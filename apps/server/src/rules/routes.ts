@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
 import { audit } from "../lib/audit.js";
 import { parse } from "../lib/http.js";
+import { rescanRecurring } from "../recurring/service.js";
 import {
   applyPlans,
   createRule,
@@ -125,9 +126,11 @@ export function registerRuleRoutes(app: FastifyInstance, db: MunyDb) {
     const { id } = parse(IdParams, req.params);
     const { includeEdited } = parse(ApplyBody, req.body ?? {});
     const rule = getRule(db, id);
-    const changed = db.transaction((tx) =>
-      applyPlans(tx, evaluateRules(tx, [rule], { includeEdited }).plans),
-    );
+    const changed = db.transaction((tx) => {
+      const changed = applyPlans(tx, evaluateRules(tx, [rule], { includeEdited }).plans);
+      if (changed) rescanRecurring(tx); // categories feed recurring types
+      return changed;
+    });
     log(user.id, "rule.apply", id, { changed, includeEdited: !!includeEdited });
     return { changed };
   });
@@ -138,7 +141,9 @@ export function registerRuleRoutes(app: FastifyInstance, db: MunyDb) {
     const { includeEdited } = parse(ApplyBody, req.body ?? {});
     const changed = db.transaction((tx) => {
       const rules = listRules(tx).filter((r) => r.enabled);
-      return applyPlans(tx, evaluateRules(tx, rules, { includeEdited }).plans);
+      const changed = applyPlans(tx, evaluateRules(tx, rules, { includeEdited }).plans);
+      if (changed) rescanRecurring(tx);
+      return changed;
     });
     log(user.id, "rule.run_all", undefined, { changed, includeEdited: !!includeEdited });
     return { changed };

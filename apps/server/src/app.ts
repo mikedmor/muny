@@ -18,6 +18,7 @@ import { registerPayeeRoutes } from "./ledger/payees.js";
 import { registerTransactionRoutes } from "./ledger/transactions.js";
 import { registerErrorHandler } from "./lib/http.js";
 import { registerRecurringRoutes } from "./recurring/routes.js";
+import { registerReportRoutes } from "./reports/routes.js";
 import { registerRuleRoutes } from "./rules/routes.js";
 import { makeProviders, type Providers } from "./sync/engine.js";
 import { registerSyncRoutes } from "./sync/routes.js";
@@ -111,6 +112,7 @@ export async function buildApp({ config, db, providers }: AppDeps): Promise<Fast
   registerSyncRoutes(app, db, syncDeps);
   registerRecurringRoutes(app, db);
   registerBudgetRoutes(app, db);
+  registerReportRoutes(app, db);
   app.decorate("syncDeps", syncDeps);
 
   // Polled by the Docker healthcheck every 30s; only log problems.

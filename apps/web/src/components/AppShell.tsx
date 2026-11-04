@@ -9,6 +9,7 @@ const NAV = [
   { to: "/transactions", label: "Transactions", icon: "≡" },
   { to: "/recurring", label: "Recurring", icon: "↻" },
   { to: "/budgets", label: "Budgets", icon: "◔" },
+  { to: "/reports", label: "Reports", icon: "▤" },
   { to: "/accounts", label: "Accounts", icon: "▣" },
   { to: "/import", label: "Import", icon: "⇪" },
   { to: "/settings", label: "Settings", icon: "⚙" },
@@ -105,7 +106,7 @@ export function AppShell({ user }: { user: CurrentUser }) {
         {userBox}
       </div>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 md:px-8 md:py-8">
+      <main className="mx-auto w-full min-w-0 max-w-6xl flex-1 px-4 py-6 md:px-8 md:py-8">
         <Outlet />
       </main>
     </div>

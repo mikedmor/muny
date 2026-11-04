@@ -52,6 +52,8 @@ export const keys = {
   syncConfig: ["sync-config"] as const,
   recurring: ["recurring"] as const,
   budgets: ["budgets"] as const,
+  overview: ["overview"] as const,
+  reports: ["reports"] as const,
 };
 
 export function useAccounts() {
@@ -175,6 +177,8 @@ const txnKeys = [
   keys.tags,
   keys.recurring,
   keys.budgets,
+  keys.overview,
+  keys.reports,
 ] as const;
 
 export const useCreateTransaction = () =>

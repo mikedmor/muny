@@ -70,7 +70,9 @@ export function Card({ children, className }: { children: ReactNode; className?:
   return (
     <div
       className={cx(
-        "rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900",
+        "rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900",
+        // A padding passed in replaces the default (Tailwind can't tell which class wins otherwise).
+        !/(^|\s)p-\d/.test(className ?? "") && "p-5",
         className,
       )}
     >

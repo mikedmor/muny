@@ -5,6 +5,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
 import { audit } from "../lib/audit.js";
+import { localToday } from "../lib/dates.js";
 import { notFound, parse } from "../lib/http.js";
 
 const cents = z.number().int().safe();
@@ -145,6 +146,16 @@ export function registerAccountRoutes(app: FastifyInstance, db: MunyDb) {
     }
     if (Object.keys(update).length > 0) {
       db.update(schema.accounts).set(update).where(eq(schema.accounts.id, id)).run();
+      if (balanceCents !== undefined && balanceCents !== current.balanceCents) {
+        // Value history for net worth (e.g. a house or car you update by hand).
+        db.insert(schema.balanceSnapshots)
+          .values({ accountId: id, date: localToday(), balanceCents })
+          .onConflictDoUpdate({
+            target: [schema.balanceSnapshots.accountId, schema.balanceSnapshots.date],
+            set: { balanceCents },
+          })
+          .run();
+      }
       audit(db, {
         actorType: "user",
         actorId: user.id,

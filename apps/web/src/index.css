@@ -11,3 +11,31 @@
 html {
   font-family: var(--font-sans);
 }
+
+/* Chart tokens (dataviz reference palette). Charts use roles, never raw hex. */
+:root {
+  --viz-surface: #fcfcfb;
+  --viz-ink: #0b0b0b;
+  --viz-ink-2: #52514e;
+  --viz-muted: #898781;
+  --viz-grid: #e1e0d9;
+  --viz-axis: #c3c2b7;
+  --viz-series-1: #2a78d6;
+  --viz-series-2: #eb6834;
+  --viz-deemph: #c3c2b7;
+  --viz-area: rgba(42, 120, 214, 0.12);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --viz-surface: #1a1a19;
+    --viz-ink: #f0efec;
+    --viz-ink-2: #c3c2b7;
+    --viz-muted: #898781;
+    --viz-grid: #2c2c2a;
+    --viz-axis: #383835;
+    --viz-series-1: #3987e5;
+    --viz-series-2: #d95926;
+    --viz-deemph: #4a4a46;
+    --viz-area: rgba(57, 135, 229, 0.18);
+  }
+}

@@ -354,7 +354,7 @@ function Upcoming() {
     .reduce((s, u) => s + u.amountCents, 0);
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <Card className="p-3">
         <div className="mb-2 flex items-center justify-between">
           <Button

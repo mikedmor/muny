@@ -39,6 +39,15 @@ export function merchantKey(payee: string | null, raw: string): string {
 const BILL_WORDS =
   /rent|mortgage|insurance|loan|electric|water|sewer|trash|gas & heating|internet|phone|utilit|bill|auto payment|tax/i;
 
+function kindFor(
+  direction: "out" | "in",
+  fixedAmount: boolean,
+  categoryName: string | null | undefined,
+): RecurringKind {
+  if (direction === "in") return "income";
+  return !fixedAmount || BILL_WORDS.test(categoryName ?? "") ? "bill" : "subscription";
+}
+
 interface Row {
   id: string;
   accountId: string;
@@ -149,6 +158,8 @@ export function rescanRecurring(tx: Tx, today = localToday()): RecurringScanResu
                 expectedAmountCents: c.expectedAmountCents,
                 fixedAmount: c.fixedAmount,
                 categoryId: latest?.categoryId ?? match.categoryId,
+                // Categories often arrive after detection (rules, edits); keep the type in step.
+                kind: kindFor(c.direction, c.fixedAmount, latest?.categoryName),
               }),
         })
         .where(eq(s.id, match.id))
@@ -167,12 +178,7 @@ export function rescanRecurring(tx: Tx, today = localToday()): RecurringScanResu
       !BILL_WORDS.test(latest?.categoryName ?? "")
     )
       continue;
-    const kind: RecurringKind =
-      c.direction === "in"
-        ? "income"
-        : !c.fixedAmount || BILL_WORDS.test(latest?.categoryName ?? "")
-          ? "bill"
-          : "subscription";
+    const kind = kindFor(c.direction, c.fixedAmount, latest?.categoryName);
     const id = newId();
     tx.insert(s)
       .values({
