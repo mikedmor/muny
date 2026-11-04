@@ -1,19 +1,16 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openDb } from "@muny/db";
 import { afterAll, describe, expect, it } from "vitest";
-import { buildApp } from "./app.js";
 import { loadConfig } from "./config.js";
+import { makeApp as makeBareApp, makeSignedInApp } from "./test-utils.js";
 
 const webDir = mkdtempSync(join(tmpdir(), "muny-web-"));
 writeFileSync(join(webDir, "index.html"), "<!doctype html><title>Muny</title>");
 afterAll(() => rmSync(webDir, { recursive: true, force: true }));
 
 async function makeApp(env: Record<string, string> = {}) {
-  const config = loadConfig({ NODE_ENV: "test", ...env });
-  const db = openDb({ filename: ":memory:" });
-  return buildApp({ config, db });
+  return (await makeBareApp(env)).app;
 }
 
 describe("server", () => {
@@ -37,9 +34,9 @@ describe("server", () => {
     });
   });
 
-  it("returns JSON 404 for unknown API routes", async () => {
-    const app = await makeApp({ MUNY_WEB_DIR: webDir });
-    const res = await app.inject({ method: "GET", url: "/api/nope" });
+  it("returns JSON 404 for unknown API routes when signed in", async () => {
+    const { client } = await makeSignedInApp();
+    const res = await client.get("/api/nope");
     expect(res.statusCode).toBe(404);
     expect(res.json()).toEqual({ error: "Not Found" });
   });

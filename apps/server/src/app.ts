@@ -1,10 +1,14 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import fastifyCookie from "@fastify/cookie";
 import fastifyStatic from "@fastify/static";
 import { appliedMigrationCount, type MunyDb, pingDb } from "@muny/db";
 import type { HealthResponse, MetaResponse } from "@muny/shared";
 import Fastify, { type FastifyInstance } from "fastify";
+import { registerAuth } from "./auth/plugin.js";
+import { registerAuthRoutes } from "./auth/routes.js";
 import type { Config } from "./config.js";
+import { registerErrorHandler } from "./lib/http.js";
 import { VERSION } from "./version.js";
 
 export interface AppDeps {
@@ -33,6 +37,23 @@ export async function buildApp({ config, db }: AppDeps): Promise<FastifyInstance
     trustProxy: true,
     bodyLimit: 25 * 1024 * 1024, // room for large CSV imports later
   });
+
+  registerErrorHandler(app);
+  await app.register(fastifyCookie);
+
+  // Baseline security headers for every response.
+  app.addHook("onSend", async (_req, reply) => {
+    reply.header("x-content-type-options", "nosniff");
+    reply.header("referrer-policy", "same-origin");
+    reply.header("x-frame-options", "DENY");
+    reply.header(
+      "content-security-policy",
+      "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+    );
+  });
+
+  registerAuth(app, db);
+  registerAuthRoutes(app, db);
 
   // Polled by the Docker healthcheck every 30s; only log problems.
   app.get("/api/health", { logLevel: "warn" }, async (_req, reply) => {
