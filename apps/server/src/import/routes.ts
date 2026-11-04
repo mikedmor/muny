@@ -1,4 +1,5 @@
 import type { MunyDb } from "@muny/db";
+import { DATE_FORMATS } from "@muny/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
@@ -8,14 +9,52 @@ import { commitImport, previewImport } from "./service.js";
 
 const MAX_CONTENT = 20 * 1024 * 1024; // 20 MB of text
 
+const column = z.string().trim().min(1).max(100);
+const optColumn = z
+  .string()
+  .trim()
+  .max(100)
+  .optional()
+  .transform((v) => v || undefined);
+
+const CsvMapping = z
+  .object({
+    date: column,
+    dateFormat: z.enum(DATE_FORMATS),
+    description: column,
+    descriptionFallback: optColumn,
+    amount: optColumn,
+    negate: z.boolean().optional(),
+    debit: optColumn,
+    credit: optColumn,
+    authorizedDate: optColumn,
+    category: optColumn,
+    notes: optColumn,
+    filters: z
+      .array(
+        z.object({
+          column,
+          op: z.enum(["in", "notIn"]),
+          values: z.array(z.string().max(100)).max(20),
+        }),
+      )
+      .max(10)
+      .optional(),
+  })
+  .refine((m) => m.amount || m.debit || m.credit, {
+    message: "Choose an amount column, or debit/credit columns",
+  });
+
 const ImportBody = z.object({
   filename: z.string().trim().min(1).max(255),
   content: z.string().min(1, "The file is empty").max(MAX_CONTENT, "File is too large (20 MB max)"),
   format: z.enum(["rocket_money", "csv", "ofx"]).optional(),
+  csv: CsvMapping.optional(),
 });
 
 const CommitBody = ImportBody.extend({
   accountMap: z.record(z.string(), z.string().min(1).max(64)),
+  applyBalances: z.array(z.string().max(64)).max(100).optional(),
 });
 
 export function registerImportRoutes(app: FastifyInstance, db: MunyDb) {

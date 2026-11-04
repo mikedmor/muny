@@ -1,14 +1,19 @@
 import { createHash } from "node:crypto";
 import {
+  type BankCsvParse,
+  isOfx,
   isRocketMoneyCsv,
   normalizeDescription,
   type ParsedTransaction,
   type ParseResult,
+  parseBankCsv,
   parseCsvRecords,
+  parseOfx,
   parseRocketMoneyCsv,
 } from "@muny/core";
 import { type MunyDb, newId, schema } from "@muny/db";
 import type {
+  CsvPreviewInfo,
   ImportCommitRequest,
   ImportFormat,
   ImportPreview,
@@ -16,9 +21,11 @@ import type {
   ImportRequest,
   ImportResult,
 } from "@muny/shared";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { upsertPayee, upsertTag } from "../ledger/transactions.js";
 import { badRequest } from "../lib/http.js";
+
+type Tx = Parameters<Parameters<MunyDb["transaction"]>[0]>[0];
 
 // ---------------------------------------------------------------------------
 // Parsing
@@ -26,34 +33,47 @@ import { badRequest } from "../lib/http.js";
 
 export function detectFormat(req: ImportRequest): ImportFormat {
   if (req.format) return req.format;
-  const head = req.content.slice(0, 4000);
-  if (/OFXHEADER|<OFX>/i.test(head)) return "ofx";
-  const { headers } = parseCsvRecords(head.split(/\r?\n/)[0] ?? "");
+  if (isOfx(req.content)) return "ofx";
+  const { headers } = parseCsvRecords(req.content.slice(0, 4000).split(/\r?\n/)[0] ?? "");
   if (isRocketMoneyCsv(headers)) return "rocket_money";
   return "csv";
 }
 
-export function parseImport(req: ImportRequest): ParseResult {
+interface Parsed extends ParseResult {
+  csv: CsvPreviewInfo | null;
+}
+
+export function parseImport(req: ImportRequest): Parsed {
   const format = detectFormat(req);
-  switch (format) {
-    case "rocket_money":
-      return parseRocketMoneyCsv(req.content);
-    default:
-      throw badRequest(
-        format === "csv"
-          ? "This CSV format isn't supported yet. Rocket Money exports are supported; bank CSV/OFX import is coming next."
-          : "OFX/QFX import is coming next.",
-      );
-  }
+  if (format === "rocket_money") return { ...parseRocketMoneyCsv(req.content), csv: null };
+  if (format === "ofx") return { ...parseOfx(req.content), csv: null };
+
+  const r: BankCsvParse = parseBankCsv(req.content, { filename: req.filename, mapping: req.csv });
+  if (r.headers.length === 0) throw badRequest("This file is empty or isn't a CSV.");
+  const { headers, sample, preset, mapping, ...rest } = r;
+  return {
+    ...rest,
+    csv: {
+      headers,
+      sample,
+      mapping,
+      preset: preset && {
+        id: preset.id,
+        label: preset.label,
+        institutionName: preset.institutionName,
+        accountType: preset.accountType,
+      },
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
 // Matching helpers
 // ---------------------------------------------------------------------------
 
-/** Rocket Money category names that map onto Muny defaults. */
+/** Category names (Rocket Money, bank CSVs) that map onto Muny defaults. */
 const CATEGORY_ALIASES: Record<string, string> = {
-  // Near-synonyms only. Broader Rocket Money categories (e.g. "Auto & Transport",
+  // Near-synonyms only. Broader categories (e.g. "Auto & Transport",
   // "Bills & Utilities") are kept as-is rather than squeezed into a narrower one.
   "internal transfers": "Internal Transfer",
   "savings transfer": "Savings",
@@ -74,33 +94,39 @@ const CATEGORY_ALIASES: Record<string, string> = {
   "loan payments": "Loan Payment",
   "restaurants & bars": "Dining & Drinks",
   "dining & drinks": "Dining & Drinks",
+  // Chase credit card categories
+  "food & drink": "Dining & Drinks",
+  gas: "Gas & Fuel",
+  "gifts & donations": "Gifts",
+  "fees & adjustments": "Fees & Charges",
+  travel: "Travel & Vacation",
+  personal: "Personal Care",
 };
 
 const lc = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
+const firstWord = (s: string | null | undefined) => lc(s).split(/\s+/)[0] ?? "";
 
 function findMatchingAccount(
   existing: { id: string; name: string; institutionName: string | null; mask: string | null }[],
   a: { name: string; institutionName: string | null; mask: string | null },
 ) {
-  // Same institution + last 4 is the strongest signal; then exact name (+institution).
+  // "Ally" and "Ally Bank" are the same institution.
+  const sameInst = (x: string | null) =>
+    !x || !a.institutionName || firstWord(x) === firstWord(a.institutionName);
+  const sameMask = a.mask ? existing.filter((e) => e.mask === a.mask) : [];
+  // Same institution + last 4 is the strongest signal; then exact name (+institution);
+  // then last 4 alone if only one account has it (institution names vary by source).
   return (
-    existing.find(
-      (e) => a.mask && e.mask === a.mask && lc(e.institutionName) === lc(a.institutionName),
-    ) ??
-    existing.find(
-      (e) =>
-        lc(e.name) === lc(a.name) &&
-        (!a.institutionName ||
-          !e.institutionName ||
-          lc(e.institutionName) === lc(a.institutionName)),
-    ) ??
+    sameMask.find((e) => sameInst(e.institutionName)) ??
+    existing.find((e) => lc(e.name) === lc(a.name) && sameInst(e.institutionName)) ??
+    (sameMask.length === 1 ? sameMask[0] : null) ??
     null
   );
 }
 
 type CategoryIndex = Map<string, string>; // lowercased name -> id
 
-function loadCategoryIndex(db: MunyDb): CategoryIndex {
+function loadCategoryIndex(db: MunyDb | Tx): CategoryIndex {
   const idx: CategoryIndex = new Map();
   for (const c of db.select().from(schema.categories).all()) {
     if (!idx.has(lc(c.name))) idx.set(lc(c.name), c.id);
@@ -112,10 +138,14 @@ function resolveCategoryName(idx: CategoryIndex, name: string): string | undefin
   return idx.get(lc(name)) ?? idx.get(lc(CATEGORY_ALIASES[lc(name)]));
 }
 
+/** Rocket Money categories are the user's own and get created; bank categories only map. */
+const createsCategories = (format: ImportFormat) => format === "rocket_money";
+
 /**
- * Dedupe hash: account + date + amount + normalized description + the
- * occurrence number of that tuple within the file, so two identical $5
- * coffees on the same day both import, but re-importing the file doesn't.
+ * Dedupe hash. With a bank transaction id (OFX FITID) that's the identity;
+ * otherwise account + date + amount + normalized description + the occurrence
+ * number of that tuple within the file, so two identical $5 coffees on the
+ * same day both import, but re-importing the file doesn't.
  */
 function computeHashes(
   txns: ParsedTransaction[],
@@ -125,28 +155,139 @@ function computeHashes(
   return txns.map((t) => {
     const accountId = accountIdFor(t.accountKey);
     if (!accountId) return undefined;
-    const base = [
-      accountId,
-      t.postedDate,
-      t.amountCents,
-      normalizeDescription(t.rawDescription),
-    ].join("|");
+    const base = t.providerTxnRef
+      ? `${accountId}|ref|${t.providerTxnRef}`
+      : [accountId, t.postedDate, t.amountCents, normalizeDescription(t.rawDescription)].join("|");
     const n = (seen.get(base) ?? 0) + 1;
     seen.set(base, n);
     return createHash("sha256").update(`${base}|${n}`).digest("hex").slice(0, 32);
   });
 }
 
-function existingHashes(db: MunyDb, accountIds: string[]): Set<string> {
-  if (accountIds.length === 0) return new Set();
+const NOISE = new Set(
+  "pos debit credit card purchase payment ach web online recurring transfer from the and inc llc com www withdrawal deposit check visa mastercard id ppd ccd".split(
+    " ",
+  ),
+);
+function merchantWords(s: string): Set<string> {
   return new Set(
-    db
-      .select({ accountId: schema.transactions.accountId, h: schema.transactions.importHash })
-      .from(schema.transactions)
-      .where(inArray(schema.transactions.accountId, accountIds))
-      .all()
-      .map((r) => `${r.accountId}:${r.h}`),
+    normalizeDescription(s)
+      .split(/[^a-z]+/)
+      .filter((w) => w.length >= 3 && !NOISE.has(w)),
   );
+}
+
+function shiftDate(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+const FUZZY_DAYS = 3;
+
+/**
+ * Which file transactions already exist in Muny. Three passes, each consuming
+ * the existing rows it matches so one existing row can't hide two file rows:
+ *  1. exact: same import hash or bank transaction id (re-importing a file)
+ *  2. same account + amount + date (posted or transaction date): overlap with
+ *     history from another source, e.g. a bank CSV covering months already
+ *     imported from Rocket Money
+ *  3. same amount within ±3 days and a shared merchant word (posting-date drift)
+ */
+function findDuplicates(
+  db: MunyDb | Tx,
+  txns: ParsedTransaction[],
+  hashes: (string | undefined)[],
+  accountIdFor: (key: string) => string | undefined,
+): boolean[] {
+  const dup = txns.map(() => false);
+  const accountIds = [...new Set(txns.map((t) => accountIdFor(t.accountKey)))].filter(
+    (x): x is string => !!x,
+  );
+  if (accountIds.length === 0 || txns.length === 0) return dup;
+  const dates = txns.flatMap((t) => [t.postedDate, t.authorizedDate ?? t.postedDate]).sort();
+  const t = schema.transactions;
+  const rows = db
+    .select({
+      id: t.id,
+      accountId: t.accountId,
+      postedDate: t.postedDate,
+      amountCents: t.amountCents,
+      rawDescription: t.rawDescription,
+      importHash: t.importHash,
+      providerTxnRef: t.providerTxnRef,
+    })
+    .from(t)
+    .where(
+      and(
+        inArray(t.accountId, accountIds),
+        gte(t.postedDate, shiftDate(dates[0] ?? "", -FUZZY_DAYS)),
+        lte(t.postedDate, shiftDate(dates[dates.length - 1] ?? "", FUZZY_DAYS)),
+      ),
+    )
+    .all();
+
+  const used = new Set<string>();
+  const byHash = new Map(rows.map((r) => [`${r.accountId}:${r.importHash}`, r]));
+  const byRef = new Map(
+    rows.filter((r) => r.providerTxnRef).map((r) => [`${r.accountId}:${r.providerTxnRef}`, r]),
+  );
+  const byDayAmount = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const k = `${r.accountId}|${r.postedDate}|${r.amountCents}`;
+    byDayAmount.set(k, [...(byDayAmount.get(k) ?? []), r]);
+  }
+
+  // Pass 1: exact.
+  txns.forEach((tx, i) => {
+    const acc = accountIdFor(tx.accountKey);
+    if (!acc) return;
+    const hit =
+      byHash.get(`${acc}:${hashes[i]}`) ??
+      (tx.providerTxnRef ? byRef.get(`${acc}:${tx.providerTxnRef}`) : undefined);
+    if (hit && !used.has(hit.id)) {
+      used.add(hit.id);
+      dup[i] = true;
+    }
+  });
+  // Pass 2: same day + amount (sources disagree on posted vs transaction date).
+  txns.forEach((tx, i) => {
+    const acc = accountIdFor(tx.accountKey);
+    if (dup[i] || !acc) return;
+    for (const day of [tx.postedDate, tx.authorizedDate]) {
+      const hit = day
+        ? byDayAmount.get(`${acc}|${day}|${tx.amountCents}`)?.find((r) => !used.has(r.id))
+        : undefined;
+      if (hit) {
+        used.add(hit.id);
+        dup[i] = true;
+        break;
+      }
+    }
+  });
+  // Pass 3: nearby day + amount + a shared merchant word.
+  txns.forEach((tx, i) => {
+    const acc = accountIdFor(tx.accountKey);
+    if (dup[i] || !acc) return;
+    const words = merchantWords(tx.rawDescription);
+    if (words.size === 0) return;
+    for (let d = 1; d <= FUZZY_DAYS && !dup[i]; d++) {
+      for (const day of [shiftDate(tx.postedDate, -d), shiftDate(tx.postedDate, d)]) {
+        const hit = byDayAmount
+          .get(`${acc}|${day}|${tx.amountCents}`)
+          ?.find(
+            (r) =>
+              !used.has(r.id) && [...merchantWords(r.rawDescription)].some((w) => words.has(w)),
+          );
+        if (hit) {
+          used.add(hit.id);
+          dup[i] = true;
+          break;
+        }
+      }
+    }
+  });
+  return dup;
 }
 
 // ---------------------------------------------------------------------------
@@ -163,6 +304,7 @@ export function previewImport(db: MunyDb, req: ImportRequest): ImportPreview {
     const m = findMatchingAccount(existing, a);
     return {
       ...a,
+      statementBalance: a.statementBalance ?? null,
       transactionCount: txns.length,
       firstDate: dates[0] ?? null,
       lastDate: dates[dates.length - 1] ?? null,
@@ -171,28 +313,26 @@ export function previewImport(db: MunyDb, req: ImportRequest): ImportPreview {
   });
 
   const matchFor = new Map(accounts.map((a) => [a.key, a.match?.id]));
-  const hashes = computeHashes(parsed.transactions, (k) => matchFor.get(k));
-  const known = existingHashes(db, [
-    ...new Set([...matchFor.values()].filter((x): x is string => !!x)),
-  ]);
-  const duplicateCount = parsed.transactions.filter((t, i) => {
-    const h = hashes[i];
-    const acc = matchFor.get(t.accountKey);
-    return h && acc && known.has(`${acc}:${h}`);
-  }).length;
+  const accountIdFor = (k: string) => matchFor.get(k);
+  const hashes = computeHashes(parsed.transactions, accountIdFor);
+  const duplicateCount = findDuplicates(db, parsed.transactions, hashes, accountIdFor).filter(
+    Boolean,
+  ).length;
 
   const idx = loadCategoryIndex(db);
-  const newCategories = [
-    ...new Set(
-      parsed.transactions
-        .map((t) => t.categoryName)
-        .filter((c): c is string => !!c && !resolveCategoryName(idx, c)),
-    ),
-  ].sort();
+  const newCategories = createsCategories(parsed.format)
+    ? [
+        ...new Set(
+          parsed.transactions
+            .map((t) => t.categoryName)
+            .filter((c): c is string => !!c && !resolveCategoryName(idx, c)),
+        ),
+      ].sort()
+    : [];
 
   const dates = parsed.transactions.map((t) => t.postedDate).sort();
   return {
-    format: parsed.format as ImportFormat,
+    format: parsed.format,
     accounts,
     transactionCount: parsed.transactions.length,
     duplicateCount,
@@ -201,6 +341,7 @@ export function previewImport(db: MunyDb, req: ImportRequest): ImportPreview {
     newCategories,
     errors: parsed.errors.slice(0, 50),
     errorCount: parsed.errors.length,
+    csv: parsed.csv,
   };
 }
 
@@ -208,7 +349,7 @@ export function previewImport(db: MunyDb, req: ImportRequest): ImportPreview {
 // Commit
 // ---------------------------------------------------------------------------
 
-function categoryGroupFor(tx: Parameters<Parameters<MunyDb["transaction"]>[0]>[0], name: string) {
+function categoryGroupFor(tx: Tx, name: string) {
   const kind: "income" | "transfer" | "expense" =
     /income|paycheck|salary|interest|dividend|refund|reimburse/i.test(name)
       ? "income"
@@ -241,9 +382,51 @@ function categoryGroupFor(tx: Parameters<Parameters<MunyDb["transaction"]>[0]>[0
   return id;
 }
 
+/**
+ * Make a computed account's balance equal `cents` as of `asOf` by shifting its
+ * opening balance (transactions after `asOf` still count on top). Reported
+ * accounts just take the value.
+ */
+function applyStatementBalance(tx: Tx, accountId: string, cents: number, asOf: string) {
+  const acc = tx.select().from(schema.accounts).where(eq(schema.accounts.id, accountId)).get();
+  if (!acc) return;
+  if (acc.balanceSource === "computed") {
+    const row = tx
+      .select({ s: sql<number>`coalesce(sum(${schema.transactions.amountCents}), 0)` })
+      .from(schema.transactions)
+      .where(
+        and(
+          eq(schema.transactions.accountId, accountId),
+          eq(schema.transactions.pending, false),
+          lte(schema.transactions.postedDate, asOf),
+        ),
+      )
+      .get();
+    tx.update(schema.accounts)
+      .set({ openingBalanceCents: cents - Number(row?.s ?? 0) })
+      .where(eq(schema.accounts.id, accountId))
+      .run();
+  } else {
+    tx.update(schema.accounts)
+      .set({ currentBalanceCents: cents })
+      .where(eq(schema.accounts.id, accountId))
+      .run();
+  }
+  tx.insert(schema.balanceSnapshots)
+    .values({ accountId, date: asOf, balanceCents: cents })
+    .onConflictDoUpdate({
+      target: [schema.balanceSnapshots.accountId, schema.balanceSnapshots.date],
+      set: { balanceCents: cents },
+    })
+    .run();
+}
+
 export function commitImport(db: MunyDb, req: ImportCommitRequest, userId: string): ImportResult {
   const parsed = parseImport(req);
-  const format = parsed.format as ImportFormat;
+  const format = parsed.format;
+  if (parsed.transactions.length === 0 && parsed.accounts.length === 0) {
+    throw badRequest(parsed.errors[0]?.message ?? "Nothing to import in this file.");
+  }
 
   return db.transaction((tx) => {
     // 1. Resolve target accounts.
@@ -289,12 +472,13 @@ export function commitImport(db: MunyDb, req: ImportCommitRequest, userId: strin
     }
 
     // 2. Categories.
-    const idx = loadCategoryIndex(db);
+    const idx = loadCategoryIndex(tx);
     let categoriesCreated = 0;
     const categoryId = (name: string | null): string | null => {
       if (!name) return null;
       const found = resolveCategoryName(idx, name);
       if (found) return found;
+      if (!createsCategories(format)) return null;
       const id = newId();
       tx.insert(schema.categories)
         .values({ id, groupId: categoryGroupFor(tx, name), name: name.trim().slice(0, 60) })
@@ -315,7 +499,9 @@ export function commitImport(db: MunyDb, req: ImportCommitRequest, userId: strin
       })
       .run();
 
-    const hashes = computeHashes(parsed.transactions, (k) => accountIdFor.get(k));
+    const lookup = (k: string) => accountIdFor.get(k);
+    const hashes = computeHashes(parsed.transactions, lookup);
+    const isDup = findDuplicates(tx, parsed.transactions, hashes, lookup);
     const payeeCache = new Map<string, string>();
     const tagCache = new Map<string, string>();
     let imported = 0;
@@ -327,6 +513,10 @@ export function commitImport(db: MunyDb, req: ImportCommitRequest, userId: strin
       const importHash = hashes[i];
       if (!accountId || !importHash) {
         skipped++;
+        return;
+      }
+      if (isDup[i]) {
+        duplicates++;
         return;
       }
       let payeeId: string | null = null;
@@ -347,7 +537,7 @@ export function commitImport(db: MunyDb, req: ImportCommitRequest, userId: strin
           rawDescription: t.rawDescription.slice(0, 500),
           payeeId,
           categoryId: categoryId(t.categoryName),
-          notes: t.notes,
+          notes: t.notes?.slice(0, 2000) ?? null,
           hidden: t.hidden,
           providerTxnRef: t.providerTxnRef,
           importHash,
@@ -373,6 +563,16 @@ export function commitImport(db: MunyDb, req: ImportCommitRequest, userId: strin
       }
     });
 
+    // 4. Statement balances (after transactions, so the math includes them).
+    let balancesUpdated = 0;
+    const apply = new Set(req.applyBalances ?? []);
+    for (const a of parsed.accounts) {
+      const accountId = accountIdFor.get(a.key);
+      if (!accountId || !a.statementBalance || !apply.has(a.key)) continue;
+      applyStatementBalance(tx, accountId, a.statementBalance.cents, a.statementBalance.asOf);
+      balancesUpdated++;
+    }
+
     tx.update(schema.importBatches)
       .set({
         rowsTotal: parsed.transactions.length + parsed.errors.length,
@@ -380,7 +580,7 @@ export function commitImport(db: MunyDb, req: ImportCommitRequest, userId: strin
         rowsDuplicate: duplicates,
         rowsFailed: parsed.errors.length,
       })
-      .where(and(eq(schema.importBatches.id, batchId)))
+      .where(eq(schema.importBatches.id, batchId))
       .run();
 
     return {
@@ -391,6 +591,7 @@ export function commitImport(db: MunyDb, req: ImportCommitRequest, userId: strin
       failed: parsed.errors.length,
       accountsCreated,
       categoriesCreated,
+      balancesUpdated,
     };
   });
 }

@@ -147,14 +147,164 @@ describe("Rocket Money import", () => {
     expect(groupOf("Brokerage Transfer")?.kind).toBe("transfer");
     expect(groupOf("Homelab")?.name).toBe("Imported");
   });
+});
 
-  it("rejects unsupported files clearly", async () => {
+describe("bank CSV import", () => {
+  const CHASE_CARD = [
+    "Transaction Date,Post Date,Description,Category,Type,Amount,Memo",
+    // Same as the Rocket Money rows (date + amount), different description text.
+    "01/22/2026,01/23/2026,STREAMFLIX.COM 800-555-0100,Entertainment,Sale,-15.99,",
+    "01/23/2026,01/23/2026,COFFEE SHOP,Food & Drink,Sale,-4.50,",
+    "01/23/2026,01/23/2026,COFFEE SHOP,Food & Drink,Sale,-4.50,",
+    // Posting-date drift: Rocket Money had this on 01/24.
+    "01/24/2026,01/26/2026,Payment Thank You - Web,,Payment,500.00,",
+    // Genuinely new.
+    "01/30/2026,01/31/2026,HARDWARE STORE,Home,Sale,-30.00,",
+    "01/31/2026,02/01/2026,MYSTERY,Uncategorizable Thing,Sale,-1.00,",
+  ].join("\n");
+  const chase = { filename: "Chase2222_Activity_20260201.CSV", content: CHASE_CARD };
+
+  it("detects the preset and matches the existing account by institution + last 4", async () => {
+    const { client } = await makeSignedInApp();
+    const card = (
+      await client.post("/api/accounts", {
+        name: "Freedom",
+        type: "credit",
+        institutionName: "Chase",
+        mask: "2222",
+      })
+    ).json<Account>();
+    const p = (await client.post("/api/import/preview", chase)).json<ImportPreview>();
+    expect(p.format).toBe("csv");
+    expect(p.csv?.preset?.id).toBe("chase_card");
+    expect(p.csv?.headers).toContain("Post Date");
+    expect(p.accounts).toEqual([
+      expect.objectContaining({
+        key: "csv",
+        mask: "2222",
+        match: { id: card.id, name: "Freedom" },
+      }),
+    ]);
+    // Bank categories map onto existing ones but never create new ones.
+    expect(p.newCategories).toEqual([]);
+  });
+
+  it("skips transactions already imported from Rocket Money", async () => {
+    const { client } = await makeSignedInApp();
+    const rm = (await client.post("/api/import/preview", body)).json<ImportPreview>();
+    await client.post("/api/import/commit", {
+      ...body,
+      accountMap: Object.fromEntries(rm.accounts.map((a) => [a.key, "new"])),
+    });
+    const card = (await client.get("/api/accounts"))
+      .json<Account[]>()
+      .find((a) => a.mask === "2222");
+    expect(card).toBeDefined();
+
+    const p = (await client.post("/api/import/preview", chase)).json<ImportPreview>();
+    expect(p.accounts[0]?.match?.id).toBe(card?.id);
+    expect(p.duplicateCount).toBe(4);
+
+    const r = (
+      await client.post("/api/import/commit", { ...chase, accountMap: { csv: card?.id ?? "" } })
+    ).json<ImportResult>();
+    expect(r).toMatchObject({ imported: 2, duplicates: 4, categoriesCreated: 0 });
+
+    const txns = (
+      await client.get(`/api/transactions?accountId=${card?.id}&limit=50`)
+    ).json<TransactionPage>();
+    const hw = txns.items.find((t) => t.rawDescription === "HARDWARE STORE");
+    expect(hw).toMatchObject({ amountCents: -3000, postedDate: "2026-01-31" });
+    expect(txns.items.find((t) => t.rawDescription === "MYSTERY")?.categoryName).toBeNull();
+
+    // Re-importing the bank file is a no-op too.
+    const again = (
+      await client.post("/api/import/commit", { ...chase, accountMap: { csv: card?.id ?? "" } })
+    ).json<ImportResult>();
+    expect(again).toMatchObject({ imported: 0, duplicates: 6 });
+  });
+
+  it("returns headers and no accounts when columns can't be guessed, then accepts a mapping", async () => {
+    const { client } = await makeSignedInApp();
+    const file = { filename: "odd.csv", content: "When,What,How much\n2026-01-02,Coffee,4.50" };
+    const p = (await client.post("/api/import/preview", file)).json<ImportPreview>();
+    expect(p.csv).toMatchObject({ headers: ["When", "What", "How much"], mapping: null });
+    expect(p.accounts).toEqual([]);
+    expect((await client.post("/api/import/commit", { ...file, accountMap: {} })).statusCode).toBe(
+      400,
+    );
+
+    const csv = {
+      date: "When",
+      dateFormat: "YYYY-MM-DD",
+      description: "What",
+      amount: "How much",
+      negate: true,
+    };
+    const p2 = (await client.post("/api/import/preview", { ...file, csv })).json<ImportPreview>();
+    expect(p2.transactionCount).toBe(1);
+    const r = (
+      await client.post("/api/import/commit", { ...file, csv, accountMap: { csv: "new" } })
+    ).json<ImportResult>();
+    expect(r).toMatchObject({ imported: 1, accountsCreated: 1 });
+    const acc = (await client.get("/api/accounts")).json<Account[]>()[0];
+    expect(acc).toMatchObject({ name: "odd", balanceCents: -450 });
+  });
+
+  it("validates the mapping", async () => {
     const { client } = await makeSignedInApp();
     const res = await client.post("/api/import/preview", {
-      filename: "bank.csv",
-      content: "Foo,Bar\n1,2",
+      filename: "x.csv",
+      content: "a,b\n1,2",
+      csv: { date: "a", dateFormat: "YYYY-MM-DD", description: "b" },
     });
     expect(res.statusCode).toBe(400);
-    expect(res.json().error).toMatch(/isn't supported yet/);
+  });
+});
+
+describe("OFX import", () => {
+  const OFX = `OFXHEADER:100
+DATA:OFXSGML
+
+<OFX><SIGNONMSGSRSV1><SONRS><FI><ORG>Example Bank</FI></SONRS></SIGNONMSGSRSV1>
+<BANKMSGSRSV1><STMTTRNRS><STMTRS><CURDEF>USD
+<BANKACCTFROM><BANKID>1<ACCTID>000123459999<ACCTTYPE>CHECKING</BANKACCTFROM>
+<BANKTRANLIST>
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20260105<TRNAMT>-20.00<FITID>A1<NAME>GROCER</STMTTRN>
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20260106<TRNAMT>-20.00<FITID>A2<NAME>GROCER</STMTTRN>
+<STMTTRN><TRNTYPE>CREDIT<DTPOSTED>20260107<TRNAMT>100.00<FITID>A3<NAME>PAY</STMTTRN>
+</BANKTRANLIST>
+<LEDGERBAL><BALAMT>1060.00<DTASOF>20260107</LEDGERBAL>
+</STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>`;
+  const file = { filename: "statement.qfx", content: OFX };
+
+  it("imports, applies the statement balance, and dedupes by FITID", async () => {
+    const { client } = await makeSignedInApp();
+    const p = (await client.post("/api/import/preview", file)).json<ImportPreview>();
+    expect(p).toMatchObject({ format: "ofx", transactionCount: 3, csv: null });
+    expect(p.accounts[0]).toMatchObject({
+      key: "ofx-1",
+      name: "Example Bank Checking",
+      mask: "9999",
+      statementBalance: { cents: 106000, asOf: "2026-01-07" },
+    });
+
+    const r = (
+      await client.post("/api/import/commit", {
+        ...file,
+        accountMap: { "ofx-1": "new" },
+        applyBalances: ["ofx-1"],
+      })
+    ).json<ImportResult>();
+    expect(r).toMatchObject({ imported: 3, accountsCreated: 1, balancesUpdated: 1 });
+    const acc = (await client.get("/api/accounts")).json<Account[]>()[0];
+    expect(acc?.balanceCents).toBe(106000);
+
+    // Same FITIDs with a changed description are still duplicates.
+    const renamed = { ...file, content: OFX.replace(/GROCER/g, "GROCERY STORE") };
+    const r2 = (
+      await client.post("/api/import/commit", { ...renamed, accountMap: { "ofx-1": acc?.id } })
+    ).json<ImportResult>();
+    expect(r2).toMatchObject({ imported: 0, duplicates: 3, balancesUpdated: 0 });
   });
 });

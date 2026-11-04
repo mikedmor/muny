@@ -1,12 +1,15 @@
 import {
   ACCOUNT_TYPE_LABELS,
   type AccountTarget,
+  type CsvMapping,
+  formatMoney,
   type ImportPreview,
   type ImportResult,
 } from "@muny/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
+import { CsvMappingCard } from "../components/CsvMappingCard.js";
 import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
 import { api } from "../lib/api.js";
 import { keys, useAccounts } from "../lib/queries.js";
@@ -38,15 +41,26 @@ export function ImportPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<LoadedFile | null>(null);
   const [map, setMap] = useState<Record<string, AccountTarget>>({});
+  const [csv, setCsv] = useState<CsvMapping | undefined>();
+  const [applyBalances, setApplyBalances] = useState<Set<string>>(new Set());
   const [dragging, setDragging] = useState(false);
 
   const preview = useMutation({
-    mutationFn: (f: LoadedFile) => api.post<ImportPreview>("/api/import/preview", f),
-    onSuccess: (p) =>
-      setMap(Object.fromEntries(p.accounts.map((a) => [a.key, a.match?.id ?? "new"]))),
+    mutationFn: (req: LoadedFile & { csv?: CsvMapping }) =>
+      api.post<ImportPreview>("/api/import/preview", req),
+    onSuccess: (p) => {
+      setMap(Object.fromEntries(p.accounts.map((a) => [a.key, a.match?.id ?? "new"])));
+      setApplyBalances(new Set(p.accounts.filter((a) => a.statementBalance).map((a) => a.key)));
+    },
   });
   const commit = useMutation({
-    mutationFn: () => api.post<ImportResult>("/api/import/commit", { ...file, accountMap: map }),
+    mutationFn: () =>
+      api.post<ImportResult>("/api/import/commit", {
+        ...file,
+        csv,
+        accountMap: map,
+        applyBalances: [...applyBalances],
+      }),
     onSuccess: () =>
       Promise.all(
         [keys.accounts, keys.transactions, keys.categories, keys.tags].map((queryKey) =>
@@ -59,12 +73,14 @@ export function ImportPage() {
     commit.reset();
     const loaded = { filename: f.name, content: await f.text() };
     setFile(loaded);
+    setCsv(undefined);
     preview.mutate(loaded);
   };
 
   const reset = () => {
     setFile(null);
     setMap({});
+    setCsv(undefined);
     preview.reset();
     commit.reset();
     if (inputRef.current) inputRef.current.value = "";
@@ -101,8 +117,14 @@ export function ImportPage() {
             {commit.data.categoriesCreated > 0 && (
               <li>{commit.data.categoriesCreated} categories created</li>
             )}
+            {commit.data.balancesUpdated > 0 && (
+              <li>
+                {commit.data.balancesUpdated} account balance
+                {commit.data.balancesUpdated === 1 ? "" : "s"} updated from the statement
+              </li>
+            )}
           </ul>
-          {commit.data.accountsCreated > 0 && (
+          {commit.data.accountsCreated > commit.data.balancesUpdated && (
             <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300">
               New accounts start from a $0 opening balance. Open each one on the{" "}
               <Link to="/accounts" className="underline">
@@ -145,11 +167,13 @@ export function ImportPage() {
               ⇪
             </span>
             <span className="mt-2 font-medium">Drop a file here or click to choose</span>
-            <span className="mt-1 text-sm text-slate-500">Rocket Money export (.csv)</span>
+            <span className="mt-1 text-sm text-slate-500">
+              Rocket Money export, bank CSV, or OFX / QFX / QBO
+            </span>
             <input
               ref={inputRef}
               type="file"
-              accept=".csv,.ofx,.qfx,text/csv"
+              accept=".csv,.ofx,.qfx,.qbo,text/csv"
               className="sr-only"
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -165,8 +189,15 @@ export function ImportPage() {
               <li>Click Export and save the CSV.</li>
               <li>Drop it here. You'll review everything before anything is saved.</li>
             </ol>
+            <h2 className="mt-5 font-semibold">From your bank</h2>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+              Download activity from your bank's website. Prefer <strong>OFX</strong>,{" "}
+              <strong>QFX</strong> or <strong>QBO</strong> (often labelled "Quicken" or "Money"):
+              they include the balance. CSV works too, with presets for Chase, Ally and PayPal.
+            </p>
             <p className="mt-3 text-xs text-slate-500">
-              Re-importing the same file is safe: transactions already in Muny are skipped.
+              Re-importing is safe: transactions already in Muny, including ones from Rocket Money
+              with the same date and amount, are skipped.
             </p>
           </Card>
         </div>
@@ -185,7 +216,19 @@ export function ImportPage() {
           {preview.isPending && <Card>Reading file…</Card>}
           {preview.error && <Alert>{preview.error.message}</Alert>}
 
-          {p && (
+          {p?.csv && (
+            <CsvMappingCard
+              key={file.filename}
+              info={p.csv}
+              busy={preview.isPending}
+              onApply={(m) => {
+                setCsv(m);
+                preview.mutate({ ...file, csv: m });
+              }}
+            />
+          )}
+
+          {p && (p.accounts.length > 0 || !p.csv) && (
             <>
               <div className="grid gap-3 sm:grid-cols-3">
                 <Card>
@@ -248,6 +291,28 @@ export function ImportPage() {
                           · {a.transactionCount.toLocaleString()} transactions ·{" "}
                           {fmtDate(a.firstDate)} – {fmtDate(a.lastDate)}
                         </p>
+                        {a.statementBalance && map[a.key] !== "skip" && (
+                          <label className="mt-1 flex items-center gap-2 text-xs">
+                            <input
+                              type="checkbox"
+                              className="accent-brand-600"
+                              checked={applyBalances.has(a.key)}
+                              onChange={(e) =>
+                                setApplyBalances((cur) => {
+                                  const next = new Set(cur);
+                                  if (e.target.checked) next.add(a.key);
+                                  else next.delete(a.key);
+                                  return next;
+                                })
+                              }
+                            />
+                            Set balance to{" "}
+                            <strong className="tabular-nums">
+                              {formatMoney(a.statementBalance.cents)}
+                            </strong>{" "}
+                            as of {fmtDate(a.statementBalance.asOf)}
+                          </label>
+                        )}
                       </div>
                       <select
                         aria-label={`Import ${a.name} into`}

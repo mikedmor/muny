@@ -1,4 +1,6 @@
-export type DateFormat = "YYYY-MM-DD" | "MM/DD/YYYY" | "DD/MM/YYYY" | "YYYYMMDD";
+import type { DateFormat } from "@muny/shared";
+
+export type { DateFormat };
 
 function valid(y: number, m: number, d: number): boolean {
   if (y < 1900 || y > 2200 || m < 1 || m > 12 || d < 1) return false;
@@ -37,7 +39,7 @@ export function parseDate(input: string, format: DateFormat): string | null {
   return valid(y, m, d) ? `${y}-${pad(m)}-${pad(d)}` : null;
 }
 
-/** Guess the date format from sample values (first format that parses all). */
+/** Guess the date format from sample values: the one that parses the most (ties: earlier wins). */
 export function detectDateFormat(samples: string[]): DateFormat | null {
   const values = samples
     .map((s) => s.trim())
@@ -45,5 +47,11 @@ export function detectDateFormat(samples: string[]): DateFormat | null {
     .slice(0, 200);
   if (values.length === 0) return null;
   const order: DateFormat[] = ["YYYY-MM-DD", "MM/DD/YYYY", "DD/MM/YYYY", "YYYYMMDD"];
-  return order.find((f) => values.every((v) => parseDate(v, f) !== null)) ?? null;
+  let best: DateFormat | null = null;
+  let bestCount = 0;
+  for (const f of order) {
+    const n = values.filter((v) => parseDate(v, f) !== null).length;
+    if (n > bestCount) [best, bestCount] = [f, n];
+  }
+  return best;
 }

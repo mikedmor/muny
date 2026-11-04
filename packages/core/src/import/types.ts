@@ -9,6 +9,8 @@ export interface ParsedAccount {
   /** Last digits only. */
   mask: string | null;
   type: AccountType;
+  /** Balance reported by the file (e.g. OFX LEDGERBAL). */
+  statementBalance?: { cents: number; asOf: string } | null;
 }
 
 /** A transaction normalized from any import format. */
@@ -37,7 +39,7 @@ export interface ParseIssue {
 }
 
 export interface ParseResult {
-  format: string;
+  format: "rocket_money" | "csv" | "ofx";
   accounts: ParsedAccount[];
   transactions: ParsedTransaction[];
   errors: ParseIssue[];
