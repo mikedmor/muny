@@ -198,6 +198,20 @@ export function loadTransactions(db: MunyDb, ids: string[]): Transaction[] {
       : [],
   );
 
+  const seriesIds = [
+    ...new Set(rows.map((r) => r.t.recurringSeriesId).filter((x): x is string => !!x)),
+  ];
+  const seriesName = new Map(
+    seriesIds.length
+      ? db
+          .select({ id: schema.recurringSeries.id, name: schema.recurringSeries.name })
+          .from(schema.recurringSeries)
+          .where(inArray(schema.recurringSeries.id, seriesIds))
+          .all()
+          .map((r) => [r.id, r.name])
+      : [],
+  );
+
   const splitRows = db
     .select({ s: schema.transactionSplits, categoryName: splitCat.name })
     .from(schema.transactionSplits)
@@ -228,6 +242,8 @@ export function loadTransactions(db: MunyDb, ids: string[]): Transaction[] {
         manual: r.importHash.startsWith(MANUAL_PREFIX),
         transferPairId: r.transferPairId,
         transferAccountName: r.transferPairId ? (pairAccount.get(r.transferPairId) ?? null) : null,
+        recurringSeriesId: r.recurringSeriesId,
+        recurringName: r.recurringSeriesId ? (seriesName.get(r.recurringSeriesId) ?? null) : null,
         tags: tagRows
           .filter((x) => x.txnId === r.id)
           .map(({ tag }) => ({ id: tag.id, name: tag.name, color: tag.color }))

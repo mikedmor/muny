@@ -228,6 +228,10 @@ export const transactions = sqliteTable(
     /** Stable dedupe hash: account + date + amount + normalized description + occurrence. */
     importHash: text().notNull(),
     importBatchId: text().references(() => importBatches.id, { onDelete: "set null" }),
+    /** Recurring series (subscription/bill/income) this charge belongs to. */
+    recurringSeriesId: text().references((): AnySQLiteColumn => recurringSeries.id, {
+      onDelete: "set null",
+    }),
     /** The user said this isn't a transfer; transfer detection leaves it alone. */
     notTransfer: integer({ mode: "boolean" }).notNull().default(false),
     /** True when the user edited category/payee manually (rules won't override). */
@@ -277,6 +281,50 @@ export const transactionTags = sqliteTable(
 // ---------------------------------------------------------------------------
 // Rules
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Recurring charges
+// ---------------------------------------------------------------------------
+
+export const recurringSeries = sqliteTable(
+  "recurring_series",
+  {
+    id: text().primaryKey(),
+    name: text().notNull(),
+    /** Merchant key used for detection (lower-cased merchant name). */
+    matchKey: text().notNull(),
+    direction: text({ enum: ["out", "in"] }).notNull(),
+    /** Typical size of the charge (absolute cents), to tell a merchant's plans apart. */
+    anchorCents: integer().notNull(),
+    kind: text({ enum: ["subscription", "bill", "income"] }).notNull(),
+    status: text({ enum: ["detected", "confirmed", "ignored", "cancelled"] })
+      .notNull()
+      .default("detected"),
+    interval: text({
+      enum: ["weekly", "biweekly", "monthly", "quarterly", "semiannual", "annual"],
+    }).notNull(),
+    /** Signed, Muny convention (negative = money out). */
+    expectedAmountCents: integer().notNull(),
+    fixedAmount: integer({ mode: "boolean" }).notNull().default(true),
+    firstDate: text().notNull(),
+    lastDate: text().notNull(),
+    lastAmountCents: integer().notNull(),
+    accountId: text().references(() => accounts.id, { onDelete: "set null" }),
+    payeeId: text().references(() => payees.id, { onDelete: "set null" }),
+    categoryId: text().references(() => categories.id, { onDelete: "set null" }),
+    source: text({ enum: ["detected", "manual"] })
+      .notNull()
+      .default("detected"),
+    /** The user changed name/kind/interval/amount; rescans keep their values. */
+    userModified: integer({ mode: "boolean" }).notNull().default(false),
+    /** YYYY-MM-DD the user marked it cancelled. */
+    cancelledAt: text(),
+    notes: text(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("recurring_series_key_idx").on(t.matchKey, t.direction)],
+);
 
 export const rules = sqliteTable("rules", {
   id: text().primaryKey(),

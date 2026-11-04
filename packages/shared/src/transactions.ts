@@ -37,6 +37,9 @@ export interface Transaction {
   transferPairId: string | null;
   /** Account on the other side of a detected transfer. */
   transferAccountName: string | null;
+  /** Recurring series (subscription/bill/income) this belongs to. */
+  recurringSeriesId: string | null;
+  recurringName: string | null;
   tags: Tag[];
   splits: TransactionSplit[];
 }

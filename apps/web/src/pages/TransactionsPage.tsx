@@ -1,9 +1,13 @@
 import {
   formatMoney,
+  INTERVAL_LABELS,
+  INTERVALS,
+  type Interval,
   type Transaction,
   type TransactionQuery,
   toDecimalString,
 } from "@muny/shared";
+import { Link } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { CategorySelect } from "../components/CategorySelect.js";
 import { Checkbox, Modal, MoneyField, SelectField } from "../components/forms.js";
@@ -13,6 +17,7 @@ import { ApiError } from "../lib/api.js";
 import {
   useAccounts,
   useBulkUpdate,
+  useCreateRecurring,
   useCreateTransaction,
   useDeleteTransaction,
   useNotTransfer,
@@ -496,6 +501,63 @@ function NewTransactionForm({ onDone }: { onDone: () => void }) {
   );
 }
 
+function RecurringBadge({ txn }: { txn: Transaction }) {
+  const create = useCreateRecurring();
+  const [open, setOpen] = useState(false);
+  const [interval, setRepeat] = useState<Interval>("monthly");
+  if (txn.recurringName)
+    return (
+      <p className="mt-1 text-xs">
+        <Link
+          to="/recurring"
+          className="rounded bg-violet-100 px-1.5 py-0.5 text-violet-800 hover:underline dark:bg-violet-900/40 dark:text-violet-300"
+        >
+          ↻ {txn.recurringName}
+        </Link>
+      </p>
+    );
+  if (txn.pending || txn.transferPairId) return null;
+  if (!open)
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-1 text-xs text-slate-500 underline"
+      >
+        Mark as recurring
+      </button>
+    );
+  return (
+    <p className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+      Repeats
+      <select
+        aria-label="Repeats"
+        value={interval}
+        onChange={(e) => setRepeat(e.target.value as Interval)}
+        className="rounded border border-slate-300 bg-white px-1 py-0.5 dark:border-slate-700 dark:bg-slate-950"
+      >
+        {INTERVALS.map((i) => (
+          <option key={i} value={i}>
+            {INTERVAL_LABELS[i]}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        disabled={create.isPending}
+        onClick={() => create.mutate({ transactionId: txn.id, interval })}
+        className="font-medium text-brand-600"
+      >
+        Save
+      </button>
+      <button type="button" onClick={() => setOpen(false)} className="text-slate-500">
+        Cancel
+      </button>
+      {create.error && <span className="text-red-600">{create.error.message}</span>}
+    </p>
+  );
+}
+
 function TransactionDetail({ txn, onDone }: { txn: Transaction; onDone: () => void }) {
   const update = useUpdateTransaction();
   const remove = useDeleteTransaction();
@@ -542,6 +604,7 @@ function TransactionDetail({ txn, onDone }: { txn: Transaction; onDone: () => vo
           <p className="text-xs text-slate-500">
             {txn.accountName} · {formatDay(txn.postedDate)}
           </p>
+          <RecurringBadge txn={txn} />
           {txn.transferAccountName && (
             <p className="mt-1 text-xs">
               <span className="rounded bg-sky-100 px-1.5 py-0.5 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300">

@@ -6,10 +6,13 @@ import type {
   ConnectionSummary,
   CreateAccountInput,
   CreateTransactionInput,
+  Interval,
   LinkResult,
   LinkStart,
   PayeeCleanupPreview,
   PayeeSummary,
+  RecurringKind,
+  RecurringSeries,
   Rule,
   RuleApplyResult,
   RuleInput,
@@ -21,7 +24,9 @@ import type {
   TransactionPage,
   TransactionQuery,
   TransferPreview,
+  UpcomingCharge,
   UpdateAccountInput,
+  UpdateRecurringInput,
   UpdateTransactionInput,
 } from "@muny/shared";
 import {
@@ -43,6 +48,7 @@ export const keys = {
   backups: ["backups"] as const,
   connections: ["connections"] as const,
   syncConfig: ["sync-config"] as const,
+  recurring: ["recurring"] as const,
 };
 
 export function useAccounts() {
@@ -159,7 +165,13 @@ export function useTags() {
 }
 
 /** Transaction changes also move balances and category counts. */
-const txnKeys = [keys.transactions, keys.accounts, keys.categories, keys.tags] as const;
+const txnKeys = [
+  keys.transactions,
+  keys.accounts,
+  keys.categories,
+  keys.tags,
+  keys.recurring,
+] as const;
 
 export const useCreateTransaction = () =>
   useInvalidatingMutation(
@@ -359,3 +371,53 @@ export function useTransferPreview(enabled: boolean) {
 
 export const useApplyTransfers = () =>
   useInvalidatingMutation(() => api.post<{ paired: number }>("/api/transfers/apply"), txnKeys);
+
+// ---------------------------------------------------------------------------
+// Recurring
+// ---------------------------------------------------------------------------
+
+export function useRecurring() {
+  return useQuery({
+    queryKey: keys.recurring,
+    queryFn: () => api.get<RecurringSeries[]>("/api/recurring"),
+  });
+}
+
+export function useUpcoming(from: string, to: string) {
+  return useQuery({
+    queryKey: [...keys.recurring, "upcoming", from, to],
+    queryFn: () => api.get<UpcomingCharge[]>(`/api/recurring/upcoming?from=${from}&to=${to}`),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useRecurringHistory(id: string | null) {
+  return useQuery({
+    queryKey: [...keys.recurring, "history", id],
+    queryFn: () => api.get<Transaction[]>(`/api/recurring/${id}/transactions`),
+    enabled: !!id,
+  });
+}
+
+export const useUpdateRecurring = () =>
+  useInvalidatingMutation(
+    ({ id, ...input }: UpdateRecurringInput & { id: string }) =>
+      api.patch<RecurringSeries>(`/api/recurring/${id}`, input),
+    [keys.recurring, keys.transactions],
+  );
+
+export const useCreateRecurring = () =>
+  useInvalidatingMutation(
+    (input: { transactionId: string; interval: Interval; kind?: RecurringKind }) =>
+      api.post<RecurringSeries>("/api/recurring", input),
+    [keys.recurring, keys.transactions],
+  );
+
+export const useDeleteRecurring = () =>
+  useInvalidatingMutation((id: string) => api.delete(`/api/recurring/${id}`), [keys.recurring]);
+
+export const useRescanRecurring = () =>
+  useInvalidatingMutation(
+    () => api.post<{ created: number; updated: number; linked: number }>("/api/recurring/rescan"),
+    [keys.recurring, keys.transactions],
+  );

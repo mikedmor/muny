@@ -7,6 +7,7 @@ import { cx } from "./ui.js";
 const NAV = [
   { to: "/", label: "Overview", icon: "◎" },
   { to: "/transactions", label: "Transactions", icon: "≡" },
+  { to: "/recurring", label: "Recurring", icon: "↻" },
   { to: "/accounts", label: "Accounts", icon: "▣" },
   { to: "/import", label: "Import", icon: "⇪" },
   { to: "/settings", label: "Settings", icon: "⚙" },

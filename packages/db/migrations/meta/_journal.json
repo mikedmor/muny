@@ -29,6 +29,13 @@
       "when": 1793824400694,
       "tag": "0003_transfer_flag",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793824829768,
+      "tag": "0004_recurring_series",
+      "breakpoints": true
     }
   ]
 }

@@ -82,6 +82,7 @@ const TAILS = [
   /\s+(direct dep(osit)?|dir dep)\b.*$/i,
   /\s+(mobile |web |online |e-)?(pmt|pymt|payment)\b.*$/i,
   /\s+ext\.? ?trnsfr\b.*$/i,
+  /\s+(bill ?pay(ment)?|e-?bill|auto ?pay)\b.*$/i,
   /\s+(ppd|web|ccd|tel|ctx|arc|boc|pop|rck|cie)\s+id:?.*$/i,
   /\s+(co )?id:.*$/i,
   /\s+des:.*$/i,

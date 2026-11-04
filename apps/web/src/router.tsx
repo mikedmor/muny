@@ -7,6 +7,7 @@ import { LoginPage, SetupPage } from "./pages/AuthPages.js";
 import { ImportPage } from "./pages/ImportPage.js";
 import { OverviewPage } from "./pages/Placeholders.js";
 import { PlaidOAuthPage } from "./pages/PlaidOAuthPage.js";
+import { RecurringPage } from "./pages/RecurringPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 import { TransactionsPage } from "./pages/TransactionsPage.js";
 
@@ -41,6 +42,7 @@ const page = <const P extends string>(path: P, component: () => React.ReactNode)
 const routeTree = rootRoute.addChildren([
   page("/", OverviewPage),
   page("/transactions", TransactionsPage),
+  page("/recurring", RecurringPage),
   page("/accounts", AccountsPage),
   page("/import", ImportPage),
   page("/settings", SettingsPage),

@@ -26,6 +26,7 @@ import { and, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { upsertPayee, upsertTag } from "../ledger/transactions.js";
 import { linkTransfersFor } from "../ledger/transfers.js";
 import { badRequest } from "../lib/http.js";
+import { rescanRecurring } from "../recurring/service.js";
 import { runRulesOn } from "../rules/service.js";
 
 type Tx = Parameters<Parameters<MunyDb["transaction"]>[0]>[0];
@@ -587,6 +588,7 @@ export function commitImport(db: MunyDb, req: ImportCommitRequest, userId: strin
     // 4. Rules (skip transactions whose category came from the user, e.g. Rocket Money).
     const rulesApplied = runRulesOn(tx, newIds);
     linkTransfersFor(tx, newIds);
+    if (newIds.length) rescanRecurring(tx);
 
     // 5. Statement balances (after transactions, so the math includes them).
     let balancesUpdated = 0;

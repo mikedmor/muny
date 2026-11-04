@@ -48,6 +48,8 @@ describe("cleanPayeeName: bank-specific shapes", () => {
     ["PAYPAL PURCHASE MEALKIT WEB ID: PAYPALSI77", "Mealkit"],
     ["PAYPAL TRANSFER PPD ID: PAYPALSD11", "PayPal"],
     ["PAYMENT TO PAYPAL CREDIT", "PayPal Credit"],
+    ["POWER CO BILL PAY", "Power Co"],
+    ["CITY WATER AUTOPAY 0123", "City Water"],
   ])("%s -> %s", (raw, expected) => {
     expect(cleanPayeeName(raw)).toBe(expected);
   });

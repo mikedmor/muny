@@ -6,6 +6,11 @@ import { computeHashes, findDuplicates } from "../import/service.js";
 import { upsertPayee } from "../ledger/transactions.js";
 import { linkTransfersFor } from "../ledger/transfers.js";
 import { decryptJson, encryptJson } from "../lib/crypto.js";
+import { localToday } from "../lib/dates.js";
+
+export { localToday };
+
+import { rescanRecurring } from "../recurring/service.js";
 import { runRulesOn } from "../rules/service.js";
 import { type PlaidCreds, PlaidProvider } from "./plaid.js";
 import { type TellerCreds, TellerProvider } from "./teller.js";
@@ -84,9 +89,6 @@ export function openCreds<T extends AnyCreds>(config: Config, conn: Connection):
     throw new ProviderError("config", e instanceof Error ? e.message : "Couldn't read credentials");
   }
 }
-
-/** Today's date in the server's time zone (TZ), YYYY-MM-DD. */
-export const localToday = () => new Date().toLocaleDateString("en-CA");
 
 export interface SyncSummary {
   added: number;
@@ -309,6 +311,7 @@ export function applySync(
 
   summary.rulesApplied = runRulesOn(tx, newIds);
   linkTransfersFor(tx, newIds);
+  if (newIds.length || summary.removed) rescanRecurring(tx);
   return summary;
 }
 
