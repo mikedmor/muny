@@ -4,7 +4,8 @@ import { Alert, Button } from "./components/ui.js";
 import { useAuthStatus } from "./lib/auth.js";
 import { AccountsPage } from "./pages/AccountsPage.js";
 import { LoginPage, SetupPage } from "./pages/AuthPages.js";
-import { ImportPage, OverviewPage } from "./pages/Placeholders.js";
+import { ImportPage } from "./pages/ImportPage.js";
+import { OverviewPage } from "./pages/Placeholders.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 import { TransactionsPage } from "./pages/TransactionsPage.js";
 

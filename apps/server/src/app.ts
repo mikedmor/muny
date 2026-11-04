@@ -8,6 +8,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { registerAuth } from "./auth/plugin.js";
 import { registerAuthRoutes } from "./auth/routes.js";
 import type { Config } from "./config.js";
+import { registerImportRoutes } from "./import/routes.js";
 import { registerAccountRoutes } from "./ledger/accounts.js";
 import { registerCategoryRoutes } from "./ledger/categories.js";
 import { registerTransactionRoutes } from "./ledger/transactions.js";
@@ -60,6 +61,7 @@ export async function buildApp({ config, db }: AppDeps): Promise<FastifyInstance
   registerAccountRoutes(app, db);
   registerCategoryRoutes(app, db);
   registerTransactionRoutes(app, db);
+  registerImportRoutes(app, db);
 
   // Polled by the Docker healthcheck every 30s; only log problems.
   app.get("/api/health", { logLevel: "warn" }, async (_req, reply) => {

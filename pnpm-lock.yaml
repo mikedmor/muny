@@ -29,6 +29,9 @@ importers:
       '@fastify/static':
         specifier: ^10.1.9
         version: 10.1.9
+      '@muny/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@muny/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -91,6 +94,12 @@ importers:
       vite:
         specifier: ^8.3.5
         version: 8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)
+
+  packages/core:
+    dependencies:
+      '@muny/shared':
+        specifier: workspace:*
+        version: link:../shared
 
   packages/db:
     dependencies:

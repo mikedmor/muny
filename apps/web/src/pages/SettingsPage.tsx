@@ -95,7 +95,12 @@ function CategoriesSettings() {
       {categories.isError && <Alert>Couldn't load categories.</Alert>}
       <div className="grid gap-4 lg:grid-cols-2">
         {categories.data?.map((g) => (
-          <GroupCard key={g.id} group={g} onDelete={setDeleting} />
+          <GroupCard
+            key={g.id}
+            group={g}
+            allGroups={categories.data ?? []}
+            onDelete={setDeleting}
+          />
         ))}
       </div>
 
@@ -128,7 +133,15 @@ function CategoriesSettings() {
   );
 }
 
-function GroupCard({ group, onDelete }: { group: CategoryGroup; onDelete: (c: Category) => void }) {
+function GroupCard({
+  group,
+  allGroups,
+  onDelete,
+}: {
+  group: CategoryGroup;
+  allGroups: CategoryGroup[];
+  onDelete: (c: Category) => void;
+}) {
   const updateGroup = useUpdateGroup();
   const deleteGroup = useDeleteGroup();
   const createCategory = useCreateCategory();
@@ -188,6 +201,25 @@ function GroupCard({ group, onDelete }: { group: CategoryGroup; onDelete: (c: Ca
             />
             <div className="flex shrink-0 items-center gap-3 text-xs text-slate-500">
               <span className="tabular-nums">{c.transactionCount || ""}</span>
+              {allGroups.length > 1 && (
+                <select
+                  aria-label={`Move ${c.name} to group`}
+                  value=""
+                  onChange={(e) =>
+                    e.target.value && updateCategory.mutate({ id: c.id, groupId: e.target.value })
+                  }
+                  className="w-16 rounded border border-transparent bg-transparent text-xs hover:border-slate-300 dark:hover:border-slate-700"
+                >
+                  <option value="">Move…</option>
+                  {allGroups
+                    .filter((g) => g.id !== group.id)
+                    .map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                </select>
+              )}
               <button
                 type="button"
                 onClick={() => updateCategory.mutate({ id: c.id, hidden: !c.hidden })}

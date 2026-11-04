@@ -13,6 +13,7 @@
   "dependencies": {
     "@fastify/cookie": "^11.1.5",
     "@fastify/static": "^10.1.9",
+    "@muny/core": "workspace:*",
     "@muny/db": "workspace:*",
     "@muny/shared": "workspace:*",
     "better-sqlite3": "^13.0.3",
