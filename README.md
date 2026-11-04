@@ -31,4 +31,4 @@ Commercial tools like Rocket Money work well, but they cost a monthly subscripti
 
 ## License
 
-To be decided before the first public release (see [docs/DECISIONS.md](docs/DECISIONS.md)).
+[GNU AGPL-3.0](LICENSE). You're free to use, modify and self-host Muny. If you run a modified version as a network service for others, you must make your source code available to its users.
