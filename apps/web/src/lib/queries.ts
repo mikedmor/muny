@@ -1,9 +1,15 @@
 import type {
   Account,
+  BackupInfo,
   BulkUpdateInput,
   CategoryGroup,
   CreateAccountInput,
   CreateTransactionInput,
+  PayeeCleanupPreview,
+  PayeeSummary,
+  Rule,
+  RuleApplyResult,
+  RuleInput,
   SplitInput,
   Tag,
   Transaction,
@@ -26,6 +32,9 @@ export const keys = {
   categories: ["categories"] as const,
   transactions: ["transactions"] as const,
   tags: ["tags"] as const,
+  rules: ["rules"] as const,
+  payees: ["payees"] as const,
+  backups: ["backups"] as const,
 };
 
 export function useAccounts() {
@@ -172,3 +181,103 @@ export const useBulkUpdate = () =>
     (input: BulkUpdateInput) => api.post<{ updated: number }>("/api/transactions/bulk", input),
     txnKeys,
   );
+
+// ---------------------------------------------------------------------------
+// Rules
+// ---------------------------------------------------------------------------
+
+export function useRules() {
+  return useQuery({ queryKey: keys.rules, queryFn: () => api.get<Rule[]>("/api/rules") });
+}
+
+export const useSaveRule = () =>
+  useInvalidatingMutation(
+    ({ id, ...input }: RuleInput & { id?: string }) =>
+      id ? api.patch<Rule>(`/api/rules/${id}`, input) : api.post<Rule>("/api/rules", input),
+    [keys.rules],
+  );
+
+export const useToggleRule = () =>
+  useInvalidatingMutation(
+    ({ id, enabled }: { id: string; enabled: boolean }) =>
+      api.patch<Rule>(`/api/rules/${id}`, { enabled }),
+    [keys.rules],
+  );
+
+export const useMoveRule = () =>
+  useInvalidatingMutation(
+    ({ id, direction }: { id: string; direction: "up" | "down" }) =>
+      api.post<Rule[]>(`/api/rules/${id}/move`, { direction }),
+    [keys.rules],
+  );
+
+export const useDeleteRule = () =>
+  useInvalidatingMutation((id: string) => api.delete(`/api/rules/${id}`), [keys.rules]);
+
+export const useApplyRule = () =>
+  useInvalidatingMutation(
+    ({ id, includeEdited }: { id?: string; includeEdited: boolean }) =>
+      api.post<RuleApplyResult>(id ? `/api/rules/${id}/apply` : "/api/rules/run", {
+        includeEdited,
+      }),
+    [...txnKeys, keys.payees],
+  );
+
+// ---------------------------------------------------------------------------
+// Payees
+// ---------------------------------------------------------------------------
+
+export function usePayees() {
+  return useQuery({
+    queryKey: keys.payees,
+    queryFn: () => api.get<PayeeSummary[]>("/api/payees/manage"),
+  });
+}
+
+export const useRenamePayee = () =>
+  useInvalidatingMutation(
+    ({ id, displayName }: { id: string; displayName: string }) =>
+      api.patch<{ id: string; merged: boolean }>(`/api/payees/${id}`, { displayName }),
+    [keys.payees, keys.transactions],
+  );
+
+export const useDeletePayee = () =>
+  useInvalidatingMutation(
+    (id: string) => api.delete(`/api/payees/${id}`),
+    [keys.payees, keys.transactions],
+  );
+
+export function usePayeeCleanupPreview(enabled: boolean) {
+  return useQuery({
+    queryKey: [...keys.payees, "cleanup"],
+    queryFn: () => api.post<PayeeCleanupPreview>("/api/payees/cleanup/preview"),
+    enabled,
+  });
+}
+
+export const usePayeeCleanup = () =>
+  useInvalidatingMutation(
+    () => api.post<{ updated: number }>("/api/payees/cleanup"),
+    [keys.payees, keys.transactions],
+  );
+
+// ---------------------------------------------------------------------------
+// Backups
+// ---------------------------------------------------------------------------
+
+export interface BackupStatus {
+  dir: string;
+  keep: number;
+  intervalHours: number;
+  backups: BackupInfo[];
+}
+
+export function useBackups() {
+  return useQuery({
+    queryKey: keys.backups,
+    queryFn: () => api.get<BackupStatus>("/api/backups"),
+  });
+}
+
+export const useCreateBackup = () =>
+  useInvalidatingMutation(() => api.post<BackupInfo>("/api/backups"), [keys.backups]);

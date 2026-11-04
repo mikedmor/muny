@@ -1,6 +1,7 @@
 import { openDb } from "@muny/db";
 import { buildApp } from "./app.js";
 import { loadConfig } from "./config.js";
+import { startBackupScheduler } from "./data/backups.js";
 import { seedDefaultCategories } from "./ledger/seed.js";
 import { VERSION } from "./version.js";
 
@@ -28,6 +29,7 @@ async function main() {
   process.once("SIGTERM", () => void shutdown("SIGTERM"));
 
   await app.listen({ host: config.host, port: config.port });
+  startBackupScheduler(db, config, app.log);
 }
 
 main().catch((err) => {

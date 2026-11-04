@@ -7,6 +7,7 @@ import {
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { CategorySelect } from "../components/CategorySelect.js";
 import { Checkbox, Modal, MoneyField, SelectField } from "../components/forms.js";
+import { type RuleDraft, RuleEditor } from "../components/RuleEditor.js";
 import { Alert, Button, Card, cx, Field, PageHeader } from "../components/ui.js";
 import { ApiError } from "../lib/api.js";
 import {
@@ -504,6 +505,7 @@ function TransactionDetail({ txn, onDone }: { txn: Transaction; onDone: () => vo
   const [amount, setAmount] = useState<number | null>(txn.amountCents);
   const [splitting, setSplitting] = useState(txn.splits.length > 0);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [ruleDraft, setRuleDraft] = useState<RuleDraft | null>(null);
   const fields = update.error instanceof ApiError ? update.error.fieldErrors() : {};
 
   const save = (e: FormEvent) => {
@@ -617,6 +619,26 @@ function TransactionDetail({ txn, onDone }: { txn: Transaction; onDone: () => vo
             </Button>
           )}
           <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              title="Make a rule for transactions like this one"
+              onClick={() =>
+                setRuleDraft({
+                  name: txn.payeeName ?? txn.description,
+                  match: "all",
+                  conditions: [
+                    txn.payeeName
+                      ? { field: "payee", op: "equals", value: txn.payeeName }
+                      : { field: "description", op: "contains", value: txn.rawDescription },
+                  ],
+                  actions: categoryId
+                    ? [{ type: "setCategory", categoryId }]
+                    : [{ type: "setCategory", categoryId: "" }],
+                })
+              }
+            >
+              Create rule
+            </Button>
             <Button variant="secondary" onClick={onDone}>
               Close
             </Button>
@@ -628,6 +650,13 @@ function TransactionDetail({ txn, onDone }: { txn: Transaction; onDone: () => vo
       </form>
 
       {splitting && <SplitEditor txn={txn} onCancel={() => setSplitting(false)} />}
+
+      {ruleDraft && (
+        <div className="border-t border-slate-200 pt-4 dark:border-slate-800">
+          <h3 className="mb-3 text-sm font-semibold">New rule</h3>
+          <RuleEditor initial={ruleDraft} onDone={() => setRuleDraft(null)} />
+        </div>
+      )}
     </div>
   );
 }

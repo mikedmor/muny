@@ -23,6 +23,16 @@ const EnvSchema = z.object({
   MUNY_MIGRATIONS_DIR: optionalString,
   /** Source code link shown in the UI (AGPL-3.0 §13). */
   MUNY_SOURCE_URL: z.string().url().default("https://github.com/mikedmor/muny"),
+  /** Where automatic SQLite backups go. Defaults to <data dir>/backups. */
+  MUNY_BACKUP_DIR: optionalString,
+  /** How many backups to keep. */
+  MUNY_BACKUP_KEEP: z.coerce.number().int().min(1).max(1000).default(14),
+  /** Hours between automatic backups; 0 turns them off. */
+  MUNY_BACKUP_INTERVAL_HOURS: z.coerce
+    .number()
+    .min(0)
+    .max(24 * 365)
+    .default(24),
 });
 
 export interface Config {
@@ -36,6 +46,9 @@ export interface Config {
   webDir: string | undefined;
   migrationsDir: string | undefined;
   sourceUrl: string;
+  backupDir: string;
+  backupKeep: number;
+  backupIntervalHours: number;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -57,5 +70,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     webDir: e.MUNY_WEB_DIR ? resolve(e.MUNY_WEB_DIR) : undefined,
     migrationsDir: e.MUNY_MIGRATIONS_DIR ? resolve(e.MUNY_MIGRATIONS_DIR) : undefined,
     sourceUrl: e.MUNY_SOURCE_URL,
+    backupDir: e.MUNY_BACKUP_DIR ? resolve(e.MUNY_BACKUP_DIR) : resolve(dataDir, "backups"),
+    backupKeep: e.MUNY_BACKUP_KEEP,
+    backupIntervalHours: e.MUNY_BACKUP_INTERVAL_HOURS,
   };
 }

@@ -8,11 +8,15 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { registerAuth } from "./auth/plugin.js";
 import { registerAuthRoutes } from "./auth/routes.js";
 import type { Config } from "./config.js";
+import { registerBackupRoutes } from "./data/backups.js";
+import { registerExportRoutes } from "./data/export.js";
 import { registerImportRoutes } from "./import/routes.js";
 import { registerAccountRoutes } from "./ledger/accounts.js";
 import { registerCategoryRoutes } from "./ledger/categories.js";
+import { registerPayeeRoutes } from "./ledger/payees.js";
 import { registerTransactionRoutes } from "./ledger/transactions.js";
 import { registerErrorHandler } from "./lib/http.js";
+import { registerRuleRoutes } from "./rules/routes.js";
 import { VERSION } from "./version.js";
 
 export interface AppDeps {
@@ -62,6 +66,10 @@ export async function buildApp({ config, db }: AppDeps): Promise<FastifyInstance
   registerCategoryRoutes(app, db);
   registerTransactionRoutes(app, db);
   registerImportRoutes(app, db);
+  registerPayeeRoutes(app, db);
+  registerRuleRoutes(app, db);
+  registerExportRoutes(app, db);
+  registerBackupRoutes(app, db, config);
 
   // Polled by the Docker healthcheck every 30s; only log problems.
   app.get("/api/health", { logLevel: "warn" }, async (_req, reply) => {

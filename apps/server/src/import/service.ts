@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   type BankCsvParse,
+  cleanPayeeName,
   isOfx,
   isRocketMoneyCsv,
   normalizeDescription,
@@ -24,6 +25,7 @@ import type {
 import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { upsertPayee, upsertTag } from "../ledger/transactions.js";
 import { badRequest } from "../lib/http.js";
+import { runRulesOn } from "../rules/service.js";
 
 type Tx = Parameters<Parameters<MunyDb["transaction"]>[0]>[0];
 
@@ -507,6 +509,7 @@ export function commitImport(db: MunyDb, req: ImportCommitRequest, userId: strin
     let imported = 0;
     let duplicates = 0;
     let skipped = 0;
+    const newIds: string[] = [];
 
     parsed.transactions.forEach((t, i) => {
       const accountId = accountIdFor.get(t.accountKey);
@@ -519,10 +522,12 @@ export function commitImport(db: MunyDb, req: ImportCommitRequest, userId: strin
         duplicates++;
         return;
       }
+      // The file's merchant name if it has one, else a cleaned-up bank description.
+      const payeeName = t.payeeName ?? cleanPayeeName(t.rawDescription);
       let payeeId: string | null = null;
-      if (t.payeeName) {
-        const k = lc(t.payeeName);
-        payeeId = payeeCache.get(k) ?? upsertPayee(tx, t.payeeName.slice(0, 100));
+      if (payeeName) {
+        const k = lc(payeeName);
+        payeeId = payeeCache.get(k) ?? upsertPayee(tx, payeeName.slice(0, 100));
         payeeCache.set(k, payeeId);
       }
       const id = newId();
@@ -552,6 +557,7 @@ export function commitImport(db: MunyDb, req: ImportCommitRequest, userId: strin
         return;
       }
       imported++;
+      newIds.push(id);
       for (const tag of t.tags) {
         const k = lc(tag);
         const tagId = tagCache.get(k) ?? upsertTag(tx, tag.slice(0, 40));
@@ -563,7 +569,10 @@ export function commitImport(db: MunyDb, req: ImportCommitRequest, userId: strin
       }
     });
 
-    // 4. Statement balances (after transactions, so the math includes them).
+    // 4. Rules (skip transactions whose category came from the user, e.g. Rocket Money).
+    const rulesApplied = runRulesOn(tx, newIds);
+
+    // 5. Statement balances (after transactions, so the math includes them).
     let balancesUpdated = 0;
     const apply = new Set(req.applyBalances ?? []);
     for (const a of parsed.accounts) {
@@ -592,6 +601,7 @@ export function commitImport(db: MunyDb, req: ImportCommitRequest, userId: strin
       accountsCreated,
       categoriesCreated,
       balancesUpdated,
+      rulesApplied,
     };
   });
 }

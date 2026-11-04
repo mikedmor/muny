@@ -117,6 +117,14 @@ export function ImportPage() {
             {commit.data.categoriesCreated > 0 && (
               <li>{commit.data.categoriesCreated} categories created</li>
             )}
+            {commit.data.rulesApplied > 0 && (
+              <li>
+                {commit.data.rulesApplied.toLocaleString()} changed by your{" "}
+                <Link to="/settings" hash="rules" className="underline">
+                  rules
+                </Link>
+              </li>
+            )}
             {commit.data.balancesUpdated > 0 && (
               <li>
                 {commit.data.balancesUpdated} account balance

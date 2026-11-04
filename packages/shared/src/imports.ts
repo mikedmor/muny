@@ -109,4 +109,6 @@ export interface ImportResult {
   accountsCreated: number;
   categoriesCreated: number;
   balancesUpdated: number;
+  /** Imported transactions changed by your rules. */
+  rulesApplied: number;
 }

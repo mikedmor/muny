@@ -1,5 +1,5 @@
 import type { Category, CategoryGroup } from "@muny/shared";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { Modal, SelectField } from "../components/forms.js";
 import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
 import {
@@ -11,14 +11,65 @@ import {
   useUpdateCategory,
   useUpdateGroup,
 } from "../lib/queries.js";
+import { DataSettings } from "./settings/DataSettings.js";
+import { PayeesSettings } from "./settings/PayeesSettings.js";
+import { RulesSettings } from "./settings/RulesSettings.js";
 
 const KIND_LABEL = { expense: "Spending", income: "Income", transfer: "Transfers" } as const;
 
+const TABS = [
+  ["categories", "Categories"],
+  ["rules", "Rules"],
+  ["merchants", "Merchants"],
+  ["data", "Data & backups"],
+] as const;
+type Tab = (typeof TABS)[number][0];
+
+const tabFromHash = (): Tab => {
+  const h = window.location.hash.slice(1);
+  return (TABS.find(([k]) => k === h)?.[0] ?? "categories") as Tab;
+};
+
 export function SettingsPage() {
+  const [tab, setTab] = useState<Tab>(tabFromHash);
+  useEffect(() => {
+    const onHash = () => setTab(tabFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
   return (
     <>
       <PageHeader title="Settings" />
-      <CategoriesSettings />
+      <div
+        role="tablist"
+        className="mb-6 flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800"
+      >
+        {TABS.map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
+            onClick={() => {
+              setTab(key);
+              window.history.replaceState(null, "", `#${key}`);
+            }}
+            className={cx(
+              "-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium",
+              tab === key
+                ? "border-brand-600 text-brand-700 dark:text-brand-500"
+                : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {tab === "categories" && <CategoriesSettings />}
+      {tab === "rules" && <RulesSettings />}
+      {tab === "merchants" && <PayeesSettings />}
+      {tab === "data" && <DataSettings />}
     </>
   );
 }
