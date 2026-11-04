@@ -17,12 +17,6 @@ export const OverviewPage = () => (
     text="Your spending summary, upcoming bills and subscriptions will appear here once data is imported."
   />
 );
-export const TransactionsPage = () => (
-  <ComingSoon
-    title="Transactions"
-    text="Transaction list, search and editing are coming next in Phase 1."
-  />
-);
 export const ImportPage = () => (
   <ComingSoon title="Import" text="CSV, OFX/QFX and Rocket Money imports are coming in Phase 1." />
 );

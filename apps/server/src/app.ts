@@ -10,6 +10,7 @@ import { registerAuthRoutes } from "./auth/routes.js";
 import type { Config } from "./config.js";
 import { registerAccountRoutes } from "./ledger/accounts.js";
 import { registerCategoryRoutes } from "./ledger/categories.js";
+import { registerTransactionRoutes } from "./ledger/transactions.js";
 import { registerErrorHandler } from "./lib/http.js";
 import { VERSION } from "./version.js";
 
@@ -58,6 +59,7 @@ export async function buildApp({ config, db }: AppDeps): Promise<FastifyInstance
   registerAuthRoutes(app, db);
   registerAccountRoutes(app, db);
   registerCategoryRoutes(app, db);
+  registerTransactionRoutes(app, db);
 
   // Polled by the Docker healthcheck every 30s; only log problems.
   app.get("/api/health", { logLevel: "warn" }, async (_req, reply) => {

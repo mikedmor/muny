@@ -4,8 +4,9 @@ import { Alert, Button } from "./components/ui.js";
 import { useAuthStatus } from "./lib/auth.js";
 import { AccountsPage } from "./pages/AccountsPage.js";
 import { LoginPage, SetupPage } from "./pages/AuthPages.js";
-import { ImportPage, OverviewPage, TransactionsPage } from "./pages/Placeholders.js";
+import { ImportPage, OverviewPage } from "./pages/Placeholders.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
+import { TransactionsPage } from "./pages/TransactionsPage.js";
 
 /** Root: decides between first-run setup, sign-in, and the app. */
 function Root() {

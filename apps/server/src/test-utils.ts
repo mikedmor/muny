@@ -34,6 +34,9 @@ export class TestClient {
   patch(url: string, payload?: unknown) {
     return this.request({ method: "PATCH", url, payload: payload as InjectOptions["payload"] });
   }
+  put(url: string, payload?: unknown) {
+    return this.request({ method: "PUT", url, payload: payload as InjectOptions["payload"] });
+  }
   delete(url: string) {
     return this.request({ method: "DELETE", url });
   }
