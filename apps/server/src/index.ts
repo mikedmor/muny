@@ -1,11 +1,13 @@
 import { openDb } from "@muny/db";
 import { buildApp } from "./app.js";
 import { loadConfig } from "./config.js";
+import { seedDefaultCategories } from "./ledger/seed.js";
 import { VERSION } from "./version.js";
 
 async function main() {
   const config = loadConfig();
   const db = openDb({ filename: config.dbFile, migrationsFolder: config.migrationsDir });
+  seedDefaultCategories(db);
   const app = await buildApp({ config, db });
 
   app.log.info({ version: VERSION, dataDir: config.dataDir }, "Muny starting");

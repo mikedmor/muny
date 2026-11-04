@@ -3,6 +3,7 @@ import type { AuthStatusResponse } from "@muny/shared";
 import { count, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { seedDefaultCategories } from "../ledger/seed.js";
 import { audit } from "../lib/audit.js";
 import { conflict, HttpError, parse, unauthorized } from "../lib/http.js";
 import { dummyVerify, hashPassword, PASSWORD_MIN_LENGTH, verifyPassword } from "./password.js";
@@ -58,6 +59,7 @@ export function registerAuthRoutes(app: FastifyInstance, db: MunyDb) {
       return true;
     });
     if (!created) throw conflict("Muny is already set up. Sign in instead.");
+    seedDefaultCategories(db);
 
     audit(db, {
       actorType: "user",

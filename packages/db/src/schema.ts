@@ -92,7 +92,17 @@ export const accounts = sqliteTable(
     /** Last 4 digits only, never the full number. */
     mask: text(),
     currency: text().notNull().default("USD"),
-    /** Latest known balance (cents). History lives in balance_snapshots. */
+    /**
+     * How the balance is determined:
+     * - computed: openingBalanceCents + sum(posted transactions). Manual/file accounts.
+     * - reported: currentBalanceCents as reported by a sync provider.
+     */
+    balanceSource: text({ enum: ["computed", "reported"] })
+      .notNull()
+      .default("computed"),
+    /** Balance before the first recorded transaction (computed accounts). */
+    openingBalanceCents: integer().notNull().default(0),
+    /** Latest provider-reported balance (cents). History lives in balance_snapshots. */
     currentBalanceCents: integer(),
     hidden: integer({ mode: "boolean" }).notNull().default(false),
     /** Excluded from budgets/reports (e.g. a business account). */

@@ -23,15 +23,6 @@ export const TransactionsPage = () => (
     text="Transaction list, search and editing are coming next in Phase 1."
   />
 );
-export const AccountsPage = () => (
-  <ComingSoon
-    title="Accounts"
-    text="Add manual accounts here, or create them automatically via import."
-  />
-);
 export const ImportPage = () => (
   <ComingSoon title="Import" text="CSV, OFX/QFX and Rocket Money imports are coming in Phase 1." />
-);
-export const SettingsPage = () => (
-  <ComingSoon title="Settings" text="Categories, rules, backups and export will live here." />
 );

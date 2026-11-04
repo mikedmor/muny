@@ -8,6 +8,13 @@
       "when": 1793803869415,
       "tag": "0000_initial_ledger",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793813646245,
+      "tag": "0001_account_balance_source",
+      "breakpoints": true
     }
   ]
 }

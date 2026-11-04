@@ -1,0 +1,289 @@
+import type { Category, CategoryGroup } from "@muny/shared";
+import { type FormEvent, useState } from "react";
+import { Modal, SelectField } from "../components/forms.js";
+import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
+import {
+  useCategories,
+  useCreateCategory,
+  useCreateGroup,
+  useDeleteCategory,
+  useDeleteGroup,
+  useUpdateCategory,
+  useUpdateGroup,
+} from "../lib/queries.js";
+
+const KIND_LABEL = { expense: "Spending", income: "Income", transfer: "Transfers" } as const;
+
+export function SettingsPage() {
+  return (
+    <>
+      <PageHeader title="Settings" />
+      <CategoriesSettings />
+    </>
+  );
+}
+
+function InlineText({
+  value,
+  onSave,
+  className,
+}: {
+  value: string;
+  onSave: (v: string) => void;
+  className?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(value);
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        title="Rename"
+        onClick={() => {
+          setText(value);
+          setEditing(true);
+        }}
+        className={cx("truncate text-left hover:underline", className)}
+      >
+        {value}
+      </button>
+    );
+  }
+  const commit = () => {
+    setEditing(false);
+    const v = text.trim();
+    if (v && v !== value) onSave(v);
+  };
+  return (
+    <input
+      // biome-ignore lint/a11y/noAutofocus: inline rename should focus immediately
+      autoFocus
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") commit();
+        if (e.key === "Escape") setEditing(false);
+      }}
+      className={cx(
+        "w-full rounded border border-brand-500 bg-white px-2 py-0.5 outline-none dark:bg-slate-950",
+        className,
+      )}
+    />
+  );
+}
+
+function CategoriesSettings() {
+  const categories = useCategories();
+  const createGroup = useCreateGroup();
+  const [newGroup, setNewGroup] = useState("");
+  const [deleting, setDeleting] = useState<Category | null>(null);
+
+  const addGroup = (e: FormEvent) => {
+    e.preventDefault();
+    if (!newGroup.trim()) return;
+    createGroup.mutate({ name: newGroup.trim() }, { onSuccess: () => setNewGroup("") });
+  };
+
+  return (
+    <section>
+      <h2 className="mb-1 text-lg font-semibold">Categories</h2>
+      <p className="mb-4 text-sm text-slate-500">
+        Click a name to rename it. Hidden categories stay on existing transactions but aren't
+        offered for new ones.
+      </p>
+      {categories.isError && <Alert>Couldn't load categories.</Alert>}
+      <div className="grid gap-4 lg:grid-cols-2">
+        {categories.data?.map((g) => (
+          <GroupCard key={g.id} group={g} onDelete={setDeleting} />
+        ))}
+      </div>
+
+      <form onSubmit={addGroup} className="mt-4 flex max-w-md gap-2">
+        <input
+          value={newGroup}
+          onChange={(e) => setNewGroup(e.target.value)}
+          placeholder="New group name"
+          aria-label="New group name"
+          className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+        />
+        <Button type="submit" variant="secondary" disabled={createGroup.isPending}>
+          Add group
+        </Button>
+      </form>
+      {createGroup.error && (
+        <p className="mt-2 text-sm text-red-600">{createGroup.error.message}</p>
+      )}
+
+      <Modal open={deleting !== null} onClose={() => setDeleting(null)} title="Delete category">
+        {deleting && (
+          <DeleteCategoryForm
+            category={deleting}
+            groups={categories.data ?? []}
+            onDone={() => setDeleting(null)}
+          />
+        )}
+      </Modal>
+    </section>
+  );
+}
+
+function GroupCard({ group, onDelete }: { group: CategoryGroup; onDelete: (c: Category) => void }) {
+  const updateGroup = useUpdateGroup();
+  const deleteGroup = useDeleteGroup();
+  const createCategory = useCreateCategory();
+  const updateCategory = useUpdateCategory();
+  const [newName, setNewName] = useState("");
+  const error =
+    updateGroup.error ?? deleteGroup.error ?? createCategory.error ?? updateCategory.error;
+
+  const add = (e: FormEvent) => {
+    e.preventDefault();
+    if (!newName.trim()) return;
+    createCategory.mutate(
+      { groupId: group.id, name: newName.trim() },
+      { onSuccess: () => setNewName("") },
+    );
+  };
+
+  return (
+    <Card className="p-0">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+        <InlineText
+          value={group.name}
+          onSave={(name) => updateGroup.mutate({ id: group.id, name })}
+          className="font-semibold"
+        />
+        <div className="flex shrink-0 items-center gap-2">
+          <select
+            aria-label={`${group.name} type`}
+            value={group.kind}
+            onChange={(e) => updateGroup.mutate({ id: group.id, kind: e.target.value })}
+            className="rounded border border-slate-200 bg-transparent px-1 py-0.5 text-xs text-slate-500 dark:border-slate-700"
+          >
+            {Object.entries(KIND_LABEL).map(([k, label]) => (
+              <option key={k} value={k}>
+                {label}
+              </option>
+            ))}
+          </select>
+          {group.categories.length === 0 && (
+            <button
+              type="button"
+              onClick={() => deleteGroup.mutate(group.id)}
+              className="text-xs text-red-600 hover:underline"
+            >
+              Delete
+            </button>
+          )}
+        </div>
+      </div>
+      <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+        {group.categories.map((c) => (
+          <li key={c.id} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
+            <InlineText
+              value={c.name}
+              onSave={(name) => updateCategory.mutate({ id: c.id, name })}
+              className={cx(c.hidden && "text-slate-400 line-through")}
+            />
+            <div className="flex shrink-0 items-center gap-3 text-xs text-slate-500">
+              <span className="tabular-nums">{c.transactionCount || ""}</span>
+              <button
+                type="button"
+                onClick={() => updateCategory.mutate({ id: c.id, hidden: !c.hidden })}
+                className="hover:underline"
+              >
+                {c.hidden ? "Unhide" : "Hide"}
+              </button>
+              <button
+                type="button"
+                onClick={() => onDelete(c)}
+                className="text-red-600 hover:underline"
+              >
+                Delete
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <form
+        onSubmit={add}
+        className="flex gap-2 border-t border-slate-100 px-4 py-2 dark:border-slate-800"
+      >
+        <input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder="Add category"
+          aria-label={`Add category to ${group.name}`}
+          className="flex-1 bg-transparent py-1 text-sm outline-none placeholder:text-slate-400"
+        />
+        {newName && (
+          <button type="submit" className="text-sm font-medium text-brand-600">
+            Add
+          </button>
+        )}
+      </form>
+      {error && <p className="px-4 pb-2 text-xs text-red-600">{error.message}</p>}
+    </Card>
+  );
+}
+
+function DeleteCategoryForm({
+  category,
+  groups,
+  onDone,
+}: {
+  category: Category;
+  groups: CategoryGroup[];
+  onDone: () => void;
+}) {
+  const del = useDeleteCategory();
+  const [reassignTo, setReassignTo] = useState("");
+  return (
+    <div className="space-y-4">
+      <p className="text-sm">
+        Delete <strong>{category.name}</strong>?
+        {category.transactionCount > 0 &&
+          ` It's used by ${category.transactionCount} transaction${category.transactionCount === 1 ? "" : "s"}.`}
+      </p>
+      {category.transactionCount > 0 && (
+        <SelectField
+          label="Move its transactions to"
+          value={reassignTo}
+          onChange={(e) => setReassignTo(e.target.value)}
+        >
+          <option value="">Uncategorized</option>
+          {groups.map((g) => (
+            <optgroup key={g.id} label={g.name}>
+              {g.categories
+                .filter((c) => c.id !== category.id)
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+            </optgroup>
+          ))}
+        </SelectField>
+      )}
+      {del.error && <Alert>{del.error.message}</Alert>}
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" onClick={onDone}>
+          Cancel
+        </Button>
+        <Button
+          variant="danger"
+          disabled={del.isPending}
+          onClick={() =>
+            del.mutate(
+              { id: category.id, reassignTo: reassignTo || undefined },
+              { onSuccess: onDone },
+            )
+          }
+        >
+          Delete
+        </Button>
+      </div>
+    </div>
+  );
+}
