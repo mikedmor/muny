@@ -13,7 +13,6 @@ Muny is in early development. Dev setup instructions will be added once the mono
 
 - Add entries to the **alternatives catalog** (paid service → self-hosted/FOSS alternative).
 - Add **CSV import presets** for your bank (with synthetic sample data only).
-- Add **cancellation guides** for services.
 
 ## Ground rules
 
