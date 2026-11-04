@@ -4,6 +4,7 @@ import { Alert, Button } from "./components/ui.js";
 import { useAuthStatus } from "./lib/auth.js";
 import { AccountsPage } from "./pages/AccountsPage.js";
 import { LoginPage, SetupPage } from "./pages/AuthPages.js";
+import { BudgetsPage } from "./pages/BudgetsPage.js";
 import { ImportPage } from "./pages/ImportPage.js";
 import { OverviewPage } from "./pages/Placeholders.js";
 import { PlaidOAuthPage } from "./pages/PlaidOAuthPage.js";
@@ -43,6 +44,7 @@ const routeTree = rootRoute.addChildren([
   page("/", OverviewPage),
   page("/transactions", TransactionsPage),
   page("/recurring", RecurringPage),
+  page("/budgets", BudgetsPage),
   page("/accounts", AccountsPage),
   page("/import", ImportPage),
   page("/settings", SettingsPage),

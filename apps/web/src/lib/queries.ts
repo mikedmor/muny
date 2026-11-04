@@ -1,6 +1,7 @@
 import type {
   Account,
   BackupInfo,
+  BudgetMonth,
   BulkUpdateInput,
   CategoryGroup,
   ConnectionSummary,
@@ -16,6 +17,7 @@ import type {
   Rule,
   RuleApplyResult,
   RuleInput,
+  SetBudgetInput,
   SplitInput,
   SyncConfigStatus,
   SyncSummary,
@@ -49,6 +51,7 @@ export const keys = {
   connections: ["connections"] as const,
   syncConfig: ["sync-config"] as const,
   recurring: ["recurring"] as const,
+  budgets: ["budgets"] as const,
 };
 
 export function useAccounts() {
@@ -171,6 +174,7 @@ const txnKeys = [
   keys.categories,
   keys.tags,
   keys.recurring,
+  keys.budgets,
 ] as const;
 
 export const useCreateTransaction = () =>
@@ -421,3 +425,16 @@ export const useRescanRecurring = () =>
     () => api.post<{ created: number; updated: number; linked: number }>("/api/recurring/rescan"),
     [keys.recurring, keys.transactions],
   );
+
+// ---------------------------------------------------------------------------
+// Budgets
+// ---------------------------------------------------------------------------
+
+export const useSetBudget = () =>
+  useInvalidatingMutation(
+    (input: SetBudgetInput) => api.put<BudgetMonth>("/api/budgets", input),
+    [keys.budgets],
+  );
+
+export const useDeleteBudget = () =>
+  useInvalidatingMutation((id: string) => api.delete(`/api/budgets/${id}`), [keys.budgets]);

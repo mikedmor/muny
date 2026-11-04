@@ -7,6 +7,7 @@ import type { HealthResponse, MetaResponse } from "@muny/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import { registerAuth } from "./auth/plugin.js";
 import { registerAuthRoutes } from "./auth/routes.js";
+import { registerBudgetRoutes } from "./budgets/routes.js";
 import type { Config } from "./config.js";
 import { registerBackupRoutes } from "./data/backups.js";
 import { registerExportRoutes } from "./data/export.js";
@@ -109,6 +110,7 @@ export async function buildApp({ config, db, providers }: AppDeps): Promise<Fast
   registerBackupRoutes(app, db, config);
   registerSyncRoutes(app, db, syncDeps);
   registerRecurringRoutes(app, db);
+  registerBudgetRoutes(app, db);
   app.decorate("syncDeps", syncDeps);
 
   // Polled by the Docker healthcheck every 30s; only log problems.

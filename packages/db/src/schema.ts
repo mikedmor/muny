@@ -326,6 +326,42 @@ export const recurringSeries = sqliteTable(
   (t) => [index("recurring_series_key_idx").on(t.matchKey, t.direction)],
 );
 
+// ---------------------------------------------------------------------------
+// Budgets
+// ---------------------------------------------------------------------------
+
+/** A monthly budget for one category, or the overall total (category_id null). */
+export const budgets = sqliteTable(
+  "budgets",
+  {
+    id: text().primaryKey(),
+    categoryId: text().references(() => categories.id, { onDelete: "cascade" }),
+    /** Unspent money carries into next month (and overspending is deducted). */
+    rollover: integer({ mode: "boolean" }).notNull().default(false),
+    /** YYYY-MM: first month this budget applies (rollover starts counting here). */
+    startMonth: text().notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("budgets_category_uq").on(t.categoryId).where(sql`${t.categoryId} IS NOT NULL`),
+  ],
+);
+
+/** Budget amount history: the amount applies from from_month until the next row. */
+export const budgetAmounts = sqliteTable(
+  "budget_amounts",
+  {
+    budgetId: text()
+      .notNull()
+      .references(() => budgets.id, { onDelete: "cascade" }),
+    /** YYYY-MM */
+    fromMonth: text().notNull(),
+    amountCents: integer().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.budgetId, t.fromMonth] })],
+);
+
 export const rules = sqliteTable("rules", {
   id: text().primaryKey(),
   name: text().notNull(),
