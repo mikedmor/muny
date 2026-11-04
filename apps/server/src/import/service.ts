@@ -22,7 +22,7 @@ import type {
   ImportRequest,
   ImportResult,
 } from "@muny/shared";
-import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { upsertPayee, upsertTag } from "../ledger/transactions.js";
 import { badRequest } from "../lib/http.js";
 import { runRulesOn } from "../rules/service.js";
@@ -108,7 +108,7 @@ const CATEGORY_ALIASES: Record<string, string> = {
 const lc = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
 const firstWord = (s: string | null | undefined) => lc(s).split(/\s+/)[0] ?? "";
 
-function findMatchingAccount(
+export function findMatchingAccount(
   existing: { id: string; name: string; institutionName: string | null; mask: string | null }[],
   a: { name: string; institutionName: string | null; mask: string | null },
 ) {
@@ -149,8 +149,8 @@ const createsCategories = (format: ImportFormat) => format === "rocket_money";
  * number of that tuple within the file, so two identical $5 coffees on the
  * same day both import, but re-importing the file doesn't.
  */
-function computeHashes(
-  txns: ParsedTransaction[],
+export function computeHashes(
+  txns: DedupeInput[],
   accountIdFor: (key: string) => string | undefined,
 ): (string | undefined)[] {
   const seen = new Map<string, number>();
@@ -196,13 +196,26 @@ const FUZZY_DAYS = 3;
  *     imported from Rocket Money
  *  3. same amount within ±3 days and a shared merchant word (posting-date drift)
  */
-function findDuplicates(
+export type DedupeInput = Pick<
+  ParsedTransaction,
+  | "accountKey"
+  | "postedDate"
+  | "authorizedDate"
+  | "amountCents"
+  | "rawDescription"
+  | "providerTxnRef"
+>;
+
+/** Returns, per transaction, the id of the existing transaction it duplicates (or null). */
+export function findDuplicates(
   db: MunyDb | Tx,
-  txns: ParsedTransaction[],
+  txns: DedupeInput[],
   hashes: (string | undefined)[],
   accountIdFor: (key: string) => string | undefined,
-): boolean[] {
-  const dup = txns.map(() => false);
+  /** Only match rows that no provider has claimed yet (used by bank sync). */
+  opts: { unreferencedOnly?: boolean } = {},
+): (string | null)[] {
+  const dup: (string | null)[] = txns.map(() => null);
   const accountIds = [...new Set(txns.map((t) => accountIdFor(t.accountKey)))].filter(
     (x): x is string => !!x,
   );
@@ -225,6 +238,7 @@ function findDuplicates(
         inArray(t.accountId, accountIds),
         gte(t.postedDate, shiftDate(dates[0] ?? "", -FUZZY_DAYS)),
         lte(t.postedDate, shiftDate(dates[dates.length - 1] ?? "", FUZZY_DAYS)),
+        opts.unreferencedOnly ? isNull(t.providerTxnRef) : undefined,
       ),
     )
     .all();
@@ -249,7 +263,7 @@ function findDuplicates(
       (tx.providerTxnRef ? byRef.get(`${acc}:${tx.providerTxnRef}`) : undefined);
     if (hit && !used.has(hit.id)) {
       used.add(hit.id);
-      dup[i] = true;
+      dup[i] = hit.id;
     }
   });
   // Pass 2: same day + amount (sources disagree on posted vs transaction date).
@@ -262,7 +276,7 @@ function findDuplicates(
         : undefined;
       if (hit) {
         used.add(hit.id);
-        dup[i] = true;
+        dup[i] = hit.id;
         break;
       }
     }
@@ -283,7 +297,7 @@ function findDuplicates(
           );
         if (hit) {
           used.add(hit.id);
-          dup[i] = true;
+          dup[i] = hit.id;
           break;
         }
       }

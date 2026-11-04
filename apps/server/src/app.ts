@@ -17,15 +17,54 @@ import { registerPayeeRoutes } from "./ledger/payees.js";
 import { registerTransactionRoutes } from "./ledger/transactions.js";
 import { registerErrorHandler } from "./lib/http.js";
 import { registerRuleRoutes } from "./rules/routes.js";
+import { makeProviders, type Providers } from "./sync/engine.js";
+import { registerSyncRoutes } from "./sync/routes.js";
 import { VERSION } from "./version.js";
 
 export interface AppDeps {
   config: Config;
   db: MunyDb;
+  /** Bank sync providers; defaults to the ones configured in env. Tests inject fakes. */
+  providers?: Providers;
+}
+
+/**
+ * Content-Security-Policy. Bank widgets (Plaid Link, Teller Connect) load
+ * scripts/frames from their own domains, so those are allowed only when that
+ * provider is configured.
+ */
+export function contentSecurityPolicy(config: Config): string {
+  const script = ["'self'"];
+  const frame = ["'none'"];
+  const connect = ["'self'"];
+  if (config.plaid) {
+    script.push("https://cdn.plaid.com");
+    frame.push("https://cdn.plaid.com", "https://*.plaid.com");
+    connect.push("https://*.plaid.com");
+  }
+  if (config.teller) {
+    script.push("https://cdn.teller.io");
+    frame.push("https://teller.io", "https://*.teller.io");
+    connect.push("https://*.teller.io");
+  }
+  const frameSrc = frame.length > 1 ? frame.filter((f) => f !== "'none'") : frame;
+  return [
+    "default-src 'self'",
+    `script-src ${script.join(" ")}`,
+    `frame-src ${frameSrc.join(" ")}`,
+    `connect-src ${connect.join(" ")}`,
+    "img-src 'self' data:",
+    "style-src 'self' 'unsafe-inline'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+  ].join("; ");
 }
 
 /** Build the Fastify app without listening, so tests can use app.inject(). */
-export async function buildApp({ config, db }: AppDeps): Promise<FastifyInstance> {
+export async function buildApp({ config, db, providers }: AppDeps): Promise<FastifyInstance> {
+  const syncDeps = { config, providers: providers ?? makeProviders(config) };
+  const csp = contentSecurityPolicy(config);
   const app = Fastify({
     logger:
       config.env === "test"
@@ -54,10 +93,7 @@ export async function buildApp({ config, db }: AppDeps): Promise<FastifyInstance
     reply.header("x-content-type-options", "nosniff");
     reply.header("referrer-policy", "same-origin");
     reply.header("x-frame-options", "DENY");
-    reply.header(
-      "content-security-policy",
-      "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
-    );
+    reply.header("content-security-policy", csp);
   });
 
   registerAuth(app, db);
@@ -70,6 +106,8 @@ export async function buildApp({ config, db }: AppDeps): Promise<FastifyInstance
   registerRuleRoutes(app, db);
   registerExportRoutes(app, db);
   registerBackupRoutes(app, db, config);
+  registerSyncRoutes(app, db, syncDeps);
+  app.decorate("syncDeps", syncDeps);
 
   // Polled by the Docker healthcheck every 30s; only log problems.
   app.get("/api/health", { logLevel: "warn" }, async (_req, reply) => {

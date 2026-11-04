@@ -3,6 +3,7 @@ import { buildApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { startBackupScheduler } from "./data/backups.js";
 import { seedDefaultCategories } from "./ledger/seed.js";
+import { startSyncScheduler } from "./sync/engine.js";
 import { VERSION } from "./version.js";
 
 async function main() {
@@ -30,6 +31,9 @@ async function main() {
 
   await app.listen({ host: config.host, port: config.port });
   startBackupScheduler(db, config, app.log);
+  startSyncScheduler(db, app.syncDeps, app.log);
+  if (config.plaid) app.log.info({ env: config.plaid.env }, "Plaid sync enabled");
+  if (config.teller) app.log.info({ env: config.teller.env }, "Teller sync enabled");
 }
 
 main().catch((err) => {

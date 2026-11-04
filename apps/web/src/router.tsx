@@ -6,6 +6,7 @@ import { AccountsPage } from "./pages/AccountsPage.js";
 import { LoginPage, SetupPage } from "./pages/AuthPages.js";
 import { ImportPage } from "./pages/ImportPage.js";
 import { OverviewPage } from "./pages/Placeholders.js";
+import { PlaidOAuthPage } from "./pages/PlaidOAuthPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 import { TransactionsPage } from "./pages/TransactionsPage.js";
 
@@ -43,6 +44,7 @@ const routeTree = rootRoute.addChildren([
   page("/accounts", AccountsPage),
   page("/import", ImportPage),
   page("/settings", SettingsPage),
+  page("/oauth/plaid", PlaidOAuthPage),
 ]);
 
 export const router = createRouter({

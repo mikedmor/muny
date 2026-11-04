@@ -7,6 +7,7 @@ import {
   LIABILITY_TYPES,
 } from "@muny/shared";
 import { type FormEvent, useState } from "react";
+import { BankConnections } from "../components/BankConnections.js";
 import { Checkbox, Modal, MoneyField, SelectField } from "../components/forms.js";
 import { Alert, Button, Card, cx, Field, PageHeader } from "../components/ui.js";
 import { ApiError } from "../lib/api.js";
@@ -61,6 +62,8 @@ export function AccountsPage() {
       />
 
       {accounts.isError && <Alert>Couldn't load accounts.</Alert>}
+
+      <BankConnections />
 
       {accounts.isSuccess && all.length === 0 && (
         <Card className="text-center">

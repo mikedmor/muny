@@ -33,7 +33,45 @@ const EnvSchema = z.object({
     .min(0)
     .max(24 * 365)
     .default(24),
+  /** Hours between automatic bank syncs; 0 turns scheduled sync off. */
+  MUNY_SYNC_INTERVAL_HOURS: z.coerce
+    .number()
+    .min(0)
+    .max(24 * 7)
+    .default(6),
+
+  // Plaid (optional; your own developer keys)
+  PLAID_CLIENT_ID: optionalString,
+  PLAID_SECRET: optionalString,
+  PLAID_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
+  /** HTTPS URL registered in the Plaid dashboard; needed for OAuth banks. */
+  PLAID_REDIRECT_URI: optionalString.refine(
+    (v) => v === undefined || /^https:\/\//.test(v),
+    "PLAID_REDIRECT_URI must be an https:// URL",
+  ),
+  PLAID_COUNTRY_CODES: z.string().default("US"),
+
+  // Teller (optional)
+  TELLER_APPLICATION_ID: optionalString,
+  TELLER_ENV: z.enum(["sandbox", "development", "production"]).default("sandbox"),
+  TELLER_CERT_PATH: optionalString,
+  TELLER_KEY_PATH: optionalString,
 });
+
+export interface PlaidConfig {
+  clientId: string;
+  secret: string;
+  env: "sandbox" | "production";
+  redirectUri: string | undefined;
+  countryCodes: string[];
+}
+
+export interface TellerConfig {
+  applicationId: string;
+  env: "sandbox" | "development" | "production";
+  certPath: string | undefined;
+  keyPath: string | undefined;
+}
 
 export interface Config {
   env: "development" | "production" | "test";
@@ -49,6 +87,9 @@ export interface Config {
   backupDir: string;
   backupKeep: number;
   backupIntervalHours: number;
+  syncIntervalHours: number;
+  plaid: PlaidConfig | null;
+  teller: TellerConfig | null;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -73,5 +114,26 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     backupDir: e.MUNY_BACKUP_DIR ? resolve(e.MUNY_BACKUP_DIR) : resolve(dataDir, "backups"),
     backupKeep: e.MUNY_BACKUP_KEEP,
     backupIntervalHours: e.MUNY_BACKUP_INTERVAL_HOURS,
+    syncIntervalHours: e.MUNY_SYNC_INTERVAL_HOURS,
+    plaid:
+      e.PLAID_CLIENT_ID && e.PLAID_SECRET
+        ? {
+            clientId: e.PLAID_CLIENT_ID,
+            secret: e.PLAID_SECRET,
+            env: e.PLAID_ENV,
+            redirectUri: e.PLAID_REDIRECT_URI,
+            countryCodes: e.PLAID_COUNTRY_CODES.split(",")
+              .map((c) => c.trim().toUpperCase())
+              .filter(Boolean),
+          }
+        : null,
+    teller: e.TELLER_APPLICATION_ID
+      ? {
+          applicationId: e.TELLER_APPLICATION_ID,
+          env: e.TELLER_ENV,
+          certPath: e.TELLER_CERT_PATH ? resolve(e.TELLER_CERT_PATH) : undefined,
+          keyPath: e.TELLER_KEY_PATH ? resolve(e.TELLER_KEY_PATH) : undefined,
+        }
+      : null,
   };
 }

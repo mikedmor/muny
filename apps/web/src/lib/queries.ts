@@ -3,14 +3,19 @@ import type {
   BackupInfo,
   BulkUpdateInput,
   CategoryGroup,
+  ConnectionSummary,
   CreateAccountInput,
   CreateTransactionInput,
+  LinkResult,
+  LinkStart,
   PayeeCleanupPreview,
   PayeeSummary,
   Rule,
   RuleApplyResult,
   RuleInput,
   SplitInput,
+  SyncConfigStatus,
+  SyncSummary,
   Tag,
   Transaction,
   TransactionPage,
@@ -35,6 +40,8 @@ export const keys = {
   rules: ["rules"] as const,
   payees: ["payees"] as const,
   backups: ["backups"] as const,
+  connections: ["connections"] as const,
+  syncConfig: ["sync-config"] as const,
 };
 
 export function useAccounts() {
@@ -281,3 +288,52 @@ export function useBackups() {
 
 export const useCreateBackup = () =>
   useInvalidatingMutation(() => api.post<BackupInfo>("/api/backups"), [keys.backups]);
+
+// ---------------------------------------------------------------------------
+// Bank connections
+// ---------------------------------------------------------------------------
+
+export function useSyncConfig() {
+  return useQuery({
+    queryKey: keys.syncConfig,
+    queryFn: () => api.get<SyncConfigStatus>("/api/sync/config"),
+    staleTime: 60_000,
+  });
+}
+
+export function useConnections() {
+  return useQuery({
+    queryKey: keys.connections,
+    queryFn: () => api.get<ConnectionSummary[]>("/api/connections"),
+  });
+}
+
+const syncKeys = [keys.connections, ...txnKeys, keys.payees] as const;
+
+export const useLinkAccounts = () =>
+  useInvalidatingMutation(
+    ({ id, accounts }: { id: string; accounts: Record<string, string> }) =>
+      api.post<LinkResult>(`/api/connections/${id}/link`, { accounts }),
+    syncKeys,
+  );
+
+export const useSyncNow = () =>
+  useInvalidatingMutation(
+    (id: string) => api.post<SyncSummary>(`/api/connections/${id}/sync`),
+    syncKeys,
+  );
+
+export const useDisconnect = () =>
+  useInvalidatingMutation((id: string) => api.delete(`/api/connections/${id}`), syncKeys);
+
+export const linkApi = {
+  plaidLinkToken: () => api.post<{ linkToken: string }>("/api/connections/plaid/link-token"),
+  plaidUpdateToken: (id: string) =>
+    api.post<{ linkToken: string }>(`/api/connections/${id}/plaid/update-token`),
+  plaidExchange: (publicToken: string) =>
+    api.post<LinkStart>("/api/connections/plaid/exchange", { publicToken }),
+  plaidReauthed: (id: string) => api.post<SyncSummary>(`/api/connections/${id}/reauthed`),
+  tellerEnroll: (body: { accessToken: string; enrollmentId: string; connectionId?: string }) =>
+    api.post<LinkStart>("/api/connections/teller/enroll", body),
+  linkable: (id: string) => api.get<LinkStart>(`/api/connections/${id}/accounts`),
+};

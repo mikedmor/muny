@@ -69,11 +69,15 @@ export const connections = sqliteTable("connections", {
   providerRef: text(),
   /** AES-256-GCM encrypted JSON blob (access tokens etc). Never logged. */
   credentialsEnc: text(),
-  status: text({ enum: ["active", "error", "reauth_required", "disabled"] })
+  status: text({ enum: ["pending_setup", "active", "error", "reauth_required", "disabled"] })
     .notNull()
     .default("active"),
   lastSyncAt: integer({ mode: "timestamp_ms" }),
   lastError: text(),
+  /** Provider sync position (Plaid transactions/sync cursor). Not secret. */
+  syncCursor: text(),
+  /** Provider account ids the user chose not to track. */
+  ignoredAccountRefs: text({ mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
