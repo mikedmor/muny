@@ -1,0 +1,30 @@
+{
+  "name": "muny",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-hosted personal finance and subscription manager with AI agent access",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @muny/server --filter @muny/web dev",
+    "build": "pnpm --filter @muny/web build && pnpm --filter @muny/server build",
+    "start": "pnpm --filter @muny/server start",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "db:generate": "pnpm --filter @muny/db generate",
+    "check": "pnpm lint && pnpm typecheck && pnpm test"
+  },
+  "packageManager": "pnpm@10.34.9+sha512.f49b5a8ea0fdedb44bb3c0c1d6575092a53c2950d95b7ad15df11f17974877a2de3a01c07e934e9b28ce716e51c09a94962c7306d09be2e1e4b18a8c8762fd32",
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.5",
+    "@types/node": "^24.19.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}

@@ -1,0 +1,26 @@
+# Example Docker Compose file for Muny.
+#
+#   cp docker/compose.yaml compose.yaml   # adjust paths/user
+#   docker compose up -d --build          # builds from source in this repo
+#
+# Once images are published, replace `build:` with:
+#   image: ghcr.io/mikedmor/muny:latest
+services:
+  muny:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: muny:local
+    container_name: muny
+    restart: unless-stopped
+    # Must own the data folder on the host. On Synology run `id` over SSH to find yours.
+    user: "1000:1000"
+    ports:
+      - "8420:8420"
+    environment:
+      TZ: America/New_York
+      # Required once bank sync is enabled. Generate with:
+      #   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+      MUNY_SECRET_KEY: ${MUNY_SECRET_KEY:-}
+    volumes:
+      - ./data:/data

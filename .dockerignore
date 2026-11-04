@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+.git
+.claude
+data-local
+docs
+*.md
+!LICENSE
+.env
+.env.*
+**/*.db
+**/*.db-*
+**/*.log
+coverage

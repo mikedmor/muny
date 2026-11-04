@@ -17,17 +17,17 @@ Commercial tools like Rocket Money work well, but they cost a monthly subscripti
 
 ## Documentation
 
-| Doc | Purpose |
-|---|---|
-| [docs/VISION.md](docs/VISION.md) | Goals, non-goals, guiding principles |
-| [docs/FEATURES.md](docs/FEATURES.md) | Rocket Money parity matrix + Muny-only features |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Tech stack, components, data model |
+| Doc                                              | Purpose                                          |
+| ------------------------------------------------ | ------------------------------------------------ |
+| [docs/VISION.md](docs/VISION.md)                 | Goals, non-goals, guiding principles             |
+| [docs/FEATURES.md](docs/FEATURES.md)             | Rocket Money parity matrix + Muny-only features  |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)     | Tech stack, components, data model               |
 | [docs/AI_INTEGRATION.md](docs/AI_INTEGRATION.md) | MCP server, agent API, permission model, privacy |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Phased delivery plan |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | Architecture decision log |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Docker / Synology NAS deployment |
-| [SECURITY.md](SECURITY.md) | Security model and vulnerability reporting |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Dev setup and contribution guidelines |
+| [docs/ROADMAP.md](docs/ROADMAP.md)               | Phased delivery plan                             |
+| [docs/DECISIONS.md](docs/DECISIONS.md)           | Architecture decision log                        |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)         | Docker / Synology NAS deployment                 |
+| [SECURITY.md](SECURITY.md)                       | Security model and vulnerability reporting       |
+| [CONTRIBUTING.md](CONTRIBUTING.md)               | Dev setup and contribution guidelines            |
 
 ## License
 
