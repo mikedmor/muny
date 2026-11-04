@@ -34,7 +34,8 @@ export async function buildApp({ config, db }: AppDeps): Promise<FastifyInstance
     bodyLimit: 25 * 1024 * 1024, // room for large CSV imports later
   });
 
-  app.get("/api/health", async (_req, reply) => {
+  // Polled by the Docker healthcheck every 30s; only log problems.
+  app.get("/api/health", { logLevel: "warn" }, async (_req, reply) => {
     const dbOk = pingDb(db);
     const body: HealthResponse = {
       status: dbOk ? "ok" : "degraded",
