@@ -175,7 +175,7 @@ export function RulesSettings() {
                     When {d.when} → {d.actions}
                   </p>
                 </div>
-                <div className="flex items-center gap-1 text-sm">
+                <div className="flex w-full items-center justify-end gap-1 text-sm sm:w-auto">
                   <button
                     type="button"
                     aria-label="Move up"

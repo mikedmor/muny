@@ -39,4 +39,9 @@ export const useSetup = () =>
     api.post("/api/auth/setup", b),
   );
 
+export const useAcceptInvite = (token: string) =>
+  useAuthMutation((b: { email: string; password: string; displayName?: string }) =>
+    api.post(`/api/invites/${token}/accept`, b),
+  );
+
 export const useLogout = () => useAuthMutation(() => api.post("/api/auth/logout"));

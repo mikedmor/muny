@@ -107,6 +107,11 @@ export function AppShell({ user }: { user: CurrentUser }) {
       </div>
 
       <main className="mx-auto w-full min-w-0 max-w-6xl flex-1 px-4 py-6 md:px-8 md:py-8">
+        {user.role === "viewer" && (
+          <p className="mb-4 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+            You have view-only access to this household.
+          </p>
+        )}
         <Outlet />
       </main>
     </div>

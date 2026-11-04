@@ -76,7 +76,7 @@ type Tab = (typeof TABS)[number][0];
 const selectClass =
   "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950";
 const th = "px-2 py-1.5 text-left font-medium text-slate-500";
-const td = "px-2 py-1.5 tabular-nums";
+const td = "whitespace-nowrap px-2 py-1.5 tabular-nums";
 
 // ---------------------------------------------------------------------------
 

@@ -36,11 +36,24 @@ export const users = sqliteTable("users", {
   email: text().notNull().unique(),
   displayName: text(),
   passwordHash: text().notNull(),
-  role: text({ enum: ["owner", "member"] })
+  /** owner: everything; member: everything but household & backups; viewer: read-only. */
+  role: text({ enum: ["owner", "member", "viewer"] })
     .notNull()
     .default("member"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
+});
+
+/** Single-use household invite links. Only the token's hash is stored. */
+export const invites = sqliteTable("invites", {
+  id: text().primaryKey(),
+  tokenHash: text().notNull().unique(),
+  role: text({ enum: ["member", "viewer"] }).notNull(),
+  createdBy: text().references(() => users.id, { onDelete: "set null" }),
+  expiresAt: integer({ mode: "timestamp_ms" }).notNull(),
+  usedAt: integer({ mode: "timestamp_ms" }),
+  usedBy: text().references(() => users.id, { onDelete: "set null" }),
+  createdAt: createdAt(),
 });
 
 export const sessions = sqliteTable(

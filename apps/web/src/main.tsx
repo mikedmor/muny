@@ -34,3 +34,12 @@ createRoot(root).render(
     </QueryClientProvider>
   </StrictMode>,
 );
+
+// Installable app + fast startup. Only in production builds (Vite dev serves differently).
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {
+      // Not fatal: some browsers block service workers over plain HTTP.
+    });
+  });
+}

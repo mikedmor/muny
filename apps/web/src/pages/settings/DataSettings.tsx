@@ -47,7 +47,13 @@ export function DataSettings() {
           Backups are stored next to the database, so also copy them off the NAS (for example with
           Hyper Backup).
         </p>
-        {backups.isError && <Alert>Couldn't load backups.</Alert>}
+        {backups.isError && (
+          <Alert>
+            {backups.error.message.includes("owner")
+              ? "Only the household owner manages backups."
+              : "Couldn't load backups."}
+          </Alert>
+        )}
         {create.error && <Alert>{create.error.message}</Alert>}
         <Card className="p-0">
           <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800">

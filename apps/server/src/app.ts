@@ -5,6 +5,7 @@ import fastifyStatic from "@fastify/static";
 import { appliedMigrationCount, type MunyDb, pingDb } from "@muny/db";
 import type { HealthResponse, MetaResponse } from "@muny/shared";
 import Fastify, { type FastifyInstance } from "fastify";
+import { registerHouseholdRoutes } from "./auth/household.js";
 import { registerAuth } from "./auth/plugin.js";
 import { registerAuthRoutes } from "./auth/routes.js";
 import { registerBudgetRoutes } from "./budgets/routes.js";
@@ -101,6 +102,7 @@ export async function buildApp({ config, db, providers }: AppDeps): Promise<Fast
 
   registerAuth(app, db);
   registerAuthRoutes(app, db);
+  registerHouseholdRoutes(app, db);
   registerAccountRoutes(app, db);
   registerCategoryRoutes(app, db);
   registerTransactionRoutes(app, db);

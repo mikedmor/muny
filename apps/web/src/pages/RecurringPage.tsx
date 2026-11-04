@@ -59,7 +59,7 @@ function SeriesRow({ s, onOpen }: { s: RecurringSeries; onOpen: () => void }) {
   const update = useUpdateRecurring();
   return (
     <li className="flex flex-wrap items-center gap-3 px-4 py-3">
-      <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
+      <button type="button" onClick={onOpen} className="min-w-0 flex-1 basis-40 text-left">
         <p className="truncate font-medium">
           {s.name}
           {s.status === "detected" && (
@@ -106,7 +106,7 @@ function SeriesRow({ s, onOpen }: { s: RecurringSeries; onOpen: () => void }) {
         )}
       </div>
       {s.status === "detected" && (
-        <div className="flex gap-1">
+        <div className="flex w-full justify-end gap-1 sm:w-auto">
           <Button
             variant="ghost"
             className="px-2 py-1 text-xs"

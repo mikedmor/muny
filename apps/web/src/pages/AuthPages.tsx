@@ -1,7 +1,9 @@
+import type { InviteStatus } from "@muny/shared";
+import { useQuery } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { Alert, Button, Field } from "../components/ui.js";
-import { ApiError } from "../lib/api.js";
-import { useLogin, useSetup } from "../lib/auth.js";
+import { ApiError, api } from "../lib/api.js";
+import { useAcceptInvite, useLogin, useSetup } from "../lib/auth.js";
 
 function AuthLayout({
   title,
@@ -136,6 +138,92 @@ export function SetupPage() {
         />
         <Button type="submit" className="w-full" disabled={setup.isPending}>
           {setup.isPending ? "Creating account…" : "Create account"}
+        </Button>
+      </form>
+    </AuthLayout>
+  );
+}
+
+/** Joining a household from an invite link (/invite/<token>). */
+export function InvitePage({ token }: { token: string }) {
+  const status = useQuery({
+    queryKey: ["invite", token],
+    queryFn: () => api.get<InviteStatus>(`/api/invites/${encodeURIComponent(token)}`),
+    retry: false,
+  });
+  const accept = useAcceptInvite(token);
+  const [displayName, setDisplayName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const { message, fields } = errorInfo(accept.error);
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    accept.mutate(
+      { email, password, displayName: displayName || undefined },
+      { onSuccess: () => window.history.replaceState(null, "", "/") },
+    );
+  };
+
+  if (status.isPending)
+    return (
+      <AuthLayout title="Join a household" subtitle="Checking your invite…">
+        {null}
+      </AuthLayout>
+    );
+  if (!status.data?.valid)
+    return (
+      <AuthLayout
+        title="Invite not valid"
+        subtitle="This link is invalid, already used, or expired."
+      >
+        <p className="text-sm text-slate-600 dark:text-slate-400">
+          Ask the person who runs this Muny for a new invite link.{" "}
+          <a href="/" className="text-brand-600 underline">
+            Sign in
+          </a>{" "}
+          if you already have an account.
+        </p>
+      </AuthLayout>
+    );
+  return (
+    <AuthLayout
+      title="Join this household on Muny"
+      subtitle={
+        status.data.role === "viewer"
+          ? "You'll be able to see everything but not change it."
+          : "You'll be able to see and manage the household's finances."
+      }
+    >
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        {message && !Object.keys(fields).length && <Alert>{message}</Alert>}
+        <Field
+          label="Your name"
+          autoComplete="name"
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
+        />
+        <Field
+          label="Email"
+          type="email"
+          autoComplete="username"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          error={fields.email}
+        />
+        <Field
+          label="Password"
+          type="password"
+          autoComplete="new-password"
+          required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          error={fields.password}
+          hint="At least 10 characters."
+        />
+        <Button type="submit" className="w-full" disabled={accept.isPending}>
+          {accept.isPending ? "Creating your account…" : "Create account"}
         </Button>
       </form>
     </AuthLayout>

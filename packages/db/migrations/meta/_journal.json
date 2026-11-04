@@ -43,6 +43,13 @@
       "when": 1793825338175,
       "tag": "0005_budgets",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793826459529,
+      "tag": "0006_household",
+      "breakpoints": true
     }
   ]
 }

@@ -5,7 +5,7 @@ import type { MunyDb } from "@muny/db";
 import type { BackupInfo } from "@muny/shared";
 import type { FastifyBaseLogger, FastifyInstance } from "fastify";
 import { z } from "zod";
-import { requireUser } from "../auth/plugin.js";
+import { requireOwner } from "../auth/plugin.js";
 import type { Config } from "../config.js";
 import { audit } from "../lib/audit.js";
 import { notFound, parse } from "../lib/http.js";
@@ -94,15 +94,18 @@ export function startBackupScheduler(db: MunyDb, config: Config, log: FastifyBas
 }
 
 export function registerBackupRoutes(app: FastifyInstance, db: MunyDb, config: Config) {
-  app.get("/api/backups", async () => ({
-    dir: config.backupDir,
-    keep: config.backupKeep,
-    intervalHours: config.backupIntervalHours,
-    backups: await listBackups(config.backupDir),
-  }));
+  app.get("/api/backups", async (req) => {
+    requireOwner(req);
+    return {
+      dir: config.backupDir,
+      keep: config.backupKeep,
+      intervalHours: config.backupIntervalHours,
+      backups: await listBackups(config.backupDir),
+    };
+  });
 
   app.post("/api/backups", async (req, reply) => {
-    const user = requireUser(req);
+    const user = requireOwner(req);
     const b = await createBackup(db, config.backupDir, config.backupKeep);
     audit(db, {
       actorType: "user",
@@ -114,7 +117,7 @@ export function registerBackupRoutes(app: FastifyInstance, db: MunyDb, config: C
   });
 
   app.get("/api/backups/:name", async (req, reply) => {
-    const user = requireUser(req);
+    const user = requireOwner(req);
     const { name } = parse(
       z.object({ name: z.string().regex(NAME, "Invalid backup name") }),
       req.params,

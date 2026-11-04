@@ -17,7 +17,12 @@ const PUBLIC_ROUTES = new Set([
   "POST /api/auth/setup",
   "POST /api/auth/login",
   "POST /api/auth/logout",
+  "GET /api/invites/:token",
+  "POST /api/invites/:token/accept",
 ]);
+
+/** The only changes a read-only (viewer) user may make. */
+const VIEWER_WRITES = new Set(["POST /api/auth/logout", "POST /api/auth/password"]);
 
 /** Header the web client sends on every mutating request (see SECURITY.md). */
 export const CSRF_HEADER = "x-muny-csrf";
@@ -58,7 +63,21 @@ export function registerAuth(app: FastifyInstance, db: MunyDb) {
 
     const routeKey = `${req.method} ${req.routeOptions.url ?? req.url.split("?")[0]}`;
     if (!req.user && !PUBLIC_ROUTES.has(routeKey)) throw unauthorized();
+    if (
+      req.user?.role === "viewer" &&
+      !["GET", "HEAD", "OPTIONS"].includes(req.method) &&
+      !VIEWER_WRITES.has(routeKey)
+    ) {
+      throw forbidden("You have view-only access to this household.");
+    }
   });
+}
+
+/** Household administration and backups (which contain password hashes) are owner-only. */
+export function requireOwner(req: FastifyRequest): SessionUser {
+  const user = requireUser(req);
+  if (user.role !== "owner") throw forbidden("Only the household owner can do this.");
+  return user;
 }
 
 export function requireUser(req: FastifyRequest): SessionUser {

@@ -10,7 +10,7 @@ export interface SessionUser {
   id: string;
   email: string;
   displayName: string | null;
-  role: "owner" | "member";
+  role: "owner" | "member" | "viewer";
 }
 
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");

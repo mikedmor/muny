@@ -16,11 +16,13 @@ export interface MetaResponse {
   license: "AGPL-3.0-only";
 }
 
+export type UserRole = "owner" | "member" | "viewer";
+
 export interface CurrentUser {
   id: string;
   email: string;
   displayName: string | null;
-  role: "owner" | "member";
+  role: UserRole;
 }
 
 /** Response of GET /api/auth/status. */
@@ -35,3 +37,31 @@ export interface ApiErrorBody {
   error: string;
   issues?: { path: string; message: string }[];
 }
+
+export interface HouseholdUser {
+  id: string;
+  email: string;
+  displayName: string | null;
+  role: UserRole;
+  createdAt: number;
+  isYou: boolean;
+}
+
+export interface HouseholdInfo {
+  users: HouseholdUser[];
+  /** Pending invites (owner only). */
+  invites: { id: string; role: "member" | "viewer"; expiresAt: number; createdAt: number }[];
+}
+
+export interface InviteCreated {
+  id: string;
+  role: "member" | "viewer";
+  /** Shown once; Muny only stores its hash. */
+  token: string;
+  path: string;
+  expiresAt: number;
+}
+
+export type InviteStatus =
+  | { valid: true; role: "member" | "viewer"; expiresAt: number }
+  | { valid: false };

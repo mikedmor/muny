@@ -3,7 +3,7 @@ import { AppShell } from "./components/AppShell.js";
 import { Alert, Button } from "./components/ui.js";
 import { useAuthStatus } from "./lib/auth.js";
 import { AccountsPage } from "./pages/AccountsPage.js";
-import { LoginPage, SetupPage } from "./pages/AuthPages.js";
+import { InvitePage, LoginPage, SetupPage } from "./pages/AuthPages.js";
 import { BudgetsPage } from "./pages/BudgetsPage.js";
 import { ImportPage } from "./pages/ImportPage.js";
 import { OverviewPage } from "./pages/OverviewPage.js";
@@ -32,6 +32,8 @@ function Root() {
     );
   }
   if (status.data.setupRequired) return <SetupPage />;
+  const invite = /^\/invite\/([\w-]{20,100})$/.exec(window.location.pathname);
+  if (!status.data.user && invite?.[1]) return <InvitePage token={invite[1]} />;
   if (!status.data.user) return <LoginPage />;
   return <AppShell user={status.data.user} />;
 }

@@ -7,6 +7,7 @@ Muny holds sensitive financial data. Security is a core requirement, not a featu
 - **Self-hosted, LAN-first.** Muny is not hardened for direct internet exposure. Use a VPN or an authenticated reverse proxy with TLS.
 - **No outbound traffic by default.** Bank sync, notifications and LLM providers are opt-in.
 - **Secrets at rest:** bank/provider credentials (including Plaid and Teller access tokens) are encrypted (AES-256-GCM) with `MUNY_SECRET_KEY`, which is supplied via the environment and never stored in the database.
+- **Roles:** owner / member / viewer (read-only, enforced server-side). Household invites are single-use, hashed, 7-day links.
 - **Passwords:** argon2id. **API tokens:** shown once, stored hashed, scoped, expirable, audited.
 - **Agents:** read-only by default. Writes go through approval and are audited. Agents can never touch credentials, tokens or bulk export.
 - **No money movement**, ever.
