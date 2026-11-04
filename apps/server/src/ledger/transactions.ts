@@ -7,6 +7,12 @@ import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, notFound, parse } from "../lib/http.js";
+import {
+  applyTransferPairs,
+  dismissTransfer,
+  findTransferPairs,
+  previewTransfers,
+} from "./transfers.js";
 
 const t = schema.transactions;
 const MANUAL_PREFIX = "manual:";
@@ -178,6 +184,20 @@ export function loadTransactions(db: MunyDb, ids: string[]): Transaction[] {
     .where(inArray(schema.transactionTags.transactionId, ids))
     .all();
 
+  // Account names on the other side of transfers.
+  const pairIds = rows.map((r) => r.t.transferPairId).filter((x): x is string => !!x);
+  const pairAccount = new Map(
+    pairIds.length
+      ? db
+          .select({ id: t.id, name: schema.accounts.name })
+          .from(t)
+          .innerJoin(schema.accounts, eq(schema.accounts.id, t.accountId))
+          .where(inArray(t.id, pairIds))
+          .all()
+          .map((r) => [r.id, r.name])
+      : [],
+  );
+
   const splitRows = db
     .select({ s: schema.transactionSplits, categoryName: splitCat.name })
     .from(schema.transactionSplits)
@@ -207,6 +227,7 @@ export function loadTransactions(db: MunyDb, ids: string[]): Transaction[] {
         hidden: r.hidden,
         manual: r.importHash.startsWith(MANUAL_PREFIX),
         transferPairId: r.transferPairId,
+        transferAccountName: r.transferPairId ? (pairAccount.get(r.transferPairId) ?? null) : null,
         tags: tagRows
           .filter((x) => x.txnId === r.id)
           .map(({ tag }) => ({ id: tag.id, name: tag.name, color: tag.color }))
@@ -454,6 +475,25 @@ export function registerTransactionRoutes(app: FastifyInstance, db: MunyDb) {
     });
     log(user.id, "transaction.bulk_update", undefined, { count: ids.length, set });
     return { updated: changed };
+  });
+
+  /** "Not a transfer": unpair, and don't pair these again. */
+  app.delete("/api/transactions/:id/transfer", async (req) => {
+    const user = requireUser(req);
+    const { id: txnId } = parse(IdParams, req.params);
+    getTransaction(db, txnId);
+    db.transaction((tx) => dismissTransfer(tx, txnId));
+    log(user.id, "transaction.not_transfer", txnId);
+    return getTransaction(db, txnId);
+  });
+
+  app.post("/api/transfers/preview", async () => previewTransfers(db));
+
+  app.post("/api/transfers/apply", async (req) => {
+    const user = requireUser(req);
+    const paired = db.transaction((tx) => applyTransferPairs(tx, findTransferPairs(tx)));
+    log(user.id, "transfer.detect", undefined, { paired });
+    return { paired };
   });
 
   app.get("/api/tags", async () => db.select().from(schema.tags).orderBy(schema.tags.name).all());

@@ -20,6 +20,7 @@ import type {
   Transaction,
   TransactionPage,
   TransactionQuery,
+  TransferPreview,
   UpdateAccountInput,
   UpdateTransactionInput,
 } from "@muny/shared";
@@ -337,3 +338,24 @@ export const linkApi = {
     api.post<LinkStart>("/api/connections/teller/enroll", body),
   linkable: (id: string) => api.get<LinkStart>(`/api/connections/${id}/accounts`),
 };
+
+// ---------------------------------------------------------------------------
+// Transfers
+// ---------------------------------------------------------------------------
+
+export const useNotTransfer = () =>
+  useInvalidatingMutation(
+    (id: string) => api.delete<Transaction>(`/api/transactions/${id}/transfer`),
+    txnKeys,
+  );
+
+export function useTransferPreview(enabled: boolean) {
+  return useQuery({
+    queryKey: [...keys.transactions, "transfer-preview"],
+    queryFn: () => api.post<TransferPreview>("/api/transfers/preview"),
+    enabled,
+  });
+}
+
+export const useApplyTransfers = () =>
+  useInvalidatingMutation(() => api.post<{ paired: number }>("/api/transfers/apply"), txnKeys);

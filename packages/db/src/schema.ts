@@ -228,6 +228,8 @@ export const transactions = sqliteTable(
     /** Stable dedupe hash: account + date + amount + normalized description + occurrence. */
     importHash: text().notNull(),
     importBatchId: text().references(() => importBatches.id, { onDelete: "set null" }),
+    /** The user said this isn't a transfer; transfer detection leaves it alone. */
+    notTransfer: integer({ mode: "boolean" }).notNull().default(false),
     /** True when the user edited category/payee manually (rules won't override). */
     userModified: integer({ mode: "boolean" }).notNull().default(false),
     createdAt: createdAt(),

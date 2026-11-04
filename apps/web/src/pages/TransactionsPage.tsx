@@ -15,6 +15,7 @@ import {
   useBulkUpdate,
   useCreateTransaction,
   useDeleteTransaction,
+  useNotTransfer,
   useSetSplits,
   useTags,
   useTransactions,
@@ -304,6 +305,8 @@ function TransactionRow({
         </p>
         <p className="truncate text-xs text-slate-500">
           {txn.accountName}
+          {txn.transferAccountName &&
+            ` ${txn.amountCents < 0 ? "→" : "←"} ${txn.transferAccountName}`}
           {txn.notes && ` · ${txn.notes}`}
           {txn.tags.map((t) => ` #${t.name}`).join("")}
         </p>
@@ -506,6 +509,7 @@ function TransactionDetail({ txn, onDone }: { txn: Transaction; onDone: () => vo
   const [splitting, setSplitting] = useState(txn.splits.length > 0);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [ruleDraft, setRuleDraft] = useState<RuleDraft | null>(null);
+  const notTransfer = useNotTransfer();
   const fields = update.error instanceof ApiError ? update.error.fieldErrors() : {};
 
   const save = (e: FormEvent) => {
@@ -538,6 +542,20 @@ function TransactionDetail({ txn, onDone }: { txn: Transaction; onDone: () => vo
           <p className="text-xs text-slate-500">
             {txn.accountName} · {formatDay(txn.postedDate)}
           </p>
+          {txn.transferAccountName && (
+            <p className="mt-1 text-xs">
+              <span className="rounded bg-sky-100 px-1.5 py-0.5 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300">
+                Transfer {txn.amountCents < 0 ? "to" : "from"} {txn.transferAccountName}
+              </span>{" "}
+              <button
+                type="button"
+                onClick={() => notTransfer.mutate(txn.id)}
+                className="text-slate-500 underline hover:text-slate-700"
+              >
+                Not a transfer
+              </button>
+            </p>
+          )}
         </div>
         <Amount cents={txn.amountCents} className="text-lg font-semibold" />
       </div>

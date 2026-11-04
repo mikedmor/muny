@@ -1,0 +1,1 @@
+ALTER TABLE `transactions` ADD `not_transfer` integer DEFAULT false NOT NULL;

@@ -1,5 +1,6 @@
 import {
   AMOUNT_OP_LABELS,
+  formatMoney,
   type Rule,
   type RuleAction,
   type RuleCondition,
@@ -13,11 +14,13 @@ import { Alert, Button, Card, cx } from "../../components/ui.js";
 import {
   useAccounts,
   useApplyRule,
+  useApplyTransfers,
   useCategories,
   useDeleteRule,
   useMoveRule,
   useRules,
   useToggleRule,
+  useTransferPreview,
 } from "../../lib/queries.js";
 
 const NEW_RULE: RuleDraft = {
@@ -62,6 +65,64 @@ function useDescribe() {
     when: r.conditions.map(cond).join(r.match === "all" ? " and " : " or "),
     actions: r.actions.map(act).join(", "),
   });
+}
+
+function TransfersCard() {
+  const [show, setShow] = useState(false);
+  const preview = useTransferPreview(show);
+  const apply = useApplyTransfers();
+  const p = preview.data;
+  return (
+    <Card className="space-y-3">
+      <div>
+        <h3 className="font-semibold">Transfers between your accounts</h3>
+        <p className="text-sm text-slate-500">
+          Money moving between your own accounts (to savings, credit card payments) is linked
+          automatically on import and sync, so it isn't counted as spending or income. This finds
+          ones in your existing history. Transactions you filed under a spending category yourself
+          are left alone.
+        </p>
+      </div>
+      {apply.data ? (
+        <p className="text-sm">Linked {apply.data.paired.toLocaleString()} transfers.</p>
+      ) : !show ? (
+        <Button variant="secondary" onClick={() => setShow(true)}>
+          Find transfers
+        </Button>
+      ) : !p ? (
+        <p className="text-sm text-slate-500">Looking…</p>
+      ) : p.pairs === 0 ? (
+        <p className="text-sm">No new transfers found.</p>
+      ) : (
+        <>
+          <p className="text-sm">
+            Found <strong>{p.pairs.toLocaleString()}</strong> transfers. Most recent:
+          </p>
+          <ul className="max-h-60 divide-y divide-slate-100 overflow-auto rounded-lg border border-slate-200 text-xs dark:divide-slate-800 dark:border-slate-800">
+            {p.sample.map((s) => (
+              <li
+                key={`${s.date}-${s.from}-${s.amountCents}-${s.description}`}
+                className="flex justify-between gap-3 px-2 py-1"
+              >
+                <span className="truncate">
+                  <span className="text-slate-500">{s.date}</span> {s.from} → {s.to}
+                </span>
+                <span className="tabular-nums">{formatMoney(s.amountCents)}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="flex gap-2">
+            <Button disabled={apply.isPending} onClick={() => apply.mutate()}>
+              Link them
+            </Button>
+            <Button variant="ghost" onClick={() => setShow(false)}>
+              Cancel
+            </Button>
+          </div>
+        </>
+      )}
+    </Card>
+  );
 }
 
 export function RulesSettings() {
@@ -183,6 +244,8 @@ export function RulesSettings() {
           </div>
         </Card>
       )}
+
+      <TransfersCard />
 
       <Modal
         open={editing !== null}

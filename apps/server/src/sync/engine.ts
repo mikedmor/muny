@@ -4,6 +4,7 @@ import { and, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
 import type { Config } from "../config.js";
 import { computeHashes, findDuplicates } from "../import/service.js";
 import { upsertPayee } from "../ledger/transactions.js";
+import { linkTransfersFor } from "../ledger/transfers.js";
 import { decryptJson, encryptJson } from "../lib/crypto.js";
 import { runRulesOn } from "../rules/service.js";
 import { type PlaidCreds, PlaidProvider } from "./plaid.js";
@@ -307,6 +308,7 @@ export function applySync(
   }
 
   summary.rulesApplied = runRulesOn(tx, newIds);
+  linkTransfersFor(tx, newIds);
   return summary;
 }
 

@@ -35,6 +35,8 @@ export interface Transaction {
   /** Manually entered (editable date/amount) vs imported/synced. */
   manual: boolean;
   transferPairId: string | null;
+  /** Account on the other side of a detected transfer. */
+  transferAccountName: string | null;
   tags: Tag[];
   splits: TransactionSplit[];
 }
@@ -92,4 +94,10 @@ export interface SplitInput {
 export interface BulkUpdateInput {
   ids: string[];
   set: { categoryId?: string | null; hidden?: boolean; addTag?: string };
+}
+
+export interface TransferPreview {
+  /** New transfer pairs detection would make. */
+  pairs: number;
+  sample: { date: string; amountCents: number; from: string; to: string; description: string }[];
 }

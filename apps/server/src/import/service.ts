@@ -24,6 +24,7 @@ import type {
 } from "@muny/shared";
 import { and, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { upsertPayee, upsertTag } from "../ledger/transactions.js";
+import { linkTransfersFor } from "../ledger/transfers.js";
 import { badRequest } from "../lib/http.js";
 import { runRulesOn } from "../rules/service.js";
 
@@ -585,6 +586,7 @@ export function commitImport(db: MunyDb, req: ImportCommitRequest, userId: strin
 
     // 4. Rules (skip transactions whose category came from the user, e.g. Rocket Money).
     const rulesApplied = runRulesOn(tx, newIds);
+    linkTransfersFor(tx, newIds);
 
     // 5. Statement balances (after transactions, so the math includes them).
     let balancesUpdated = 0;
