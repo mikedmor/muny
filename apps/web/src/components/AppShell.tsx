@@ -15,6 +15,7 @@ const NAV = [
   { to: "/reports", label: "Reports", icon: "▤" },
   { to: "/taxes", label: "Taxes", icon: "🧾" },
   { to: "/accounts", label: "Accounts", icon: "▣" },
+  { to: "/crypto", label: "Crypto", icon: "🪙" },
   { to: "/savings", label: "Savings", icon: "💰" },
   { to: "/import", label: "Import", icon: "⇪" },
   { to: "/settings", label: "Settings", icon: "⚙" },

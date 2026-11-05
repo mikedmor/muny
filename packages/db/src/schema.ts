@@ -571,3 +571,87 @@ export const infraCosts = sqliteTable("infra_costs", {
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
+
+// ---------------------------------------------------------------------------
+// Crypto (Koinly-style portfolio & tax). Quantities are exact decimal strings;
+// USD values are integer cents. See docs/DECISIONS.md D-021.
+// ---------------------------------------------------------------------------
+
+export const cryptoWallets = sqliteTable("crypto_wallets", {
+  id: text().primaryKey(),
+  name: text().notNull(),
+  /** blockchain (synced from a public address/xpub), exchange, or manual/file-only. */
+  kind: text({ enum: ["blockchain", "exchange", "manual"] }).notNull(),
+  /** Chain key for blockchain wallets: btc, ltc, doge, zec, eth, xlm, atom, ada, algo… */
+  chain: text(),
+  /** AES-256-GCM encrypted address or extended public key (an xpub reveals all history). */
+  sourceEnc: text(),
+  /** Safe display hint, e.g. "zpub6s…D8SH5". */
+  sourceHint: text(),
+  syncEnabled: integer({ mode: "boolean" }).notNull().default(false),
+  status: text({ enum: ["ok", "error", "never"] })
+    .notNull()
+    .default("never"),
+  lastSyncAt: integer({ mode: "timestamp_ms" }),
+  lastError: text(),
+  /** Provider cursor/checkpoint (not secret). */
+  syncCursor: text(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const cryptoTxns = sqliteTable(
+  "crypto_txns",
+  {
+    id: text().primaryKey(),
+    walletId: text()
+      .notNull()
+      .references(() => cryptoWallets.id, { onDelete: "cascade" }),
+    /** Unix ms (crypto is timestamped, not just dated). */
+    at: integer().notNull(),
+    /** deposit (in), withdrawal (out), trade (out+in), transfer (between own wallets). */
+    type: text({ enum: ["deposit", "withdrawal", "trade", "transfer"] }).notNull(),
+    /** reward, staking, airdrop, mining, income, gift, donation, lost, cost, fee_refund, … */
+    label: text(),
+    sentAsset: text(),
+    sentAmount: text(),
+    receivedAsset: text(),
+    receivedAmount: text(),
+    feeAsset: text(),
+    feeAmount: text(),
+    /** USD value of the transaction at the time (cents), when known. */
+    valueCents: integer(),
+    feeValueCents: integer(),
+    /** Imported cost basis / gain (e.g. from Koinly), kept for reference. */
+    importedCostBasisCents: integer(),
+    importedGainCents: integer(),
+    txHash: text(),
+    description: text(),
+    /** Stable id for dedupe: provider id, or a hash of the imported row. */
+    externalId: text().notNull(),
+    source: text({ enum: ["sync", "import", "manual"] }).notNull(),
+    /** The other side of a transfer between your own wallets. */
+    transferPairId: text().references((): AnySQLiteColumn => cryptoTxns.id, {
+      onDelete: "set null",
+    }),
+    userModified: integer({ mode: "boolean" }).notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("crypto_txns_external_uq").on(t.walletId, t.externalId),
+    index("crypto_txns_at_idx").on(t.at),
+  ],
+);
+
+/** Daily USD close per asset symbol (decimal string). */
+export const cryptoPrices = sqliteTable(
+  "crypto_prices",
+  {
+    asset: text().notNull(),
+    /** YYYY-MM-DD (UTC) */
+    date: text().notNull(),
+    usd: text().notNull(),
+    source: text().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.asset, t.date] })],
+);

@@ -13,6 +13,11 @@ import type {
   ConnectionSummary,
   CreateAccountInput,
   CreateTransactionInput,
+  CryptoOverview,
+  CryptoSettings,
+  CryptoTxnPage,
+  CryptoTxnQuery,
+  CryptoWallet,
   DiyInput,
   DiyProject,
   InfraCost,
@@ -606,3 +611,45 @@ export const useSaveInfra = () =>
   );
 export const useDeleteInfra = () =>
   useInvalidatingMutation((id: string) => api.delete(`/api/infra/${id}`), savingInvalidates);
+
+// ---------------------------------------------------------------------------
+// Crypto
+// ---------------------------------------------------------------------------
+
+export const cryptoKeys = {
+  all: ["crypto"] as const,
+  overview: ["crypto", "overview"] as const,
+  wallets: ["crypto", "wallets"] as const,
+  txns: ["crypto", "txns"] as const,
+  settings: ["crypto", "settings"] as const,
+};
+
+export const useCryptoOverview = () =>
+  useQuery({
+    queryKey: cryptoKeys.overview,
+    queryFn: () => api.get<CryptoOverview>("/api/crypto/overview"),
+  });
+export const useCryptoWallets = () =>
+  useQuery({
+    queryKey: cryptoKeys.wallets,
+    queryFn: () => api.get<CryptoWallet[]>("/api/crypto/wallets"),
+  });
+export function useCryptoTxns(q: CryptoTxnQuery) {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== "") p.set(k, String(v));
+  return useQuery({
+    queryKey: [...cryptoKeys.txns, q],
+    queryFn: () => api.get<CryptoTxnPage>(`/api/crypto/txns?${p}`),
+    placeholderData: keepPreviousData,
+  });
+}
+export const useCryptoSettings = () =>
+  useQuery({
+    queryKey: cryptoKeys.settings,
+    queryFn: () =>
+      api.get<CryptoSettings & { updatedAt: number | null; lastError: string | null }>(
+        "/api/crypto/settings",
+      ),
+  });
+export const useCryptoMutation = <TIn, TOut>(fn: (input: TIn) => Promise<TOut>) =>
+  useInvalidatingMutation(fn, [cryptoKeys.all]);

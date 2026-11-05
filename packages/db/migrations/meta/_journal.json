@@ -78,6 +78,13 @@
       "when": 1793857531528,
       "tag": "0010_budget_kinds",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1793860559341,
+      "tag": "0011_crypto",
+      "breakpoints": true
     }
   ]
 }

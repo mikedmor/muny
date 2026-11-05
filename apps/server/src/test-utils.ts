@@ -8,12 +8,18 @@ export const OWNER = { email: "owner@example.com", password: "correct horse batt
 export interface AppOptions {
   env?: Record<string, string>;
   alertFetch?: typeof fetch;
+  priceFetch?: typeof fetch;
 }
 
 export async function makeApp(env: Record<string, string> = {}, opts: AppOptions = {}) {
   const config = loadConfig({ NODE_ENV: "test", ...env, ...opts.env });
   const db = openDb({ filename: ":memory:" });
-  const app = await buildApp({ config, db, alertFetch: opts.alertFetch });
+  const app = await buildApp({
+    config,
+    db,
+    alertFetch: opts.alertFetch,
+    priceFetch: opts.priceFetch,
+  });
   return { app, db, config };
 }
 

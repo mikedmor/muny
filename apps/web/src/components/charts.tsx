@@ -444,7 +444,8 @@ export function LineChart({
           </g>
         ))}
         {points.map((p, i) =>
-          i % labelEvery === 0 || i === points.length - 1 ? (
+          (i % labelEvery === 0 && points.length - 1 - i >= labelEvery / 2) ||
+          i === points.length - 1 ? (
             <text
               key={p.date}
               x={x(i)}

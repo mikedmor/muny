@@ -12,6 +12,7 @@ import { registerAuth } from "./auth/plugin.js";
 import { registerAuthRoutes } from "./auth/routes.js";
 import { registerBudgetRoutes } from "./budgets/routes.js";
 import type { Config } from "./config.js";
+import { registerCryptoRoutes } from "./crypto/routes.js";
 import { registerBackupRoutes } from "./data/backups.js";
 import { registerExportRoutes } from "./data/export.js";
 import { registerImportRoutes } from "./import/routes.js";
@@ -36,6 +37,8 @@ export interface AppDeps {
   providers?: Providers;
   /** Override outbound HTTP for notification channels (tests). */
   alertFetch?: typeof fetch;
+  /** Override outbound HTTP for crypto prices (tests). */
+  priceFetch?: typeof fetch;
 }
 
 /**
@@ -77,6 +80,7 @@ export async function buildApp({
   db,
   providers,
   alertFetch,
+  priceFetch,
 }: AppDeps): Promise<FastifyInstance> {
   const syncDeps = { config, providers: providers ?? makeProviders(config) };
   const csp = contentSecurityPolicy(config);
@@ -134,6 +138,11 @@ export async function buildApp({
     fetch: alertFetch,
   };
   registerAlertRoutes(app, db, alertDeps);
+  registerCryptoRoutes(app, db, {
+    secretKey: config.secretKey,
+    fetch: priceFetch,
+    delayMs: priceFetch ? 0 : undefined,
+  });
   app.decorate("syncDeps", syncDeps);
   app.decorate("alertDeps", alertDeps);
 

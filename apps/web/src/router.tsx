@@ -7,6 +7,10 @@ import { AccountsPage } from "./pages/AccountsPage.js";
 import { InvitePage, LoginPage, SetupPage } from "./pages/AuthPages.js";
 import { BudgetsPage } from "./pages/BudgetsPage.js";
 import { CategoryPage } from "./pages/CategoryPage.js";
+import { CryptoDashboard } from "./pages/crypto/CryptoDashboard.js";
+import { CryptoSettings } from "./pages/crypto/CryptoSettings.js";
+import { CryptoTransactions } from "./pages/crypto/CryptoTransactions.js";
+import { CryptoWallets } from "./pages/crypto/CryptoWallets.js";
 import { ImportPage } from "./pages/ImportPage.js";
 import { NotificationsPage } from "./pages/NotificationsPage.js";
 import { OverviewPage } from "./pages/OverviewPage.js";
@@ -59,6 +63,22 @@ const searchPage = <const P extends string, S>(
 const monthSearch = (s: Record<string, unknown>): { month?: string } =>
   typeof s.month === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(s.month) ? { month: s.month } : {};
 
+const cryptoTxnSearch = (s: Record<string, unknown>) => {
+  const out: Record<string, string | number> = {};
+  for (const k of ["walletId", "asset", "type", "label", "from", "to"])
+    if (typeof s[k] === "string" && (s[k] as string).length <= 64) out[k] = s[k] as string;
+  if (typeof s.page === "number" && s.page > 0) out.page = Math.floor(s.page);
+  return out as {
+    walletId?: string;
+    asset?: string;
+    type?: "deposit" | "withdrawal" | "trade" | "transfer";
+    label?: string;
+    from?: string;
+    to?: string;
+    page?: number;
+  };
+};
+
 const routeTree = rootRoute.addChildren([
   page("/", OverviewPage),
   searchPage("/transactions", TransactionsPage, validateTransactionSearch),
@@ -70,6 +90,10 @@ const routeTree = rootRoute.addChildren([
   page("/budgets", BudgetsPage),
   page("/reports", ReportsPage),
   page("/taxes", TaxesPage),
+  page("/crypto", CryptoDashboard),
+  page("/crypto/wallets", CryptoWallets),
+  searchPage("/crypto/transactions", CryptoTransactions, cryptoTxnSearch),
+  page("/crypto/settings", CryptoSettings),
   page("/accounts", AccountsPage),
   page("/import", ImportPage),
   page("/settings", SettingsPage),
