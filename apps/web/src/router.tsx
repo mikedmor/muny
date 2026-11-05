@@ -11,6 +11,7 @@ import { OverviewPage } from "./pages/OverviewPage.js";
 import { PlaidOAuthPage } from "./pages/PlaidOAuthPage.js";
 import { RecurringPage } from "./pages/RecurringPage.js";
 import { ReportsPage } from "./pages/ReportsPage.js";
+import { SavingsPage } from "./pages/SavingsPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 import { TransactionsPage } from "./pages/TransactionsPage.js";
 
@@ -49,6 +50,7 @@ const routeTree = rootRoute.addChildren([
   page("/transactions", TransactionsPage),
   page("/alerts", NotificationsPage),
   page("/recurring", RecurringPage),
+  page("/savings", SavingsPage),
   page("/budgets", BudgetsPage),
   page("/reports", ReportsPage),
   page("/accounts", AccountsPage),

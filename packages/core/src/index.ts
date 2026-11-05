@@ -1,3 +1,4 @@
+export * from "./alternatives/catalog.js";
 export * from "./import/bank-csv.js";
 export * from "./import/csv.js";
 export * from "./import/dates.js";

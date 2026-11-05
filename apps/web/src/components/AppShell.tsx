@@ -10,6 +10,7 @@ const NAV = [
   { to: "/alerts", label: "Alerts", icon: "🔔" },
   { to: "/transactions", label: "Transactions", icon: "≡" },
   { to: "/recurring", label: "Recurring", icon: "↻" },
+  { to: "/savings", label: "Savings", icon: "💰" },
   { to: "/budgets", label: "Budgets", icon: "◔" },
   { to: "/reports", label: "Reports", icon: "▤" },
   { to: "/accounts", label: "Accounts", icon: "▣" },

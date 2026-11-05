@@ -495,3 +495,71 @@ export const trials = sqliteTable("trials", {
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
+
+// ---------------------------------------------------------------------------
+// Savings ledger, DIY replacements, self-hosting costs (Phase 3)
+// ---------------------------------------------------------------------------
+
+export const savings = sqliteTable("savings", {
+  id: text().primaryKey(),
+  kind: text({ enum: ["cancelled", "downgraded", "negotiated", "replaced", "other"] }).notNull(),
+  name: text().notNull(),
+  /** The recurring charge this saving is about (used to verify it). */
+  seriesId: text().references(() => recurringSeries.id, { onDelete: "set null" }),
+  /** Monthly cost before and after (positive cents). */
+  beforeMonthlyCents: integer().notNull(),
+  afterMonthlyCents: integer().notNull().default(0),
+  /** YYYY-MM-DD the change took effect. */
+  effectiveDate: text().notNull(),
+  /** projected → verified (no/lower charge seen) or failed (still charged). */
+  status: text({ enum: ["projected", "verified", "failed"] })
+    .notNull()
+    .default("projected"),
+  statusNote: text(),
+  verifiedAt: integer({ mode: "timestamp_ms" }),
+  notes: text(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const diyProjects = sqliteTable("diy_projects", {
+  id: text().primaryKey(),
+  /** The paid service being replaced. */
+  serviceName: text().notNull(),
+  seriesId: text().references(() => recurringSeries.id, { onDelete: "set null" }),
+  /** e.g. "Jellyfin" */
+  alternative: text().notNull(),
+  status: text({ enum: ["idea", "testing", "migrated", "cancelled", "abandoned"] })
+    .notNull()
+    .default("idea"),
+  effort: text({ enum: ["low", "medium", "high"] }),
+  /** Extra running cost of the alternative per month (positive cents), beyond shared infrastructure. */
+  runningMonthlyCents: integer().notNull().default(0),
+  /** Set when the project reaches "cancelled" and a saving is recorded. */
+  savingId: text().references(() => savings.id, { onDelete: "set null" }),
+  notes: text(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const infraCosts = sqliteTable("infra_costs", {
+  id: text().primaryKey(),
+  name: text().notNull(),
+  kind: text({
+    enum: ["power", "hardware", "domain", "hosting", "storage", "software", "other"],
+  }).notNull(),
+  /** Fixed costs: amount per period (positive cents). */
+  amountCents: integer(),
+  period: text({ enum: ["monthly", "annual", "once"] }),
+  /** Hardware ("once"): spread over this many months. */
+  amortizeMonths: integer(),
+  /** Power: average draw in watts and price in tenths of a cent per kWh (e.g. 155 = 15.5¢). */
+  watts: integer(),
+  priceDeciCentsPerKwh: integer(),
+  /** YYYY-MM-DD; hardware amortization starts here. */
+  startDate: text().notNull(),
+  endDate: text(),
+  notes: text(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});

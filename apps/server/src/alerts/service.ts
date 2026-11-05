@@ -11,6 +11,7 @@ import {
 import { and, desc, eq, gte, inArray, isNull } from "drizzle-orm";
 import { decryptJson } from "../lib/crypto.js";
 import { localToday } from "../lib/dates.js";
+import { verifySavings } from "../savings/service.js";
 import { ChannelError, type OutboundMessage, sendToChannel } from "./channels.js";
 import { type Candidate, DEFAULT_PARAMS, evaluateRules } from "./evaluate.js";
 
@@ -148,6 +149,7 @@ export async function runAlerts(db: MunyDb, deps: AlertDeps, now = new Date()) {
   if (running) return { created: 0 };
   running = true;
   try {
+    verifySavings(db, localToday(now));
     const rules = db
       .select()
       .from(schema.alertRules)

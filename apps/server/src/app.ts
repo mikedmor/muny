@@ -23,6 +23,7 @@ import { registerErrorHandler } from "./lib/http.js";
 import { registerRecurringRoutes } from "./recurring/routes.js";
 import { registerReportRoutes } from "./reports/routes.js";
 import { registerRuleRoutes } from "./rules/routes.js";
+import { registerSavingsRoutes } from "./savings/routes.js";
 import { makeProviders, type Providers } from "./sync/engine.js";
 import { registerSyncRoutes } from "./sync/routes.js";
 import { registerTrialRoutes } from "./trials/routes.js";
@@ -126,6 +127,7 @@ export async function buildApp({
   registerBudgetRoutes(app, db);
   registerReportRoutes(app, db);
   registerTrialRoutes(app, db);
+  registerSavingsRoutes(app, db);
   const alertDeps: AlertDeps = {
     secretKey: config.secretKey,
     publicUrl: config.publicUrl,

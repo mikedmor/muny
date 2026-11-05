@@ -3,6 +3,7 @@ import type {
   AlertParams,
   AlertRule,
   AlertType,
+  AlternativeSuggestion,
   BackupInfo,
   BudgetMonth,
   BulkUpdateInput,
@@ -12,6 +13,10 @@ import type {
   ConnectionSummary,
   CreateAccountInput,
   CreateTransactionInput,
+  DiyInput,
+  DiyProject,
+  InfraCost,
+  InfraInput,
   Interval,
   LinkResult,
   LinkStart,
@@ -24,6 +29,9 @@ import type {
   Rule,
   RuleApplyResult,
   RuleInput,
+  Saving,
+  SavingInput,
+  SavingsSummary,
   SetBudgetInput,
   SplitInput,
   SyncConfigStatus,
@@ -535,3 +543,66 @@ export const useTestChannel = () =>
     (id: string) => api.post(`/api/alerts/channels/${id}/test`),
     [alertKeys.channels],
   );
+
+// ---------------------------------------------------------------------------
+// Savings, DIY replacements, self-hosting costs
+// ---------------------------------------------------------------------------
+
+export const savingKeys = {
+  all: ["savings"] as const,
+  diy: ["diy"] as const,
+  infra: ["infra"] as const,
+};
+const savingInvalidates = [savingKeys.all, savingKeys.diy, savingKeys.infra, keys.recurring];
+
+export const useSavings = () =>
+  useQuery({
+    queryKey: [...savingKeys.all, "list"],
+    queryFn: () => api.get<Saving[]>("/api/savings"),
+  });
+export const useSavingsSummary = () =>
+  useQuery({
+    queryKey: [...savingKeys.all, "summary"],
+    queryFn: () => api.get<SavingsSummary>("/api/savings/summary"),
+  });
+export const useAlternativeSuggestions = () =>
+  useQuery({
+    queryKey: [...savingKeys.all, "alternatives"],
+    queryFn: () => api.get<AlternativeSuggestion[]>("/api/savings/alternatives"),
+  });
+export const useDiyProjects = () =>
+  useQuery({ queryKey: savingKeys.diy, queryFn: () => api.get<DiyProject[]>("/api/diy") });
+export const useInfraCosts = () =>
+  useQuery({ queryKey: savingKeys.infra, queryFn: () => api.get<InfraCost[]>("/api/infra") });
+
+export const useRecordSaving = () =>
+  useInvalidatingMutation(
+    (body: SavingInput) => api.post<Saving>("/api/savings", body),
+    savingInvalidates,
+  );
+export const useUpdateSaving = () =>
+  useInvalidatingMutation(
+    ({ id, ...body }: { id: string; status?: Saving["status"]; notes?: string | null }) =>
+      api.patch<Saving>(`/api/savings/${id}`, body),
+    savingInvalidates,
+  );
+export const useDeleteSaving = () =>
+  useInvalidatingMutation((id: string) => api.delete(`/api/savings/${id}`), savingInvalidates);
+
+export const useSaveDiy = () =>
+  useInvalidatingMutation(
+    ({ id, ...body }: DiyInput & { id?: string }) =>
+      id ? api.patch<DiyProject>(`/api/diy/${id}`, body) : api.post<DiyProject>("/api/diy", body),
+    savingInvalidates,
+  );
+export const useDeleteDiy = () =>
+  useInvalidatingMutation((id: string) => api.delete(`/api/diy/${id}`), savingInvalidates);
+
+export const useSaveInfra = () =>
+  useInvalidatingMutation(
+    ({ id, ...body }: InfraInput & { id?: string }) =>
+      id ? api.put<InfraCost>(`/api/infra/${id}`, body) : api.post<InfraCost>("/api/infra", body),
+    savingInvalidates,
+  );
+export const useDeleteInfra = () =>
+  useInvalidatingMutation((id: string) => api.delete(`/api/infra/${id}`), savingInvalidates);

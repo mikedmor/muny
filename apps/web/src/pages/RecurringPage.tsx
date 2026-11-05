@@ -14,6 +14,7 @@ import { Modal, MoneyField, SelectField } from "../components/forms.js";
 import { Alert, Button, Card, cx, Field, PageHeader } from "../components/ui.js";
 import {
   useDeleteRecurring,
+  useRecordSaving,
   useRecurring,
   useRecurringHistory,
   useRescanRecurring,
@@ -198,6 +199,23 @@ function SeriesDetail({ s, onDone }: { s: RecurringSeries; onDone: () => void })
   };
   const setStatus = (status: RecurringSeries["status"]) =>
     update.mutate({ id: s.id, status }, { onSuccess: onDone });
+  const recordSaving = useRecordSaving();
+  const [lowering, setLowering] = useState(false);
+  const [newPrice, setNewPrice] = useState<number | null>(null);
+  // Cancelling also records the saving (and marks the charge cancelled on the server).
+  const cancel = () =>
+    recordSaving.mutate({ kind: "cancelled", seriesId: s.id }, { onSuccess: onDone });
+  const lowered = (kind: "downgraded" | "negotiated") => {
+    if (newPrice === null) return;
+    // Convert the new per-charge price to a monthly figure like the series' own.
+    const perMonth = Math.round(
+      (newPrice * Math.abs(s.monthlyCents)) / Math.max(1, Math.abs(s.expectedAmountCents)),
+    );
+    recordSaving.mutate(
+      { kind, seriesId: s.id, afterMonthlyCents: perMonth },
+      { onSuccess: onDone },
+    );
+  };
 
   return (
     <div className="space-y-5">
@@ -249,16 +267,52 @@ function SeriesDetail({ s, onDone }: { s: RecurringSeries; onDone: () => void })
           onChange={(e) => setNotes(e.target.value)}
           placeholder="e.g. shared with family, renews in March"
         />
-        {(update.error || del.error) && <Alert>{(update.error ?? del.error)?.message}</Alert>}
+        {lowering && (
+          <div className="flex flex-wrap items-end gap-2 rounded-lg bg-slate-50 p-3 dark:bg-slate-800/50">
+            <div className="w-40">
+              <MoneyField
+                label="New price per charge"
+                cents={newPrice}
+                onChange={(c, ok) => ok && setNewPrice(c)}
+              />
+            </div>
+            <Button
+              variant="secondary"
+              disabled={newPrice === null || recordSaving.isPending}
+              onClick={() => lowered("downgraded")}
+            >
+              I downgraded
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={newPrice === null || recordSaving.isPending}
+              onClick={() => lowered("negotiated")}
+            >
+              I negotiated it
+            </Button>
+            <Button variant="ghost" onClick={() => setLowering(false)}>
+              Cancel
+            </Button>
+          </div>
+        )}
+        {(update.error || del.error || recordSaving.error) && (
+          <Alert>{(update.error ?? del.error ?? recordSaving.error)?.message}</Alert>
+        )}
         <div className="flex flex-wrap justify-between gap-2">
           <div className="flex flex-wrap gap-1">
             {s.status !== "cancelled" && s.kind !== "income" && (
               <Button
                 variant="ghost"
-                onClick={() => setStatus("cancelled")}
-                title="You cancelled it; Muny will flag any further charges"
+                onClick={cancel}
+                disabled={recordSaving.isPending}
+                title="Records the saving; Muny confirms it when the charge stops and flags any further charges"
               >
-                Mark cancelled
+                I cancelled it
+              </Button>
+            )}
+            {s.status !== "cancelled" && s.kind !== "income" && !lowering && (
+              <Button variant="ghost" onClick={() => setLowering(true)}>
+                Price went down
               </Button>
             )}
             {s.status !== "ignored" && (
