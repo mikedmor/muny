@@ -20,6 +20,8 @@ import {
 import {
   addAdjustment,
   addOpeningBalance,
+  compareWithChain,
+  correctToChain,
   countRewardsOnce,
   linkTransfer,
   mergeWallets,
@@ -469,6 +471,38 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
     } catch (err) {
       throw badRequest(err instanceof Error ? err.message : "Couldn't apply that fix");
     }
+  });
+
+  /** Transaction-by-transaction comparison with the chain (EVM wallets). */
+  app.post("/api/crypto/reconcile/compare", async (req) => {
+    requireUser(req);
+    const body = parse(z.object({ walletId: z.string().min(1).max(64) }), req.body);
+    try {
+      return await compareWithChain(db, body.walletId, {
+        ...priceDeps,
+        delayMs: priceDeps.delayMs ?? 300,
+      });
+    } catch (err) {
+      throw badRequest(err instanceof Error ? err.message : "Couldn't compare");
+    }
+  });
+
+  app.post("/api/crypto/reconcile/correct", async (req) => {
+    const user = requireUser(req);
+    const body = parse(
+      z.object({
+        walletId: z.string().min(1).max(64),
+        asset,
+        txHash: z.string().max(100).nullable(),
+        at: z.number().int().min(0).max(4_102_444_800_000),
+        chain: z.string().max(60),
+        muny: z.string().max(60),
+      }),
+      req.body,
+    );
+    const res = fix(() => correctToChain(db, body));
+    log(user.id, "crypto.reconcile_correct", body.walletId, { asset: body.asset });
+    return res;
   });
 
   app.post("/api/crypto/reconcile/undo", async (req) => {

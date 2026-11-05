@@ -13,6 +13,7 @@ import { type MunyDb, newId, schema } from "@muny/db";
 import type { CryptoReconcile, CryptoTransferSuggestion } from "@muny/shared";
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { decryptJson } from "../lib/crypto.js";
+import { balanceChanges, type ChainBalanceChange } from "./chains/blockscout.js";
 import { rewardWithdrawals } from "./chains/cardano.js";
 import { closeAmountsSql, normHash, normHashSql } from "./match.js";
 import { getCryptoSettings } from "./prices.js";
@@ -219,6 +220,7 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
         walletId: x.id,
         walletName: x.name,
         kind: x.kind,
+        chain: x.chain,
         synced: !!x.sourceEnc,
         missing,
         mismatches,
@@ -615,6 +617,105 @@ export function undoReconcileRows(db: MunyDb, walletId: string, ids?: string[]) 
     update crypto_txns set type = case when sent_asset is null then 'deposit' else 'withdrawal' end
      where type = 'transfer' and transfer_pair_id is null`);
   return { undone: rowsToUndo.length };
+}
+
+export interface TxnDifference {
+  txHash: string | null;
+  at: number;
+  /** What the chain says the transaction did to the balance. */
+  chain: string;
+  /** What Muny's rows for it add up to. */
+  muny: string;
+}
+
+/**
+ * Compare a synced EVM wallet with the chain transaction by transaction (for
+ * its native coin) and list where they differ.
+ */
+export async function compareWithChain(db: MunyDb, walletId: string, deps: SyncDeps) {
+  const wallet = db.select().from(w).where(eq(w.id, walletId)).get();
+  if (!wallet?.sourceEnc || !wallet.chain)
+    throw new Error("This wallet isn't synced from a blockchain");
+  const info = CHAINS[wallet.chain as ChainKey];
+  if (info?.provider !== "blockscout")
+    throw new Error(
+      "Comparing transaction by transaction works for Ethereum-style wallets for now",
+    );
+  const changes = await balanceChanges(walletCtx(db, wallet, deps));
+  const asset = info.asset;
+  const chainBy = new Map<string, { at: number; v: bigint }>();
+  const noHash: ChainBalanceChange[] = [];
+  for (const c of changes) {
+    if (!c.txHash) {
+      noHash.push(c);
+      continue;
+    }
+    const k = normHash(c.txHash);
+    const cur = chainBy.get(k) ?? { at: c.at, v: 0n };
+    cur.v += toFixed(c.delta);
+    chainBy.set(k, cur);
+  }
+  const munyBy = new Map<string, { at: number; v: bigint }>();
+  for (const r of db.select().from(t).where(eq(t.walletId, walletId)).all()) {
+    const v =
+      (r.receivedAsset === asset ? toFixed(r.receivedAmount ?? "0") : 0n) -
+      (r.sentAsset === asset ? toFixed(r.sentAmount ?? "0") : 0n) -
+      (r.feeAsset === asset ? toFixed(r.feeAmount ?? "0") : 0n);
+    if (v === 0n) continue;
+    const k = r.txHash ? normHash(r.txHash) : `row:${r.id}`;
+    const cur = munyBy.get(k) ?? { at: r.at, v: 0n };
+    cur.v += v;
+    munyBy.set(k, cur);
+  }
+  const diffs: TxnDifference[] = [];
+  for (const k of new Set([...chainBy.keys(), ...munyBy.keys()])) {
+    const c = chainBy.get(k);
+    const m = munyBy.get(k);
+    if ((c?.v ?? 0n) === (m?.v ?? 0n)) continue;
+    diffs.push({
+      txHash: k.startsWith("row:") ? null : k,
+      at: c?.at ?? m?.at ?? 0,
+      chain: fromFixed(c?.v ?? 0n),
+      muny: fromFixed(m?.v ?? 0n),
+    });
+  }
+  for (const c of noHash) diffs.push({ txHash: null, at: c.at, chain: c.delta, muny: "0" });
+  diffs.sort((a, b) => a.at - b.at);
+  return { asset, diffs };
+}
+
+/** Add a correction so a transaction counts what the chain says it did. */
+export function correctToChain(
+  db: MunyDb,
+  input: {
+    walletId: string;
+    asset: string;
+    txHash: string | null;
+    at: number;
+    chain: string;
+    muny: string;
+  },
+) {
+  const diff = toFixed(input.chain) - toFixed(input.muny);
+  if (diff === 0n) return { id: null };
+  const id = newId();
+  const amount = fromFixed(diff < 0n ? -diff : diff);
+  db.insert(t)
+    .values({
+      id,
+      walletId: input.walletId,
+      at: input.at,
+      type: diff > 0n ? "deposit" : "withdrawal",
+      ...(diff > 0n
+        ? { receivedAsset: input.asset, receivedAmount: amount }
+        : { sentAsset: input.asset, sentAmount: amount }),
+      txHash: input.txHash,
+      description: "Added in Reconcile: correction to match the blockchain for this transaction",
+      externalId: `manual:${id}`,
+      source: "manual",
+    })
+    .run();
+  return { id };
 }
 
 /** Remove a synced wallet's rows that repeat imported ones. */

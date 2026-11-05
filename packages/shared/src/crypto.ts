@@ -323,6 +323,7 @@ export interface CryptoReconcile {
     walletId: string;
     walletName: string;
     kind: CryptoWalletKind;
+    chain: string | null;
     synced: boolean;
     /** More left than arrived: earlier deposits are missing. */
     missing: {

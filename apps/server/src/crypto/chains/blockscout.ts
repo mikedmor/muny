@@ -10,7 +10,7 @@ import { schema } from "@muny/db";
 import { eq } from "drizzle-orm";
 import { decryptJson } from "../../lib/crypto.js";
 import { BLOCKSCOUT_KEY } from "../prices.js";
-import { type Adapter, type Cursor, SyncError, safeText } from "./ctx.js";
+import { type Adapter, type ChainCtx, type Cursor, SyncError, safeText } from "./ctx.js";
 
 /**
  * EVM chains through Blockscout's Etherscan-compatible account API. With a
@@ -28,8 +28,8 @@ interface EsResponse<T> {
   result?: T[] | string;
 }
 
-export const blockscout: Adapter = async (ctx) => {
-  const { chain, source: address, cursor } = ctx;
+/** Where to reach Blockscout for this chain, and the key header if one is saved. */
+function endpoint(ctx: ChainCtx) {
   const override = ctx.override.replace(/\/+$/, "");
   const enc = ctx.db
     .select()
@@ -38,12 +38,55 @@ export const blockscout: Adapter = async (ctx) => {
     .get()?.value as string | undefined;
   const key =
     !override && enc && ctx.deps.secretKey ? decryptJson<string>(ctx.deps.secretKey, enc) : null;
-  const base = override
-    ? `${override}/api`
-    : key
-      ? `${API}/${chain.chainId}/api`
-      : `${chain.server}/api`;
+  const root = override || (key ? `${API}/${ctx.chain.chainId}` : ctx.chain.server);
   const headers: Record<string, string> = key ? { authorization: `Bearer ${key}` } : {};
+  return { root, headers };
+}
+
+interface BalanceHistoryPage {
+  items?: { transaction_hash?: string | null; block_timestamp?: string; delta?: string }[];
+  next_page_params?: Record<string, string | number> | null;
+}
+
+export interface ChainBalanceChange {
+  txHash: string | null;
+  at: number;
+  /** Change in the native coin's balance (decimal string). */
+  delta: string;
+}
+
+/**
+ * Every change to the address's native-coin balance, as the chain records it
+ * (Blockscout's coin balance history), newest first. Used to pinpoint which
+ * transaction Muny records differently.
+ */
+export async function balanceChanges(ctx: ChainCtx): Promise<ChainBalanceChange[]> {
+  const { root, headers } = endpoint(ctx);
+  const out: ChainBalanceChange[] = [];
+  let next: Record<string, string | number> | null = null;
+  for (let page = 0; page < 40; page++) {
+    const params: [string, string][] = Object.entries(next ?? {}).map(([k, v]) => [k, String(v)]);
+    const q: string = params.length ? `?${new URLSearchParams(params)}` : "";
+    const r: BalanceHistoryPage = await ctx.get<BalanceHistoryPage>(
+      `${root}/api/v2/addresses/${ctx.source}/coin-balance-history${q}`,
+      headers,
+    );
+    for (const i of r.items ?? [])
+      out.push({
+        txHash: i.transaction_hash ?? null,
+        at: Date.parse(i.block_timestamp ?? "") || 0,
+        delta: fromBaseUnits(i.delta ?? "0", ctx.chain.decimals),
+      });
+    next = r.next_page_params ?? null;
+    if (!next) return out;
+  }
+  throw new SyncError("Too much balance history to compare in one go");
+}
+
+export const blockscout: Adapter = async (ctx) => {
+  const { chain, source: address, cursor } = ctx;
+  const { root, headers } = endpoint(ctx);
+  const base = `${root}/api`;
   const host = new URL(base).host;
 
   const call = async <T>(params: Record<string, string | number>): Promise<T[] | string> => {

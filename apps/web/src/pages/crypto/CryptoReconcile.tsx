@@ -241,7 +241,13 @@ function WalletIssues({ w }: { w: Report["wallets"][number] }) {
       )}
 
       {w.mismatches.map((x) => (
-        <Mismatch key={x.asset} walletId={w.walletId} m={x} imported={w.importedWithHash} />
+        <Mismatch
+          key={x.asset}
+          walletId={w.walletId}
+          m={x}
+          imported={w.importedWithHash}
+          evm={!!w.chain && EVM_CHAINS.has(w.chain)}
+        />
       ))}
       {error && <Alert>{error.message}</Alert>}
     </Card>
@@ -265,7 +271,33 @@ const SYNCABLE = new Set<string>([
 type MismatchT = Report["wallets"][number]["mismatches"][number];
 
 /** Synced wallet vs. its blockchain: explain the gap and offer the fitting fix. */
-function Mismatch({ walletId, m, imported }: { walletId: string; m: MismatchT; imported: number }) {
+const EVM_CHAINS = new Set(["eth", "base", "op", "arb", "polygon", "gnosis"]);
+
+interface TxnDiff {
+  txHash: string | null;
+  at: number;
+  chain: string;
+  muny: string;
+}
+
+function Mismatch({
+  walletId,
+  m,
+  imported,
+  evm,
+}: {
+  walletId: string;
+  m: MismatchT;
+  imported: number;
+  evm: boolean;
+}) {
+  const compare = useCryptoMutation(() =>
+    api.post<{ asset: string; diffs: TxnDiff[] }>("/api/crypto/reconcile/compare", { walletId }),
+  );
+  const correct = useCryptoMutation((d: TxnDiff) =>
+    api.post("/api/crypto/reconcile/correct", { walletId, asset: m.asset, ...d }),
+  );
+  const [fixed, setFixed] = useState<Set<string>>(new Set());
   const chain = useCryptoMutation(() =>
     api.post<{ replaced: number; added: number; relinked: number }>(
       "/api/crypto/reconcile/prefer-chain",
@@ -291,7 +323,8 @@ function Mismatch({ walletId, m, imported }: { walletId: string; m: MismatchT; i
   );
   const more = !m.diff.startsWith("-");
   const gap = fmtAmount(m.diff.replace(/^-/, ""), 8);
-  const error = remove.error ?? adjust.error ?? once.error ?? chain.error;
+  const error =
+    remove.error ?? adjust.error ?? once.error ?? chain.error ?? compare.error ?? correct.error;
   return (
     <div className="space-y-2 text-sm">
       <p>
@@ -406,6 +439,60 @@ function Mismatch({ walletId, m, imported }: { walletId: string; m: MismatchT; i
           <Button disabled={chain.isPending} onClick={() => chain.mutate(undefined)}>
             {chain.isPending ? "Re-reading the blockchain…" : "Use the blockchain's version"}
           </Button>
+        </div>
+      )}
+      {evm && !m.rewardsTwice && (
+        <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
+          <p>
+            Compare with the blockchain transaction by transaction to see exactly which ones Muny
+            records differently (uses a few requests to Blockscout).
+          </p>
+          {!compare.data && (
+            <Button
+              variant="secondary"
+              disabled={compare.isPending}
+              onClick={() => compare.mutate(undefined)}
+            >
+              {compare.isPending ? "Comparing…" : "Find the transactions that differ"}
+            </Button>
+          )}
+          {compare.data && compare.data.diffs.length === 0 && (
+            <p className="text-slate-500">
+              Every transaction matches the chain. The difference may come from rows without a
+              transaction (added by hand or imported without a hash).
+            </p>
+          )}
+          {compare.data && compare.data.diffs.length > 0 && (
+            <ul className="space-y-1">
+              {compare.data.diffs.map((d) => {
+                const key = `${d.txHash ?? "none"}:${d.at}`;
+                return (
+                  <li
+                    key={key}
+                    className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-1 dark:border-slate-700"
+                  >
+                    <span>
+                      {dayLabel(d.at)}{" "}
+                      <span className="font-mono text-xs text-slate-500">
+                        {d.txHash ? `${d.txHash.slice(0, 8)}…` : "no transaction (e.g. a reward)"}
+                      </span>
+                      : chain {fmtAmount(d.chain, 8)}, Muny {fmtAmount(d.muny, 8)}{" "}
+                      {compare.data?.asset}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      disabled={correct.isPending || fixed.has(key)}
+                      onClick={() =>
+                        correct.mutate(d, { onSuccess: () => setFixed((s) => new Set(s).add(key)) })
+                      }
+                    >
+                      {fixed.has(key) ? "Corrected" : "Use the chain's amount"}
+                    </Button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       )}
       {error && <Alert>{error.message}</Alert>}
