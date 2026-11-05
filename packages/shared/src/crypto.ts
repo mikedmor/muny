@@ -524,7 +524,7 @@ export const CRYPTO_EXCHANGES: CryptoExchangeInfo[] = [
       keyLabel: "API key (account-…)",
       secretLabel: "API secret",
       steps:
-        "In Gemini, open Settings → API and create a key for your Primary account with the Auditor role (read-only).",
+        "In Gemini, open Settings → API and create a key for your Primary account with the Auditor role (read-only). You can leave "Uses a time based nonce" unchecked (Muny handles either).",
       url: "https://exchange.gemini.com/settings/api",
     },
   },

@@ -71,33 +71,50 @@ const nonce = () => {
 };
 
 export const gemini: ExchangeAdapter = async (ctx) => {
+  // Gemini keys use either an increasing nonce (Muny's default: milliseconds)
+  // or, if created with "Uses a time based nonce", seconds within 30 s of now.
+  // Muny tries the first and switches once if Gemini rejects the nonce.
+  let timeBased = false;
   const call = async <T>(path: string, params: Record<string, unknown> = {}): Promise<T> => {
-    const payload = Buffer.from(
-      JSON.stringify({ request: path, nonce: nonce(), ...params }),
-    ).toString("base64");
-    const signature = createHmac("sha384", ctx.creds.secret.trim()).update(payload).digest("hex");
-    const res = await ctx.request<T & { result?: string; reason?: string }>(`${API}${path}`, {
-      method: "POST",
-      headers: {
-        "content-type": "text/plain",
-        "content-length": "0",
-        "cache-control": "no-cache",
-        "X-GEMINI-APIKEY": ctx.creds.key.trim(),
-        "X-GEMINI-PAYLOAD": payload,
-        "X-GEMINI-SIGNATURE": signature,
-      },
-    });
-    const body = res.body as { result?: string; reason?: string } | null;
-    if (body && !Array.isArray(body) && body.result === "error") {
-      if (/Key|Signature|Role|Nonce|Unauthorized/i.test(body.reason ?? ""))
-        throw keyRefused(
-          "Gemini",
-          body.reason === "MissingRole" ? "it needs the Auditor role" : undefined,
-        );
-      throw new SyncError(`Gemini answered with an error (${(body.reason ?? "").slice(0, 40)})`);
+    for (let attempt = 0; ; attempt++) {
+      const n = timeBased ? Date.now() / 1000 : nonce();
+      const payload = Buffer.from(JSON.stringify({ request: path, nonce: n, ...params })).toString(
+        "base64",
+      );
+      const signature = createHmac("sha384", ctx.creds.secret.trim()).update(payload).digest("hex");
+      const res = await ctx.request<T & { result?: string; reason?: string }>(`${API}${path}`, {
+        method: "POST",
+        headers: {
+          "content-type": "text/plain",
+          "content-length": "0",
+          "cache-control": "no-cache",
+          "X-GEMINI-APIKEY": ctx.creds.key.trim(),
+          "X-GEMINI-PAYLOAD": payload,
+          "X-GEMINI-SIGNATURE": signature,
+        },
+      });
+      const body = res.body as { result?: string; reason?: string } | null;
+      if (body && !Array.isArray(body) && body.result === "error") {
+        if (/Nonce/i.test(body.reason ?? "")) {
+          if (attempt === 0) {
+            timeBased = !timeBased;
+            continue;
+          }
+          throw keyRefused(
+            "Gemini",
+            "its nonce was rejected; if another app uses this key, make Muny its own key",
+          );
+        }
+        if (/Key|Signature|Role|Unauthorized/i.test(body.reason ?? ""))
+          throw keyRefused(
+            "Gemini",
+            body.reason === "MissingRole" ? "it needs the Auditor role" : undefined,
+          );
+        throw new SyncError(`Gemini answered with an error (${(body.reason ?? "").slice(0, 40)})`);
+      }
+      if (res.status >= 400) throw keyRefused("Gemini");
+      return res.body;
     }
-    if (res.status >= 400) throw keyRefused("Gemini");
-    return res.body;
   };
 
   const since = ctx.cursor?.height ?? 0;

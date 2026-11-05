@@ -381,6 +381,24 @@ describe("Gemini", () => {
   });
 });
 
+describe("Gemini with a time-based nonce", () => {
+  it("switches to seconds when Gemini rejects the default nonce", async () => {
+    const fake = (async (url: string, init: RequestInit) => {
+      const h = init.headers as Record<string, string>;
+      const p = JSON.parse(Buffer.from(h["X-GEMINI-PAYLOAD"] ?? "", "base64").toString());
+      // This key wants seconds within 30 s of now.
+      if (Math.abs(Number(p.nonce) - Date.now() / 1000) > 30)
+        return Response.json({ result: "error", reason: "InvalidNonce" }, { status: 400 });
+      const path = new URL(url).pathname;
+      if (path === "/v1/balances") return Response.json([{ currency: "BTC", amount: "1" }]);
+      return Response.json([]);
+    }) as unknown as typeof fetch;
+    const { connect } = await setup(fake);
+    const w = await connect("gemini", "account-xyz", "secret");
+    expect(w).toMatchObject({ status: "ok", onChain: [{ asset: "BTC", amount: "1" }] });
+  });
+});
+
 describe("Binance US", () => {
   it("asks coin by coin and market by market, signed", async () => {
     const secret = "bus-secret";
