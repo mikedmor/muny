@@ -246,7 +246,7 @@ function WalletIssues({ w }: { w: Report["wallets"][number] }) {
           walletId={w.walletId}
           m={x}
           imported={w.importedWithHash}
-          evm={!!w.chain && EVM_CHAINS.has(w.chain)}
+          evm={!!w.chain && EVM_CHAINS.get(w.chain) === x.asset}
         />
       ))}
       {error && <Alert>{error.message}</Alert>}
@@ -271,7 +271,63 @@ const SYNCABLE = new Set<string>([
 type MismatchT = Report["wallets"][number]["mismatches"][number];
 
 /** Synced wallet vs. its blockchain: explain the gap and offer the fitting fix. */
-const EVM_CHAINS = new Set(["eth", "base", "op", "arb", "polygon", "gnosis"]);
+/** EVM chains and their own coin (the compare tool checks only that coin). */
+const EVM_CHAINS = new Map([
+  ["eth", "ETH"],
+  ["base", "ETH"],
+  ["op", "ETH"],
+  ["arb", "ETH"],
+  ["polygon", "POL"],
+  ["gnosis", "XDAI"],
+]);
+
+type Kept = {
+  txnId: string;
+  at: number;
+  asset: string;
+  amount: string;
+  direction: "in" | "out";
+};
+
+/** Imported rows the chain doesn't have, kept as they were: decide about each. */
+function KeptRows({ rows }: { rows: Kept[] }) {
+  const [gone, setGone] = useState<Set<string>>(new Set());
+  const del = useCryptoMutation((id: string) => api.delete(`/api/crypto/txns/${id}`));
+  const left = rows.filter((r) => !gone.has(r.txnId));
+  if (!left.length) return null;
+  return (
+    <div className="space-y-1 rounded-md bg-amber-50 px-3 py-2 text-sm dark:bg-amber-950/30">
+      <p>
+        The blockchain doesn&apos;t have{" "}
+        {left.length === 1 ? "this imported row" : "these imported rows"}, so{" "}
+        {left.length === 1 ? "it was" : "they were"} kept as imported. If{" "}
+        {left.length === 1 ? "it" : "one"} never happened on this address, delete it:
+      </p>
+      <ul>
+        {left.map((r) => (
+          <li key={r.txnId} className="flex flex-wrap items-center gap-2">
+            <span>
+              {dayLabel(r.at)}: {r.direction === "out" ? "−" : "+"}
+              {fmtAmount(r.amount, 8)} {r.asset}
+            </span>
+            <button
+              type="button"
+              disabled={del.isPending}
+              onClick={() =>
+                window.confirm("Delete this imported transaction?") &&
+                del.mutate(r.txnId, { onSuccess: () => setGone((g) => new Set(g).add(r.txnId)) })
+              }
+              className="text-xs text-red-600 hover:underline"
+            >
+              Delete
+            </button>
+          </li>
+        ))}
+      </ul>
+      {del.error && <p className="text-xs text-red-600">{del.error.message}</p>}
+    </div>
+  );
+}
 
 interface TxnDiff {
   txHash: string | null;
@@ -299,7 +355,7 @@ function Mismatch({
   );
   const [fixed, setFixed] = useState<Set<string>>(new Set());
   const chain = useCryptoMutation(() =>
-    api.post<{ replaced: number; added: number; relinked: number }>(
+    api.post<{ replaced: number; added: number; relinked: number; kept: Kept[] }>(
       "/api/crypto/reconcile/prefer-chain",
       { walletId },
     ),
@@ -509,19 +565,20 @@ function Mismatch({
             version of this wallet&apos;s {imported} imported{" "}
             {imported === 1 ? "transaction" : "transactions"}. Exports sometimes split or round a
             transaction differently from what happened on-chain; built from the chain alone, the
-            wallet adds up to its on-chain balance. Links to your other wallets are kept; imported
-            USD values on those rows are replaced by daily prices.
+            wallet adds up to its on-chain balance. Links to your other wallets, tags and USD values
+            are kept; rows the chain doesn&apos;t have stay as imported.
           </p>
           <Button disabled={chain.isPending} onClick={() => chain.mutate(undefined)}>
             {chain.isPending ? "Re-reading the blockchain…" : "Use the blockchain's version"}
           </Button>
+          {chain.data && chain.data.kept.length > 0 && <KeptRows rows={chain.data.kept} />}
         </div>
       )}
       {evm && !m.rewardsTwice && (
         <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
           <p>
-            Compare with the blockchain transaction by transaction to see exactly which ones Muny
-            records differently (uses a few requests to Blockscout).
+            Compare {m.asset} with the blockchain transaction by transaction to see exactly which
+            ones Muny records differently (uses a few requests to Blockscout).
           </p>
           {!compare.data && (
             <Button

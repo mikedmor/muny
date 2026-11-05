@@ -559,13 +559,17 @@ export async function preferChain(db: MunyDb, walletId: string, deps: SyncDeps) 
   // (e.g. a merged Stellar account) or pruned nodes return little or nothing.
   const fetched = await fetchFullHistory(db, walletId, deps);
   const onChain = new Set(fetched.mapped.map((m) => normHash(m.txHash || "")));
+  // Only rows the chain has are replaced; the rest stay as imported (and are
+  // listed, so you can decide about them).
   const missing = rowsWithHash.filter((r) => !onChain.has(normHash(r.txHash as string)));
-  if (missing.length > 0)
+  if (missing.length === rowsWithHash.length)
     throw new Error(
       `The blockchain service doesn't have ${missing.length} of this wallet's ${rowsWithHash.length} imported transactions${fetched.notice ? ` (${fetched.notice.split(":")[0]})` : ""}, so nothing was changed.`,
     );
+  const missingIds = new Set(missing.map((r) => r.id));
+  const replaceable = rowsWithHash.filter((r) => !missingIds.has(r.id));
   // Remember transfer partners in other wallets, per transaction and direction.
-  const links = rowsWithHash
+  const links = replaceable
     .filter((r) => r.transferPairId)
     .map((r) => ({
       hash: normHash(r.txHash as string),
@@ -575,7 +579,7 @@ export async function preferChain(db: MunyDb, walletId: string, deps: SyncDeps) 
     }));
   // What the import knew that the chain doesn't: tags, notes, values, addresses.
   const meta = new Map(
-    rowsWithHash.map((r) => [
+    replaceable.map((r) => [
       `${normHash(r.txHash as string)}|${r.sentAsset ? "out" : "in"}|${r.sentAsset ?? r.receivedAsset}`,
       r,
     ]),
@@ -587,7 +591,7 @@ export async function preferChain(db: MunyDb, walletId: string, deps: SyncDeps) 
       .where(
         inArray(
           t.id,
-          rowsWithHash.map((r) => r.id),
+          replaceable.map((r) => r.id),
         ),
       )
       .run();
@@ -636,7 +640,19 @@ export async function preferChain(db: MunyDb, walletId: string, deps: SyncDeps) 
     }
   });
   setChainVersion(db, walletId, true);
-  return { replaced: rowsWithHash.length, added: res.added, relinked };
+  return {
+    replaced: replaceable.length,
+    added: res.added,
+    relinked,
+    kept: missing.map((r) => ({
+      txnId: r.id,
+      at: r.at,
+      asset: (r.sentAsset ?? r.receivedAsset ?? r.feeAsset) as string,
+      amount: (r.sentAmount ?? r.receivedAmount ?? r.feeAmount) as string,
+      direction:
+        r.sentAsset || (!r.receivedAsset && r.feeAsset) ? ("out" as const) : ("in" as const),
+    })),
+  };
 }
 
 type TxnRow = typeof t.$inferSelect;

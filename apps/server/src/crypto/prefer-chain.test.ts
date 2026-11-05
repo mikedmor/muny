@@ -79,6 +79,13 @@ describe("use the blockchain's version", () => {
       txHash: H2.slice(2),
       at: T + 60_000,
     });
+    // A row the chain doesn't have (an export's mistake): kept, and listed.
+    row("ghost", hot.id, {
+      receivedAsset: "REP",
+      receivedAmount: "2",
+      txHash: "9".repeat(64),
+      at: T + 120_000,
+    });
     row("cbin", cb.id, {
       type: "transfer",
       receivedAsset: "ETH",
@@ -102,11 +109,15 @@ describe("use the blockchain's version", () => {
     }
     const report = async () => (await client.get("/api/crypto/reconcile")).json<CryptoReconcile>();
     const issue = (await report()).wallets.find((x) => x.walletId === hot.id);
-    expect(issue).toMatchObject({ importedWithHash: 2 });
+    expect(issue).toMatchObject({ importedWithHash: 3 });
     expect(issue?.mismatches[0]?.asset).toBe("ETH");
 
     const res = await client.post("/api/crypto/reconcile/prefer-chain", { walletId: hot.id });
-    expect(res.json()).toMatchObject({ replaced: 2, relinked: 1 });
+    expect(res.json()).toMatchObject({
+      replaced: 2,
+      relinked: 1,
+      kept: [{ txnId: "ghost", asset: "REP", amount: "2", direction: "in" }],
+    });
     expect((await report()).wallets.find((x) => x.walletId === hot.id)).toBeUndefined();
     const page = (await client.get(`/api/crypto/txns?walletId=${hot.id}`)).json<CryptoTxnPage>();
     expect(page.items.find((x) => x.type === "transfer")).toMatchObject({
@@ -114,7 +125,7 @@ describe("use the blockchain's version", () => {
       sentAmount: "0.4",
     });
     // What the import knew stays: the tag, its USD value; the chain adds the sender.
-    const dep = page.items.find((x) => x.type === "deposit");
+    const dep = page.items.find((x) => x.type === "deposit" && x.receivedAsset === "ETH");
     expect(dep).toMatchObject({ label: "mining", valueCents: 170_000, counterparty: OTHER });
     // Rows without a USD value are valued at that day's price.
     db.insert(schema.cryptoPrices)
@@ -140,7 +151,9 @@ describe("use the blockchain's version", () => {
     expect(imp).toMatchObject({ imported: 0, duplicates: 1 });
     const after = (await client.get(`/api/crypto/txns?walletId=${hot.id}`)).json<CryptoTxnPage>();
     expect(after.total).toBe(page.total);
-    expect(after.items.find((x) => x.type === "deposit")).toMatchObject({
+    expect(
+      after.items.find((x) => x.type === "deposit" && x.receivedAsset === "ETH"),
+    ).toMatchObject({
       description: "From the pool",
     });
     expect((await report()).wallets.find((x) => x.walletId === hot.id)).toBeUndefined();
