@@ -27,11 +27,43 @@ export function CryptoSettings() {
           <Card className="space-y-3">
             <h2 className="font-semibold">Prices</h2>
             <Checkbox
-              label="Get prices from CoinGecko"
-              description="Off by default. When on, Muny asks CoinGecko for the price of each coin you hold (it sends only coin ids like “bitcoin”, never balances, addresses or wallets) about every 6 hours, and loads about a year of daily history. Older values come from your imported transactions."
+              label="Get crypto prices"
+              description="Off by default. When on, Muny asks the price provider below for the price of each coin you hold about every 6 hours, and fills in daily price history back to your first transaction. It sends only coin ids like “bitcoin”, never balances, addresses or wallet names."
               checked={d.pricesEnabled}
               onChange={(pricesEnabled) => save.mutate({ pricesEnabled })}
             />
+            <fieldset className="space-y-2 pl-7">
+              <legend className="text-sm font-medium">Price provider</legend>
+              {(
+                [
+                  [
+                    "defillama",
+                    "DefiLlama (recommended)",
+                    "Free, no account or key, years of daily history.",
+                  ],
+                  [
+                    "coingecko",
+                    "CoinGecko",
+                    "About a year of history on the free plan; works best with a free Demo key (below).",
+                  ],
+                ] as const
+              ).map(([value, label, note]) => (
+                <label key={value} className="flex items-start gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="provider"
+                    value={value}
+                    checked={d.provider === value}
+                    onChange={() => save.mutate({ provider: value })}
+                    className="mt-1 accent-brand-600"
+                  />
+                  <span>
+                    <span className="font-medium">{label}</span>
+                    <span className="block text-xs text-slate-500">{note}</span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
             <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
               <span>
                 {d.updatedAt
@@ -57,37 +89,39 @@ export function CryptoSettings() {
             )}
           </Card>
 
-          <Card className="space-y-3">
-            <h2 className="font-semibold">CoinGecko API key (optional)</h2>
-            <p className="text-sm text-slate-500">
-              The free public API works without a key but is rate-limited. A free CoinGecko “Demo”
-              key raises the limits. Stored encrypted; never shown again.
-            </p>
-            <div className="flex flex-wrap items-end gap-2">
-              <Field
-                label={d.hasApiKey ? "Replace key" : "Key"}
-                type="password"
-                autoComplete="off"
-                value={key}
-                onChange={(e) => setKey(e.target.value)}
-              />
-              <Button
-                disabled={!key || save.isPending}
-                onClick={() => save.mutate({ apiKey: key }, { onSuccess: () => setKey("") })}
-              >
-                Save key
-              </Button>
-              {d.hasApiKey && (
+          {d.provider === "coingecko" && (
+            <Card className="space-y-3">
+              <h2 className="font-semibold">CoinGecko API key (optional)</h2>
+              <p className="text-sm text-slate-500">
+                The free public API works without a key but is rate-limited. A free CoinGecko “Demo”
+                key raises the limits. Stored encrypted; never shown again.
+              </p>
+              <div className="flex flex-wrap items-end gap-2">
+                <Field
+                  label={d.hasApiKey ? "Replace key" : "Key"}
+                  type="password"
+                  autoComplete="off"
+                  value={key}
+                  onChange={(e) => setKey(e.target.value)}
+                />
                 <Button
-                  variant="ghost"
-                  className="text-red-600"
-                  onClick={() => save.mutate({ apiKey: null })}
+                  disabled={!key || save.isPending}
+                  onClick={() => save.mutate({ apiKey: key }, { onSuccess: () => setKey("") })}
                 >
-                  Remove key
+                  Save key
                 </Button>
-              )}
-            </div>
-          </Card>
+                {d.hasApiKey && (
+                  <Button
+                    variant="ghost"
+                    className="text-red-600"
+                    onClick={() => save.mutate({ apiKey: null })}
+                  >
+                    Remove key
+                  </Button>
+                )}
+              </div>
+            </Card>
+          )}
 
           <Card className="space-y-3">
             <h2 className="font-semibold">Coin mapping</h2>

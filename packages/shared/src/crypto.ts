@@ -134,10 +134,14 @@ export interface CryptoImportResult {
   errors: { line: number; message: string }[];
 }
 
+/** Where prices come from. Both use CoinGecko coin ids for mapping. */
+export type CryptoPriceProvider = "defillama" | "coingecko";
+
 export interface CryptoSettings {
-  /** Fetch prices from CoinGecko (an opt-in outbound call: sends only coin ids). */
+  /** Fetch prices (an opt-in outbound call: sends only coin ids). */
   pricesEnabled: boolean;
-  /** Optional CoinGecko demo/pro key for higher limits (write-only). */
+  provider: CryptoPriceProvider;
+  /** Optional CoinGecko demo key for higher limits (write-only). */
   hasApiKey: boolean;
   /** Overrides: asset symbol → CoinGecko id. */
   assetIds: Record<string, string>;

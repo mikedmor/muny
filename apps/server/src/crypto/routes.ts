@@ -261,6 +261,7 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
     const body = parse(
       z.object({
         pricesEnabled: z.boolean().optional(),
+        provider: z.enum(["defillama", "coingecko"]).optional(),
         assetIds: z
           .record(
             asset,
@@ -279,9 +280,12 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
     } catch (err) {
       throw badRequest(err instanceof Error ? err.message : "Couldn't save");
     }
-    log(user.id, "crypto.settings", undefined, { pricesEnabled: body.pricesEnabled });
-    if (body.pricesEnabled)
-      void refreshPrices(db, { ...priceDeps, delayMs: priceDeps.delayMs ?? 2500 }).catch(() => {});
+    log(user.id, "crypto.settings", undefined, {
+      pricesEnabled: body.pricesEnabled,
+      provider: body.provider,
+    });
+    if (body.pricesEnabled || body.provider)
+      void refreshPrices(db, { ...priceDeps, delayMs: priceDeps.delayMs ?? 1500 }).catch(() => {});
     return { ...getCryptoSettings(db), ...priceState(db) };
   });
 

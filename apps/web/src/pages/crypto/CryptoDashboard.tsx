@@ -144,7 +144,7 @@ export function CryptoDashboard() {
           {!d.pricesEnabled && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-500/40 bg-brand-50 px-4 py-3 text-sm dark:bg-brand-700/15">
               <span>
-                Values need prices. Turn on CoinGecko prices to see what your crypto is worth (Muny
+                Values need prices. Turn on crypto prices to see what your crypto is worth (Muny
                 only sends coin names like “bitcoin”, never balances or addresses).
               </span>
               <Link

@@ -99,20 +99,27 @@ describe("crypto", () => {
     ]);
   });
 
-  it("prices holdings from CoinGecko only when turned on, sending only coin ids", async () => {
+  it("prices holdings from DefiLlama only when turned on, sending only coin ids", async () => {
     const urls: string[] = [];
     const fakeFetch = (async (url: string) => {
       urls.push(url);
-      if (url.includes("/simple/price"))
+      if (url.includes("/prices/current/"))
         return Response.json({
-          ethereum: { usd: 2000, usd_24h_change: 5.5 },
-          cosmos: { usd: 1.5, usd_24h_change: -2 },
+          coins: { "coingecko:ethereum": { price: 2000 }, "coingecko:cosmos": { price: 1.5 } },
         });
+      if (url.includes("/percentage/"))
+        return Response.json({ coins: { "coingecko:ethereum": 5.5, "coingecko:cosmos": -2 } });
+      // /chart: two daily closes for whichever coin was asked.
+      const id = decodeURIComponent(url.split("/chart/")[1]?.split("?")[0] ?? "");
       return Response.json({
-        prices: [
-          [Date.UTC(2025, 0, 10), 2000],
-          [Date.UTC(2025, 1, 2), 2500],
-        ],
+        coins: {
+          [id]: {
+            prices: [
+              { timestamp: Date.UTC(2025, 0, 10) / 1000, price: 2000 },
+              { timestamp: Date.UTC(2025, 1, 2) / 1000, price: 2500 },
+            ],
+          },
+        },
       });
     }) as unknown as typeof fetch;
     const { client, imp } = await setup(fakeFetch);
@@ -121,14 +128,18 @@ describe("crypto", () => {
     expect(urls).toEqual([]);
 
     await client.put("/api/crypto/settings", { pricesEnabled: true });
-    const r = await client.post("/api/crypto/prices/refresh");
-    expect(r.statusCode).toBe(200);
-    expect(
-      urls.some((u) => u.includes("ids=ethereum%2Ccosmos") || u.includes("ids=cosmos%2Cethereum")),
-    ).toBe(true);
+    // Turning prices on starts an update in the background; wait for it.
+    let o = (await client.get("/api/crypto/overview")).json<CryptoOverview>();
+    for (let i = 0; i < 50 && !o.holdings.some((h) => h.price); i++) {
+      await new Promise((r) => setTimeout(r, 20));
+      o = (await client.get("/api/crypto/overview")).json<CryptoOverview>();
+    }
+    expect(urls.every((u) => u.startsWith("https://coins.llama.fi/"))).toBe(true);
+    expect(urls.some((u) => u.includes("coingecko%3Aethereum"))).toBe(true);
     expect(urls.join(" ")).not.toMatch(/0\.299|Demo|Cold/);
+    // History starts at each coin's first transaction (ETH: 2025-01-10).
+    expect(urls.some((u) => u.includes(`start=${Date.UTC(2025, 0, 10) / 1000}`))).toBe(true);
 
-    const o = (await client.get("/api/crypto/overview")).json<CryptoOverview>();
     const eth = o.holdings.find((h) => h.asset === "ETH");
     expect(eth).toMatchObject({
       amount: "0.398",
@@ -142,6 +153,32 @@ describe("crypto", () => {
     ]);
     expect(o.totalValueCents).toBe(79_600 + 2); // + 0.01 ATOM at $1.50
     expect(o.history.length).toBeGreaterThanOrEqual(2);
-    expect(o.history[0]).toEqual({ date: "2025-01-10", valueCents: 100_000 - 100_000 + 100_000 });
+    expect(o.history[0]).toEqual({ date: "2025-01-10", valueCents: 100_000 });
+
+    // A second update only fetches what's missing (no chart calls for stored days).
+    urls.length = 0;
+    await client.post("/api/crypto/prices/refresh");
+    expect(urls.filter((u) => u.includes("/chart/")).length).toBeLessThanOrEqual(2);
+  });
+
+  it("can use CoinGecko instead", async () => {
+    const urls: string[] = [];
+    const fakeFetch = (async (url: string) => {
+      urls.push(url);
+      if (url.includes("/simple/price"))
+        return Response.json({ ethereum: { usd: 2000, usd_24h_change: 1 }, cosmos: { usd: 1 } });
+      return Response.json({ prices: [[Date.UTC(2025, 0, 10), 2000]] });
+    }) as unknown as typeof fetch;
+    const { client, imp } = await setup(fakeFetch);
+    await imp();
+    await client.put("/api/crypto/settings", { provider: "coingecko" });
+    await client.put("/api/crypto/settings", { pricesEnabled: true });
+    let o = (await client.get("/api/crypto/overview")).json<CryptoOverview>();
+    for (let i = 0; i < 50 && !o.holdings.some((h) => h.price); i++) {
+      await new Promise((r) => setTimeout(r, 20));
+      o = (await client.get("/api/crypto/overview")).json<CryptoOverview>();
+    }
+    expect(urls.every((u) => u.startsWith("https://api.coingecko.com/"))).toBe(true);
+    expect(o.holdings.find((h) => h.asset === "ETH")?.price).toBe("2000");
   });
 });
