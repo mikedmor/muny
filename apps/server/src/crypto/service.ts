@@ -1202,7 +1202,12 @@ export function deleteTxn(db: Db, id: string) {
  * "lost" withdrawal on that day (a loss, not a sale). Deleting those rows
  * undoes it.
  */
-export function markRemainingLost(db: Db, walletId: string, at: number) {
+export function markRemainingLost(
+  db: Db,
+  walletId: string,
+  at: number,
+  reason: "closed" | "access" = "closed",
+) {
   const wallet = db.select().from(w).where(eq(w.id, walletId)).get();
   if (!wallet) throw new Error("Wallet not found");
   const left = [...(balancesByWallet(db).get(walletId) ?? new Map<string, string>())].filter(
@@ -1222,7 +1227,10 @@ export function markRemainingLost(db: Db, walletId: string, at: number) {
         label: "lost",
         sentAsset: asset,
         sentAmount: amount,
-        description: `Lost: still on ${wallet.name} when it closed`,
+        description:
+          reason === "access"
+            ? `Lost: no longer have access to ${wallet.name}`
+            : `Lost: still on ${wallet.name} when it closed`,
         externalId: `manual:${id}`,
         source: "manual",
       })

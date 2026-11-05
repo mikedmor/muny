@@ -203,8 +203,14 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
   app.post("/api/crypto/wallets/:id/lost", async (req) => {
     const user = requireUser(req);
     const { id } = parse(IdParams, req.params);
-    const body = parse(z.object({ at: z.number().int().positive() }), req.body);
-    const res = markRemainingLost(db, id, body.at);
+    const body = parse(
+      z.object({
+        at: z.number().int().positive(),
+        reason: z.enum(["closed", "access"]).default("closed"),
+      }),
+      req.body,
+    );
+    const res = markRemainingLost(db, id, body.at, body.reason);
     log(user.id, "crypto.wallet_lost", id, { coins: res.coins });
     return res;
   });

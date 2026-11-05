@@ -500,4 +500,34 @@ describe("closed exchanges", () => {
     ).json<CryptoWallet>();
     expect(patched).toMatchObject({ archived: true, exchange: "tradeogre", balances: [] });
   });
+
+  it("records a wallet you can't open any more as lost, saying why", async () => {
+    const { client, db } = await setup(
+      (async () => new Response("", { status: 500 })) as unknown as typeof fetch,
+    );
+    const bcn = (
+      await client.post("/api/crypto/wallets", { name: "Bytecoin", kind: "manual" })
+    ).json<CryptoWallet>();
+    db.insert(schema.cryptoTxns)
+      .values({
+        id: "bcn-in",
+        walletId: bcn.id,
+        at: Date.UTC(2018, 0, 1),
+        externalId: "koinly:bcn-in",
+        source: "import",
+        type: "deposit",
+        receivedAsset: "BCN",
+        receivedAmount: "1000",
+      })
+      .run();
+    const at = Date.UTC(2020, 5, 1, 12);
+    await client.post(`/api/crypto/wallets/${bcn.id}/lost`, { at, reason: "access" });
+    const page = (await client.get(`/api/crypto/txns?walletId=${bcn.id}`)).json<CryptoTxnPage>();
+    expect(page.items[0]).toMatchObject({
+      label: "lost",
+      sentAmount: "1000",
+      at,
+      description: "Lost: no longer have access to Bytecoin",
+    });
+  });
 });

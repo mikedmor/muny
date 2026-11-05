@@ -211,6 +211,74 @@ function ExchangeCard({
   );
 }
 
+/**
+ * A wallet you can't open any more (lost recovery phrase, old app or device):
+ * record what's left as lost, and archive it.
+ */
+function LostAccessCard({ w, onClose }: { w: CryptoWallet; onClose: () => void }) {
+  const patch = useCryptoMutation((body: object) => api.patch(`/api/crypto/wallets/${w.id}`, body));
+  const lost = useCryptoMutation((at: number) =>
+    api.post<{ coins: number }>(`/api/crypto/wallets/${w.id}/lost`, { at, reason: "access" }),
+  );
+  const [lostOn, setLostOn] = useState(new Date().toISOString().slice(0, 10));
+  const holds = w.balances.length > 0;
+  return (
+    <Card className="space-y-3 text-sm">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-medium">No longer have access</span>
+        <button type="button" onClick={onClose} className="text-xs text-slate-500 hover:underline">
+          Close
+        </button>
+      </div>
+      {holds ? (
+        <>
+          <p className="text-slate-600 dark:text-slate-300">
+            If you can&apos;t open this wallet any more (lost recovery phrase, an old app or
+            device), what&apos;s in it is gone for good. Mark it lost: one &quot;lost&quot;
+            withdrawal per coin on the day you lost access, which counts as a loss rather than a
+            sale. Deleting those rows undoes it.
+          </p>
+          <p className="text-xs text-slate-500">
+            Still holds {w.balances.map((b) => `${fmtAmount(b.amount)} ${b.asset}`).join(", ")}.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="date"
+              aria-label="Lost access on"
+              value={lostOn}
+              onChange={(e) => setLostOn(e.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+            />
+            <Button
+              variant="secondary"
+              disabled={lost.isPending || !lostOn}
+              onClick={() =>
+                window.confirm(`Record everything left in ${w.name} as lost on ${lostOn}?`) &&
+                lost.mutate(Date.parse(`${lostOn}T12:00:00Z`))
+              }
+            >
+              Mark what&apos;s left as lost
+            </Button>
+          </div>
+        </>
+      ) : (
+        <p className="text-slate-600 dark:text-slate-300">
+          Nothing is left in it{lost.data ? " now" : ""}. Archive it to keep its history out of the
+          way: off the wallet list (under &quot;archived&quot;) and out of daily syncs.
+        </p>
+      )}
+      <Button
+        variant={holds ? "ghost" : "primary"}
+        disabled={patch.isPending}
+        onClick={() => patch.mutate({ archived: !w.archived })}
+      >
+        {w.archived ? "Unarchive" : "Archive this wallet"}
+      </Button>
+      {(patch.error ?? lost.error) && <Alert>{(patch.error ?? lost.error)?.message}</Alert>}
+    </Card>
+  );
+}
+
 /** Paste a read-only API key (stored encrypted; sent only to that exchange). */
 function ConnectExchange({ w, onDone }: { w: CryptoWallet; onDone: () => void }) {
   const ex = cryptoExchange(w.exchange);
@@ -283,6 +351,7 @@ export function CryptoWalletPage() {
   const q = useCryptoWallet(walletId);
   const settings = useCryptoSettings();
   const navigate = useNavigate();
+  const [lostAccess, setLostAccess] = useState(false);
   const [modal, setModal] = useState<
     "import" | "connect" | "history" | "exchange" | "withdrawal" | null
   >(null);
@@ -354,6 +423,11 @@ export function CryptoWalletPage() {
                 >
                   ⚠ Troubleshoot
                 </Button>
+                {w.kind !== "exchange" && (
+                  <Button variant="ghost" onClick={() => setLostAccess((v) => !v)}>
+                    {w.archived ? "Archived" : "No longer have access"}
+                  </Button>
+                )}
               </div>
 
               <Card className="space-y-1">
@@ -407,6 +481,9 @@ export function CryptoWalletPage() {
                 )}
               </Card>
 
+              {w.kind !== "exchange" && lostAccess && (
+                <LostAccessCard w={w} onClose={() => setLostAccess(false)} />
+              )}
               {w.kind === "exchange" && (
                 <ExchangeCard
                   w={w}
