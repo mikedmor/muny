@@ -404,13 +404,19 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
     const body = parse(
       z.object({
         moves: z
-          .array(z.object({ txnId: z.string().min(1).max(64), toTxnId: z.string().min(1).max(64) }))
+          .array(
+            z.object({
+              txnId: z.string().min(1).max(64),
+              toTxnId: z.string().min(1).max(64).nullable(),
+              toWalletId: z.string().min(1).max(64),
+            }),
+          )
           .min(1)
           .max(500),
       }),
       req.body,
     );
-    const res = fix(() => body.moves.map((m) => moveCrossChain(db, m.txnId, m.toTxnId)));
+    const res = fix(() => body.moves.map((m) => moveCrossChain(db, m.txnId, m)));
     log(user.id, "crypto.reconcile_crosschain", undefined, { count: res.length });
     return { moved: res.length };
   });

@@ -71,8 +71,9 @@ function WalletIssues({ w }: { w: Report["wallets"][number] }) {
       at: m.firstAt,
     }),
   );
-  const move = useCryptoMutation((moves: { txnId: string; toTxnId: string }[]) =>
-    api.post("/api/crypto/reconcile/crosschain", { moves }),
+  const move = useCryptoMutation(
+    (moves: { txnId: string; toTxnId: string | null; toWalletId: string }[]) =>
+      api.post("/api/crypto/reconcile/crosschain", { moves }),
   );
   const error = dedupe.error ?? link.error ?? opening.error ?? move.error;
   const why =
@@ -126,13 +127,22 @@ function WalletIssues({ w }: { w: Report["wallets"][number] }) {
                 className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700"
               >
                 <span>
-                  {fmtAmount(c.amount, 8)} {c.asset} on {dayLabel(c.at)} arrived in{" "}
+                  {fmtAmount(c.amount, 8)} {c.asset} on {dayLabel(c.at)}{" "}
+                  {c.toTxnId ? "arrived in" : "was paid straight into"}{" "}
                   <span className="font-medium">{c.toWalletName}</span>
+                  {!c.toTxnId && (
+                    <span className="text-slate-500">
+                      {" "}
+                      (it's missing exactly that much from then)
+                    </span>
+                  )}
                 </span>
                 <Button
                   variant="secondary"
                   disabled={move.isPending}
-                  onClick={() => move.mutate([{ txnId: c.txnId, toTxnId: c.toTxnId }])}
+                  onClick={() =>
+                    move.mutate([{ txnId: c.txnId, toTxnId: c.toTxnId, toWalletId: c.toWalletId }])
+                  }
                 >
                   Move there
                 </Button>
@@ -143,7 +153,13 @@ function WalletIssues({ w }: { w: Report["wallets"][number] }) {
             <Button
               disabled={move.isPending}
               onClick={() =>
-                move.mutate(w.crossChain.map((c) => ({ txnId: c.txnId, toTxnId: c.toTxnId })))
+                move.mutate(
+                  w.crossChain.map((c) => ({
+                    txnId: c.txnId,
+                    toTxnId: c.toTxnId,
+                    toWalletId: c.toWalletId,
+                  })),
+                )
               }
             >
               Move all {w.crossChain.length}

@@ -217,17 +217,45 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
           Math.abs(o.at - r.at) <= DAY &&
           Math.abs(Number(o.receivedAmount) - want) <= want * 0.01,
       );
-      if (!d) continue;
-      used.add(d.id);
-      out.push({
-        txnId: r.id,
-        asset: r.receivedAsset,
-        amount: r.receivedAmount,
-        at: r.at,
-        toWalletId: d.walletId,
-        toWalletName: names.get(d.walletId) ?? "",
-        toTxnId: d.id,
-      });
+      if (d) {
+        used.add(d.id);
+        out.push({
+          txnId: r.id,
+          asset: r.receivedAsset,
+          amount: r.receivedAmount,
+          at: r.at,
+          toWalletId: d.walletId,
+          toWalletName: names.get(d.walletId) ?? "",
+          toTxnId: d.id,
+        });
+        continue;
+      }
+      // No deposit anywhere: the swap may have paid out straight to another
+      // wallet or exchange (e.g. a Coinbase deposit address), which then lacks
+      // exactly this amount from just after the swap.
+      for (const [k, b] of run) {
+        const [wid, asset] = k.split("|") as [string, string];
+        if (wid === walletId || asset !== r.receivedAsset || !b.bal.startsWith("-")) continue;
+        if (
+          b.firstNegAt === null ||
+          b.firstNegAt < r.at - 3_600_000 ||
+          b.firstNegAt > r.at + 3 * DAY
+        )
+          continue;
+        const deficit = Number(b.bal.slice(1));
+        if (Math.abs(deficit - want) > want * 0.01 || used.has(k)) continue;
+        used.add(k);
+        out.push({
+          txnId: r.id,
+          asset: r.receivedAsset,
+          amount: r.receivedAmount,
+          at: r.at,
+          toWalletId: wid,
+          toWalletName: names.get(wid) ?? "",
+          toTxnId: null,
+        });
+        break;
+      }
     }
     return out;
   }
@@ -295,14 +323,40 @@ export function mergeWallets(db: MunyDb, into: string, from: string[]) {
  * out of this wallet, linked to the synced deposit there (which then stops
  * counting as income).
  */
-export function moveCrossChain(db: MunyDb, txnId: string, toTxnId: string) {
+export function moveCrossChain(
+  db: MunyDb,
+  txnId: string,
+  to: { toTxnId: string | null; toWalletId: string },
+) {
   return db.transaction((tx) => {
     const src = tx.select().from(t).where(eq(t.id, txnId)).get();
-    const dst = tx.select().from(t).where(eq(t.id, toTxnId)).get();
-    if (!src?.receivedAsset || !src.receivedAmount || !dst || dst.transferPairId)
-      throw new Error("Those transactions can't be linked");
-    if (dst.receivedAsset !== src.receivedAsset || dst.walletId === src.walletId)
+    if (!src?.receivedAsset || !src.receivedAmount || src.transferPairId)
+      throw new Error("That transaction can't be moved");
+    if (to.toWalletId === src.walletId) throw new Error("Pick another wallet");
+    let dst = to.toTxnId ? tx.select().from(t).where(eq(t.id, to.toTxnId)).get() : undefined;
+    if (to.toTxnId && (!dst || dst.transferPairId || dst.receivedAsset !== src.receivedAsset))
       throw new Error("Those transactions don't match");
+    if (!dst) {
+      // Paid straight into the other wallet: record its receiving side.
+      if (!tx.select({ id: w.id }).from(w).where(eq(w.id, to.toWalletId)).get())
+        throw new Error("Wallet not found");
+      const inId = newId();
+      tx.insert(t)
+        .values({
+          id: inId,
+          walletId: to.toWalletId,
+          at: src.at + 1000,
+          type: "transfer",
+          receivedAsset: src.receivedAsset,
+          receivedAmount: src.receivedAmount,
+          description: "Added in Reconcile: swap proceeds paid into this wallet",
+          externalId: `manual:${inId}`,
+          source: "manual",
+        })
+        .run();
+      dst = tx.select().from(t).where(eq(t.id, inId)).get();
+    }
+    if (!dst) throw new Error("Couldn't record the receiving side");
     const id = newId();
     tx.insert(t)
       .values({

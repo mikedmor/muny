@@ -120,12 +120,61 @@ describe("reconcile: Koinly's quirks", () => {
     ]);
     const c = issue?.crossChain[0];
     await client.post("/api/crypto/reconcile/crosschain", {
-      moves: [{ txnId: c?.txnId, toTxnId: c?.toTxnId }],
+      moves: [{ txnId: c?.txnId, toTxnId: c?.toTxnId, toWalletId: c?.toWalletId }],
     });
     o = (await client.get("/api/crypto/overview")).json<CryptoOverview>();
     expect(o.holdings.find((h) => h.asset === "ETH")?.wallets.map((x) => x.walletName)).toEqual([
       "Exodus ETH",
     ]);
     expect((await report()).wallets.find((x) => x.walletId === trx.id)).toBeUndefined();
+  });
+
+  it("finds swap proceeds paid straight into an exchange that is missing them", async () => {
+    const { client, db, report } = await setup();
+    const add = async (name: string, kind: string) =>
+      (await client.post("/api/crypto/wallets", { name, kind })).json<CryptoWallet>();
+    const trx = await add("Exodus TRX", "manual");
+    const cb = await add("Coinbase", "exchange");
+    const row = (id: string, walletId: string, at: number, v: Record<string, string>) =>
+      db
+        .insert(schema.cryptoTxns)
+        .values({
+          id,
+          walletId,
+          at,
+          type: "trade",
+          externalId: `koinly:${id}`,
+          source: "import",
+          ...v,
+        })
+        .run();
+    row("fund", trx.id, T - 3_600_000, {
+      type: "deposit",
+      receivedAsset: "TRX",
+      receivedAmount: "5000",
+    });
+    row("swap", trx.id, T, {
+      sentAsset: "TRX",
+      sentAmount: "5000",
+      receivedAsset: "ETH",
+      receivedAmount: "0.09751483",
+    });
+    // Coinbase sends on ETH it never received in Muny (the swap paid into it).
+    row("onward", cb.id, T + 1_440_000, {
+      type: "withdrawal",
+      sentAsset: "ETH",
+      sentAmount: "0.09751483",
+    });
+
+    const c = (await report()).wallets.find((x) => x.walletId === trx.id)?.crossChain[0];
+    expect(c).toMatchObject({ asset: "ETH", toWalletId: cb.id, toTxnId: null });
+    await client.post("/api/crypto/reconcile/crosschain", {
+      moves: [{ txnId: c?.txnId, toTxnId: null, toWalletId: cb.id }],
+    });
+    const r = await report();
+    expect(r.wallets).toEqual([]);
+    const o = (await client.get("/api/crypto/overview")).json<CryptoOverview>();
+    expect(o.holdings.find((h) => h.asset === "ETH")).toBeUndefined();
+    expect(o.missingHistory).toEqual([]);
   });
 });

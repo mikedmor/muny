@@ -314,7 +314,8 @@ export interface CryptoReconcile {
       at: number;
       toWalletId: string;
       toWalletName: string;
-      toTxnId: string;
+      /** The synced deposit there, or null when Muny should record one. */
+      toTxnId: string | null;
     }[];
   }[];
 }
