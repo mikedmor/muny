@@ -133,16 +133,14 @@ export function CryptoSettings() {
               <div className="space-y-3 px-5 pb-5">
                 <p className="text-sm text-slate-500">
                   Muny picks a free public service for each coin. Enter a URL only to use your own
-                  server instead (for example a self-hosted Blockscout or Koios). Bitcoin, Litecoin,
-                  Dogecoin and Zcash need a Blockbook server here until built-in support lands.
-                  Whichever server you use sees the addresses you sync.
+                  instance of the same service instead (for example a self-hosted mempool,
+                  Blockscout or Koios). Whichever server you use sees the addresses you sync.
                 </p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {CRYPTO_SYNC_CHAINS.map((c) => (
                     <ServerField
                       key={c.key}
                       chain={c.key}
-                      required={c.server}
                       label={`${c.name} (${c.coin})`}
                       value={d.servers[c.key] ?? ""}
                       onSave={(url) => save.mutate({ servers: { ...d.servers, [c.key]: url } })}
@@ -310,13 +308,11 @@ export function CryptoSettings() {
 
 function ServerField({
   chain,
-  required,
   label,
   value,
   onSave,
 }: {
   chain: string;
-  required: boolean;
   label: string;
   value: string;
   onSave: (url: string) => void;
@@ -326,7 +322,7 @@ function ServerField({
     <Field
       label={label}
       name={`server-${chain}`}
-      placeholder={required ? "https://your-blockbook" : "Default"}
+      placeholder="Default"
       inputMode="url"
       value={v}
       onChange={(e) => setV(e.target.value.trim())}

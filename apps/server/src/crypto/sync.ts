@@ -5,11 +5,14 @@ import { and, eq, ne, sql } from "drizzle-orm";
 import { decryptJson, encryptJson } from "../lib/crypto.js";
 import type { BudgetProvider } from "./budget.js";
 import { algorand } from "./chains/algorand.js";
-import { blockbook } from "./chains/blockbook.js";
+import { blockchair } from "./chains/blockchair.js";
 import { blockscout } from "./chains/blockscout.js";
 import { cardano } from "./chains/cardano.js";
+import { cosmos } from "./chains/cosmos.js";
 import { type Adapter, type Cursor, makeCtx, type SyncDeps, SyncError } from "./chains/ctx.js";
+import { esplora } from "./chains/esplora.js";
 import { stellar } from "./chains/stellar.js";
+import { tron } from "./chains/tron.js";
 import { getCryptoSettings } from "./prices.js";
 
 export { type SyncDeps, SyncError };
@@ -18,7 +21,8 @@ export { type SyncDeps, SyncError };
  * Wallet sync from public blockchain data. Each chain has an adapter in
  * ./chains (one per provider); this file stores the results.
  * Providers: Blockscout (EVM chains), Koios (Cardano), AlgoNode (Algorand),
- * Horizon (Stellar), Blockbook (Bitcoin-like chains, on a server you provide).
+ * Horizon (Stellar), mempool.space/litecoinspace (Bitcoin, Litecoin), Blockchair
+ * (Dogecoin, Zcash), a Cosmos Hub REST node and TronGrid.
  *
  * Privacy: syncing sends the wallet's address or extended public key to that
  * service. It is opt-in per wallet; the source is stored encrypted and never
@@ -32,18 +36,24 @@ export { type SyncDeps, SyncError };
 type Db = MunyDb | Parameters<Parameters<MunyDb["transaction"]>[0]>[0];
 
 const ADAPTERS: Record<(typeof CHAINS)[ChainKey]["provider"], Adapter> = {
-  "blockbook-utxo": blockbook,
+  esplora,
+  blockchair,
   blockscout,
   koios: cardano,
   algonode: algorand,
   horizon: stellar,
+  cosmos,
+  trongrid: tron,
 };
 const BUDGET: Record<(typeof CHAINS)[ChainKey]["provider"], BudgetProvider> = {
-  "blockbook-utxo": "blockbook",
+  esplora: "esplora",
+  blockchair: "blockchair",
   blockscout: "blockscout",
   koios: "koios",
   algonode: "algonode",
   horizon: "horizon",
+  cosmos: "cosmos",
+  trongrid: "trongrid",
 };
 
 const sleep = (ms?: number) => (ms ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());

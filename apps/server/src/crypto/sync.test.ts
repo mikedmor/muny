@@ -220,20 +220,26 @@ describe("crypto wallet sync", () => {
     expect(w.balances[0]?.amount).toBe("0.299");
   });
 
-  it("asks for a Blockbook server for Bitcoin instead of calling one that refuses apps", async () => {
+  it("picks the service from the coin and rejects keys of another coin", async () => {
     const bs = fakeBlockscout();
     const { client } = await setup(bs.f);
     const w = (
       await client.post("/api/crypto/wallets", { name: "BTC", kind: "manual" })
     ).json<CryptoWallet>();
+    // A Bitcoin zpub is not a Dogecoin key.
+    const zpub =
+      "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs";
+    const bad = await client.put(`/api/crypto/wallets/${w.id}/source`, {
+      chain: "doge",
+      source: zpub,
+    });
+    expect(bad.statusCode).toBe(400);
     await client.put(`/api/crypto/wallets/${w.id}/source`, {
       chain: "btc",
       source: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
     });
-    const res = await client.post(`/api/crypto/wallets/${w.id}/sync`);
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toMatch(/needs a Blockbook server/);
-    expect(bs.calls).toEqual([]);
+    await client.post(`/api/crypto/wallets/${w.id}/sync`);
+    expect(bs.calls[0]?.url.origin).toBe("https://mempool.space");
   });
 
   it("never goes over the daily request budget", async () => {

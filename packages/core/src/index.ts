@@ -4,6 +4,7 @@ export * from "./crypto/blockbook.js";
 export * from "./crypto/chains.js";
 export * from "./crypto/decimal.js";
 export * from "./crypto/evm.js";
+export * from "./crypto/hd.js";
 export * from "./crypto/koinly.js";
 export * from "./crypto/movements.js";
 export * from "./import/bank-csv.js";

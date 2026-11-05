@@ -14,7 +14,10 @@ export type BudgetProvider =
   | "defillama"
   | "coingecko"
   | "blockscout"
-  | "blockbook"
+  | "esplora"
+  | "blockchair"
+  | "cosmos"
+  | "trongrid"
   | "koios"
   | "algonode"
   | "horizon";
@@ -26,8 +29,12 @@ export const LIMITS: Record<BudgetProvider, { day: number; month: number; label:
   coingecko: { day: 200, month: 5000, label: "CoinGecko prices" },
   // Free plan: 100K credits a day at 20-40 credits per call (~2,500+ calls).
   blockscout: { day: 1500, month: 30000, label: "Blockscout wallet sync (EVM chains)" },
-  // A Blockbook server you run or rent.
-  blockbook: { day: 500, month: 10000, label: "Blockbook wallet sync (Bitcoin-like chains)" },
+  // mempool.space / litecoinspace.org public APIs (per-IP rate limits).
+  esplora: { day: 1500, month: 30000, label: "mempool.space wallet sync (Bitcoin, Litecoin)" },
+  // Blockchair without a key: about 1,440 requests a day.
+  blockchair: { day: 300, month: 6000, label: "Blockchair wallet sync (Dogecoin, Zcash)" },
+  cosmos: { day: 500, month: 10000, label: "Cosmos Hub wallet sync (ATOM)" },
+  trongrid: { day: 500, month: 10000, label: "TronGrid wallet sync (TRON)" },
   // Koios public tier: 100 requests per 10 s per IP, small bodies.
   koios: { day: 1000, month: 20000, label: "Koios wallet sync (Cardano)" },
   // AlgoNode free public indexer.

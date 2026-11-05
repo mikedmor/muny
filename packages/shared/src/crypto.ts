@@ -179,8 +179,7 @@ export interface CryptoSyncResult {
 /**
  * Coins Muny can sync, by what the user knows (the coin), not the provider.
  * The server picks the provider per chain and validates addresses; see
- * @muny/core CHAINS. `server` marks chains that need a server the user
- * provides.
+ * @muny/core CHAINS.
  */
 export const CRYPTO_SYNC_CHAINS = [
   {
@@ -189,16 +188,14 @@ export const CRYPTO_SYNC_CHAINS = [
     coin: "BTC",
     placeholder: "zpub… / xpub… / bc1…",
     evm: false,
-    server: true,
   },
-  { key: "eth", name: "Ethereum", coin: "ETH", placeholder: "0x…", evm: true, server: false },
+  { key: "eth", name: "Ethereum", coin: "ETH", placeholder: "0x…", evm: true },
   {
     key: "ada",
     name: "Cardano",
     coin: "ADA",
     placeholder: "stake1… / addr1…",
     evm: false,
-    server: false,
   },
   {
     key: "algo",
@@ -206,16 +203,16 @@ export const CRYPTO_SYNC_CHAINS = [
     coin: "ALGO",
     placeholder: "58-character address",
     evm: false,
-    server: false,
   },
-  { key: "xlm", name: "Stellar", coin: "XLM", placeholder: "G…", evm: false, server: false },
+  { key: "xlm", name: "Stellar", coin: "XLM", placeholder: "G…", evm: false },
+  { key: "atom", name: "Cosmos", coin: "ATOM", placeholder: "cosmos1…", evm: false },
+  { key: "trx", name: "TRON", coin: "TRX", placeholder: "T…", evm: false },
   {
     key: "ltc",
     name: "Litecoin",
     coin: "LTC",
     placeholder: "Ltub… / ltc1… / L…",
     evm: false,
-    server: true,
   },
   {
     key: "doge",
@@ -223,18 +220,16 @@ export const CRYPTO_SYNC_CHAINS = [
     coin: "DOGE",
     placeholder: "dgub… / D…",
     evm: false,
-    server: true,
   },
-  { key: "zec", name: "Zcash", coin: "ZEC", placeholder: "t1…", evm: false, server: true },
-  { key: "polygon", name: "Polygon", coin: "POL", placeholder: "0x…", evm: true, server: false },
-  { key: "base", name: "Base", coin: "ETH on Base", placeholder: "0x…", evm: true, server: false },
+  { key: "zec", name: "Zcash", coin: "ZEC", placeholder: "t1…", evm: false },
+  { key: "polygon", name: "Polygon", coin: "POL", placeholder: "0x…", evm: true },
+  { key: "base", name: "Base", coin: "ETH on Base", placeholder: "0x…", evm: true },
   {
     key: "arb",
     name: "Arbitrum",
     coin: "ETH on Arbitrum",
     placeholder: "0x…",
     evm: true,
-    server: false,
   },
   {
     key: "op",
@@ -242,9 +237,8 @@ export const CRYPTO_SYNC_CHAINS = [
     coin: "ETH on Optimism",
     placeholder: "0x…",
     evm: true,
-    server: false,
   },
-  { key: "gnosis", name: "Gnosis", coin: "XDAI", placeholder: "0x…", evm: true, server: false },
+  { key: "gnosis", name: "Gnosis", coin: "XDAI", placeholder: "0x…", evm: true },
 ] as const;
 
 export type CryptoSyncChain = (typeof CRYPTO_SYNC_CHAINS)[number]["key"];
@@ -260,7 +254,10 @@ export function detectCryptoChains(input: string): CryptoSyncChain[] {
   if (/^(stake1|addr1)[02-9ac-hj-np-z]{40,}$/.test(s)) return ["ada"];
   if (/^[A-Z2-7]{58}$/.test(s)) return ["algo"];
   if (/^G[A-Z2-7]{55}$/.test(s)) return ["xlm"];
-  if (/^(xpub|ypub|zpub)/.test(s)) return ["btc", "ltc", "doge", "zec"];
+  if (/^cosmos1[02-9ac-hj-np-z]{38}$/.test(s)) return ["atom"];
+  if (/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(s)) return ["trx"];
+  if (/^(ypub|zpub)/.test(s)) return ["btc", "ltc"];
+  if (/^xpub/.test(s)) return ["btc", "ltc", "doge", "zec"];
   if (/^(Ltub|Mtub)/.test(s)) return ["ltc"];
   if (/^dgub/.test(s)) return ["doge"];
   if (/^bc1[02-9ac-hj-np-z]{11,71}$/i.test(s)) return ["btc"];

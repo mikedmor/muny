@@ -15,7 +15,7 @@ import { Modal, SelectField } from "../../components/forms.js";
 import { Alert, Button, Card, cx, Field } from "../../components/ui.js";
 import { MerchantAvatar } from "../../components/visuals.js";
 import { api } from "../../lib/api.js";
-import { useCryptoMutation, useCryptoSettings, useCryptoWallets } from "../../lib/queries.js";
+import { useCryptoMutation, useCryptoWallets } from "../../lib/queries.js";
 import { ago, agoTime, CryptoHeader, dayLabel, fmtAmount } from "./common.js";
 
 /** Wallets & exchanges, Koinly-style: balance, transactions, status; add or import. */
@@ -146,10 +146,12 @@ type ChainKey = CryptoSyncChain;
 
 /** Where each coin's data comes from (shown in the privacy note). */
 const VIA: Record<ChainKey, string> = {
-  btc: "your Blockbook server",
-  ltc: "your Blockbook server",
-  doge: "your Blockbook server",
-  zec: "your Blockbook server",
+  btc: "mempool.space",
+  ltc: "litecoinspace.org",
+  doge: "Blockchair",
+  zec: "Blockchair",
+  atom: "a public Cosmos node",
+  trx: "TronGrid",
   eth: "Blockscout",
   polygon: "Blockscout",
   base: "Blockscout",
@@ -179,7 +181,6 @@ function SourceFields({
   source: string;
   setSource: (s: string) => void;
 }) {
-  const settings = useCryptoSettings();
   const info = chainInfo(chain);
   const detected = detectCryptoChains(source);
   const paste = (v: string) => {
@@ -187,7 +188,6 @@ function SourceFields({
     const d = detectCryptoChains(v);
     if (d.length && !d.includes(chain)) setChain(d[0] as ChainKey);
   };
-  const needsServer = info.server && !settings.data?.servers[chain];
   return (
     <>
       <Field
@@ -219,20 +219,14 @@ function SourceFields({
               ? `Recognised as a ${info.name} address.`
               : null}
       </p>
-      {needsServer && (
-        <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 sm:col-span-2 dark:bg-amber-950/40 dark:text-amber-200">
-          {info.name} sync currently needs a Blockbook server you run or rent (Crypto → Settings →
-          Advanced). Built-in {info.name} support is coming next; you can add the wallet now and it
-          will sync once that lands.
-        </p>
-      )}
       <p className="text-xs text-slate-500 sm:col-span-2">
         Public addresses or keys only; never a seed phrase or private key. Muny stores it encrypted
         and asks {VIA[chain]} (a public blockchain service) for its transactions once a day when you
         open Crypto, or when you press Sync. That service sees the address; nobody can move funds
         with it.
         {chain === "ada" && " A stake address (stake1…) covers every address in the wallet."}
-        {info.server && " An xpub/zpub covers every address in the wallet."}
+        {["btc", "ltc", "doge", "zec"].includes(chain) &&
+          " An xpub/zpub covers every address in the wallet: Muny works out the addresses itself and only looks those up."}
       </p>
     </>
   );

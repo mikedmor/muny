@@ -1,10 +1,13 @@
+import { type HdCoin, isSupportedXpub } from "./hd.js";
+
 /**
  * Chains Muny can sync from public data. Each wallet syncs through a provider:
  * - blockscout: EVM chains (open-source explorer; one free key covers them all,
  *   or each chain's public instance without a key).
- * - blockbook-utxo: Bitcoin-like chains (Blockbook API v2). Trezor's public
- *   servers refuse third-party apps, so these need a server you run or rent.
- * - koios (Cardano), algonode (Algorand), horizon (Stellar): free public APIs.
+ * - esplora (Bitcoin, Litecoin: mempool.space / litecoinspace.org) and
+ *   blockchair (Dogecoin, Zcash); extended public keys are expanded locally.
+ * - koios (Cardano), algonode (Algorand), horizon (Stellar), cosmos (Cosmos Hub
+ *   REST node), trongrid (TRON): free public APIs.
  * Servers are configurable per chain.
  */
 
@@ -21,14 +24,24 @@ export type ChainKey =
   | "gnosis"
   | "ada"
   | "algo"
-  | "xlm";
+  | "xlm"
+  | "atom"
+  | "trx";
 
 export interface ChainInfo {
   key: ChainKey;
   name: string;
   asset: string;
   decimals: number;
-  provider: "blockbook-utxo" | "blockscout" | "koios" | "algonode" | "horizon";
+  provider:
+    | "esplora"
+    | "blockchair"
+    | "blockscout"
+    | "koios"
+    | "algonode"
+    | "horizon"
+    | "cosmos"
+    | "trongrid";
   /** Default server: a Blockbook server, or the chain's public Blockscout instance. */
   server: string;
   /** EVM chain id (Blockscout's unified API addresses chains by id). */
@@ -41,6 +54,8 @@ export interface ChainInfo {
 
 // Extended public keys (BIP32/44/49/84) by prefix; base58 body.
 const XPUB = /^(xpub|ypub|zpub|Ltub|Mtub|dgub|tpub|vpub|upub)[1-9A-HJ-NP-Za-km-z]{100,112}$/;
+/** An extended public key this coin's address formats support. */
+const xpubFor = (coin: HdCoin) => (s: string) => XPUB.test(s) && isSupportedXpub(s, coin);
 const BASE58 = /^[1-9A-HJ-NP-Za-km-z]+$/;
 const EVM = (s: string) => /^0x[0-9a-fA-F]{40}$/.test(s);
 
@@ -50,11 +65,11 @@ export const CHAINS: Record<ChainKey, ChainInfo> = {
     name: "Bitcoin",
     asset: "BTC",
     decimals: 8,
-    provider: "blockbook-utxo",
-    server: "",
+    provider: "esplora",
+    server: "https://mempool.space/api",
     accepts: "xpub / ypub / zpub (recommended: covers every address) or a single address",
     validate: (s) =>
-      XPUB.test(s) ||
+      xpubFor("btc")(s) ||
       /^bc1[02-9ac-hj-np-z]{11,71}$/i.test(s) ||
       (/^[13]/.test(s) && BASE58.test(s) && s.length >= 26 && s.length <= 35),
   },
@@ -63,11 +78,11 @@ export const CHAINS: Record<ChainKey, ChainInfo> = {
     name: "Litecoin",
     asset: "LTC",
     decimals: 8,
-    provider: "blockbook-utxo",
-    server: "",
+    provider: "esplora",
+    server: "https://litecoinspace.org/api",
     accepts: "Ltub / Mtub / zpub or a single address",
     validate: (s) =>
-      XPUB.test(s) ||
+      xpubFor("ltc")(s) ||
       /^ltc1[02-9ac-hj-np-z]{11,71}$/i.test(s) ||
       (/^[LM3]/.test(s) && BASE58.test(s) && s.length >= 26 && s.length <= 35),
   },
@@ -76,21 +91,22 @@ export const CHAINS: Record<ChainKey, ChainInfo> = {
     name: "Dogecoin",
     asset: "DOGE",
     decimals: 8,
-    provider: "blockbook-utxo",
-    server: "",
+    provider: "blockchair",
+    server: "https://api.blockchair.com/dogecoin",
     accepts: "dgub / xpub or a single address (starts with D)",
     validate: (s) =>
-      XPUB.test(s) || (/^[DA9]/.test(s) && BASE58.test(s) && s.length >= 26 && s.length <= 35),
+      xpubFor("doge")(s) ||
+      (/^[DA9]/.test(s) && BASE58.test(s) && s.length >= 26 && s.length <= 35),
   },
   zec: {
     key: "zec",
     name: "Zcash",
     asset: "ZEC",
     decimals: 8,
-    provider: "blockbook-utxo",
-    server: "",
+    provider: "blockchair",
+    server: "https://api.blockchair.com/zcash",
     accepts: "xpub or a transparent address (starts with t1 or t3)",
-    validate: (s) => XPUB.test(s) || (/^t[13]/.test(s) && BASE58.test(s) && s.length === 35),
+    validate: (s) => xpubFor("zec")(s) || (/^t[13]/.test(s) && BASE58.test(s) && s.length === 35),
   },
   eth: {
     key: "eth",
@@ -187,6 +203,26 @@ export const CHAINS: Record<ChainKey, ChainInfo> = {
     server: "https://horizon.stellar.org",
     accepts: "an account (G…, 56 characters); tokens are included",
     validate: (s) => /^G[A-Z2-7]{55}$/.test(s),
+  },
+  atom: {
+    key: "atom",
+    name: "Cosmos Hub",
+    asset: "ATOM",
+    decimals: 6,
+    provider: "cosmos",
+    server: "https://cosmos-rest.publicnode.com",
+    accepts: "an address (cosmos1…)",
+    validate: (s) => /^cosmos1[02-9ac-hj-np-z]{38}$/.test(s),
+  },
+  trx: {
+    key: "trx",
+    name: "TRON",
+    asset: "TRX",
+    decimals: 6,
+    provider: "trongrid",
+    server: "https://api.trongrid.io",
+    accepts: "an address (T…, 34 characters); tokens are included",
+    validate: (s) => /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(s),
   },
 };
 

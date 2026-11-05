@@ -11,6 +11,9 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@muny/shared": "workspace:*"
+    "@muny/shared": "workspace:*",
+    "@noble/hashes": "^2.4.0",
+    "@scure/base": "^2.4.0",
+    "@scure/bip32": "^2.4.0"
   }
 }
