@@ -2,9 +2,11 @@ import { createRootRoute, createRoute, createRouter } from "@tanstack/react-rout
 import { AppShell } from "./components/AppShell.js";
 import { Alert, Button } from "./components/ui.js";
 import { useAuthStatus } from "./lib/auth.js";
+import { validateTransactionSearch } from "./lib/search.js";
 import { AccountsPage } from "./pages/AccountsPage.js";
 import { InvitePage, LoginPage, SetupPage } from "./pages/AuthPages.js";
 import { BudgetsPage } from "./pages/BudgetsPage.js";
+import { CategoryPage } from "./pages/CategoryPage.js";
 import { ImportPage } from "./pages/ImportPage.js";
 import { NotificationsPage } from "./pages/NotificationsPage.js";
 import { OverviewPage } from "./pages/OverviewPage.js";
@@ -45,9 +47,20 @@ const rootRoute = createRootRoute({ component: Root });
 const page = <const P extends string>(path: P, component: () => React.ReactNode) =>
   createRoute({ getParentRoute: () => rootRoute, path, component });
 
+/** A route whose URL search params are validated (e.g. transaction filters). */
+const searchPage = <const P extends string, S>(
+  path: P,
+  component: () => React.ReactNode,
+  validateSearch: (s: Record<string, unknown>) => S,
+) => createRoute({ getParentRoute: () => rootRoute, path, component, validateSearch });
+
+const monthSearch = (s: Record<string, unknown>): { month?: string } =>
+  typeof s.month === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(s.month) ? { month: s.month } : {};
+
 const routeTree = rootRoute.addChildren([
   page("/", OverviewPage),
-  page("/transactions", TransactionsPage),
+  searchPage("/transactions", TransactionsPage, validateTransactionSearch),
+  searchPage("/categories/$categoryId", CategoryPage, monthSearch),
   page("/alerts", NotificationsPage),
   page("/recurring", RecurringPage),
   page("/savings", SavingsPage),

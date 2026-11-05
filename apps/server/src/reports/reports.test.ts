@@ -1,5 +1,6 @@
 import type {
   Account,
+  CategoryActivity,
   CategoryGroup,
   MonthlyReport,
   NetWorthReport,
@@ -152,6 +153,38 @@ describe("reports", () => {
     expect(cumulativeDailySpending(db, "2026-04-01", "2026-04-05")).toEqual([
       0, 7000, 7000, 5500, 5500,
     ]);
+  });
+
+  it("summarizes one category by month, with budget and stats", async () => {
+    const { client, card, add, cat } = await setup();
+    const thisMonth = localToday().slice(0, 7);
+    const day = (n: number) => `${thisMonth}-${String(n).padStart(2, "0")}`;
+    await add(card.id, day(1), -6000, "KROGER", "Groceries");
+    await add(card.id, day(2), -1500, "KROGER", "Groceries");
+    await add(card.id, day(2), 500, "KROGER REFUND", "Groceries");
+    await add(card.id, day(1), -999, "CAFE", "Coffee");
+    await client.put("/api/budgets", { categoryId: cat("Groceries"), amountCents: 20_000 });
+    const r = await client.get(`/api/categories/${cat("Groceries")}/activity`);
+    const a = r.json<CategoryActivity>();
+    expect(a.category).toMatchObject({ name: "Groceries", kind: "expense" });
+    expect(a.months).toHaveLength(12);
+    expect(a.months[11]).toEqual({ month: thisMonth, cents: 7000 });
+    expect(a.budget).toMatchObject({ budgetCents: 20_000, availableCents: 13_000 });
+    expect(a.stats).toEqual({ count: 3, totalCents: 7000, averageCents: 2333, largestCents: 6000 });
+    expect((await client.get("/api/categories/nope/activity")).statusCode).toBe(404);
+  });
+
+  it("leaves matched transfers out of 'uncategorized'", async () => {
+    const { client, card, chk, add } = await setup();
+    const today = localToday();
+    await add(chk.id, today, -5000, "PAYMENT TO CARD");
+    await add(card.id, today, 5000, "PAYMENT RECEIVED");
+    await add(card.id, today, -1234, "SOMETHING");
+    await client.post("/api/transfers/apply");
+    const page = (await client.get("/api/transactions?categoryId=uncategorized")).json<{
+      items: { description: string }[];
+    }>();
+    expect(page.items.map((i) => i.description)).toEqual(["SOMETHING"]);
   });
 
   it("builds month-end dates", () => {

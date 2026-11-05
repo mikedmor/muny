@@ -1,0 +1,372 @@
+import {
+  type BudgetMonth,
+  type CategoryActivity,
+  formatMoney,
+  type Transaction,
+  type TransactionPage,
+} from "@muny/shared";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
+import { EditBudget, monthLabel, Ring } from "../components/budget.js";
+import { ColumnChart } from "../components/charts.js";
+import { Alert, Button, Card, cx } from "../components/ui.js";
+import { CategoryIcon, MerchantAvatar } from "../components/visuals.js";
+import { api } from "../lib/api.js";
+import { keys } from "../lib/queries.js";
+
+/**
+ * One category, like Rocket Money's category page: 12 months of spending
+ * (click a month), that month's transactions, its budget and a summary.
+ */
+
+const pad = (n: number) => String(n).padStart(2, "0");
+const thisMonth = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+};
+const shift = (m: string, n: number) => {
+  const [y, mo] = m.split("-").map(Number) as [number, number];
+  const t = y * 12 + mo - 1 + n;
+  return `${Math.floor(t / 12)}-${pad((t % 12) + 1)}`;
+};
+const monthEnd = (m: string) => {
+  const [y, mo] = m.split("-").map(Number) as [number, number];
+  return `${m}-${pad(new Date(y, mo, 0).getDate())}`;
+};
+const shortDay = (iso: string) =>
+  new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { month: "numeric", day: "numeric" });
+
+/** The part of a transaction that belongs to this category (split-aware). */
+function amountIn(t: Transaction, categoryId: string) {
+  if (t.splits.length)
+    return t.splits
+      .filter((s) => s.categoryId === categoryId)
+      .reduce((a, s) => a + s.amountCents, 0);
+  return t.amountCents;
+}
+
+export function CategoryPage() {
+  const { categoryId } = useParams({ strict: false }) as { categoryId: string };
+  const search = useSearch({ strict: false }) as { month?: string };
+  const navigate = useNavigate();
+  const month = search.month ?? thisMonth();
+  const setMonth = (m: string) =>
+    void navigate({
+      to: "/categories/$categoryId",
+      params: { categoryId },
+      search: { month: m },
+      replace: true,
+    });
+  const [end, setEnd] = useState(() => (month > thisMonth() ? month : thisMonth()));
+  // Keep the selected month inside the chart window.
+  useEffect(() => {
+    if (month > end || month <= shift(end, -12)) setEnd(month > thisMonth() ? month : thisMonth());
+  }, [month, end]);
+  const [sort, setSort] = useState<"date" | "amount">("date");
+  const [editing, setEditing] = useState(false);
+
+  const activity = useQuery({
+    queryKey: [...keys.reports, "category", categoryId, month, end],
+    queryFn: () =>
+      api.get<CategoryActivity>(`/api/categories/${categoryId}/activity?month=${month}&end=${end}`),
+    placeholderData: keepPreviousData,
+  });
+  const txns = useQuery({
+    queryKey: [...keys.transactions, "category", categoryId, month],
+    queryFn: () =>
+      api.get<TransactionPage>(
+        `/api/transactions?categoryId=${categoryId}&from=${month}-01&to=${monthEnd(month)}&limit=200&offset=0`,
+      ),
+    placeholderData: keepPreviousData,
+  });
+  // The budget editor needs the month's full budget line.
+  const budget = useQuery({
+    queryKey: [...keys.budgets, month],
+    queryFn: () => api.get<BudgetMonth>(`/api/budgets/${month}`),
+    enabled: editing,
+  });
+  const line = budget.data?.groups.flatMap((g) => g.lines).find((l) => l.categoryId === categoryId);
+
+  const a = activity.data;
+  const spending = a?.category.kind !== "income";
+  const items = useMemo(() => {
+    const list = [...(txns.data?.items ?? [])];
+    if (sort === "amount")
+      list.sort((x, y) => Math.abs(amountIn(y, categoryId)) - Math.abs(amountIn(x, categoryId)));
+    return list;
+  }, [txns.data, sort, categoryId]);
+
+  const exportUrl = `/api/export/transactions.csv?categoryId=${categoryId}&from=${month}-01&to=${monthEnd(month)}&includeHidden=false`;
+
+  return (
+    <>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <Link
+            to="/budgets"
+            aria-label="Back to budgets"
+            className="rounded-lg px-2 py-1 text-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            ‹
+          </Link>
+          <span
+            aria-hidden="true"
+            className="flex size-11 shrink-0 items-center justify-center rounded-full bg-white text-xl shadow-sm dark:bg-slate-800"
+          >
+            <CategoryIcon name={a?.category.name} group={a?.category.groupName} />
+          </span>
+          <div className="min-w-0">
+            <h1 className="truncate text-2xl font-semibold">{a?.category.name ?? "Category"}</h1>
+            {a && <p className="text-sm text-slate-500">{a.category.groupName}</p>}
+          </div>
+        </div>
+        <a
+          href={exportUrl}
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+        >
+          ⤓ Export
+        </a>
+      </div>
+      {activity.isError && <Alert>{activity.error.message}</Alert>}
+
+      {a && (
+        <>
+          <Card className="mb-6">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                aria-label="Earlier months"
+                onClick={() => setEnd((e) => shift(e, -6))}
+              >
+                ‹
+              </Button>
+              <div className="min-w-0 flex-1">
+                <ColumnChart
+                  ariaLabel={`${a.category.name} ${spending ? "spending" : "income"} by month`}
+                  seriesNames={[spending ? "Spent" : "Received"]}
+                  selectedKey={month}
+                  onSelect={setMonth}
+                  data={a.months.map((m) => ({
+                    key: m.month,
+                    label: monthLabel(m.month, { month: "short" }),
+                    title: monthLabel(m.month),
+                    values: [Math.max(0, m.cents)],
+                  }))}
+                />
+              </div>
+              <Button
+                variant="ghost"
+                aria-label="Later months"
+                disabled={end >= thisMonth()}
+                onClick={() =>
+                  setEnd((e) => (shift(e, 6) > thisMonth() ? thisMonth() : shift(e, 6)))
+                }
+              >
+                ›
+              </Button>
+            </div>
+            <p className="mt-1 text-center text-xs text-slate-500">
+              Click a month to see its transactions.
+            </p>
+          </Card>
+
+          <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+            <div className="order-2 min-w-0 space-y-3 lg:order-0">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="rounded-full bg-brand-600 px-3 py-1 text-sm font-medium text-white">
+                  {monthLabel(month, { month: "long" })} 1 – {monthLabel(month, { month: "long" })}{" "}
+                  {Number(monthEnd(month).slice(8))}
+                </span>
+                <label className="flex items-center gap-2 text-sm">
+                  <span className="text-slate-500">Sort by</span>
+                  <select
+                    value={sort}
+                    onChange={(e) => setSort(e.target.value as "date" | "amount")}
+                    className="rounded-lg border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
+                  >
+                    <option value="date">Date</option>
+                    <option value="amount">Amount</option>
+                  </select>
+                </label>
+              </div>
+              <Card className="p-0">
+                <div className="grid grid-cols-[3rem_minmax(0,1fr)_auto] gap-3 border-b border-slate-200 px-4 py-2.5 text-xs font-medium text-slate-500 dark:border-slate-800">
+                  <span>Date</span>
+                  <span>Name</span>
+                  <span className="text-right">Amount</span>
+                </div>
+                <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                  {items.map((t) => {
+                    const part = amountIn(t, categoryId);
+                    const name = t.payeeName ?? t.description;
+                    return (
+                      <li
+                        key={t.id}
+                        className="grid grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-3 px-4 py-2.5"
+                      >
+                        <span className="text-slate-500 tabular-nums">
+                          {shortDay(t.postedDate)}
+                        </span>
+                        <span className="flex min-w-0 items-center gap-3">
+                          <MerchantAvatar name={name} size="sm" />
+                          <span className="min-w-0">
+                            <span className="block truncate">
+                              {name}
+                              {t.pending && <span className="text-slate-500"> | Pending</span>}
+                            </span>
+                            <span className="block truncate text-xs text-slate-500">
+                              {t.accountName}
+                              {t.splits.length > 0 &&
+                                ` · split, ${formatMoney(Math.abs(t.amountCents))} total`}
+                            </span>
+                          </span>
+                        </span>
+                        <span
+                          className={cx(
+                            "text-right font-medium tabular-nums",
+                            part > 0 && "text-emerald-700 dark:text-emerald-400",
+                          )}
+                        >
+                          {part > 0 ? "+" : ""}
+                          {formatMoney(Math.abs(part))}
+                        </span>
+                      </li>
+                    );
+                  })}
+                  {txns.isSuccess && items.length === 0 && (
+                    <li className="px-4 py-6 text-center text-slate-500">
+                      Nothing in {a.category.name} in {monthLabel(month)}.
+                    </li>
+                  )}
+                </ul>
+                {(txns.data?.total ?? 0) > items.length && (
+                  <div className="border-t border-slate-200 px-4 py-2 text-sm dark:border-slate-800">
+                    <Link
+                      to="/transactions"
+                      search={{ categoryId, from: `${month}-01`, to: monthEnd(month) }}
+                      className="text-brand-600 hover:underline"
+                    >
+                      See all {txns.data?.total} on the Transactions page
+                    </Link>
+                  </div>
+                )}
+              </Card>
+              <Link
+                to="/transactions"
+                search={{ categoryId, from: `${month}-01`, to: monthEnd(month) }}
+                className="inline-block text-sm text-brand-600 hover:underline"
+              >
+                Edit these on the Transactions page
+              </Link>
+            </div>
+
+            <div className="order-1 space-y-6 lg:order-0">
+              {spending && (
+                <div>
+                  <h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {monthLabel(month, { month: "long" })} budget
+                  </h2>
+                  <Card className="p-0">
+                    {a.budget ? (
+                      (() => {
+                        const limit = a.budget.budgetCents + a.budget.rolloverCents;
+                        const left = a.budget.availableCents;
+                        return (
+                          <>
+                            <div className="flex justify-center px-4 pt-6 pb-4">
+                              <Ring used={a.stats.totalCents} limit={limit} size={170} stroke={11}>
+                                <span className="text-xs text-slate-500">
+                                  {left < 0 ? "Over by" : "Left to spend"}
+                                </span>
+                                <span
+                                  className={cx(
+                                    "text-2xl font-semibold tabular-nums",
+                                    left < 0 && "text-red-600 dark:text-red-400",
+                                  )}
+                                >
+                                  {formatMoney(Math.abs(left))}
+                                </span>
+                                <span className="text-xs text-slate-500">
+                                  of {formatMoney(limit)}
+                                </span>
+                              </Ring>
+                            </div>
+                            <dl className="divide-y divide-slate-100 border-t border-slate-200 text-sm dark:divide-slate-800 dark:border-slate-800">
+                              {[
+                                ["⊕", "Spending budget", formatMoney(limit), ""],
+                                ["⊖", "Current spend", formatMoney(a.stats.totalCents), ""],
+                                [
+                                  "⊜",
+                                  "Remaining",
+                                  `${left < 0 ? "−" : ""}${formatMoney(Math.abs(left))}`,
+                                  left < 0
+                                    ? "text-red-600 dark:text-red-400"
+                                    : "text-emerald-700 dark:text-emerald-400",
+                                ],
+                              ].map(([icon, k, v, cls]) => (
+                                <div key={k} className="flex justify-between gap-3 px-4 py-3">
+                                  <dt className="flex items-center gap-2">
+                                    <span
+                                      aria-hidden="true"
+                                      className="w-4 text-center text-slate-400"
+                                    >
+                                      {icon}
+                                    </span>
+                                    {k}
+                                  </dt>
+                                  <dd className={cx("font-semibold tabular-nums", cls)}>{v}</dd>
+                                </div>
+                              ))}
+                            </dl>
+                          </>
+                        );
+                      })()
+                    ) : (
+                      <p className="px-4 py-4 text-sm text-slate-500">
+                        No budget for this category.
+                      </p>
+                    )}
+                    <div className="border-t border-slate-200 px-4 py-3 dark:border-slate-800">
+                      {editing ? (
+                        line ? (
+                          <EditBudget line={line} month={month} onDone={() => setEditing(false)} />
+                        ) : (
+                          <p className="text-sm text-slate-500">Loading…</p>
+                        )
+                      ) : (
+                        <Button variant="secondary" onClick={() => setEditing(true)}>
+                          {a.budget ? "Edit budget" : "Set a budget"}
+                        </Button>
+                      )}
+                    </div>
+                  </Card>
+                </div>
+              )}
+              <div>
+                <h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Summary
+                </h2>
+                <Card className="p-0">
+                  <dl className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                    {[
+                      ["Total transactions", String(a.stats.count)],
+                      ["Average transaction", formatMoney(a.stats.averageCents)],
+                      ["Largest transaction", formatMoney(a.stats.largestCents)],
+                      ["Total amount", formatMoney(a.stats.totalCents)],
+                    ].map(([k, v]) => (
+                      <div key={k} className="flex justify-between gap-3 px-4 py-3">
+                        <dt>{k}</dt>
+                        <dd className="font-semibold tabular-nums">{v}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </Card>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </>
+  );
+}

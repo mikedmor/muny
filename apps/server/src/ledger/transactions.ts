@@ -84,8 +84,9 @@ function buildFilters(q: z.infer<typeof ListQuery>): SQL | undefined {
   const conds: (SQL | undefined)[] = [];
   if (q.accountId) conds.push(eq(t.accountId, q.accountId));
   if (q.categoryId === "uncategorized") {
+    // A matched transfer with no category counts as categorized (it's a transfer).
     conds.push(
-      sql`${t.categoryId} is null and not exists (select 1 from ${schema.transactionSplits} s where s.transaction_id = ${t.id})`,
+      sql`${t.categoryId} is null and ${t.transferPairId} is null and not exists (select 1 from ${schema.transactionSplits} s where s.transaction_id = ${t.id})`,
     );
   } else if (q.categoryId) {
     conds.push(

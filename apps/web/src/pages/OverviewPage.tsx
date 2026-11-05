@@ -32,6 +32,12 @@ const weekday = (iso: string) =>
     day: "numeric",
   });
 
+function addDaysIso(iso: string, n: number) {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
 function addMonthsIso(iso: string, n: number) {
   const [y, m] = iso.split("-").map(Number) as [number, number];
   const d = new Date(Date.UTC(y, m - 1 + n, 15));
@@ -534,13 +540,18 @@ function AttentionBar({ d }: { d: Overview }) {
       </Link>
     ),
     d.attention.uncategorized > 0 && (
-      <Link key="u" to="/transactions" className="underline">
+      <Link
+        key="u"
+        to="/transactions"
+        search={{ categoryId: "uncategorized", from: addDaysIso(d.today, -90) }}
+        className="underline"
+      >
         {d.attention.uncategorized} uncategorized transaction
         {d.attention.uncategorized === 1 ? "" : "s"}
       </Link>
     ),
     d.attention.newRecurring > 0 && (
-      <Link key="r" to="/recurring" className="underline">
+      <Link key="r" to="/recurring" hash="review" className="underline">
         {d.attention.newRecurring} new recurring charge
         {d.attention.newRecurring === 1 ? "" : "s"} to review
       </Link>

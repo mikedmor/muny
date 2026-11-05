@@ -8,7 +8,7 @@ import {
   type RecurringSeries,
   type UpcomingCharge,
 } from "@muny/shared";
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { CategorySelect } from "../components/CategorySelect.js";
 import { Modal, MoneyField, SelectField } from "../components/forms.js";
 import { Alert, Button, Card, cx, Field, PageHeader } from "../components/ui.js";
@@ -521,14 +521,27 @@ export function RecurringPage() {
   const [tab, setTab] = useState<"list" | "upcoming" | "trials">(() =>
     window.location.hash === "#trials" ? "trials" : "list",
   );
+  // "#review" (from the Overview to-do) shows only new charges to confirm.
+  const [reviewOnly, setReviewOnly] = useState(() => window.location.hash === "#review");
+  useEffect(() => {
+    const on = () => {
+      if (window.location.hash === "#review") {
+        setReviewOnly(true);
+        setTab("list");
+      } else if (window.location.hash === "#trials") setTab("trials");
+    };
+    window.addEventListener("hashchange", on);
+    return () => window.removeEventListener("hashchange", on);
+  }, []);
   const [open, setOpen] = useState<RecurringSeries | null>(null);
   const all = recurring.data ?? [];
 
   const tracked = all.filter((s) => s.status !== "ignored");
   const live = tracked.filter((s) => s.active && s.status !== "cancelled");
-  const subs = live.filter((s) => s.kind === "subscription");
-  const bills = live.filter((s) => s.kind === "bill");
-  const income = live.filter((s) => s.kind === "income");
+  const shown = reviewOnly ? live.filter((s) => s.status === "detected") : live;
+  const subs = shown.filter((s) => s.kind === "subscription");
+  const bills = shown.filter((s) => s.kind === "bill");
+  const income = shown.filter((s) => s.kind === "income");
   const inactive = tracked.filter((s) => !live.includes(s));
   const ignored = all.filter((s) => s.status === "ignored");
   const sum = (xs: RecurringSeries[]) => xs.reduce((a, s) => a + s.monthlyCents, 0);
@@ -601,6 +614,31 @@ export function RecurringPage() {
             ))}
           </div>
 
+          {tab === "list" && reviewOnly && (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-500/40 bg-brand-50 px-4 py-3 text-sm dark:bg-brand-700/15">
+              <span>
+                {newCount > 0 ? (
+                  <>
+                    Showing the <span className="font-semibold">{newCount}</span> new recurring
+                    charge{newCount === 1 ? "" : "s"} Muny found. Choose{" "}
+                    <span className="font-medium">Confirm</span> or{" "}
+                    <span className="font-medium">Not recurring</span> on each.
+                  </>
+                ) : (
+                  "All caught up: nothing new to review."
+                )}
+              </span>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setReviewOnly(false);
+                  window.history.replaceState(null, "", window.location.pathname);
+                }}
+              >
+                Show everything
+              </Button>
+            </div>
+          )}
           {tab === "list" ? (
             <div className="space-y-6 min-[112rem]:grid min-[112rem]:grid-cols-2 min-[112rem]:items-start min-[112rem]:gap-6 min-[112rem]:space-y-0">
               <Section

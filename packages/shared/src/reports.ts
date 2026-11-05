@@ -73,3 +73,21 @@ export interface Overview {
   cashTrend: { date: string; cents: number }[];
   attention: { uncategorized: number; connectionsNeedingLogin: number; newRecurring: number };
 }
+
+/** One category over time, for its detail page. Amounts are positive spending (or income). */
+export interface CategoryActivity {
+  category: {
+    id: string;
+    name: string;
+    groupName: string;
+    kind: "expense" | "income" | "transfer";
+  };
+  /** Selected month (YYYY-MM). */
+  month: string;
+  /** Net totals per month for the chart, oldest first, ending at `end`. */
+  months: { month: string; cents: number }[];
+  /** Budget for the selected month (expense categories), or null if none. */
+  budget: { budgetCents: number; rolloverCents: number; availableCents: number } | null;
+  /** Transactions (or split parts) in this category in the selected month. */
+  stats: { count: number; totalCents: number; averageCents: number; largestCents: number };
+}

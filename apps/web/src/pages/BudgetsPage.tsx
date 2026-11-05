@@ -1,12 +1,12 @@
-import { type BudgetLine, type BudgetMonth, formatMoney } from "@muny/shared";
+import { type BudgetMonth, formatMoney } from "@muny/shared";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Fragment, useState } from "react";
-import { Checkbox, MoneyField } from "../components/forms.js";
+import { useState } from "react";
+import { EditBudget, Ring } from "../components/budget.js";
 import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
 import { CategoryIcon, MerchantAvatar } from "../components/visuals.js";
 import { api } from "../lib/api.js";
-import { keys, useDeleteBudget, useSetBudget } from "../lib/queries.js";
+import { keys } from "../lib/queries.js";
 
 /**
  * Budgets, laid out like Rocket Money: budget basics (earnings and recurring
@@ -37,134 +37,11 @@ const day = (iso: string) =>
     month: "short",
     day: "numeric",
   });
+const monthEndIso = (m: string) => {
+  const [y, mo] = m.split("-").map(Number) as [number, number];
+  return `${m}-${pad(new Date(y, mo, 0).getDate())}`;
+};
 const signed = (cents: number) => `${cents < 0 ? "−" : ""}${formatMoney(Math.abs(cents))}`;
-
-/** Progress ring: the arc shows how much of the limit is used. */
-function Ring({
-  used,
-  limit,
-  size = 22,
-  stroke = 3,
-  children,
-}: {
-  used: number;
-  limit: number;
-  size?: number;
-  stroke?: number;
-  children?: React.ReactNode;
-}) {
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const pct = limit > 0 ? Math.min(1, Math.max(0, used / limit)) : used > 0 ? 1 : 0;
-  const over = limit > 0 ? used > limit : used > 0;
-  const color = over
-    ? "stroke-red-500"
-    : pct > 0.85
-      ? "stroke-amber-500"
-      : "stroke-[var(--viz-series-1)]";
-  return (
-    <span
-      className="relative inline-flex shrink-0 items-center justify-center"
-      style={{ width: size, height: size }}
-    >
-      <svg width={size} height={size} aria-hidden="true" className="-rotate-90">
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          strokeWidth={stroke}
-          className="stroke-slate-200 dark:stroke-slate-700"
-        />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          strokeWidth={stroke}
-          strokeLinecap="round"
-          strokeDasharray={c}
-          strokeDashoffset={c * (1 - (over ? 1 : pct))}
-          className={color}
-        />
-      </svg>
-      {children && (
-        <span className="absolute inset-0 flex flex-col items-center justify-center text-center">
-          {children}
-        </span>
-      )}
-    </span>
-  );
-}
-
-function EditBudget({
-  line,
-  month,
-  onDone,
-}: {
-  line: BudgetLine;
-  month: string;
-  onDone: () => void;
-}) {
-  const set = useSetBudget();
-  const del = useDeleteBudget();
-  const suggested = line.averageCents > 0 ? Math.ceil(line.averageCents / 1000) * 1000 : null;
-  const [amount, setAmount] = useState<number | null>(line.budgetCents ?? suggested);
-  const [rollover, setRollover] = useState(line.rollover);
-  return (
-    <div className="space-y-3 rounded-lg bg-slate-50 p-3 dark:bg-slate-800/50">
-      <div className="grid items-end gap-3 sm:grid-cols-2">
-        <MoneyField
-          label={`Monthly budget from ${label(month)}`}
-          cents={amount}
-          onChange={(c) => setAmount(c)}
-          hint={
-            line.averageCents > 0
-              ? `You spent ${formatMoney(line.averageCents)}/mo on average over the last 3 months.`
-              : undefined
-          }
-        />
-        <Checkbox
-          label="Roll over"
-          description="Carry what's left (or overspent) into next month."
-          checked={rollover}
-          onChange={setRollover}
-        />
-      </div>
-      {(set.error || del.error) && <Alert>{(set.error ?? del.error)?.message}</Alert>}
-      <div className="flex flex-wrap justify-between gap-2">
-        {line.budgetId ? (
-          <Button
-            variant="ghost"
-            className="text-red-600"
-            onClick={() => line.budgetId && del.mutate(line.budgetId, { onSuccess: onDone })}
-          >
-            Remove budget
-          </Button>
-        ) : (
-          <span />
-        )}
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={onDone}>
-            Cancel
-          </Button>
-          <Button
-            disabled={amount === null || set.isPending}
-            onClick={() =>
-              amount !== null &&
-              set.mutate(
-                { categoryId: line.categoryId, amountCents: amount, rollover, fromMonth: month },
-                { onSuccess: onDone },
-              )
-            }
-          >
-            Save
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Tables
@@ -281,7 +158,6 @@ function BasicsTable({ b }: { b: BudgetMonth }) {
 }
 
 function CategoriesTable({ b, month }: { b: BudgetMonth; month: string }) {
-  const [editing, setEditing] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const scheduled = b.forecast.scheduledByCategory;
   const lines = b.groups.flatMap((g) => g.lines.map((l) => ({ ...l, groupName: g.name })));
@@ -301,58 +177,50 @@ function CategoriesTable({ b, month }: { b: BudgetMonth; month: string }) {
           const id = l.categoryId ?? "";
           const limit = (l.budgetCents ?? 0) + l.rolloverCents;
           const due = scheduled[id] ?? 0;
-          const open = editing === id;
           return (
-            <Fragment key={id}>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => setEditing(open ? null : id)}
-                  aria-expanded={open}
-                  className={cx(
-                    ROW,
-                    "w-full px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50",
-                  )}
-                >
-                  <span className="flex min-w-0 items-center gap-3">
-                    <span
-                      aria-hidden="true"
-                      className="flex size-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-base dark:bg-slate-800"
-                    >
-                      <CategoryIcon name={l.name} group={l.groupName} />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate font-medium">{l.name}</span>
-                      <span className="block truncate text-xs text-slate-500">
-                        {due > 0 && `${formatMoney(due)} more scheduled`}
-                        {due > 0 && l.rollover && l.rolloverCents !== 0 && " · "}
-                        {l.rollover &&
-                          l.rolloverCents !== 0 &&
-                          `${signed(l.rolloverCents)} rolled over`}
-                        {due === 0 && !(l.rollover && l.rolloverCents !== 0) && (
-                          <span className="sm:hidden">
-                            {l.budgetCents !== null ? `of ${formatMoney(limit)}` : ""}
-                          </span>
-                        )}
-                      </span>
+            <li key={id}>
+              <Link
+                to="/categories/$categoryId"
+                params={{ categoryId: id }}
+                search={{ month }}
+                className={cx(
+                  ROW,
+                  "w-full px-4 py-3 text-left hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-brand-600 dark:hover:bg-slate-800/50",
+                )}
+              >
+                <span className="flex min-w-0 items-center gap-3">
+                  <span
+                    aria-hidden="true"
+                    className="flex size-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-base dark:bg-slate-800"
+                  >
+                    <CategoryIcon name={l.name} group={l.groupName} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">{l.name}</span>
+                    <span className="block truncate text-xs text-slate-500">
+                      {due > 0 && `${formatMoney(due)} more scheduled`}
+                      {due > 0 && l.rollover && l.rolloverCents !== 0 && " · "}
+                      {l.rollover &&
+                        l.rolloverCents !== 0 &&
+                        `${signed(l.rolloverCents)} rolled over`}
+                      {due === 0 && !(l.rollover && l.rolloverCents !== 0) && (
+                        <span className="sm:hidden">
+                          {l.budgetCents !== null ? `of ${formatMoney(limit)}` : ""}
+                        </span>
+                      )}
                     </span>
                   </span>
-                  <span className="hidden text-right tabular-nums text-slate-600 sm:block dark:text-slate-300">
-                    {l.budgetCents !== null ? formatMoney(limit) : "—"}
-                  </span>
-                  <span className="text-right tabular-nums">{formatMoney(l.spentCents)}</span>
-                  <Remaining cents={l.availableCents} />
-                  <span className="hidden sm:block">
-                    {l.budgetCents !== null && <Ring used={l.spentCents} limit={limit} />}
-                  </span>
-                </button>
-              </li>
-              {open && (
-                <li className="px-4 pb-3">
-                  <EditBudget line={l} month={month} onDone={() => setEditing(null)} />
-                </li>
-              )}
-            </Fragment>
+                </span>
+                <span className="hidden text-right tabular-nums text-slate-600 sm:block dark:text-slate-300">
+                  {l.budgetCents !== null ? formatMoney(limit) : "—"}
+                </span>
+                <span className="text-right tabular-nums">{formatMoney(l.spentCents)}</span>
+                <Remaining cents={l.availableCents} />
+                <span className="hidden sm:block">
+                  {l.budgetCents !== null && <Ring used={l.spentCents} limit={limit} />}
+                </span>
+              </Link>
+            </li>
           );
         })}
       </ul>
@@ -375,7 +243,6 @@ function CategoriesTable({ b, month }: { b: BudgetMonth; month: string }) {
 
 function SummaryCard({ b, month }: { b: BudgetMonth; month: string }) {
   const [editTotal, setEditTotal] = useState(false);
-  const f = b.forecast;
   const budget =
     b.total.budgetCents != null ? b.total.budgetCents + b.total.rolloverCents : b.budgetedCents;
   const spent = b.total.spentCents;
@@ -463,7 +330,15 @@ function SummaryCard({ b, month }: { b: BudgetMonth; month: string }) {
       {b.uncategorizedCents > 0 && (
         <p className="border-t border-slate-200 px-4 py-3 text-xs text-amber-700 dark:border-slate-800 dark:text-amber-400">
           {formatMoney(b.uncategorizedCents)} of spending has no category.{" "}
-          <Link to="/transactions" className="underline">
+          <Link
+            to="/transactions"
+            search={{
+              categoryId: "uncategorized",
+              from: `${b.month}-01`,
+              to: monthEndIso(b.month),
+            }}
+            className="underline"
+          >
             Categorize it
           </Link>{" "}
           so it lands in the right budget.
@@ -620,11 +495,11 @@ export function BudgetsPage() {
       {q.isError && <Alert>Couldn't load budgets.</Alert>}
       {b && (
         <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start min-[112rem]:grid-cols-[minmax(0,1fr)_26rem_26rem]">
-          <div className="order-2 space-y-6 lg:order-none">
+          <div className="order-2 space-y-6 lg:order-0">
             <BasicsTable b={b} />
             <CategoriesTable b={b} month={month} />
           </div>
-          <div className="order-1 space-y-6 lg:sticky lg:top-6 lg:order-none">
+          <div className="order-1 space-y-6 lg:sticky lg:top-6 lg:order-0">
             <SummaryCard b={b} month={month} />
             <div className="min-[112rem]:hidden">
               <StillToCome b={b} />

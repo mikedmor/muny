@@ -2,7 +2,8 @@ import type { MunyDb } from "@muny/db";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { localToday } from "../lib/dates.js";
-import { badRequest, parse } from "../lib/http.js";
+import { badRequest, notFound, parse } from "../lib/http.js";
+import { categoryActivity } from "./category.js";
 import {
   monthlyReport,
   netWorthDates,
@@ -17,6 +18,18 @@ const month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Use YYYY-MM");
 
 export function registerReportRoutes(app: FastifyInstance, db: MunyDb) {
   app.get("/api/overview", async () => overview(db));
+
+  /** One category's monthly totals, budget and stats (category detail page). */
+  app.get("/api/categories/:id/activity", async (req) => {
+    const { id } = parse(z.object({ id: z.string().min(1).max(64) }), req.params);
+    const thisMonth = localToday().slice(0, 7);
+    const q = parse(z.object({ month: month.optional(), end: month.optional() }), req.query);
+    const selected = q.month ?? thisMonth;
+    const end = q.end ?? (selected > thisMonth ? selected : thisMonth);
+    const a = categoryActivity(db, id, selected, end);
+    if (!a) throw notFound("Category not found");
+    return a;
+  });
 
   app.get("/api/reports/spending", async (req) => {
     const q = parse(

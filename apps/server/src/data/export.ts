@@ -14,6 +14,8 @@ const CsvQuery = z.object({
   from: isoDate.optional(),
   to: isoDate.optional(),
   accountId: z.string().max(64).optional(),
+  /** Only this category (including split parts in it). */
+  categoryId: z.string().max(64).optional(),
   includeHidden: z.enum(["true", "false"]).default("true"),
 });
 
@@ -33,6 +35,15 @@ const today = () => new Date().toISOString().slice(0, 10);
 /** Every transaction (one row per split part) as CSV. */
 export function transactionsCsv(db: MunyDb, q: z.infer<typeof CsvQuery>): string {
   const t = schema.transactions;
+  // Categories used by split parts, for the category filter.
+  const splitCats = new Map<string, Set<string>>();
+  if (q.categoryId)
+    for (const s of db.select().from(schema.transactionSplits).all())
+      if (s.categoryId)
+        splitCats.set(
+          s.transactionId,
+          (splitCats.get(s.transactionId) ?? new Set()).add(s.categoryId),
+        );
   const rows = db
     .select({
       t,
@@ -53,6 +64,9 @@ export function transactionsCsv(db: MunyDb, q: z.infer<typeof CsvQuery>): string
         (!q.from || r.t.postedDate >= q.from) &&
         (!q.to || r.t.postedDate <= q.to) &&
         (!q.accountId || r.t.accountId === q.accountId) &&
+        (!q.categoryId ||
+          r.t.categoryId === q.categoryId ||
+          splitCats.get(r.t.id)?.has(q.categoryId)) &&
         (q.includeHidden === "true" || !r.t.hidden),
     );
 

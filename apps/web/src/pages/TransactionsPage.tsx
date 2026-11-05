@@ -7,7 +7,7 @@ import {
   type TransactionQuery,
   toDecimalString,
 } from "@muny/shared";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { CategorySelect } from "../components/CategorySelect.js";
 import { Checkbox, Modal, MoneyField, SelectField } from "../components/forms.js";
@@ -26,6 +26,7 @@ import {
   useTransactions,
   useUpdateTransaction,
 } from "../lib/queries.js";
+import type { TransactionSearch } from "../lib/search.js";
 
 const selectClass =
   "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950";
@@ -66,12 +67,43 @@ function Amount({ cents, className }: { cents: number; className?: string }) {
 
 const today = () => new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
 
+/** Drop empty values so the URL stays short. */
+function clean<T extends object>(o: T): T {
+  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== "")) as T;
+}
+
 export function TransactionsPage() {
   const accounts = useAccounts();
   const tags = useTags();
-  const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState<Omit<TransactionQuery, "q" | "offset" | "limit">>({});
+  // Filters live in the URL (?categoryId=…&from=…) so links can pre-filter and
+  // back/forward and bookmarks work. The search box is local while typing.
+  const urlSearch = useSearch({ strict: false }) as TransactionSearch;
+  const navigate = useNavigate();
+  const { q: urlQ, ...urlFilters } = urlSearch;
+  // Stable identity per distinct filter set (effects below depend on it).
+  const filterKey = JSON.stringify(urlFilters);
+  const filters = useMemo(
+    () => JSON.parse(filterKey) as Omit<TransactionQuery, "q" | "offset" | "limit">,
+    [filterKey],
+  );
+  const setFilters = (next: Omit<TransactionQuery, "q" | "offset" | "limit">) =>
+    void navigate({
+      to: "/transactions",
+      search: clean({ ...(next as TransactionSearch), q: urlQ }),
+      replace: true,
+    });
+  const [search, setSearch] = useState(urlQ ?? "");
+  // Follow the URL when it changes from outside (e.g. a to-do link).
+  useEffect(() => setSearch(urlQ ?? ""), [urlQ]);
   const q = useDebounced(search.trim());
+  useEffect(() => {
+    if ((q || undefined) === urlQ) return;
+    void navigate({
+      to: "/transactions",
+      search: clean({ ...(filters as TransactionSearch), q: q || undefined }),
+      replace: true,
+    });
+  }, [q, urlQ, filters, navigate]);
   const query = useMemo(() => ({ ...filters, q: q || undefined }), [filters, q]);
   const txns = useTransactions(query);
 
@@ -95,7 +127,7 @@ export function TransactionsPage() {
   }, [items]);
 
   const setFilter = <K extends keyof typeof filters>(k: K, v: (typeof filters)[K]) =>
-    setFilters((f) => ({ ...f, [k]: v || undefined }));
+    setFilters({ ...filters, [k]: v || undefined });
   const activeFilters = Object.values(filters).some(Boolean) || q;
 
   const toggle = (id: string) =>

@@ -227,7 +227,7 @@ export function listDiy(db: Db, today = localToday()): DiyProject[] {
 /** Moving a project to "cancelled" records the saving (and cancels the series). */
 export function onDiyStatus(db: Db, id: string, today = localToday()) {
   const p = db.select().from(schema.diyProjects).where(eq(schema.diyProjects.id, id)).get();
-  if (!p || p.status !== "cancelled" || p.savingId) return;
+  if (p?.status !== "cancelled" || p.savingId) return;
   const savingId = createSaving(
     db,
     {
