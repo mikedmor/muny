@@ -102,7 +102,18 @@ export interface CryptoHolding {
   change24hPct: number | null;
   /** Share of the portfolio value (0-100). */
   allocationPct: number;
-  wallets: { walletId: string; walletName: string; amount: string }[];
+  /**
+   * Every wallet that holds or has held this coin (emptied ones show 0), most
+   * first. Value is null without a price.
+   */
+  wallets: {
+    walletId: string;
+    walletName: string;
+    walletKind: CryptoWalletKind;
+    chain: string | null;
+    amount: string;
+    valueCents: number | null;
+  }[];
 }
 
 export interface CryptoOverview {

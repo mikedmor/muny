@@ -123,8 +123,12 @@ describe("reconcile: Koinly's quirks", () => {
       moves: [{ txnId: c?.txnId, toTxnId: c?.toTxnId, toWalletId: c?.toWalletId }],
     });
     o = (await client.get("/api/crypto/overview")).json<CryptoOverview>();
-    expect(o.holdings.find((h) => h.asset === "ETH")?.wallets.map((x) => x.walletName)).toEqual([
-      "Exodus ETH",
+    // Exodus TRX is still listed under ETH (it held some), now at 0.
+    expect(
+      o.holdings.find((h) => h.asset === "ETH")?.wallets.map((x) => [x.walletName, x.amount]),
+    ).toEqual([
+      ["Exodus ETH", "0.123456789012345678"],
+      ["Exodus TRX", "0"],
     ]);
     expect((await report()).wallets.find((x) => x.walletId === trx.id)).toBeUndefined();
   });

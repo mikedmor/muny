@@ -456,22 +456,39 @@ export function cryptoOverview(
   const balances = balancesByWallet(db);
   const prices = latestPrices(db);
   const hidden = hiddenAssets(db);
-  const names = new Map(
+  const info = new Map(
     db
-      .select({ id: w.id, name: w.name })
+      .select({ id: w.id, name: w.name, kind: w.kind, chain: w.chain })
       .from(w)
       .all()
-      .map((x) => [x.id, x.name]),
+      .map((x) => [x.id, x]),
   );
+  const names = new Map([...info].map(([id, x]) => [id, x.name]));
 
   const missingHistory: { asset: string; walletName: string; amount: string }[] = [];
-  const perAsset = new Map<
-    string,
-    { amount: string; wallets: { walletId: string; walletName: string; amount: string }[] }
-  >();
+  type HoldingWallet = import("@muny/shared").CryptoHolding["wallets"][number];
+  const perAsset = new Map<string, { amount: string; wallets: HoldingWallet[] }>();
+  /** Wallets that once held a coin and are now empty (listed under the coin, at 0). */
+  const emptied = new Map<string, string[]>();
+  const walletEntry = (walletId: string, asset: string, amount: string): HoldingWallet => {
+    const x = info.get(walletId);
+    const p = prices.get(asset);
+    return {
+      walletId,
+      walletName: x?.name ?? "",
+      walletKind: x?.kind ?? "manual",
+      chain: x?.chain ?? null,
+      amount,
+      valueCents: p ? valueCents(amount, p.usd) : null,
+    };
+  };
   for (const [walletId, m] of balances)
     for (const [asset, amount] of m) {
-      if (isZeroDec(amount) || hidden.has(asset)) continue;
+      if (hidden.has(asset)) continue;
+      if (isZeroDec(amount)) {
+        emptied.set(asset, [...(emptied.get(asset) ?? []), walletId]);
+        continue;
+      }
       if (amount.startsWith("-")) {
         // Fiat deposits from a bank are often missing from exports; not a crypto problem.
         if (FIAT.has(asset)) continue;
@@ -480,7 +497,7 @@ export function cryptoOverview(
       }
       const cur = perAsset.get(asset) ?? { amount: "0", wallets: [] };
       cur.amount = addDec(cur.amount, amount);
-      cur.wallets.push({ walletId, walletName: names.get(walletId) ?? "", amount });
+      cur.wallets.push(walletEntry(walletId, asset, amount));
       perAsset.set(asset, cur);
     }
   const holdings = [...perAsset.entries()]
@@ -495,7 +512,17 @@ export function cryptoOverview(
         valueCents: p ? valueCents(h.amount, p.usd) : null,
         change24hPct: opts.change24h[asset] ?? null,
         allocationPct: 0,
-        wallets: h.wallets.sort((a, b) => a.walletName.localeCompare(b.walletName)),
+        wallets: [
+          ...h.wallets.sort(
+            (a, b) =>
+              (b.valueCents ?? 0) - (a.valueCents ?? 0) ||
+              Number(b.amount) - Number(a.amount) ||
+              a.walletName.localeCompare(b.walletName),
+          ),
+          ...(emptied.get(asset) ?? [])
+            .map((id) => walletEntry(id, asset, "0"))
+            .sort((a, b) => a.walletName.localeCompare(b.walletName)),
+        ],
       };
     });
   const total = holdings.reduce((s, h) => s + Math.max(0, h.valueCents ?? 0), 0);

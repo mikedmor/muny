@@ -2,7 +2,7 @@ import { type CryptoHolding, formatMoney } from "@muny/shared";
 import { Link } from "@tanstack/react-router";
 import { Fragment, useMemo, useState } from "react";
 import { Donut, type DonutSlice, LineChart } from "../../components/charts.js";
-import { CoinIcon } from "../../components/coins.js";
+import { CoinIcon, WalletIcon } from "../../components/coins.js";
 import { Alert, Button, Card, cx } from "../../components/ui.js";
 import { api } from "../../lib/api.js";
 import { useCryptoMutation, useCryptoOverview } from "../../lib/queries.js";
@@ -33,7 +33,7 @@ function Pct({ v }: { v: number | null }) {
 
 function HoldingRow({ h }: { h: CryptoHolding }) {
   const [open, setOpen] = useState(false);
-  const multi = h.wallets.length > 1;
+  const multi = h.wallets.length > 0;
   return (
     <>
       <tr className="border-t border-slate-100 dark:border-slate-800">
@@ -76,14 +76,42 @@ function HoldingRow({ h }: { h: CryptoHolding }) {
         </td>
       </tr>
       {open &&
-        h.wallets.map((w) => (
-          <tr key={w.walletId} className="bg-slate-50/60 text-sm dark:bg-slate-800/30">
-            <td />
-            <td className="py-1.5 pl-12 text-slate-600 dark:text-slate-300">{w.walletName}</td>
-            <td className="px-2 text-right font-mono tabular-nums">{fmtAmount(w.amount)}</td>
-            <td colSpan={3} />
-          </tr>
-        ))}
+        h.wallets.map((w) => {
+          // Share of this coin held in the wallet (display only).
+          const share = Number(h.amount) > 0 ? (Number(w.amount) / Number(h.amount)) * 100 : 0;
+          const empty = Number(w.amount) === 0;
+          return (
+            <tr
+              key={w.walletId}
+              className={cx(
+                "bg-slate-50/60 text-sm dark:bg-slate-800/30",
+                empty && "text-slate-400 dark:text-slate-500",
+              )}
+            >
+              <td />
+              <td className="py-1.5 pl-2">
+                <Link
+                  to="/crypto/transactions"
+                  search={{ walletId: w.walletId, asset: h.asset }}
+                  className="flex items-center gap-2 hover:underline"
+                >
+                  <WalletIcon name={w.walletName} chain={w.chain} kind={w.walletKind} size="sm" />
+                  <span className={empty ? "" : "text-slate-700 dark:text-slate-200"}>
+                    {w.walletName}
+                  </span>
+                </Link>
+              </td>
+              <td className="px-2 text-right font-mono tabular-nums">{fmtAmount(w.amount)}</td>
+              <td className="px-2 text-right tabular-nums">
+                {w.valueCents !== null ? formatMoney(w.valueCents) : "—"}
+              </td>
+              <td className="hidden px-2 text-right tabular-nums sm:table-cell">
+                {empty ? "0%" : share < 1 ? "<1%" : `${Math.round(share)}%`}
+              </td>
+              <td />
+            </tr>
+          );
+        })}
     </>
   );
 }
