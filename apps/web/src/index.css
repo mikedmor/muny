@@ -10,6 +10,29 @@
 
 html {
   font-family: var(--font-sans);
+  color-scheme: light;
+}
+
+/*
+ * Native form controls (dropdown lists, date pickers, scrollbars) follow the
+ * theme. A <select>'s popup list doesn't inherit the page's dark background,
+ * but its options do inherit the light text colour, which made them white on
+ * white. Give every option an explicit background and text colour.
+ */
+option,
+optgroup {
+  background-color: #ffffff;
+  color: #0f172a;
+}
+@media (prefers-color-scheme: dark) {
+  html {
+    color-scheme: dark;
+  }
+  option,
+  optgroup {
+    background-color: #0f172a;
+    color: #e2e8f0;
+  }
 }
 
 /* Chart tokens (dataviz reference palette). Charts use roles, never raw hex. */
