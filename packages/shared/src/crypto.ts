@@ -353,6 +353,8 @@ export interface CryptoReconcile {
     }[];
     /** Synced transactions that repeat imported ones. */
     duplicates: number;
+    /** Imported rows with a transaction hash (a synced wallet can use the chain's version). */
+    importedWithHash: number;
     /** Swap proceeds recorded here that arrived in another wallet. */
     crossChain: {
       txnId: string;

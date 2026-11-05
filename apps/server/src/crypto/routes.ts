@@ -24,6 +24,7 @@ import {
   linkTransfer,
   mergeWallets,
   moveCrossChain,
+  preferChain,
   reconcileReport,
   removeDuplicates,
   removeRows,
@@ -451,6 +452,22 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
       staking: body.staking,
     });
     return res;
+  });
+
+  /** Replace a synced wallet's imported rows (with hashes) by the chain's version. */
+  app.post("/api/crypto/reconcile/prefer-chain", async (req) => {
+    const user = requireUser(req);
+    const body = parse(z.object({ walletId: z.string().min(1).max(64) }), req.body);
+    try {
+      const res = await preferChain(db, body.walletId, {
+        ...priceDeps,
+        delayMs: priceDeps.delayMs ?? 500,
+      });
+      log(user.id, "crypto.reconcile_prefer_chain", body.walletId, res);
+      return res;
+    } catch (err) {
+      throw badRequest(err instanceof Error ? err.message : "Couldn't apply that fix");
+    }
   });
 
   /** Staking rewards counted twice: keep one version. */

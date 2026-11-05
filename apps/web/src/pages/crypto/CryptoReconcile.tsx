@@ -214,7 +214,7 @@ function WalletIssues({ w }: { w: Report["wallets"][number] }) {
       ))}
 
       {w.mismatches.map((x) => (
-        <Mismatch key={x.asset} walletId={w.walletId} m={x} />
+        <Mismatch key={x.asset} walletId={w.walletId} m={x} imported={w.importedWithHash} />
       ))}
       {error && <Alert>{error.message}</Alert>}
     </Card>
@@ -238,7 +238,13 @@ const SYNCABLE = new Set<string>([
 type MismatchT = Report["wallets"][number]["mismatches"][number];
 
 /** Synced wallet vs. its blockchain: explain the gap and offer the fitting fix. */
-function Mismatch({ walletId, m }: { walletId: string; m: MismatchT }) {
+function Mismatch({ walletId, m, imported }: { walletId: string; m: MismatchT; imported: number }) {
+  const chain = useCryptoMutation(() =>
+    api.post<{ replaced: number; added: number; relinked: number }>(
+      "/api/crypto/reconcile/prefer-chain",
+      { walletId },
+    ),
+  );
   const remove = useCryptoMutation(() =>
     api.post("/api/crypto/reconcile/remove", { walletId, txnIds: m.extra.map((e) => e.txnId) }),
   );
@@ -258,7 +264,7 @@ function Mismatch({ walletId, m }: { walletId: string; m: MismatchT }) {
   );
   const more = !m.diff.startsWith("-");
   const gap = fmtAmount(m.diff.replace(/^-/, ""), 8);
-  const error = remove.error ?? adjust.error ?? once.error;
+  const error = remove.error ?? adjust.error ?? once.error ?? chain.error;
   return (
     <div className="space-y-2 text-sm">
       <p>
@@ -358,6 +364,21 @@ function Mismatch({ walletId, m }: { walletId: string; m: MismatchT }) {
               Add {gap} {m.asset} as a balance adjustment (not income)
             </Button>
           </div>
+        </div>
+      )}
+      {imported > 0 && !m.rewardsTwice && (
+        <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
+          <p>
+            <span className="font-medium">Most reliable fix:</span> use the blockchain&apos;s
+            version of this wallet&apos;s {imported} imported{" "}
+            {imported === 1 ? "transaction" : "transactions"}. Exports sometimes split or round a
+            transaction differently from what happened on-chain; built from the chain alone, the
+            wallet adds up to its on-chain balance. Links to your other wallets are kept; imported
+            USD values on those rows are replaced by daily prices.
+          </p>
+          <Button disabled={chain.isPending} onClick={() => chain.mutate(undefined)}>
+            {chain.isPending ? "Re-reading the blockchain…" : "Use the blockchain's version"}
+          </Button>
         </div>
       )}
       {error && <Alert>{error.message}</Alert>}

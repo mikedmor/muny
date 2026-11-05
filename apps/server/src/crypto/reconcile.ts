@@ -16,7 +16,7 @@ import { decryptJson } from "../lib/crypto.js";
 import { rewardWithdrawals } from "./chains/cardano.js";
 import { closeAmountsSql, normHash, normHashSql } from "./match.js";
 import { getCryptoSettings } from "./prices.js";
-import { readCursor, type SyncDeps, setRewardsFromImport, walletCtx } from "./sync.js";
+import { readCursor, type SyncDeps, setRewardsFromImport, syncWallet, walletCtx } from "./sync.js";
 
 /**
  * Reconcile: find why a wallet's balance is wrong, and offer fixes.
@@ -116,6 +116,7 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
       transferPairId: t.transferPairId,
       source: t.source,
       label: t.label,
+      txHash: t.txHash,
     })
     .from(t)
     .orderBy(t.at)
@@ -198,6 +199,9 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
         missing,
         mismatches,
         duplicates: dupes.length,
+        importedWithHash: x.sourceEnc
+          ? rows.filter((r) => r.walletId === x.id && r.source === "import" && r.txHash).length
+          : 0,
         crossChain,
       });
   }
@@ -465,6 +469,83 @@ export function moveCrossChain(
       .run();
     return { id };
   });
+}
+
+/**
+ * Use the blockchain's version of a synced wallet's imported transactions:
+ * imported rows that carry a transaction hash are replaced by what the chain
+ * says (a full resync of the wallet), so the wallet adds up to its on-chain
+ * balance by construction. Links to other wallets (transfers) are kept by
+ * re-linking the synced rows of the same transaction. Imported USD values
+ * and labels on those rows go; daily prices fill in values.
+ */
+export async function preferChain(db: MunyDb, walletId: string, deps: SyncDeps) {
+  const wallet = db.select().from(w).where(eq(w.id, walletId)).get();
+  if (!wallet?.sourceEnc) throw new Error("This wallet isn't synced from a blockchain");
+  const rowsWithHash = db
+    .select()
+    .from(t)
+    .where(
+      and(
+        eq(t.walletId, walletId),
+        eq(t.source, "import"),
+        sql`${t.txHash} is not null and ${t.txHash} <> ''`,
+      ),
+    )
+    .all();
+  if (!rowsWithHash.length) throw new Error("No imported transactions with a hash in this wallet");
+  // Remember transfer partners in other wallets, per transaction and direction.
+  const links = rowsWithHash
+    .filter((r) => r.transferPairId)
+    .map((r) => ({
+      hash: normHash(r.txHash as string),
+      partner: r.transferPairId as string,
+      dir: r.sentAsset ? ("out" as const) : ("in" as const),
+      asset: (r.sentAsset ?? r.receivedAsset) as string,
+    }));
+  db.transaction((tx) => {
+    tx.delete(t)
+      .where(
+        inArray(
+          t.id,
+          rowsWithHash.map((r) => r.id),
+        ),
+      )
+      .run();
+    // Re-read the whole history from the chain.
+    tx.update(w).set({ syncCursor: null }).where(eq(w.id, walletId)).run();
+  });
+  const res = await syncWallet(db, walletId, deps);
+  let relinked = 0;
+  db.transaction((tx) => {
+    for (const l of links) {
+      const mine = tx
+        .select()
+        .from(t)
+        .where(
+          and(
+            eq(t.walletId, walletId),
+            eq(t.source, "sync"),
+            sql`${t.transferPairId} is null`,
+            sql`${normHashSql("tx_hash")} = ${l.hash}`,
+            l.dir === "out" ? eq(t.sentAsset, l.asset) : eq(t.receivedAsset, l.asset),
+          ),
+        )
+        .get();
+      const partner = tx.select().from(t).where(eq(t.id, l.partner)).get();
+      if (!mine || !partner || partner.transferPairId) continue;
+      tx.update(t)
+        .set({ type: "transfer", label: null, transferPairId: partner.id })
+        .where(eq(t.id, mine.id))
+        .run();
+      tx.update(t)
+        .set({ type: "transfer", label: null, transferPairId: mine.id })
+        .where(eq(t.id, partner.id))
+        .run();
+      relinked++;
+    }
+  });
+  return { replaced: rowsWithHash.length, added: res.added, relinked };
 }
 
 /** Remove a synced wallet's rows that repeat imported ones. */
