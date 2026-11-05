@@ -132,10 +132,11 @@ export const coinbase: ExchangeAdapter = async (ctx) => {
     txns.push(...list.filter((x) => x.status === "completed"));
   }
 
-  // Both sides of one buy / sell / conversion / fill become one trade.
+  // Both sides of one buy / sell / conversion become one trade, and all fills
+  // of one Advanced Trade order too (as Koinly records them).
   const groupKey = (x: CbTxn) =>
     x.advanced_trade_fill?.order_id
-      ? `fill:${x.advanced_trade_fill.order_id}:${x.created_at}`
+      ? `fill:${x.advanced_trade_fill.order_id}`
       : x.buy?.id
         ? `buy:${x.buy.id}`
         : x.sell?.id

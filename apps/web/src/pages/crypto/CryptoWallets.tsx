@@ -422,8 +422,13 @@ export function mismatches(w: CryptoWallet): string[] {
   const mine = new Map(w.balances.map((b) => [b.asset, b.amount]));
   const norm = (x: string | undefined) =>
     (x ?? "0").replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+  // Differences under 0.000001 are rounding between exports and exchanges.
   return w.onChain
-    .filter((c) => norm(mine.get(c.asset)) !== norm(c.amount))
+    .filter(
+      (c) =>
+        norm(mine.get(c.asset)) !== norm(c.amount) &&
+        Math.abs(Number(mine.get(c.asset) ?? 0) - Number(c.amount)) >= 0.000001,
+    )
     .map((c) => `${fmtAmount(c.amount, 6)} ${c.asset}`);
 }
 

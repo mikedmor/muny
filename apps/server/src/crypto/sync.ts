@@ -152,18 +152,31 @@ function coveredByImport(db: Db, walletId: string, s: SyncedTxn): boolean {
          and ${normHashSql("tx_hash")} = ${normHash(s.txHash)}`)
   )
     return true;
+  const near = (ac: string, am: string, asset: string, amount: string, trade: boolean) =>
+    !!db.get(sql`
+      select 1 from crypto_txns
+       where wallet_id = ${walletId} and source <> 'sync'
+         and abs(at - ${s.at}) <= ${2 * 3_600_000}
+         ${trade ? sql`and type = 'trade'` : sql``}
+         and ${sql.raw(ac)} = ${asset}
+         and ${closeAmountsSql(am, `'${amount.replace(/[^0-9.]/g, "")}'`)}`);
+  // A trade: either side may be rounded or net of fees differently; the other
+  // side usually matches exactly.
+  if (s.type === "trade")
+    return (
+      (!!s.sentAsset &&
+        !!s.sentAmount &&
+        near("sent_asset", "sent_amount", s.sentAsset, s.sentAmount, true)) ||
+      (!!s.receivedAsset &&
+        !!s.receivedAmount &&
+        near("received_asset", "received_amount", s.receivedAsset, s.receivedAmount, true))
+    );
   const asset = s.receivedAsset ?? s.sentAsset;
   const amount = s.receivedAmount ?? s.sentAmount;
   if (!asset || !amount) return false;
-  const [ac, am] = s.receivedAmount
-    ? ["received_asset", "received_amount"]
-    : ["sent_asset", "sent_amount"];
-  return !!db.get(sql`
-    select 1 from crypto_txns
-     where wallet_id = ${walletId} and source <> 'sync'
-       and abs(at - ${s.at}) <= ${2 * 3_600_000}
-       and ${sql.raw(ac)} = ${asset}
-       and ${closeAmountsSql(am, `'${amount.replace(/[^0-9.]/g, "")}'`)}`);
+  return s.receivedAmount
+    ? near("received_asset", "received_amount", asset, amount, false)
+    : near("sent_asset", "sent_amount", asset, amount, false);
 }
 
 /** Link sends and receives between own wallets that share a transaction hash. */

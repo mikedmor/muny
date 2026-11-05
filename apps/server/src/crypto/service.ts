@@ -26,7 +26,7 @@ import type {
 } from "@muny/shared";
 import { guessCryptoExchange } from "@muny/shared";
 import { and, desc, eq, gte, inArray, lte, or, type SQL, sql } from "drizzle-orm";
-import { normHash, normHashSql } from "./match.js";
+import { normHash, normHashSql, ROUNDING_TEXT } from "./match.js";
 import { getCryptoSettings } from "./prices.js";
 import { enrichment, removeDuplicates } from "./reconcile.js";
 import { chainVersion, isQueued, isSyncing, readCursor } from "./sync.js";
@@ -913,6 +913,8 @@ function dailyPrices(db: Db, assets: (string | null)[]) {
  * Koinly warns. Per wallet and coin, in time order, arrivals first within
  * the same moment. Transaction id → what was missing.
  */
+const DUST_FIXED = toFixed(ROUNDING_TEXT);
+
 export function missingHistory(db: Db): Map<string, { asset: string; amount: string }[]> {
   const hidden = hiddenAssets(db);
   const rows = db
@@ -951,7 +953,8 @@ export function missingHistory(db: Db): Map<string, { asset: string; amount: str
       const had = bal.get(k) ?? 0n;
       const short = had >= n ? 0n : had > 0n ? n - had : n;
       bal.set(k, had - n);
-      if (short > 0n)
+      // Rounding dust isn't missing history.
+      if (short >= DUST_FIXED)
         out.set(r.id, [...(out.get(r.id) ?? []), { asset, amount: fromFixed(short) }]);
     }
   }

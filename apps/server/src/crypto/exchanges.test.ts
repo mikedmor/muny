@@ -226,6 +226,90 @@ describe("Coinbase", () => {
   });
 });
 
+describe("Coinbase alongside a Koinly import", () => {
+  it("doesn't repeat an order Koinly recorded whole, or rewards Koinly rounded", async () => {
+    const { privateKey } = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+    const pem = privateKey.export({ type: "sec1", format: "pem" }).toString();
+    const fill = (id: string, amount: string, currency: string, at: string) => ({
+      id,
+      type: "advanced_trade_fill",
+      status: "completed",
+      amount: { amount, currency },
+      created_at: at,
+      advanced_trade_fill: { order_id: "o1", product_id: "ALEO-USD", order_side: "SELL" },
+    });
+    const acct = (id: string, code: string, amount: string) => ({
+      id,
+      currency: { code },
+      balance: { amount, currency: code },
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-02-01T00:00:00Z",
+    });
+    const fake = (async (url: string) => {
+      const p = new URL(url).pathname;
+      const page = (data: unknown[]) => Response.json({ data, pagination: { next_uri: null } });
+      if (p === "/v2/accounts")
+        return page([
+          acct("a-aleo", "ALEO", "0"),
+          acct("a-usd", "USD", "1300"),
+          acct("a-ada", "ADA", "0.00027972189318106"),
+        ]);
+      if (p === "/v2/accounts/a-aleo/transactions")
+        return page([
+          fill("f2", "-12.29", "ALEO", "2025-01-26T18:50:01Z"),
+          fill("f1", "-55.39", "ALEO", "2025-01-26T18:50:00Z"),
+        ]);
+      if (p === "/v2/accounts/a-usd/transactions")
+        return page([
+          fill("u2", "236.00", "USD", "2025-01-26T18:50:01Z"),
+          fill("u1", "1064.00", "USD", "2025-01-26T18:50:00Z"),
+        ]);
+      if (p === "/v2/accounts/a-ada/transactions")
+        return page([
+          {
+            id: "r1",
+            type: "staking_reward",
+            status: "completed",
+            amount: { amount: "0.00027972189318106", currency: "ADA" },
+            created_at: "2024-05-07T03:06:43Z",
+          },
+        ]);
+      return page([]);
+    }) as unknown as typeof fetch;
+    const { db, wallet, connect, rows } = await setup(fake);
+    const imp = (id: string, v: Record<string, unknown>) =>
+      db
+        .insert(schema.cryptoTxns)
+        .values({
+          id,
+          walletId: wallet.id,
+          externalId: `koinly:${id}`,
+          source: "import",
+          ...v,
+        } as never)
+        .run();
+    imp("k1", {
+      at: Date.UTC(2025, 0, 26, 18, 50),
+      type: "trade",
+      sentAsset: "ALEO",
+      sentAmount: "67.68",
+      receivedAsset: "USD",
+      receivedAmount: "1295.12",
+    });
+    imp("k2", {
+      at: Date.UTC(2024, 4, 7, 3, 6, 43),
+      type: "deposit",
+      label: "reward",
+      receivedAsset: "ADA",
+      receivedAmount: "0.000279",
+    });
+    const w = await connect("coinbase", "organizations/o/apiKeys/k", pem);
+    expect(w.status).toBe("ok");
+    const r = await rows();
+    expect(r.map((t) => t.id).sort()).toEqual(["k1", "k2"]);
+  });
+});
+
 describe("Gemini", () => {
   it("signs the payload and maps trades and transfers", async () => {
     const secret = "gemini-secret";

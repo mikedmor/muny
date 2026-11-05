@@ -81,7 +81,9 @@ function WalletIssues({ w }: { w: Report["wallets"][number] }) {
   const error = dedupe.error ?? link.error ?? opening.error ?? move.error;
   const why =
     w.kind === "exchange"
-      ? "Exchanges keep their history off the blockchain, so it can't be synced from there: it needs the exchange's own history (exchange sync is coming), an older import, or an opening balance."
+      ? w.synced
+        ? "This exchange syncs with its API, so the gap is usually history from before what the exchange reports, or an imported row recorded differently. Look at its transactions around that date, or add an opening balance."
+        : "Exchanges keep their history off the blockchain. Connect the exchange's read-only API key on its wallet page (if it still runs), import older history, or add an opening balance."
       : w.synced
         ? "This wallet syncs its full history from the blockchain, so the gap is usually an imported row that doesn't match the chain (for example a swap recorded in the wrong wallet, see above)."
         : "This wallet isn't synced: connect its address (🔗 on the Wallets tab) and Muny pulls its whole history from the blockchain. Otherwise add the deposit by hand or an opening balance.";

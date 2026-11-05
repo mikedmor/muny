@@ -15,7 +15,11 @@ import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { decryptJson } from "../lib/crypto.js";
 import { balanceChanges, type ChainBalanceChange } from "./chains/blockscout.js";
 import { rewardWithdrawals } from "./chains/cardano.js";
-import { closeAmountsSql, normHash, normHashSql } from "./match.js";
+import { closeAmountsSql, normHash, normHashSql, ROUNDING_TEXT } from "./match.js";
+
+/** Smaller differences are rounding (see ROUNDING), in fixed-point units. */
+const DUST = toFixed(ROUNDING_TEXT);
+
 import { getCryptoSettings } from "./prices.js";
 import {
   fetchFullHistory,
@@ -162,6 +166,7 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
       computed.set(asset, r.bal);
       if (!r.bal.startsWith("-") || FIAT.has(asset) || hidden.has(asset)) continue;
       const deficit = normDec(r.bal.slice(1));
+      if (toFixed(deficit) < DUST) continue;
       const firstAt = r.firstNegAt ?? 0;
       // A Reconcile move out of this wallet with nothing coming in to move:
       // the imported row it was built on was replaced since.
@@ -194,6 +199,8 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
         const mine = computed.get(c.asset) ?? "0";
         if (normDec(mine) === normDec(c.amount)) continue;
         const diff = subDec(mine, c.amount);
+        // Rounding between exports and the chain or exchange, not a real gap.
+        if (toFixed(diff.replace(/^-/, "")) < DUST) continue;
         mismatches.push({
           asset: c.asset,
           onChain: c.amount,
