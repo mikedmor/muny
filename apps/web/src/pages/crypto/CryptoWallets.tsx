@@ -258,15 +258,37 @@ function SourceFields({
   };
   return (
     <>
-      <Field
-        label="Public address or extended public key"
-        placeholder={info.placeholder}
-        autoComplete="off"
-        spellCheck={false}
-        value={source}
-        onChange={(e) => paste(e.target.value.trim())}
-        className="sm:col-span-2"
-      />
+      {chain === "sc" ? (
+        <label className="block sm:col-span-2">
+          <span className="text-sm font-medium">
+            Addresses (one per line, or separated by commas)
+          </span>
+          <textarea
+            rows={6}
+            placeholder={info.placeholder}
+            autoComplete="off"
+            spellCheck={false}
+            value={source}
+            onChange={(e) => paste(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
+          />
+          <span className="text-xs text-slate-500">
+            {source.split(/[\s,;]+/).filter(Boolean).length} addresses. Sia has no extended public
+            key, so paste every address your wallet has used (up to 1,000): the Sia wallet app lists
+            them under its addresses. Never paste the seed.
+          </span>
+        </label>
+      ) : (
+        <Field
+          label="Public address or extended public key"
+          placeholder={info.placeholder}
+          autoComplete="off"
+          spellCheck={false}
+          value={source}
+          onChange={(e) => paste(e.target.value.trim())}
+          className="sm:col-span-2"
+        />
+      )}
       <SelectField
         label="Coin"
         value={chain}

@@ -81,7 +81,8 @@ const amount = z
   }, "Enter a positive amount");
 const CSV_MAX = 20 * 1024 * 1024;
 const chainKey = z.enum(Object.keys(CHAINS) as [ChainKey, ...ChainKey[]]);
-const SourceBody = z.object({ chain: chainKey, source: z.string().trim().min(10).max(200) });
+// A Sia wallet can have hundreds of 76-character addresses.
+const SourceBody = z.object({ chain: chainKey, source: z.string().trim().min(10).max(100_000) });
 
 export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps: PriceDeps) {
   const log = (userId: string, action: string, entityId?: string, details?: unknown) =>
@@ -255,7 +256,7 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
         kind: z.enum(["blockchain", "exchange", "manual"]),
         chain: z.string().trim().max(20).nullable().optional(),
         /** Optional address / xpub to sync from (needs a chain). */
-        source: z.string().trim().min(10).max(200).optional(),
+        source: z.string().trim().min(10).max(100_000).optional(),
       }),
       req.body,
     );

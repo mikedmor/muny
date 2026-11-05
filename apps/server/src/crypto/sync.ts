@@ -110,7 +110,10 @@ export function setWalletSource(
       kind: "blockchain",
       chain: input.chain,
       sourceEnc: encryptJson(secretKey, source),
-      sourceHint: sourceHint(source),
+      sourceHint:
+        input.chain === "sc" && siaAddresses(source).length > 1
+          ? `${siaAddresses(source).length} addresses`
+          : sourceHint(source),
       syncEnabled: true,
       status: "never",
       lastError: null,
@@ -628,7 +631,11 @@ export async function findSiaAddresses(db: MunyDb, walletId: string, deps: SyncD
   if (found.size) {
     const source = [...known, ...found].join(", ");
     db.update(w)
-      .set({ sourceEnc: encryptJson(deps.secretKey, source), syncCursor: null })
+      .set({
+        sourceEnc: encryptJson(deps.secretKey, source),
+        sourceHint: `${known.size + found.size} addresses`,
+        syncCursor: null,
+      })
       .where(eq(w.id, walletId))
       .run();
     await syncWallet(db, walletId, deps);

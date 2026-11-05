@@ -101,6 +101,29 @@ describe("Siacoin", () => {
   });
 });
 
+describe("a Sia wallet with many addresses", () => {
+  it("takes 100 addresses and asks balances only of the used ones", async () => {
+    const many = [
+      A,
+      B,
+      ...Array.from({ length: 98 }, (_, i) => i.toString(16).padStart(2, "0").repeat(38)),
+    ];
+    const balanceCalls: string[] = [];
+    const counting = (async (url: string, init?: RequestInit) => {
+      const u = new URL(url);
+      if (u.pathname.endsWith("/balance")) balanceCalls.push(u.pathname.split("/")[2] as string);
+      return siascan(url, init);
+    }) as unknown as typeof fetch;
+    const { w, settle } = await wallet(counting, "sc", many.join("
+"));
+    const done = await settle();
+    expect(done).toMatchObject({ status: "ok", sourceHint: "100 addresses" });
+    expect(done.onChain).toEqual([{ asset: "SC", amount: "7.9" }]);
+    expect(balanceCalls.sort()).toEqual([A, B].sort());
+    expect(w.id).toBeTruthy();
+  });
+});
+
 describe("Siacoin's other addresses", () => {
   it("finds the address an imported deposit was paid to, and adds it", async () => {
     const C = "12".repeat(38);

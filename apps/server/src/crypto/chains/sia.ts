@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Deltas, fromBaseUnits, movementsToTxns, type SyncedTxn } from "@muny/core";
 import type { Adapter, ChainCtx } from "./ctx.js";
 
@@ -84,6 +85,13 @@ export const sia: Adapter = async (ctx) => {
   const base = (ctx.override || SIASCAN).replace(/\/+$/, "");
   const mine = new Set(siaAddresses(ctx.source));
   const since = ctx.cursor?.height ?? 0;
+  // Addresses that ever saw an event (the rest hold nothing: no balance call).
+  // The cursor isn't encrypted, so it keeps a short hash, never the address.
+  const pos = { ...(ctx.cursor?.pos ?? {}) };
+  const tag = (a: string) => createHash("sha256").update(a).digest("hex").slice(0, 12);
+  // Synced before this was kept: check every address's balance once.
+  const legacy = since > 0 && !Object.keys(pos).some((k) => k.startsWith("u:"));
+  const used = (a: string) => legacy || pos[`u:${tag(a)}`] === 1;
   const events = new Map<string, Event>();
   let height = since;
   for (const addr of mine) {
@@ -99,6 +107,7 @@ export const sia: Adapter = async (ctx) => {
           break;
         }
         events.set(e.id, e);
+        pos[`u:${tag(addr)}`] = 1;
         height = Math.max(height, e.index.height);
       }
       if (older || (page ?? []).length < PAGE) break;
@@ -148,6 +157,8 @@ export const sia: Adapter = async (ctx) => {
 
   let total = new Deltas();
   for (const addr of mine) {
+    if (!used(addr)) continue;
+    pos[`u:${tag(addr)}`] = 1;
     const b = await ctx.get<{ unspentSiacoins: string; immatureSiacoins?: string }>(
       `${base}/addresses/${addr}/balance`,
     );
@@ -157,5 +168,6 @@ export const sia: Adapter = async (ctx) => {
     mapped,
     height,
     balances: [{ asset: "SC", amount: total.toStrings().get("SC") ?? "0" }],
+    pos,
   };
 };

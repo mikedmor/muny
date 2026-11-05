@@ -124,7 +124,9 @@ export const CHAINS: Record<ChainKey, ChainInfo> = {
     accepts: "address (76 characters; several separated by commas, since a Sia wallet uses many)",
     validate: (s) => {
       const list = s.split(/[\s,;]+/).filter(Boolean);
-      return list.length > 0 && list.length <= 50 && list.every((a) => /^[0-9a-fA-F]{76}$/.test(a));
+      return (
+        list.length > 0 && list.length <= 1000 && list.every((a) => /^[0-9a-fA-F]{76}$/.test(a))
+      );
     },
   },
   eth: {

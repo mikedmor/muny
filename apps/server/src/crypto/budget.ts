@@ -48,7 +48,8 @@ export const LIMITS: Record<BudgetProvider, { day: number; month: number; label:
   // stellar.org Horizon: 3,600 requests an hour per IP.
   horizon: { day: 1000, month: 20000, label: "Horizon wallet sync (Stellar)" },
   // SiaScan's public explorer API (no published quota; stay polite).
-  siascan: { day: 500, month: 10000, label: "SiaScan wallet sync (Siacoin)" },
+  // About two requests per address per daily sync (a Sia wallet can have 100+).
+  siascan: { day: 1500, month: 30000, label: "SiaScan wallet sync (Siacoin)" },
   // A Blockbook server you set (e.g. a free GetBlock endpoint: 50K a day).
   blockbook: { day: 1000, month: 20000, label: "Blockbook wallet sync (Zcash)" },
   // Exchanges, with your own read-only API keys (limits are per key).
