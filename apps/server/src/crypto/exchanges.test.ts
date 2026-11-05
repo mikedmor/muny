@@ -399,6 +399,37 @@ describe("Gemini with a time-based nonce", () => {
   });
 });
 
+describe("Gemini with a master key", () => {
+  it("names each exchange account of the group, and adds them up", async () => {
+    const seen: (string | undefined)[] = [];
+    const fake = (async (url: string, init: RequestInit) => {
+      const h = init.headers as Record<string, string>;
+      const p = JSON.parse(Buffer.from(h["X-GEMINI-PAYLOAD"] ?? "", "base64").toString());
+      const path = new URL(url).pathname;
+      if (path === "/v1/account/list")
+        return Response.json([
+          { name: "Primary", account: "primary", type: "exchange", status: "open" },
+          { name: "Trading", account: "trading", type: "exchange", status: "open" },
+          { name: "Vault", account: "vault", type: "custody", status: "open" },
+        ]);
+      if (!p.account)
+        return Response.json({ result: "error", reason: "MissingAccounts" }, { status: 400 });
+      seen.push(p.account);
+      if (path === "/v1/balances")
+        return Response.json([{ currency: "BTC", amount: p.account === "primary" ? "1" : "0.5" }]);
+      return Response.json([]);
+    }) as unknown as typeof fetch;
+    const { connect } = await setup(fake);
+    const w = await connect("gemini", "master-abc", "secret");
+    expect(w).toMatchObject({
+      status: "ok",
+      lastError: null,
+      onChain: [{ asset: "BTC", amount: "1.5" }],
+    });
+    expect(new Set(seen)).toEqual(new Set(["primary", "trading"]));
+  });
+});
+
 describe("Binance US", () => {
   it("asks coin by coin and market by market, signed", async () => {
     const secret = "bus-secret";
