@@ -1,6 +1,10 @@
+export type BudgetKind = "spending" | "income" | "bills";
+
 export interface BudgetLine {
-  /** null for the overall total budget. */
+  /** null for the overall total budget (or the earnings / bills lines). */
   categoryId: string | null;
+  /** "spending" for categories and the total; "income" / "bills" for the basics. */
+  kind: BudgetKind;
   name: string;
   budgetId: string | null;
   /** This month's budgeted amount (positive), or null if no budget. */
@@ -66,6 +70,10 @@ export interface BudgetMonth {
   forecast: BudgetForecast;
   month: string;
   total: BudgetLine;
+  /** Earnings: target (budgetCents) vs income received (spentCents). */
+  income: BudgetLine;
+  /** Bills & subscriptions: budget vs recurring charges paid (spentCents). */
+  bills: BudgetLine;
   groups: BudgetGroup[];
   /** Spending with no category (needs categorizing). */
   uncategorizedCents: number;
@@ -76,6 +84,8 @@ export interface BudgetMonth {
 
 export interface SetBudgetInput {
   categoryId: string | null;
+  /** With no category: which budget (default "spending", the total). */
+  kind?: BudgetKind;
   amountCents: number;
   rollover?: boolean;
   /** YYYY-MM the amount applies from (defaults to the current month). */

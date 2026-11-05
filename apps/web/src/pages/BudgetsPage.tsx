@@ -87,11 +87,13 @@ function Remaining({ cents, muted }: { cents: number | null; muted?: boolean }) 
   );
 }
 
-function BasicsTable({ b }: { b: BudgetMonth }) {
+function BasicsTable({ b, month }: { b: BudgetMonth; month: string }) {
   const f = b.forecast;
   const past = f.period === "past";
   const expectedIncome = past ? f.incomeSoFarCents : f.projectedIncomeCents;
   const scheduledBills = f.recurringPaidCents + f.recurringDueCents;
+  const incomeTarget = b.income.budgetCents ?? expectedIncome;
+  const billsTarget = b.bills.budgetCents ?? scheduledBills;
   const rows = [
     {
       key: "earnings",
@@ -102,10 +104,11 @@ function BasicsTable({ b }: { b: BudgetMonth }) {
         : f.incomeExpectedCents > 0
           ? `${formatMoney(f.incomeExpectedCents)} more expected from recurring income`
           : `Usually about ${formatMoney(f.incomeAverageCents)}/mo`,
-      budgeted: expectedIncome,
+      line: b.income,
+      auto: expectedIncome,
       actual: f.incomeSoFarCents,
-      remaining: expectedIncome - f.incomeSoFarCents,
-      ring: [f.incomeSoFarCents, expectedIncome] as const,
+      remaining: incomeTarget - f.incomeSoFarCents,
+      ring: [f.incomeSoFarCents, incomeTarget] as const,
       link: "/recurring",
     },
     {
@@ -117,10 +120,11 @@ function BasicsTable({ b }: { b: BudgetMonth }) {
         : f.recurringDueCents > 0
           ? `${formatMoney(f.recurringDueCents)} still due this month`
           : "All paid for the month",
-      budgeted: scheduledBills,
+      line: b.bills,
+      auto: scheduledBills,
       actual: f.recurringPaidCents,
-      remaining: f.recurringDueCents,
-      ring: [f.recurringPaidCents, scheduledBills] as const,
+      remaining: billsTarget - f.recurringPaidCents,
+      ring: [f.recurringPaidCents, billsTarget] as const,
       link: "/recurring",
     },
   ];
@@ -144,11 +148,12 @@ function BasicsTable({ b }: { b: BudgetMonth }) {
                 <span className="block truncate text-xs text-slate-500">{r.note}</span>
               </span>
             </span>
-            <span className="tabular-nums text-slate-600 sm:text-right dark:text-slate-300">
-              {formatMoney(r.budgeted)}
-            </span>
+            <InlineBudget line={r.line} month={month} auto={r.auto} />
             <span className="text-right tabular-nums">{formatMoney(r.actual)}</span>
-            <Remaining cents={r.remaining} muted />
+            <Remaining
+              cents={r.remaining}
+              muted={r.key === "earnings" || r.line.budgetCents === null}
+            />
             <span className="hidden sm:block">
               <Ring used={r.ring[0]} limit={r.ring[1]} />
             </span>
@@ -491,7 +496,7 @@ export function BudgetsPage() {
       {b && (
         <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start min-[112rem]:grid-cols-[minmax(0,1fr)_26rem_26rem]">
           <div className="order-2 space-y-6 lg:order-0">
-            <BasicsTable b={b} />
+            <BasicsTable b={b} month={month} />
             <CategoriesTable b={b} month={month} />
           </div>
           <div className="order-1 space-y-6 lg:sticky lg:top-6 lg:order-0">

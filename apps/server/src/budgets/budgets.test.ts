@@ -74,6 +74,37 @@ describe("budget forecast", () => {
   });
 });
 
+describe("earnings and bills budgets", () => {
+  it("keeps an earnings target and a bills budget apart from the total, and goes back to automatic", async () => {
+    const { client, add } = await setup();
+    const month = localToday().slice(0, 7);
+    await add(`${month}-01`, 300_000, "Paycheck");
+    await client.put("/api/budgets", { categoryId: null, amountCents: 250_000 }); // total spending
+    await client.put("/api/budgets", { categoryId: null, kind: "income", amountCents: 700_000 });
+    await client.put("/api/budgets", { categoryId: null, kind: "bills", amountCents: 75_000 });
+    const b = (await client.get(`/api/budgets/${month}`)).json<BudgetMonth>();
+    expect(b.total.budgetCents).toBe(250_000);
+    expect(b.income).toMatchObject({
+      kind: "income",
+      budgetCents: 700_000,
+      spentCents: 300_000,
+      availableCents: 400_000,
+    });
+    expect(b.bills).toMatchObject({ kind: "bills", budgetCents: 75_000, spentCents: 0 });
+    expect(b.income.historyCents).toHaveLength(3);
+
+    // Removing the target makes it automatic again (no fixed amount).
+    await client.delete(`/api/budgets/${b.income.budgetId}`);
+    const after = (await client.get(`/api/budgets/${month}`)).json<BudgetMonth>();
+    expect(after.income.budgetCents).toBeNull();
+    expect(after.total.budgetCents).toBe(250_000);
+    expect(
+      (await client.put("/api/budgets", { categoryId: "x", kind: "income", amountCents: 1 }))
+        .statusCode,
+    ).toBe(400);
+  });
+});
+
 describe("budgets", () => {
   it("tracks spending with refunds, splits and exclusions", async () => {
     const { client, cat, add, acc } = await setup();

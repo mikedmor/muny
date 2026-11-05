@@ -152,7 +152,19 @@ export function EditBudget({
  * click away saves, Esc cancels, the trash icon removes the budget. While
  * editing, a popup shows the last 3 months of spending against the amount.
  */
-export function InlineBudget({ line, month }: { line: BudgetLine; month: string }) {
+export function InlineBudget({
+  line,
+  month,
+  auto,
+}: {
+  line: BudgetLine;
+  month: string;
+  /**
+   * Earnings/bills only: the automatic amount (from the forecast). With no
+   * fixed budget the row shows this, marked "Auto"; the popup can switch back.
+   */
+  auto?: number;
+}) {
   const set = useSetBudget();
   const del = useDeleteBudget();
   const [editing, setEditing] = useState(false);
@@ -174,6 +186,7 @@ export function InlineBudget({ line, month }: { line: BudgetLine; month: string 
     if (typed === line.budgetCents) return;
     set.mutate({
       categoryId: line.categoryId,
+      kind: line.kind,
       amountCents: typed,
       rollover: line.rollover,
       fromMonth: month,
@@ -182,6 +195,8 @@ export function InlineBudget({ line, month }: { line: BudgetLine; month: string 
   const remove = () => {
     if (line.budgetId) del.mutate(line.budgetId);
   };
+  const isAuto = auto !== undefined && line.budgetCents === null;
+  const shown = line.budgetCents ?? (auto !== undefined ? auto : null);
 
   if (!editing) {
     return (
@@ -191,25 +206,37 @@ export function InlineBudget({ line, month }: { line: BudgetLine; month: string 
             type="button"
             onClick={remove}
             disabled={del.isPending}
-            aria-label={`Remove the ${line.name} budget`}
-            title="Remove budget"
+            aria-label={
+              auto !== undefined
+                ? `Switch ${line.name} back to automatic`
+                : `Remove the ${line.name} budget`
+            }
+            title={auto !== undefined ? "Back to automatic" : "Remove budget"}
             className="rounded p-0.5 text-slate-400 opacity-0 hover:text-red-600 focus-visible:opacity-100 group-hover:opacity-100"
           >
-            🗑
+            {auto !== undefined ? "↺" : "🗑"}
           </button>
+        )}
+        {isAuto && (
+          <span
+            title="Automatic: from your recurring income and bills. Click the amount to set your own."
+            className="rounded bg-slate-100 px-1 text-[10px] font-semibold uppercase text-slate-500 dark:bg-slate-800"
+          >
+            Auto
+          </span>
         )}
         <button
           type="button"
           onClick={start}
-          aria-label={`Budget for ${line.name}: ${line.budgetCents !== null ? formatMoney(line.budgetCents) : "none"}. Click to change.`}
+          aria-label={`Budget for ${line.name}: ${shown !== null ? formatMoney(shown) : "none"}${isAuto ? " (automatic)" : ""}. Click to change.`}
           className={cx(
             "min-w-20 rounded border-b border-dashed px-1 text-right tabular-nums hover:border-brand-500",
-            line.budgetCents === null
+            shown === null
               ? "border-transparent text-xs text-brand-600"
               : "border-slate-300 text-slate-700 dark:border-slate-600 dark:text-slate-200",
           )}
         >
-          {line.budgetCents !== null ? formatMoney(line.budgetCents) : "Set budget"}
+          {shown !== null ? formatMoney(shown) : "Set budget"}
         </button>
       </span>
     );
@@ -248,7 +275,11 @@ export function InlineBudget({ line, month }: { line: BudgetLine; month: string 
         className="absolute top-full left-0 z-20 mt-2 w-64 max-w-[calc(100vw-2rem)] sm:right-0 sm:left-auto rounded-xl border border-slate-200 bg-white p-3 text-left shadow-lg dark:border-slate-700 dark:bg-slate-900"
       >
         <span className="block text-xs text-slate-600 dark:text-slate-300">
-          Your spending over the past 3 months
+          {line.kind === "income"
+            ? "Your income over the past 3 months"
+            : line.kind === "bills"
+              ? "Bills & subscriptions paid over the past 3 months"
+              : "Your spending over the past 3 months"}
         </span>
         <span className="relative mt-2 flex h-24 items-end justify-around gap-3 border-b border-slate-200 dark:border-slate-700">
           {history.map((h) => (
@@ -281,6 +312,31 @@ export function InlineBudget({ line, month }: { line: BudgetLine; month: string 
         <span className="mt-2 block text-[11px] text-slate-500">
           Average {formatMoney(line.averageCents)}/mo · Enter to save, Esc to cancel
         </span>
+        {auto !== undefined && (
+          <button
+            type="button"
+            // Keep focus in the input so blur doesn't save before this click lands.
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              setEditing(false);
+              if (line.budgetId) del.mutate(line.budgetId);
+            }}
+            className={cx(
+              "mt-2 flex w-full items-center justify-between rounded-lg border px-2 py-1.5 text-xs",
+              isAuto
+                ? "border-brand-500 bg-brand-50 dark:bg-brand-700/20"
+                : "border-slate-300 hover:border-brand-500 dark:border-slate-600",
+            )}
+          >
+            <span>
+              <span className="font-semibold">{isAuto ? "✓ Automatic" : "Use automatic"}</span>
+              <span className="block text-left text-slate-500">
+                {line.kind === "income" ? "Paychecks Muny expects" : "Recurring bills scheduled"}
+              </span>
+            </span>
+            <span className="font-medium tabular-nums">{formatMoney(auto)}</span>
+          </button>
+        )}
       </span>
     </span>
   );

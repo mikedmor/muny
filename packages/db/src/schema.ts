@@ -349,6 +349,14 @@ export const budgets = sqliteTable(
   {
     id: text().primaryKey(),
     categoryId: text().references(() => categories.id, { onDelete: "cascade" }),
+    /**
+     * What a budget without a category is for: "spending" (the total spending
+     * budget), "income" (earnings target) or "bills" (recurring bills budget).
+     * Category budgets are always "spending".
+     */
+    kind: text({ enum: ["spending", "income", "bills"] })
+      .notNull()
+      .default("spending"),
     /** Unspent money carries into next month (and overspending is deducted). */
     rollover: integer({ mode: "boolean" }).notNull().default(false),
     /** YYYY-MM: first month this budget applies (rollover starts counting here). */

@@ -1,0 +1,1 @@
+ALTER TABLE `budgets` ADD `kind` text DEFAULT 'spending' NOT NULL;

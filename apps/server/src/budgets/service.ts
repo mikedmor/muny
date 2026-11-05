@@ -2,12 +2,13 @@ import { type MunyDb, newId, schema } from "@muny/db";
 import type {
   BudgetForecast,
   BudgetGroup,
+  BudgetKind,
   BudgetLine,
   BudgetMonth,
   ScheduledItem,
   SetBudgetInput,
 } from "@muny/shared";
-import { and, eq, gte, isNotNull, isNull, lt, lte } from "drizzle-orm";
+import { and, eq, gte, isNotNull, isNull, lt, lte, sql } from "drizzle-orm";
 import { localToday } from "../lib/dates.js";
 import { listSeries, upcoming } from "../recurring/service.js";
 import {
@@ -25,6 +26,7 @@ type Db = MunyDb | Tx;
 interface StoredBudget {
   id: string;
   categoryId: string | null;
+  kind: BudgetKind;
   rollover: boolean;
   startMonth: string;
   amounts: { fromMonth: string; amountCents: number }[];
@@ -39,6 +41,7 @@ function loadBudgets(db: Db): StoredBudget[] {
     .map((b) => ({
       id: b.id,
       categoryId: b.categoryId,
+      kind: b.kind,
       rollover: b.rollover,
       startMonth: b.startMonth,
       amounts: amounts
@@ -96,7 +99,7 @@ export function budgetMonth(db: Db, month: string): BudgetMonth {
 
   const prev3 = [1, 2, 3].map((n) => addMonths(month, -n));
   const line = (categoryId: string | null, name: string): BudgetLine => {
-    const b = budgets.find((x) => x.categoryId === categoryId);
+    const b = budgets.find((x) => x.categoryId === categoryId && x.kind === "spending");
     const budgetCents = b ? amountFor(b, month) : null;
     const spentCents = spentIn(month, categoryId);
     let rolloverCents = 0;
@@ -107,6 +110,7 @@ export function budgetMonth(db: Db, month: string): BudgetMonth {
     }
     return {
       categoryId,
+      kind: "spending",
       name,
       budgetId: b?.id ?? null,
       budgetCents,
@@ -142,7 +146,35 @@ export function budgetMonth(db: Db, month: string): BudgetMonth {
     .reduce((s, l) => s + (l.budgetCents ?? 0), 0);
 
   const total = line(null, "Total spending");
+
+  // Earnings and bills: an optional fixed target; no target = automatic (the forecast).
+  const billsPaid = recurringPaidByMonth(db, [month, ...prev3]);
+  const basic = (
+    kind: "income" | "bills",
+    name: string,
+    actual: (m: string) => number,
+  ): BudgetLine => {
+    const b = budgets.find((x) => x.categoryId === null && x.kind === kind);
+    const budgetCents = b ? amountFor(b, month) : null;
+    const spentCents = actual(month);
+    return {
+      categoryId: null,
+      kind,
+      name,
+      budgetId: b?.id ?? null,
+      budgetCents,
+      spentCents,
+      rollover: false,
+      rolloverCents: 0,
+      availableCents: budgetCents === null ? null : budgetCents - spentCents,
+      averageCents: Math.round(prev3.reduce((s, m) => s + actual(m), 0) / 3),
+      historyCents: [...prev3].reverse().map((m) => ({ month: m, cents: actual(m) })),
+    };
+  };
+
   return {
+    income: basic("income", "Earnings", (m) => incomeByMonth.get(m) ?? 0),
+    bills: basic("bills", "Bills & subscriptions", (m) => billsPaid.get(m) ?? 0),
     forecast: forecastMonth(db, month, {
       spentCents: total.spentCents,
       incomeCents: income,
@@ -241,12 +273,33 @@ function forecastMonth(
   };
 }
 
+/** Recurring bills/subscriptions charged per month (positive cents). */
+function recurringPaidByMonth(db: Db, months: string[]): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!months.length) return out;
+  const sorted = [...months].sort();
+  const rows = db.all<{ m: string; s: number }>(sql`
+    select substr(t.posted_date, 1, 7) as m, -sum(t.amount_cents) as s
+      from transactions t
+      join recurring_series r on r.id = t.recurring_series_id
+     where t.hidden = 0 and t.amount_cents < 0 and r.kind <> 'income'
+       and t.posted_date between ${`${sorted[0]}-01`} and ${monthEnd(sorted[sorted.length - 1] as string)}
+     group by m
+  `);
+  for (const r of rows) out.set(r.m, Number(r.s));
+  return out;
+}
+
 export function setBudget(tx: Tx, input: SetBudgetInput & { fromMonth: string }): string {
   const b = schema.budgets;
   const existing = tx
     .select()
     .from(b)
-    .where(input.categoryId ? eq(b.categoryId, input.categoryId) : isNull(b.categoryId))
+    .where(
+      input.categoryId
+        ? eq(b.categoryId, input.categoryId)
+        : and(isNull(b.categoryId), eq(b.kind, input.kind ?? "spending")),
+    )
     .get();
   let id: string;
   if (!existing) {
@@ -255,6 +308,7 @@ export function setBudget(tx: Tx, input: SetBudgetInput & { fromMonth: string })
       .values({
         id,
         categoryId: input.categoryId,
+        kind: input.categoryId ? "spending" : (input.kind ?? "spending"),
         rollover: input.rollover ?? false,
         startMonth: input.fromMonth,
       })
