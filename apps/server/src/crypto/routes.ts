@@ -110,6 +110,7 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
         pricesEnabled: getCryptoSettings(db).pricesEnabled,
         pricesUpdatedAt: st.updatedAt,
         change24h: st.change24h,
+        mcap: st.mcap ?? {},
       }),
       pricesRefreshing: pricesRefreshing(),
       syncing: isSyncing(),

@@ -3,10 +3,12 @@ import {
   addDec,
   assetName,
   FIAT,
+  fifoCostBasis,
   isZeroDec,
   type ParsedCryptoTxn,
   parseAnyKoinlyCsv,
   subDec,
+  toFixed,
   valueCents,
 } from "@muny/core";
 import { type MunyDb, newId, schema } from "@muny/db";
@@ -451,9 +453,68 @@ export function cryptoOverview(
     pricesEnabled: boolean;
     pricesUpdatedAt: number | null;
     change24h: Record<string, number>;
+    mcap?: Record<string, number>;
   },
 ): Omit<import("@muny/shared").CryptoOverview, "pricesRefreshing" | "syncing" | "walletsSyncedAt"> {
   const balances = balancesByWallet(db);
+  // Daily prices per asset (oldest first), for cost basis fallbacks and sparklines.
+  const daily = new Map<string, { date: string; usd: string }[]>();
+  for (const r of db
+    .select({
+      asset: schema.cryptoPrices.asset,
+      date: schema.cryptoPrices.date,
+      usd: schema.cryptoPrices.usd,
+    })
+    .from(schema.cryptoPrices)
+    .orderBy(schema.cryptoPrices.date)
+    .all())
+    daily.set(r.asset, [...(daily.get(r.asset) ?? []), { date: r.date, usd: r.usd }]);
+  const priceOn = (asset: string, at: number): string | null => {
+    const list = daily.get(asset);
+    if (!list?.length) return null;
+    const d = new Date(at).toISOString().slice(0, 10);
+    let lo = 0;
+    let hi = list.length - 1;
+    let best = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if ((list[mid] as { date: string }).date <= d) {
+        best = mid;
+        lo = mid + 1;
+      } else hi = mid - 1;
+    }
+    // Before the first known day: use it if within a week.
+    if (best < 0) {
+      const first = list[0] as { date: string; usd: string };
+      return Date.parse(`${first.date}T00:00:00Z`) - at <= 7 * 86_400_000 ? first.usd : null;
+    }
+    return (list[best] as { usd: string }).usd;
+  };
+  const cost = fifoCostBasis(
+    db
+      .select({
+        at: t.at,
+        type: t.type,
+        sentAsset: t.sentAsset,
+        sentAmount: t.sentAmount,
+        receivedAsset: t.receivedAsset,
+        receivedAmount: t.receivedAmount,
+        feeAsset: t.feeAsset,
+        feeAmount: t.feeAmount,
+        valueCents: t.valueCents,
+        pair: t.transferPairId,
+      })
+      .from(t)
+      .all()
+      .map((r) => ({ ...r, paired: !!r.pair })),
+    {
+      skip: FIAT,
+      valueAt: (asset, amount, at) => {
+        const usd = priceOn(asset, at);
+        return usd ? valueCents(amount, usd) : null;
+      },
+    },
+  );
   const prices = latestPrices(db);
   const hidden = hiddenAssets(db);
   const info = new Map(
@@ -512,6 +573,18 @@ export function cryptoOverview(
         valueCents: p ? valueCents(h.amount, p.usd) : null,
         change24hPct: opts.change24h[asset] ?? null,
         allocationPct: 0,
+        ...(() => {
+          const c = cost.get(asset);
+          if (!c || FIAT.has(asset)) return { costCents: null, costIncomplete: true };
+          // Fewer coins in the cost pool than held means some history is missing.
+          const held = toFixed(h.amount);
+          return {
+            costCents: c.costCents,
+            costIncomplete: c.missing || c.amount * 1000n < held * 999n,
+          };
+        })(),
+        marketCapUsd: opts.mcap?.[asset] ?? null,
+        spark: (daily.get(asset) ?? []).slice(-30).map((p) => Number(p.usd)),
         wallets: [
           ...h.wallets.sort(
             (a, b) =>

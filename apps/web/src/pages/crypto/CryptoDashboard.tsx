@@ -31,24 +31,90 @@ function Pct({ v }: { v: number | null }) {
   );
 }
 
+/** A tiny trend line from daily closes (display only; green up, red down). */
+function Sparkline({
+  values,
+  width = 96,
+  height = 28,
+}: {
+  values: number[];
+  width?: number;
+  height?: number;
+}) {
+  if (values.length < 2) return <span className="inline-block" style={{ width }} />;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const pts = values
+    .map(
+      (v, i) =>
+        `${((i / (values.length - 1)) * width).toFixed(1)},${(height - 2 - ((v - min) / span) * (height - 4)).toFixed(1)}`,
+    )
+    .join(" ");
+  const up = (values[values.length - 1] ?? 0) >= (values[0] ?? 0);
+  return (
+    <svg
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      aria-hidden="true"
+      className="inline-block"
+    >
+      <polyline
+        points={pts}
+        fill="none"
+        strokeWidth="2"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        className={up ? "stroke-emerald-500" : "stroke-red-500"}
+      />
+    </svg>
+  );
+}
+
+const compactUsd = (n: number) =>
+  new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "USD",
+    notation: "compact",
+    maximumFractionDigits: 2,
+  }).format(n);
+
+/** Below this a wallet's balance shows as 0 (8 decimals), so it counts as empty. */
+const isDust = (amount: string) => Math.abs(Number(amount)) < 1e-8;
+
 function HoldingRow({ h }: { h: CryptoHolding }) {
   const [open, setOpen] = useState(false);
-  const multi = h.wallets.length > 0;
+  const [showEmpty, setShowEmpty] = useState(false);
+  const held = h.wallets.filter((w) => !isDust(w.amount));
+  const empty = h.wallets.length - held.length;
+  const shown = showEmpty ? h.wallets : held;
+  const gains = h.valueCents !== null && h.costCents !== null ? h.valueCents - h.costCents : null;
+  const roi = gains !== null && h.costCents ? (gains / h.costCents) * 100 : null;
+  const perUnitCost =
+    h.costCents !== null && Number(h.amount) > 0 ? h.costCents / 100 / Number(h.amount) : null;
+  const total = held.reduce((s, w) => s + Number(w.amount), 0);
+  const share = (amount: string) => (total > 0 ? (Number(amount) / total) * 100 : 0);
+  const pctLabel = (p: number) => (p === 0 ? "0%" : p < 1 ? "<1%" : `${Math.round(p)}%`);
   return (
     <>
-      <tr className="border-t border-slate-100 dark:border-slate-800">
+      <tr
+        className="cursor-pointer border-t border-slate-100 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40"
+        onClick={() => setOpen((o) => !o)}
+      >
         <td className="w-8 py-3 pl-4">
-          {multi && (
-            <button
-              type="button"
-              aria-expanded={open}
-              aria-label={`${open ? "Hide" : "Show"} ${h.asset} by wallet`}
-              onClick={() => setOpen((o) => !o)}
-              className={cx("text-xs text-slate-400 transition-transform", open && "rotate-90")}
-            >
-              ▶
-            </button>
-          )}
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-label={`${open ? "Hide" : "Show"} ${h.asset} details`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen((o) => !o);
+            }}
+            className={cx("text-xs text-slate-400 transition-transform", open && "rotate-90")}
+          >
+            ▶
+          </button>
         </td>
         <td className="py-3 pr-2">
           <span className="flex items-center gap-3">
@@ -60,6 +126,30 @@ function HoldingRow({ h }: { h: CryptoHolding }) {
           </span>
         </td>
         <td className="px-2 text-right font-mono text-sm tabular-nums">{fmtAmount(h.amount)}</td>
+        <td className="hidden px-2 text-right tabular-nums md:table-cell">
+          {h.costCents !== null ? (
+            <>
+              <span className="block">
+                {formatMoney(h.costCents)}
+                {h.costIncomplete && (
+                  <span
+                    title="Part of the cost is unknown (missing history or prices)"
+                    className="text-amber-600"
+                  >
+                    *
+                  </span>
+                )}
+              </span>
+              {perUnitCost !== null && (
+                <span className="text-xs text-slate-500">
+                  {fmtPrice(String(perUnitCost))} / unit
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="text-slate-400">—</span>
+          )}
+        </td>
         <td className="px-2 text-right tabular-nums">
           <span className="block font-medium">
             {h.valueCents !== null ? formatMoney(h.valueCents) : "—"}
@@ -67,51 +157,154 @@ function HoldingRow({ h }: { h: CryptoHolding }) {
           {h.price && <span className="text-xs text-slate-500">{fmtPrice(h.price)} / unit</span>}
         </td>
         <td className="hidden px-2 text-right text-sm tabular-nums sm:table-cell">
-          {h.allocationPct > 0
-            ? `${h.allocationPct < 1 ? "<1" : Math.round(h.allocationPct)}%`
-            : "—"}
+          <Pct v={roi} />
         </td>
         <td className="py-3 pr-4 text-right text-sm tabular-nums">
-          <Pct v={h.change24hPct} />
+          <span className="flex items-center justify-end gap-2">
+            <span className="hidden lg:inline-block">
+              <Sparkline values={h.spark} />
+            </span>
+            <Pct v={h.change24hPct} />
+          </span>
         </td>
       </tr>
-      {open &&
-        h.wallets.map((w) => {
-          // Share of this coin held in the wallet (display only).
-          const share = Number(h.amount) > 0 ? (Number(w.amount) / Number(h.amount)) * 100 : 0;
-          const empty = Number(w.amount) === 0;
-          return (
-            <tr
-              key={w.walletId}
-              className={cx(
-                "bg-slate-50/60 text-sm dark:bg-slate-800/30",
-                empty && "text-slate-400 dark:text-slate-500",
-              )}
-            >
-              <td />
-              <td className="py-1.5 pl-2">
-                <Link
-                  to="/crypto/transactions"
-                  search={{ walletId: w.walletId, asset: h.asset }}
-                  className="flex items-center gap-2 hover:underline"
-                >
-                  <WalletIcon name={w.walletName} chain={w.chain} kind={w.walletKind} size="sm" />
-                  <span className={empty ? "" : "text-slate-700 dark:text-slate-200"}>
-                    {w.walletName}
-                  </span>
-                </Link>
-              </td>
-              <td className="px-2 text-right font-mono tabular-nums">{fmtAmount(w.amount)}</td>
-              <td className="px-2 text-right tabular-nums">
-                {w.valueCents !== null ? formatMoney(w.valueCents) : "—"}
-              </td>
-              <td className="hidden px-2 text-right tabular-nums sm:table-cell">
-                {empty ? "0%" : share < 1 ? "<1%" : `${Math.round(share)}%`}
-              </td>
-              <td />
-            </tr>
-          );
-        })}
+      {open && (
+        <tr className="bg-slate-50/60 dark:bg-slate-800/30">
+          <td colSpan={7} className="px-4 pt-3 pb-4">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <dl className="grid flex-1 grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
+                {(
+                  [
+                    ["Price", h.price ? fmtPrice(h.price) : "—"],
+                    ["Market cap", h.marketCapUsd ? compactUsd(h.marketCapUsd) : "—"],
+                    ["24h", h.change24hPct !== null ? `${h.change24hPct.toFixed(1)}%` : "—"],
+                    ["Share of portfolio", pctLabel(h.allocationPct)],
+                    [
+                      "Total cost",
+                      h.costCents !== null
+                        ? `${formatMoney(h.costCents)}${h.costIncomplete ? "*" : ""}`
+                        : "—",
+                    ],
+                    ["Cost / unit", perUnitCost !== null ? fmtPrice(String(perUnitCost)) : "—"],
+                    ["Total value", h.valueCents !== null ? formatMoney(h.valueCents) : "—"],
+                    [
+                      "Gains",
+                      gains !== null
+                        ? `${gains >= 0 ? "+" : "−"}${formatMoney(Math.abs(gains))}`
+                        : "—",
+                    ],
+                  ] as const
+                ).map(([k, v]) => (
+                  <div key={k}>
+                    <dt className="text-xs text-slate-500">{k}</dt>
+                    <dd
+                      className={cx(
+                        "font-medium tabular-nums",
+                        k === "Gains" &&
+                          gains !== null &&
+                          (gains >= 0
+                            ? "text-emerald-700 dark:text-emerald-400"
+                            : "text-red-600 dark:text-red-400"),
+                      )}
+                    >
+                      {v}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <div className="hidden sm:block">
+                <Sparkline values={h.spark} width={200} height={56} />
+                <p className="text-right text-xs text-slate-500">30 days</p>
+              </div>
+            </div>
+            {h.costIncomplete && h.costCents !== null && (
+              <p className="mt-2 text-xs text-slate-500">
+                * Part of the cost is unknown: some history or prices are missing (see Reconcile).
+                Cost is first-in, first-out across all wallets.
+              </p>
+            )}
+            {held.length > 0 && (
+              <div
+                className="mt-4 flex h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"
+                aria-hidden="true"
+              >
+                {held.map((w, i) => (
+                  <span
+                    key={w.walletId}
+                    style={{ width: `${share(w.amount)}%`, background: color(i) }}
+                  />
+                ))}
+              </div>
+            )}
+            <table className="mt-3 w-full text-sm">
+              <caption className="sr-only">{h.asset} by wallet</caption>
+              <thead className="text-xs text-slate-500">
+                <tr>
+                  <th className="py-1 text-left font-medium">Wallet</th>
+                  <th className="py-1 text-right font-medium">Balance</th>
+                  <th className="py-1 text-right font-medium">Value</th>
+                  <th className="py-1 text-right font-medium">Allocation</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200/70 dark:divide-slate-700/60">
+                {shown.map((w) => {
+                  const i = held.indexOf(w);
+                  const zero = i < 0;
+                  return (
+                    <tr
+                      key={w.walletId}
+                      className={zero ? "text-slate-400 dark:text-slate-500" : ""}
+                    >
+                      <td className="py-1.5">
+                        <Link
+                          to="/crypto/transactions"
+                          search={{ walletId: w.walletId, asset: h.asset }}
+                          className="flex items-center gap-2 hover:underline"
+                        >
+                          <WalletIcon
+                            name={w.walletName}
+                            chain={w.chain}
+                            kind={w.walletKind}
+                            size="sm"
+                          />
+                          {w.walletName}
+                        </Link>
+                      </td>
+                      <td className="py-1.5 text-right font-mono tabular-nums">
+                        {zero ? "0" : fmtAmount(w.amount)}
+                      </td>
+                      <td className="py-1.5 text-right tabular-nums">
+                        {zero ? "—" : w.valueCents !== null ? formatMoney(w.valueCents) : "—"}
+                      </td>
+                      <td className="py-1.5 text-right tabular-nums">
+                        <span className="inline-flex items-center gap-2">
+                          {pctLabel(zero ? 0 : share(w.amount))}
+                          <span
+                            aria-hidden="true"
+                            className="inline-block size-2.5 rounded-sm"
+                            style={{ background: zero ? "transparent" : color(i) }}
+                          />
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {empty > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowEmpty((v) => !v)}
+                className="mt-2 text-xs text-slate-500 underline hover:text-slate-700 dark:hover:text-slate-300"
+              >
+                {showEmpty
+                  ? "Hide empty wallets"
+                  : `${empty} empty ${empty === 1 ? "wallet" : "wallets"} hidden · Show`}
+              </button>
+            )}
+          </td>
+        </tr>
+      )}
     </>
   );
 }
@@ -303,7 +496,8 @@ export function CryptoDashboard() {
               )}
             </div>
             <p className="mt-2 border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-slate-800">
-              Cost basis, unrealized and realized gains arrive with the tax engine (next phase).
+              Cost is first-in, first-out across all wallets. Realized gains and tax reports come
+              with the tax engine.
               {d.pricesUpdatedAt &&
                 ` Prices updated ${new Date(d.pricesUpdatedAt).toLocaleString()}.`}
             </p>
@@ -388,14 +582,15 @@ export function CryptoDashboard() {
           <Card className="p-0">
             <h2 className="px-4 pt-4 pb-2 font-semibold">Holdings</h2>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[34rem] text-left">
+              <table className="w-full text-left sm:min-w-[34rem]">
                 <thead className="text-xs text-slate-500">
                   <tr>
                     <th className="w-8" />
                     <th className="py-2 pr-2 font-medium">Asset</th>
                     <th className="px-2 text-right font-medium">Balance</th>
-                    <th className="px-2 text-right font-medium">Value (USD)</th>
-                    <th className="hidden px-2 text-right font-medium sm:table-cell">Share</th>
+                    <th className="hidden px-2 text-right font-medium md:table-cell">Cost (USD)</th>
+                    <th className="px-2 text-right font-medium">Market value</th>
+                    <th className="hidden px-2 text-right font-medium sm:table-cell">ROI</th>
                     <th className="pr-4 text-right font-medium">24h</th>
                   </tr>
                 </thead>

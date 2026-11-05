@@ -102,6 +102,14 @@ export interface CryptoHolding {
   change24hPct: number | null;
   /** Share of the portfolio value (0-100). */
   allocationPct: number;
+  /** What the coins you hold cost (FIFO across wallets), in cents; null when unknown. */
+  costCents: number | null;
+  /** Part of the cost is unknown (missing history or prices). */
+  costIncomplete: boolean;
+  /** Market cap in USD (display only), when the price provider reports it. */
+  marketCapUsd: number | null;
+  /** Daily closes for the last 30 days, oldest first (display only). */
+  spark: number[];
   /**
    * Every wallet that holds or has held this coin (emptied ones show 0), most
    * first. Value is null without a price.

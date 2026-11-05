@@ -38,6 +38,8 @@ interface PriceState {
   /** Last attempt (success or not), so a failing provider isn't retried on every visit. */
   attemptedAt?: number | null;
   change24h: Record<string, number>;
+  /** Market cap in USD per asset (display only). */
+  mcap?: Record<string, number>;
   lastError: string | null;
 }
 
@@ -137,13 +139,20 @@ async function getJson(
   url: string,
   deps: PriceDeps,
   headers: Record<string, string> = {},
+  body?: unknown,
 ): Promise<unknown> {
   const f = deps.fetch ?? fetch;
   const host = new URL(url).host;
   let res: Response;
   try {
     res = await f(url, {
-      headers: { accept: "application/json", ...headers },
+      method: body === undefined ? "GET" : "POST",
+      headers: {
+        accept: "application/json",
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+        ...headers,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(30_000),
     });
   } catch (err) {
@@ -162,7 +171,9 @@ const sleep = (ms?: number) => (ms ? new Promise((r) => setTimeout(r, ms)) : Pro
 
 interface Provider {
   /** Current USD price and 24h change (%) per coin id. */
-  current(ids: string[]): Promise<Map<string, { usd: number; change24h: number | null }>>;
+  current(
+    ids: string[],
+  ): Promise<Map<string, { usd: number; change24h: number | null; mcap?: number | null }>>;
   /** Daily closes per coin id from `fromMs` to now. */
   history(id: string, fromMs: number): Promise<{ ms: number; usd: number }[]>;
   /** Optional: one day's price for many coins in one call (cheap small gaps). */
@@ -172,24 +183,35 @@ interface Provider {
 function defillama(deps: PriceDeps): Provider {
   return {
     async current(ids) {
-      const out = new Map<string, { usd: number; change24h: number | null }>();
+      const out = new Map<
+        string,
+        { usd: number; change24h: number | null; mcap?: number | null }
+      >();
       for (let i = 0; i < ids.length; i += 50) {
         const keys = ids
           .slice(i, i + 50)
           .map((id) => `coingecko:${id}`)
           .join(",");
-        const [prices, pct] = (await Promise.all([
+        const [prices, pct, mcaps] = (await Promise.all([
           getJson(`${LLAMA}/prices/current/${encodeURIComponent(keys)}`, deps),
           getJson(`${LLAMA}/percentage/${encodeURIComponent(keys)}?period=24h`, deps).catch(() => ({
             coins: {},
           })),
-        ])) as [{ coins: Record<string, { price?: number }> }, { coins: Record<string, number> }];
+          // Market caps (display only); one call for the batch.
+          getJson(`${LLAMA}/mcaps`, deps, {}, { coins: keys.split(",") }).catch(() => ({})),
+        ])) as [
+          { coins: Record<string, { price?: number }> },
+          { coins: Record<string, number> },
+          Record<string, { mcap?: number }>,
+        ];
         for (const [k, v] of Object.entries(prices.coins ?? {})) {
           if (typeof v.price !== "number") continue;
           const change = pct.coins?.[k];
+          const mcap = mcaps?.[k]?.mcap;
           out.set(k.replace(/^coingecko:/, ""), {
             usd: v.price,
             change24h: typeof change === "number" ? change : null,
+            mcap: typeof mcap === "number" ? mcap : null,
           });
         }
       }
@@ -237,18 +259,22 @@ function coingecko(deps: PriceDeps, key: string | null): Provider {
   const headers: Record<string, string> = key ? { "x-cg-demo-api-key": key } : {};
   return {
     async current(ids) {
-      const out = new Map<string, { usd: number; change24h: number | null }>();
+      const out = new Map<
+        string,
+        { usd: number; change24h: number | null; mcap?: number | null }
+      >();
       for (let i = 0; i < ids.length; i += 100) {
         const data = (await getJson(
-          `${GECKO}/simple/price?ids=${encodeURIComponent(ids.slice(i, i + 100).join(","))}&vs_currencies=usd&include_24hr_change=true`,
+          `${GECKO}/simple/price?ids=${encodeURIComponent(ids.slice(i, i + 100).join(","))}&vs_currencies=usd&include_24hr_change=true&include_market_cap=true`,
           deps,
           headers,
-        )) as Record<string, { usd?: number; usd_24h_change?: number }>;
+        )) as Record<string, { usd?: number; usd_24h_change?: number; usd_market_cap?: number }>;
         for (const [id, v] of Object.entries(data))
           if (typeof v.usd === "number")
             out.set(id, {
               usd: v.usd,
               change24h: typeof v.usd_24h_change === "number" ? v.usd_24h_change : null,
+              mcap: typeof v.usd_market_cap === "number" ? v.usd_market_cap : null,
             });
       }
       return out;
@@ -313,11 +339,13 @@ export async function refreshPrices(
 
     const today = day(Date.now());
     const change24h: Record<string, number> = {};
+    const mcap: Record<string, number> = {};
     for (const [id, v] of await provider.current([...assets.keys()])) {
       const a = assets.get(id);
       if (!a) continue;
       put(a.asset, today, num(v.usd));
       if (v.change24h !== null) change24h[a.asset] = v.change24h;
+      if (v.mcap) mcap[a.asset] = v.mcap;
     }
 
     // History: from the day after the newest stored price (excluding today),
@@ -370,7 +398,13 @@ export async function refreshPrices(
       }
     }
     const now = Date.now();
-    putSetting(db, STATE_KEY, { updatedAt: now, attemptedAt: now, change24h, lastError: null });
+    putSetting(db, STATE_KEY, {
+      updatedAt: now,
+      attemptedAt: now,
+      change24h,
+      mcap,
+      lastError: null,
+    });
     return { assets: assets.size, days };
   } catch (err) {
     putSetting(db, STATE_KEY, {
