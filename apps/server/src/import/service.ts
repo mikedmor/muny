@@ -23,6 +23,7 @@ import type {
   ImportResult,
 } from "@muny/shared";
 import { and, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
+import { applyMerchantMemory } from "../ledger/memory.js";
 import { upsertPayee, upsertTag } from "../ledger/transactions.js";
 import { linkTransfersFor } from "../ledger/transfers.js";
 import { badRequest } from "../lib/http.js";
@@ -586,8 +587,10 @@ export function commitImport(db: MunyDb, req: ImportCommitRequest, userId: strin
     });
 
     // 4. Rules (skip transactions whose category came from the user, e.g. Rocket Money).
-    const rulesApplied = runRulesOn(tx, newIds);
+    // Then transfers, then merchant memory for whatever is still uncategorized.
+    const ruleChanges = runRulesOn(tx, newIds);
     linkTransfersFor(tx, newIds);
+    const rulesApplied = ruleChanges + applyMerchantMemory(tx, newIds);
     if (newIds.length) rescanRecurring(tx);
 
     // 5. Statement balances (after transactions, so the math includes them).

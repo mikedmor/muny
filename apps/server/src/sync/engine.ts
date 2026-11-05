@@ -10,6 +10,7 @@ import { localToday } from "../lib/dates.js";
 
 export { localToday };
 
+import { applyMerchantMemory } from "../ledger/memory.js";
 import { rescanRecurring } from "../recurring/service.js";
 import { runRulesOn } from "../rules/service.js";
 import { type PlaidCreds, PlaidProvider } from "./plaid.js";
@@ -311,6 +312,7 @@ export function applySync(
 
   summary.rulesApplied = runRulesOn(tx, newIds);
   linkTransfersFor(tx, newIds);
+  summary.rulesApplied += applyMerchantMemory(tx, newIds);
   if (newIds.length || summary.removed) rescanRecurring(tx);
   return summary;
 }

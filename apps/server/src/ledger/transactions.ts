@@ -7,6 +7,7 @@ import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, notFound, parse } from "../lib/http.js";
+import { rememberCategory } from "./memory.js";
 import {
   applyTransferPairs,
   dismissTransfer,
@@ -383,6 +384,7 @@ export function registerTransactionRoutes(app: FastifyInstance, db: MunyDb) {
         update.categoryId = body.categoryId;
         update.userModified = true;
       }
+      if (body.payeeName === undefined) rememberCategory(tx, [txnId], body.categoryId ?? null);
       if (body.payeeName !== undefined) {
         update.payeeId = body.payeeName ? upsertPayee(tx, body.payeeName) : null;
         update.userModified = true;
@@ -472,6 +474,7 @@ export function registerTransactionRoutes(app: FastifyInstance, db: MunyDb) {
       if (Object.keys(update).length) {
         n = tx.update(t).set(update).where(inArray(t.id, ids)).run().changes;
         if (set.categoryId !== undefined) {
+          rememberCategory(tx, ids, set.categoryId);
           // Explicit recategorization replaces any splits.
           tx.delete(schema.transactionSplits)
             .where(inArray(schema.transactionSplits.transactionId, ids))
