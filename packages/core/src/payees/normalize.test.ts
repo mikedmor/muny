@@ -50,6 +50,12 @@ describe("cleanPayeeName: bank-specific shapes", () => {
     ["PAYMENT TO PAYPAL CREDIT", "PayPal Credit"],
     ["POWER CO BILL PAY", "Power Co"],
     ["CITY WATER AUTOPAY 0123", "City Water"],
+    [
+      "ORIG CO NAME:MORTGAGE BANK CO ENTRY DESCR:MTG SEC:WEB TRACE#:12345 EED:261103 IND ID:999 IND NAME:JOHN DOE",
+      "Mortgage Bank",
+    ],
+    ["Orig Co Name:lender Co Entry Descr:web Pay Sec:web Ind", "Lender"],
+    ["ORIG CO NAME:NETFLIX.COM CO ENTRY DESCR:SUBSCRIPT SEC:CCD", "Netflix"],
   ])("%s -> %s", (raw, expected) => {
     expect(cleanPayeeName(raw)).toBe(expected);
   });

@@ -35,6 +35,48 @@ function planCleanup(db: MunyDb) {
   return [...byName.values()];
 }
 
+/**
+ * Earlier versions saved raw ACH text ("Orig Co Name:lender Co Entry Descr:...")
+ * as the merchant for synced transactions. Re-derive those names with the
+ * current cleanup, skip transactions the user edited, and drop the old
+ * merchants once nothing uses them. Idempotent; runs at startup.
+ */
+export function repairRawAchPayees(db: MunyDb): number {
+  return db.transaction((tx) => {
+    const bad = tx
+      .select({ id: p.id })
+      .from(p)
+      .where(sql`lower(${p.displayName}) like 'orig co name%'`)
+      .all()
+      .map((r) => r.id);
+    if (!bad.length) return 0;
+    let n = 0;
+    const rows = tx
+      .select({ id: t.id, raw: t.rawDescription })
+      .from(t)
+      .where(and(inArray(t.payeeId, bad), eq(t.userModified, false)))
+      .all();
+    for (const r of rows) {
+      const name = cleanPayeeName(r.raw);
+      if (!name || /^orig co name/i.test(name)) continue;
+      n += tx
+        .update(t)
+        .set({ payeeId: upsertPayee(tx, name) })
+        .where(eq(t.id, r.id))
+        .run().changes;
+    }
+    tx.delete(p)
+      .where(
+        and(
+          inArray(p.id, bad),
+          sql`not exists (select 1 from transactions x where x.payee_id = ${p.id})`,
+        ),
+      )
+      .run();
+    return n;
+  });
+}
+
 export function registerPayeeRoutes(app: FastifyInstance, db: MunyDb) {
   const log = (userId: string, action: string, entityId?: string, details?: unknown) =>
     audit(db, {

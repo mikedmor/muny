@@ -137,6 +137,45 @@ describe("recurring", () => {
     ).toBe(false);
   });
 
+  it("links a charge worded differently by the bank sync to the existing bill", async () => {
+    const { client } = await setup();
+    const acc = (await client.get("/api/accounts")).json<Account[]>()[0] as Account;
+    const history: [string, string, string][] = [];
+    for (let i = 5; i >= 1; i--)
+      history.push([addInterval(today, "monthly", -i), "MORTGAGE BANK MTG", "-2740.90"]);
+    await client.post("/api/import/commit", {
+      filename: "history.csv",
+      content: csv(history),
+      accountMap: { csv: acc.id },
+    });
+    const mtg = (await list(client)).find((s) => s.name === "Mortgage Bank Mtg") as RecurringSeries;
+    expect(mtg).toBeTruthy();
+
+    // This month's payment arrives in raw ACH wording, plus an unrelated small charge.
+    await client.post("/api/import/commit", {
+      filename: "sync.csv",
+      content: csv([
+        [
+          today,
+          "ORIG CO NAME:MORTGAGE BANK CO ENTRY DESCR:MTG SEC:WEB TRACE#:1 IND ID:2",
+          "-2740.90",
+        ],
+        [today, "ORIG CO NAME:MORTGAGE BANK CO ENTRY DESCR:FEE SEC:WEB", "-25.00"],
+      ]),
+      accountMap: { csv: acc.id },
+    });
+    const after = (await list(client)).find((s) => s.id === mtg.id) as RecurringSeries;
+    expect(after).toMatchObject({ lastDate: today, transactionCount: 6 });
+    const txns = (
+      await client.get("/api/transactions?q=mortgage&limit=50")
+    ).json<TransactionPage>();
+    const fee = txns.items.find((t) => t.amountCents === -2500) as Transaction;
+    expect(fee.recurringSeriesId).toBeNull();
+    // Paid this month, so it's not "coming up" until next month.
+    const up = (await client.get("/api/recurring/upcoming")).json<UpcomingCharge[]>();
+    expect(up.filter((u) => u.seriesId === mtg.id).every((u) => u.date > today)).toBe(true);
+  });
+
   it("creates a series by hand from a transaction", async () => {
     const { client } = await setup();
     const txns = (await client.get("/api/transactions?limit=50")).json<TransactionPage>().items;

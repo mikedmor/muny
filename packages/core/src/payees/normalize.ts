@@ -137,9 +137,19 @@ const GENERIC: [RegExp, string][] = [
   [/^atm (withdrawal|cash)|^withdrawal atm/i, "ATM Withdrawal"],
 ];
 
+/**
+ * Raw ACH (NACHA) descriptions, as some banks send them through Plaid:
+ *   "ORIG CO NAME:CITIZENS CO ENTRY DESCR:MTG SEC:WEB TRACE#:... IND ID:..."
+ * The company name is the merchant.
+ */
+const ACH_ORIG =
+  /\borig(?:inator)? co(?:mpany)? name\s*:\s*(.+?)\s+(?:co entry descr|co id|sec|trace|ind id|ind name)\s*[:#]/i;
+
 export function cleanPayeeName(raw: string): string | null {
   let s = raw.replace(/\s+/g, " ").trim();
   if (!s) return null;
+  const ach = ACH_ORIG.exec(s)?.[1]?.trim();
+  if (ach && /[a-z]{2}/i.test(ach)) s = ach;
   for (const [re, name] of GENERIC) if (re.test(s)) return name;
 
   const compact = s

@@ -2,6 +2,7 @@ import { openDb } from "@muny/db";
 import { buildApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { startBackupScheduler } from "./data/backups.js";
+import { repairRawAchPayees } from "./ledger/payees.js";
 import { seedDefaultCategories } from "./ledger/seed.js";
 import { rescanRecurring } from "./recurring/service.js";
 import { startSyncScheduler } from "./sync/engine.js";
@@ -11,6 +12,7 @@ async function main() {
   const config = loadConfig();
   const db = openDb({ filename: config.dbFile, migrationsFolder: config.migrationsDir });
   seedDefaultCategories(db);
+  repairRawAchPayees(db);
   // Cheap (well under a second for years of history); picks up detection improvements after upgrades.
   db.transaction((tx) => rescanRecurring(tx));
   const app = await buildApp({ config, db });

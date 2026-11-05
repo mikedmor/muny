@@ -94,6 +94,23 @@ function loadRows(db: Db): Row[] {
 
 const near = (a: number, b: number, pct: number) => Math.abs(a - b) <= Math.max(a, b) * pct;
 
+/** Words too common in bank descriptions to say two merchants are the same. */
+const COMMON_WORDS = new Set(
+  "payment payments online mobile bank card credit debit transfer deposit loan loans service services purchase from with bill autopay auto recurring monthly corp company inc llc the and orig name entry descr trace".split(
+    " ",
+  ),
+);
+
+/** Distinctive words of a merchant key (4+ letters, not boilerplate). */
+function keyWords(key: string): Set<string> {
+  return new Set(
+    key
+      .toLowerCase()
+      .split(/[^a-z]+/)
+      .filter((w) => w.length >= 4 && !COMMON_WORDS.has(w)),
+  );
+}
+
 /**
  * Detect recurring series across the whole ledger and reconcile with what's
  * stored: update known series, add new ones, link member transactions.
@@ -207,20 +224,41 @@ export function rescanRecurring(tx: Tx, today = localToday()): RecurringScanResu
     result.created++;
   }
 
-  // Series detection didn't (re)find this time (manual ones, or too few
-  // charges yet): attach newer charges with the same merchant and a similar amount.
-  for (const e of existing) {
-    if (touched.has(e.id) || e.status === "ignored") continue;
+  // Attach newer charges detection didn't group with a series: manual series,
+  // too few charges yet, or the same bill under a different description (a
+  // bank sync often words it differently from the imported history, e.g.
+  // "Citizens Mtg" vs "ORIG CO NAME:CITIZENS ... DESCR:MTG").
+  const linkedNow = new Set(
+    tx
+      .select({ id: t.id })
+      .from(t)
+      .where(sql`${t.recurringSeriesId} is not null`)
+      .all()
+      .map((r) => r.id),
+  );
+  const claimed = new Set<string>();
+  for (const e of tx.select().from(s).all()) {
+    if (e.status === "ignored") continue;
+    const words = keyWords(e.matchKey);
+    const minGap = DAYS[e.interval as RecurringInterval] * 0.5;
     const newer = rows
-      .filter(
-        (r) =>
-          r.postedDate > e.lastDate &&
-          (r.recurringSeriesId === null || r.recurringSeriesId === e.id) &&
-          (r.amountCents < 0 ? "out" : "in") === e.direction &&
-          keyOf.get(r.id) === e.matchKey &&
-          near(Math.abs(r.amountCents), e.anchorCents, 0.3),
-      )
+      .filter((r) => {
+        if (r.postedDate <= e.lastDate || claimed.has(r.id)) return false;
+        if (r.recurringSeriesId !== null && r.recurringSeriesId !== e.id) return false;
+        if (r.recurringSeriesId === null && linkedNow.has(r.id)) return false;
+        if ((r.amountCents < 0 ? "out" : "in") !== e.direction) return false;
+        const key = keyOf.get(r.id) ?? "";
+        if (key === e.matchKey) return near(Math.abs(r.amountCents), e.anchorCents, 0.3);
+        // Different wording: demand much more agreement before calling it the same bill.
+        return (
+          r.accountId === e.accountId &&
+          dayNum(r.postedDate) - dayNum(e.lastDate) >= minGap &&
+          near(Math.abs(r.amountCents), e.anchorCents, 0.1) &&
+          [...keyWords(key)].some((w) => words.has(w))
+        );
+      })
       .sort((a, b) => a.postedDate.localeCompare(b.postedDate));
+    for (const r of newer) claimed.add(r.id);
     const last = newer[newer.length - 1];
     if (!last) continue;
     tx.update(s)
