@@ -14,6 +14,8 @@ export interface BudgetLine {
   availableCents: number | null;
   /** Average monthly spending over the previous 3 months, for suggestions. */
   averageCents: number;
+  /** Spending in each of the previous 3 months, oldest first (for picking a budget). */
+  historyCents: { month: string; cents: number }[];
 }
 
 export interface BudgetGroup {

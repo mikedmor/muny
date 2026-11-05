@@ -2,7 +2,7 @@ import { type BudgetMonth, formatMoney } from "@muny/shared";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { EditBudget, Ring } from "../components/budget.js";
+import { EditBudget, InlineBudget, Ring } from "../components/budget.js";
 import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
 import { CategoryIcon, MerchantAvatar } from "../components/visuals.js";
 import { api } from "../lib/api.js";
@@ -48,7 +48,9 @@ const signed = (cents: number) => `${cents < 0 ? "−" : ""}${formatMoney(Math.a
 // ---------------------------------------------------------------------------
 
 const ROW =
-  "grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-4 sm:grid-cols-[minmax(0,1fr)_7rem_7rem_7rem_1.5rem]";
+  // Phones: name on its own line, the three amounts underneath. Wider: one row.
+  "grid grid-cols-3 items-center gap-x-3 gap-y-1.5 sm:gap-x-4 sm:grid-cols-[minmax(0,1fr)_8rem_7rem_7rem_1.5rem]";
+const NAME_CELL = "col-span-3 sm:col-span-1";
 
 function TableHead({ first }: { first: string }) {
   return (
@@ -58,8 +60,8 @@ function TableHead({ first }: { first: string }) {
         "border-b border-slate-200 px-4 py-2.5 text-xs font-medium text-slate-500 dark:border-slate-800",
       )}
     >
-      <span>{first}</span>
-      <span className="hidden text-right sm:block">Budgeted</span>
+      <span className={NAME_CELL}>{first}</span>
+      <span className="sm:text-right">Budgeted</span>
       <span className="text-right">Actual</span>
       <span className="text-right">Remaining</span>
       <span className="hidden sm:block" />
@@ -128,7 +130,7 @@ function BasicsTable({ b }: { b: BudgetMonth }) {
       <ul className="divide-y divide-slate-100 dark:divide-slate-800">
         {rows.map((r) => (
           <li key={r.key} className={cx(ROW, "px-4 py-3")}>
-            <span className="flex min-w-0 items-center gap-3">
+            <span className={cx(NAME_CELL, "flex min-w-0 items-center gap-3")}>
               <span
                 aria-hidden="true"
                 className="flex size-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-lg dark:bg-slate-800"
@@ -142,7 +144,7 @@ function BasicsTable({ b }: { b: BudgetMonth }) {
                 <span className="block truncate text-xs text-slate-500">{r.note}</span>
               </span>
             </span>
-            <span className="hidden text-right tabular-nums text-slate-600 sm:block dark:text-slate-300">
+            <span className="tabular-nums text-slate-600 sm:text-right dark:text-slate-300">
               {formatMoney(r.budgeted)}
             </span>
             <span className="text-right tabular-nums">{formatMoney(r.actual)}</span>
@@ -178,48 +180,41 @@ function CategoriesTable({ b, month }: { b: BudgetMonth; month: string }) {
           const limit = (l.budgetCents ?? 0) + l.rolloverCents;
           const due = scheduled[id] ?? 0;
           return (
-            <li key={id}>
-              <Link
-                to="/categories/$categoryId"
-                params={{ categoryId: id }}
-                search={{ month }}
-                className={cx(
-                  ROW,
-                  "w-full px-4 py-3 text-left hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-brand-600 dark:hover:bg-slate-800/50",
-                )}
-              >
-                <span className="flex min-w-0 items-center gap-3">
-                  <span
-                    aria-hidden="true"
-                    className="flex size-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-base dark:bg-slate-800"
+            <li
+              key={id}
+              className={cx(ROW, "px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50")}
+            >
+              <span className={cx(NAME_CELL, "flex min-w-0 items-center gap-3")}>
+                <span
+                  aria-hidden="true"
+                  className="flex size-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-base dark:bg-slate-800"
+                >
+                  <CategoryIcon name={l.name} group={l.groupName} />
+                </span>
+                <span className="min-w-0">
+                  <Link
+                    to="/categories/$categoryId"
+                    params={{ categoryId: id }}
+                    search={{ month }}
+                    className="block truncate font-medium underline-offset-2 hover:underline"
                   >
-                    <CategoryIcon name={l.name} group={l.groupName} />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block truncate font-medium">{l.name}</span>
-                    <span className="block truncate text-xs text-slate-500">
-                      {due > 0 && `${formatMoney(due)} more scheduled`}
-                      {due > 0 && l.rollover && l.rolloverCents !== 0 && " · "}
-                      {l.rollover &&
-                        l.rolloverCents !== 0 &&
-                        `${signed(l.rolloverCents)} rolled over`}
-                      {due === 0 && !(l.rollover && l.rolloverCents !== 0) && (
-                        <span className="sm:hidden">
-                          {l.budgetCents !== null ? `of ${formatMoney(limit)}` : ""}
-                        </span>
-                      )}
-                    </span>
+                    {l.name}
+                  </Link>
+                  <span className="block truncate text-xs text-slate-500">
+                    {due > 0 && `${formatMoney(due)} more scheduled`}
+                    {due > 0 && l.rollover && l.rolloverCents !== 0 && " · "}
+                    {l.rollover &&
+                      l.rolloverCents !== 0 &&
+                      `${signed(l.rolloverCents)} rolled over`}
                   </span>
                 </span>
-                <span className="hidden text-right tabular-nums text-slate-600 sm:block dark:text-slate-300">
-                  {l.budgetCents !== null ? formatMoney(limit) : "—"}
-                </span>
-                <span className="text-right tabular-nums">{formatMoney(l.spentCents)}</span>
-                <Remaining cents={l.availableCents} />
-                <span className="hidden sm:block">
-                  {l.budgetCents !== null && <Ring used={l.spentCents} limit={limit} />}
-                </span>
-              </Link>
+              </span>
+              <InlineBudget line={l} month={month} />
+              <span className="text-right tabular-nums">{formatMoney(l.spentCents)}</span>
+              <Remaining cents={l.availableCents} />
+              <span className="hidden sm:block">
+                {l.budgetCents !== null && <Ring used={l.spentCents} limit={limit} />}
+              </span>
             </li>
           );
         })}

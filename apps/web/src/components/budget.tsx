@@ -1,8 +1,14 @@
-import { type BudgetLine, formatMoney } from "@muny/shared";
+import {
+  type BudgetLine,
+  formatMoney,
+  MoneyParseError,
+  parseAmount,
+  toDecimalString,
+} from "@muny/shared";
 import { useState } from "react";
 import { useDeleteBudget, useSetBudget } from "../lib/queries.js";
 import { Checkbox, MoneyField } from "./forms.js";
-import { Alert, Button } from "./ui.js";
+import { Alert, Button, cx } from "./ui.js";
 
 /** Shared budget pieces: progress ring and the budget editor. */
 
@@ -138,5 +144,144 @@ export function EditBudget({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Click-to-edit budget amount (like Rocket Money): type a new amount, Enter or
+ * click away saves, Esc cancels, the trash icon removes the budget. While
+ * editing, a popup shows the last 3 months of spending against the amount.
+ */
+export function InlineBudget({ line, month }: { line: BudgetLine; month: string }) {
+  const set = useSetBudget();
+  const del = useDeleteBudget();
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState("");
+  const start = () => {
+    setText(line.budgetCents !== null ? toDecimalString(line.budgetCents, "USD") : "");
+    setEditing(true);
+  };
+  let typed: number | null = null;
+  try {
+    typed = text.trim() ? parseAmount(text, { currency: "USD" }) : null;
+  } catch (err) {
+    if (!(err instanceof MoneyParseError)) throw err;
+  }
+  const valid = typed === null || typed >= 0;
+  const commit = () => {
+    setEditing(false);
+    if (!valid || typed === null) return;
+    if (typed === line.budgetCents) return;
+    set.mutate({
+      categoryId: line.categoryId,
+      amountCents: typed,
+      rollover: line.rollover,
+      fromMonth: month,
+    });
+  };
+  const remove = () => {
+    if (line.budgetId) del.mutate(line.budgetId);
+  };
+
+  if (!editing) {
+    return (
+      <span className="group flex items-center gap-1.5 sm:justify-end">
+        {line.budgetId && (
+          <button
+            type="button"
+            onClick={remove}
+            disabled={del.isPending}
+            aria-label={`Remove the ${line.name} budget`}
+            title="Remove budget"
+            className="rounded p-0.5 text-slate-400 opacity-0 hover:text-red-600 focus-visible:opacity-100 group-hover:opacity-100"
+          >
+            🗑
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={start}
+          aria-label={`Budget for ${line.name}: ${line.budgetCents !== null ? formatMoney(line.budgetCents) : "none"}. Click to change.`}
+          className={cx(
+            "min-w-20 rounded border-b border-dashed px-1 text-right tabular-nums hover:border-brand-500",
+            line.budgetCents === null
+              ? "border-transparent text-xs text-brand-600"
+              : "border-slate-300 text-slate-700 dark:border-slate-600 dark:text-slate-200",
+          )}
+        >
+          {line.budgetCents !== null ? formatMoney(line.budgetCents) : "Set budget"}
+        </button>
+      </span>
+    );
+  }
+
+  const history = line.historyCents;
+  const max = Math.max(1, typed ?? 0, ...history.map((h) => h.cents));
+  return (
+    <span className="relative flex sm:justify-end">
+      <span className="relative">
+        <span className="pointer-events-none absolute inset-y-0 left-1.5 flex items-center text-sm text-slate-400">
+          $
+        </span>
+        <input
+          // biome-ignore lint/a11y/noAutofocus: opened by a click on the amount
+          autoFocus
+          inputMode="decimal"
+          aria-label={`Monthly budget for ${line.name}`}
+          aria-invalid={!valid}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onFocus={(e) => e.currentTarget.select()}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+            if (e.key === "Escape") setEditing(false);
+          }}
+          className={cx(
+            "w-24 rounded-md border bg-white py-1 pr-1.5 pl-4 text-right text-sm tabular-nums outline-none focus:ring-2 focus:ring-brand-500/30 dark:bg-slate-950",
+            valid ? "border-brand-500" : "border-red-500",
+          )}
+        />
+      </span>
+      <span
+        role="tooltip"
+        className="absolute top-full left-0 z-20 mt-2 w-64 max-w-[calc(100vw-2rem)] sm:right-0 sm:left-auto rounded-xl border border-slate-200 bg-white p-3 text-left shadow-lg dark:border-slate-700 dark:bg-slate-900"
+      >
+        <span className="block text-xs text-slate-600 dark:text-slate-300">
+          Your spending over the past 3 months
+        </span>
+        <span className="relative mt-2 flex h-24 items-end justify-around gap-3 border-b border-slate-200 dark:border-slate-700">
+          {history.map((h) => (
+            <span key={h.month} className="flex h-full flex-1 flex-col items-center justify-end">
+              <span className="mb-0.5 text-[10px] tabular-nums text-slate-600 dark:text-slate-300">
+                {formatMoney(h.cents).replace(/\.00$/, "")}
+              </span>
+              <span
+                className="w-full rounded-t-[4px]"
+                style={{
+                  height: `${Math.max(2, (h.cents / max) * 70)}%`,
+                  background: "var(--viz-series-1)",
+                }}
+              />
+            </span>
+          ))}
+          {typed !== null && typed > 0 && (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 border-t-2 border-dashed border-slate-500 dark:border-slate-300"
+              style={{ bottom: `${(typed / max) * 70}%` }}
+            />
+          )}
+        </span>
+        <span className="mt-1 flex justify-around text-[10px] text-slate-500">
+          {history.map((h) => (
+            <span key={h.month}>{monthLabel(h.month, { month: "short" })}</span>
+          ))}
+        </span>
+        <span className="mt-2 block text-[11px] text-slate-500">
+          Average {formatMoney(line.averageCents)}/mo · Enter to save, Esc to cancel
+        </span>
+      </span>
+    </span>
   );
 }

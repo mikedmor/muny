@@ -115,6 +115,7 @@ export function budgetMonth(db: Db, month: string): BudgetMonth {
       rolloverCents,
       availableCents: budgetCents === null ? null : budgetCents + rolloverCents - spentCents,
       averageCents: Math.round(prev3.reduce((s, m) => s + spentIn(m, categoryId), 0) / 3),
+      historyCents: [...prev3].reverse().map((m) => ({ month: m, cents: spentIn(m, categoryId) })),
     };
   };
 
