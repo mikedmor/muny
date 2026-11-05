@@ -37,14 +37,21 @@ export function CryptoHeader({ actions }: { actions?: React.ReactNode }) {
 
 /**
  * Format an exact decimal string for display without floats: group the whole
- * part and keep up to `maxDecimals` decimals (truncated, never rounded up).
+ * part and keep up to `maxDecimals` decimals (rounded half up, as Koinly shows them).
  */
 export function fmtAmount(s: string | null | undefined, maxDecimals = 8): string {
   if (!s) return "0";
   const neg = s.startsWith("-");
-  const [whole = "0", frac = ""] = (neg ? s.slice(1) : s).split(".");
+  const [w0 = "0", frac = ""] = (neg ? s.slice(1) : s).split(".");
+  let whole = w0;
+  let kept = frac.slice(0, maxDecimals);
+  if (maxDecimals > 0 && (frac[maxDecimals] ?? "0") >= "5") {
+    const up = (BigInt(whole + kept) + 1n).toString().padStart(maxDecimals + 1, "0");
+    whole = up.slice(0, -maxDecimals);
+    kept = up.slice(-maxDecimals);
+  }
   const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  let f = frac.slice(0, maxDecimals).replace(/0+$/, "");
+  let f = kept.replace(/0+$/, "");
   // Tiny non-zero amounts: show enough digits to not read as zero.
   if (!f && /[1-9]/.test(frac) && whole === "0")
     f = frac.replace(/0+$/, "").slice(0, frac.search(/[1-9]/) + 2);

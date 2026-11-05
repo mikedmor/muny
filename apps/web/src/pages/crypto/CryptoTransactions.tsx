@@ -41,29 +41,47 @@ function title(t: CryptoTxn) {
   if (t.label) return labelName(t.label) as string;
   if (t.type === "trade")
     return t.sentAsset === "USD" ? "Buy" : t.receivedAsset === "USD" ? "Sell" : "Exchange";
-  if (t.type === "transfer")
-    return t.sentAmount ? "Send (to own wallet)" : "Receive (from own wallet)";
-  return t.type === "deposit" ? "Receive" : "Send";
+  return TYPE_LABEL[t.type];
 }
 
-/** One side of a transaction: wallet, coin and amount, or "outside". */
+/** Exact decimal a + sign·b (amounts are decimal strings; no floats). */
+function addAmounts(a: string, b: string, sign: 1n | -1n = 1n): string {
+  const S = 18;
+  const f = (s: string) => {
+    const neg = s.startsWith("-");
+    const [w = "0", d = ""] = (neg ? s.slice(1) : s).split(".");
+    const v = BigInt(w + d.padEnd(S, "0").slice(0, S));
+    return neg ? -v : v;
+  };
+  const sum = f(a) + sign * f(b);
+  const n = (sum < 0n ? -sum : sum).toString().padStart(S + 1, "0");
+  const frac = n.slice(-S).replace(/0+$/, "");
+  return `${sum < 0n ? "-" : ""}${n.slice(0, -S)}${frac ? `.${frac}` : ""}`;
+}
+
+interface SideData {
+  wallet: string | null;
+  chain: string | null;
+  kind?: string;
+  amount: string | null;
+  asset: string | null;
+  value: number | null;
+  /** Outside your wallets: the other address, when known. */
+  address?: string | null;
+}
+const NOWHERE: SideData = { wallet: null, chain: null, amount: null, asset: null, value: null };
+
+/** One side of a transaction: wallet, coin and amount, or the address outside. */
 function Side({
   amount,
   asset,
   wallet,
   chain,
   kind,
-  sign,
+  address,
   value,
-}: {
-  amount: string | null;
-  asset: string | null;
-  wallet?: string | null;
-  chain?: string | null;
-  kind?: string;
-  sign: "+" | "-";
-  value?: number | null;
-}) {
+  sign,
+}: SideData & { sign: "+" | "-" }) {
   const out = sign === "-";
   if (!amount || !asset)
     return (
@@ -73,6 +91,14 @@ function Side({
             <WalletIcon name={wallet} chain={chain} kind={kind} size="sm" />
             {wallet}
           </>
+        ) : address ? (
+          <span
+            title={address}
+            className="rounded-md bg-emerald-50 px-2 py-1 font-mono text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
+          >
+            {address.startsWith("0x") ? "0x" : ""}
+            {shortHash(address)}
+          </span>
         ) : (
           <span className="rounded-full border border-dashed border-slate-300 px-2 py-1 dark:border-slate-700">
             outside your wallets
@@ -94,7 +120,7 @@ function Side({
           {out ? "−" : "+"} {fmtAmount(amount)}{" "}
           <span className="font-sans font-medium">{asset}</span>
         </span>
-        {value !== null && value !== undefined && (
+        {value !== null && (
           <span className="block text-xs text-slate-500">≈ {formatMoney(value)}</span>
         )}
       </span>
@@ -102,12 +128,112 @@ function Side({
   );
 }
 
-/** Fee as a share of what was sent, when both are the same coin. */
-function feePct(t: CryptoTxn): string | null {
-  if (!t.feeAmount || !t.sentAmount || t.feeAsset !== t.sentAsset) return null;
-  const pct = (Number(t.feeAmount) / Number(t.sentAmount)) * 100;
-  if (!Number.isFinite(pct) || pct <= 0) return null;
-  return pct < 0.01 ? "< 0.01% fee" : `${pct < 1 ? pct.toFixed(2) : pct.toFixed(1)}% fee`;
+type Who = { wallet: string | null; chain: string | null; kind?: string };
+
+/**
+ * Both sides of a row the way Koinly shows them: what left (including the fee
+ * when it's the same coin), what arrived, and the fee as a share of what
+ * arrived (a transfer) or of what was sent.
+ */
+function sides(t: CryptoTxn): {
+  out: SideData;
+  in: SideData;
+  fee: { asset: string; amount: string; pct: string | null; sameCoin: boolean } | null;
+  feeOnly: boolean;
+  sender: Who;
+  receiver: Who | null;
+} {
+  const me: Who = { wallet: t.walletName, chain: t.walletChain, kind: t.walletKind };
+  const fee = t.feeAmount && t.feeAsset ? { asset: t.feeAsset, amount: t.feeAmount } : null;
+  // A fee-only row (a failed call, a token approval, a staking action).
+  if (!t.sentAmount && !t.receivedAmount && fee)
+    return {
+      out: { ...me, ...fee, value: t.feeValueCents },
+      in: NOWHERE,
+      fee: null,
+      feeOnly: true,
+      sender: me,
+      receiver: null,
+    };
+  const p = t.transfer;
+  const other: Who | null = p
+    ? { wallet: p.walletName, chain: p.walletChain, kind: p.walletKind }
+    : null;
+  const partner = p && other && t.type === "transfer" ? { p, other } : null;
+  // Out: what this row sent, or (a transfer seen from its receiving side) what the other side sent.
+  const outRaw = t.sentAmount
+    ? { ...me, asset: t.sentAsset, amount: t.sentAmount, value: t.valueCents, fee }
+    : partner
+      ? {
+          ...partner.other,
+          asset: partner.p.asset,
+          amount: partner.p.amount,
+          value: partner.p.valueCents,
+          fee:
+            partner.p.feeAmount && partner.p.feeAsset
+              ? { asset: partner.p.feeAsset, amount: partner.p.feeAmount }
+              : null,
+        }
+      : null;
+  const inRaw = t.receivedAmount
+    ? { ...me, asset: t.receivedAsset, amount: t.receivedAmount, value: t.valueCents }
+    : partner
+      ? {
+          ...partner.other,
+          asset: partner.p.asset,
+          amount: partner.p.amount,
+          value: partner.p.valueCents,
+        }
+      : null;
+  const f = outRaw?.fee ?? null;
+  const sameCoin = !!(f && outRaw?.amount && f.asset === outRaw.asset);
+  const out: SideData = outRaw
+    ? {
+        ...outRaw,
+        amount:
+          sameCoin && outRaw.amount && f ? addAmounts(outRaw.amount, f.amount) : outRaw.amount,
+        // A transfer's value can come from either side.
+        value: outRaw.value ?? (t.type !== "trade" ? (inRaw?.value ?? null) : null),
+      }
+    : { ...NOWHERE, address: t.counterparty };
+  const inn: SideData = inRaw
+    ? {
+        ...inRaw,
+        // A trade's value sits on what was sent.
+        value: t.type === "trade" && outRaw ? null : (inRaw.value ?? outRaw?.value ?? null),
+      }
+    : { ...NOWHERE, address: t.counterparty };
+  // What was lost on the way: the fee, or (a transfer) everything that didn't arrive.
+  let lost = sameCoin && f ? f.amount : null;
+  if (out.amount && inRaw?.amount && out.asset && inRaw.asset === out.asset) {
+    const gap = addAmounts(out.amount, inRaw.amount, -1n);
+    lost = gap.startsWith("-") || !/[1-9]/.test(gap) ? lost : gap;
+  }
+  let pct: string | null = null;
+  if (lost && out.amount) {
+    const base = inRaw?.asset === out.asset && inRaw?.amount ? inRaw.amount : outRaw?.amount;
+    // A percentage for display only.
+    const x = (Number(lost) / Number(base)) * 100;
+    if (Number.isFinite(x) && x > 0)
+      pct = x < 0.01 ? "< 0.01% fee" : `${x < 10 ? x.toFixed(2) : x.toFixed(0)}% fee`;
+  }
+  const shownFee =
+    lost && out.asset
+      ? { asset: out.asset, amount: lost, pct, sameCoin: true }
+      : f
+        ? { ...f, pct: null, sameCoin: false }
+        : null;
+  return {
+    out,
+    in: inn,
+    fee: shownFee,
+    feeOnly: false,
+    sender: outRaw ? { wallet: outRaw.wallet, chain: outRaw.chain, kind: outRaw.kind } : me,
+    receiver:
+      outRaw && inRaw && outRaw.wallet !== inRaw.wallet
+        ? { wallet: inRaw.wallet, chain: inRaw.chain, kind: inRaw.kind }
+        : null,
+  };
 }
 
 function TxnRow({ t }: { t: CryptoTxn }) {
@@ -116,74 +242,39 @@ function TxnRow({ t }: { t: CryptoTxn }) {
     api.patch(`/api/crypto/txns/${t.id}`, { label }),
   );
   const del = useCryptoMutation(() => api.delete(`/api/crypto/txns/${t.id}`));
-  const me = { wallet: t.walletName, chain: t.walletChain, kind: t.walletKind };
-  const other = t.transfer
-    ? { wallet: t.transfer.walletName, chain: t.transfer.walletChain, kind: t.transfer.walletKind }
-    : null;
-  // A fee-only row (a failed call, a token approval, a staking action).
-  const feeOnly = !t.sentAmount && !t.receivedAmount && !!t.feeAmount;
+  const s = sides(t);
   const incoming = !t.sentAmount && !!t.receivedAmount;
-  // Left = where it came from, right = where it went.
-  const left = feeOnly
-    ? { ...me, amount: t.feeAmount, asset: t.feeAsset, value: t.feeValueCents }
-    : t.type === "transfer" && incoming && other
-      ? {
-          ...other,
-          amount: t.transfer?.amount ?? null,
-          asset: t.transfer?.asset ?? null,
-          value: t.valueCents,
-        }
-      : incoming
-        ? { wallet: null, chain: null, kind: undefined, amount: null, asset: null, value: null }
-        : { ...me, amount: t.sentAmount, asset: t.sentAsset, value: t.valueCents };
-  const right = feeOnly
-    ? { wallet: null, chain: null, kind: undefined, amount: null, asset: null, value: null }
-    : t.type === "transfer" && !incoming && other
-      ? {
-          ...other,
-          amount: t.transfer?.amount ?? null,
-          asset: t.transfer?.asset ?? null,
-          value: null,
-        }
-      : t.receivedAmount
-        ? {
-            ...me,
-            amount: t.receivedAmount,
-            asset: t.receivedAsset,
-            value: t.sentAmount ? null : t.valueCents,
-          }
-        : { wallet: null, chain: null, kind: undefined, amount: null, asset: null, value: null };
   const link = explorerTxUrl(
     guessChain(t.walletChain ?? t.transfer?.walletChain, t.walletName, t.feeAsset),
     t.txHash,
   );
-  const pct = feePct(t);
-  const heading = feeOnly ? "Fee" : title(t);
+  const heading = s.feeOnly ? "Fee" : title(t);
   return (
     <li className="grid grid-cols-1 items-center gap-3 px-4 py-3 md:grid-cols-[12rem_minmax(0,1fr)_1.5rem_minmax(0,1fr)_11rem]">
       <span className="flex items-center gap-3">
         <span className="relative">
-          <WalletIcon name={t.walletName} chain={t.walletChain} kind={t.walletKind} />
-          {other && (
+          <WalletIcon name={s.sender.wallet ?? ""} chain={s.sender.chain} kind={s.sender.kind} />
+          {s.receiver && (
             <span className="absolute -right-1.5 -bottom-1.5 rounded-full ring-2 ring-white dark:ring-slate-900">
-              <WalletIcon name={other.wallet} chain={other.chain} kind={other.kind} size="sm" />
+              <WalletIcon
+                name={s.receiver.wallet ?? ""}
+                chain={s.receiver.chain}
+                kind={s.receiver.kind}
+                size="sm"
+              />
             </span>
           )}
         </span>
         <span>
           <span className="block text-sm font-medium">{heading}</span>
           <span className="text-xs text-slate-500">
-            {when(t.at)} · {feeOnly ? "Network fee" : TYPE_LABEL[t.type]}
+            {when(t.at)}
+            {s.feeOnly ? " · Network fee" : t.label ? ` · ${TYPE_LABEL[t.type]}` : ""}
           </span>
         </span>
       </span>
       <span className="md:justify-self-end">
-        <Side {...left} sign="-" />
-        {!feeOnly && t.feeAmount && (
-          <span className="block text-right text-xs text-slate-500">
-            fee {fmtAmount(t.feeAmount)} {t.feeAsset}
-          </span>
-        )}
+        <Side {...s.out} sign="-" />
       </span>
       <span
         aria-hidden="true"
@@ -195,10 +286,10 @@ function TxnRow({ t }: { t: CryptoTxn }) {
         {t.type === "transfer" ? "»" : "→"}
       </span>
       <span>
-        {feeOnly ? (
+        {s.feeOnly ? (
           <span className="text-xs text-slate-500">paid to the network</span>
         ) : (
-          <Side {...right} sign="+" />
+          <Side {...s.in} sign="+" />
         )}
       </span>
       <span className="flex flex-wrap items-center justify-end gap-1">
@@ -218,9 +309,15 @@ function TxnRow({ t }: { t: CryptoTxn }) {
               {shortHash(t.txHash)}
             </span>
           ))}
-        {pct && (
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500 dark:bg-slate-800">
-            {pct}
+        {s.fee && (s.fee.pct || !s.fee.sameCoin) && (
+          <span
+            title={`Fee: ${fmtAmount(s.fee.amount)} ${s.fee.asset}`}
+            className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500 dark:bg-slate-800"
+          >
+            <span className="flex size-4 overflow-hidden rounded-full [&>*]:size-4! [&>*]:ring-0">
+              <CoinIcon asset={s.fee.asset} size="sm" />
+            </span>
+            {s.fee.pct ?? `${fmtAmount(s.fee.amount)} ${s.fee.asset} fee`}
           </span>
         )}
         {editing ? (

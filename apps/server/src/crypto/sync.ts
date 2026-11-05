@@ -288,6 +288,31 @@ export function setRewardsFromImport(db: MunyDb, walletId: string, on: boolean) 
     .run();
 }
 
+/**
+ * Synced wallets on the blockchain's version of their history ("Use the
+ * blockchain's version" in Reconcile): a Koinly import adds its tags and
+ * values to the synced rows instead of bringing its own rows back.
+ */
+const CHAIN_VERSION = "crypto.chain_version";
+export function chainVersion(db: MunyDb): Set<string> {
+  const v = db
+    .select()
+    .from(schema.appSettings)
+    .where(eq(schema.appSettings.key, CHAIN_VERSION))
+    .get()?.value as string[] | undefined;
+  return new Set(v ?? []);
+}
+export function setChainVersion(db: MunyDb, walletId: string, on: boolean) {
+  const s = chainVersion(db);
+  if (on) s.add(walletId);
+  else s.delete(walletId);
+  const value = [...s];
+  db.insert(schema.appSettings)
+    .values({ key: CHAIN_VERSION, value })
+    .onConflictDoUpdate({ target: schema.appSettings.key, set: { value } })
+    .run();
+}
+
 async function runSync(
   db: MunyDb,
   wallet: typeof w.$inferSelect,
@@ -329,6 +354,7 @@ async function runSync(
           feeAmount: s.feeAmount,
           label: s.label ?? null,
           txHash: s.txHash || null,
+          counterparty: s.counterparty ?? null,
           externalId: s.externalId,
           source: "sync",
         })

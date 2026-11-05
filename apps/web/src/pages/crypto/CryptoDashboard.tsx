@@ -257,8 +257,8 @@ function HoldingRow({ h }: { h: CryptoHolding }) {
                     >
                       <td className="py-1.5">
                         <Link
-                          to="/crypto/transactions"
-                          search={{ walletId: w.walletId, asset: h.asset }}
+                          to="/crypto/wallets/$walletId"
+                          params={{ walletId: w.walletId }}
                           className="flex items-center gap-2 hover:underline"
                         >
                           <WalletIcon

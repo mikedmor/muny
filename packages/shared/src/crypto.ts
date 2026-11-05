@@ -99,7 +99,12 @@ export interface CryptoTxn {
     walletKind: CryptoWalletKind;
     asset: string | null;
     amount: string | null;
+    feeAsset: string | null;
+    feeAmount: string | null;
+    valueCents: number | null;
   } | null;
+  /** The other address: who sent a deposit, or where a withdrawal went. */
+  counterparty: string | null;
 }
 
 export interface CryptoTxnPage {
@@ -382,6 +387,15 @@ export interface CryptoReconcile {
        * already has them (Koinly records rewards when withdrawn).
        */
       rewardsTwice: { synced: number; chain: string | null } | null;
+      /**
+       * The chain no longer has the account (e.g. a closed Stellar account)
+       * while the history still holds coins: the move that emptied it is
+       * missing. Deposits elsewhere that may be where they went.
+       */
+      closed: {
+        lastAt: number;
+        suggestions: CryptoTransferSuggestion[];
+      } | null;
     }[];
     /** Synced transactions that repeat imported ones. */
     duplicates: number;

@@ -24,9 +24,10 @@ import type {
   CryptoWalletKind,
 } from "@muny/shared";
 import { and, desc, eq, gte, inArray, lte, or, type SQL, sql } from "drizzle-orm";
+import { normHash, normHashSql } from "./match.js";
 import { getCryptoSettings } from "./prices.js";
-import { removeDuplicates } from "./reconcile.js";
-import { isQueued, isSyncing, readCursor } from "./sync.js";
+import { enrichment, removeDuplicates } from "./reconcile.js";
+import { chainVersion, isQueued, isSyncing, readCursor } from "./sync.js";
 
 /** Assets the user hid (spam tokens): left out of holdings and warnings. */
 const hiddenAssets = (db: Db) => new Set(getCryptoSettings(db as MunyDb).hiddenAssets);
@@ -175,6 +176,9 @@ export function toTxn(
           walletKind: p.wallet.kind,
           asset: p.row.receivedAsset ?? p.row.sentAsset,
           amount: p.row.receivedAmount ?? p.row.sentAmount,
+          feeAsset: p.row.feeAsset,
+          feeAmount: p.row.feeAmount,
+          valueCents: p.row.valueCents,
         }
       : null,
     id: r.id,
@@ -193,6 +197,7 @@ export function toTxn(
     feeValueCents: r.feeValueCents,
     txHash: r.txHash,
     description: r.description,
+    counterparty: r.counterparty,
     source: r.source,
     transferPairId: r.transferPairId,
     transferWalletName: pairWallet,
@@ -243,8 +248,27 @@ export function listTxns(db: Db, q: CryptoTxnQuery): CryptoTxnPage {
           .map((p) => [p.id, p])
       : [],
   );
+  // Rows without a USD value (synced, added by hand): that day's price.
+  const priceOn = dailyPrices(
+    db,
+    [...rows, ...pairs.values()].flatMap((r) => [r.receivedAsset ?? r.sentAsset, r.feeAsset]),
+  );
+  const priced = (r: Row): Row => {
+    const asset = r.receivedAsset ?? r.sentAsset;
+    const amount = r.receivedAmount ?? r.sentAmount;
+    const at = (a: string | null, n: string | null) => {
+      const usd = a && n ? priceOn(a, r.at) : null;
+      return usd ? valueCents(n as string, usd) : null;
+    };
+    return {
+      ...r,
+      valueCents: r.valueCents ?? at(asset, amount),
+      feeValueCents: r.feeValueCents ?? at(r.feeAsset, r.feeAmount),
+    };
+  };
+  for (const [k, v] of pairs) pairs.set(k, priced(v));
   return {
-    items: rows.map((r) => {
+    items: rows.map(priced).map((r) => {
       const pr = r.transferPairId ? pairs.get(r.transferPairId) : undefined;
       const pw = pr ? wallets.get(pr.walletId) : undefined;
       return toTxn(r, wallets.get(r.walletId)?.name ?? "", pw?.name ?? null, {
@@ -418,9 +442,42 @@ export function importKoinly(
   let imported = 0;
   let duplicates = 0;
   const byTransfer = new Map<string, string[]>();
+  // Koinly ids of synced rows that took an imported row's place (for relinking).
+  const koinlyExt = new Map<string, string>();
+  const onChainVersion = chainVersion(tx as unknown as MunyDb);
   for (const p of parsed.txns) {
     const walletId = ids.get(p.wallet);
     if (!walletId) continue; // skipped wallet
+    // A wallet on the blockchain's version: the synced row stays, and gets
+    // the import's tag, notes, values and address.
+    if (onChainVersion.has(walletId) && p.txHash) {
+      const s = tx
+        .select()
+        .from(t)
+        .where(
+          and(
+            eq(t.walletId, walletId),
+            eq(t.source, "sync"),
+            sql`${normHashSql("tx_hash")} = ${normHash(p.txHash)}`,
+            p.sentAsset
+              ? eq(t.sentAsset, p.sentAsset)
+              : p.receivedAsset
+                ? eq(t.receivedAsset, p.receivedAsset)
+                : sql`${t.sentAsset} is null and ${t.receivedAsset} is null`,
+          ),
+        )
+        .get();
+      if (s) {
+        const set = enrichment(s, { ...p, counterparty: p.counterparty ?? null });
+        if (Object.keys(set).length) tx.update(t).set(set).where(eq(t.id, s.id)).run();
+        duplicates++;
+        if (p.transferKey && !s.transferPairId) {
+          byTransfer.set(p.transferKey, [...(byTransfer.get(p.transferKey) ?? []), s.id]);
+          koinlyExt.set(s.id, p.externalId ?? externalId(p));
+        }
+        continue;
+      }
+    }
     const id = newId();
     const res = tx
       .insert(t)
@@ -442,6 +499,7 @@ export function importKoinly(
         importedGainCents: p.importedGainCents,
         txHash: p.txHash,
         description: p.description,
+        counterparty: p.counterparty ?? null,
         externalId: p.externalId ?? externalId(p),
         source: "import",
       })
@@ -461,11 +519,12 @@ export function importKoinly(
       if (!a) continue;
       // The other side's wallet was skipped: link to that side if it's already
       // in Muny (the full export gives both sides stable ids: …:out / …:in).
-      const mine = tx.select({ ext: t.externalId }).from(t).where(eq(t.id, a)).get();
-      const otherExt = mine?.ext.endsWith(":out")
-        ? mine.ext.replace(/:out$/, ":in")
-        : mine?.ext.endsWith(":in")
-          ? mine.ext.replace(/:in$/, ":out")
+      const ext =
+        koinlyExt.get(a) ?? tx.select({ ext: t.externalId }).from(t).where(eq(t.id, a)).get()?.ext;
+      const otherExt = ext?.endsWith(":out")
+        ? ext.replace(/:out$/, ":in")
+        : ext?.endsWith(":in")
+          ? ext.replace(/:in$/, ":out")
           : null;
       const other = otherExt
         ? tx
@@ -475,7 +534,10 @@ export function importKoinly(
             .get()
         : undefined;
       if (other) {
-        tx.update(t).set({ transferPairId: other.id }).where(eq(t.id, a)).run();
+        tx.update(t)
+          .set({ type: "transfer", label: null, transferPairId: other.id })
+          .where(eq(t.id, a))
+          .run();
         tx.update(t).set({ type: "transfer", transferPairId: a }).where(eq(t.id, other.id)).run();
       } else
         tx.update(t)
@@ -484,8 +546,8 @@ export function importKoinly(
           .run();
       continue;
     }
-    tx.update(t).set({ transferPairId: b }).where(eq(t.id, a)).run();
-    tx.update(t).set({ transferPairId: a }).where(eq(t.id, b)).run();
+    tx.update(t).set({ type: "transfer", label: null, transferPairId: b }).where(eq(t.id, a)).run();
+    tx.update(t).set({ type: "transfer", label: null, transferPairId: a }).where(eq(t.id, b)).run();
   }
   // Synced rows that repeat what was just imported go (imports keep prices and labels).
   let duplicatesRemoved = 0;
@@ -518,38 +580,9 @@ export function cryptoOverview(
 ): Omit<import("@muny/shared").CryptoOverview, "pricesRefreshing" | "syncing" | "walletsSyncedAt"> {
   const balances = balancesByWallet(db);
   // Daily prices per asset (oldest first), for cost basis fallbacks and sparklines.
-  const daily = new Map<string, { date: string; usd: string }[]>();
-  for (const r of db
-    .select({
-      asset: schema.cryptoPrices.asset,
-      date: schema.cryptoPrices.date,
-      usd: schema.cryptoPrices.usd,
-    })
-    .from(schema.cryptoPrices)
-    .orderBy(schema.cryptoPrices.date)
-    .all())
-    daily.set(r.asset, [...(daily.get(r.asset) ?? []), { date: r.date, usd: r.usd }]);
-  const priceOn = (asset: string, at: number): string | null => {
-    const list = daily.get(asset);
-    if (!list?.length) return null;
-    const d = new Date(at).toISOString().slice(0, 10);
-    let lo = 0;
-    let hi = list.length - 1;
-    let best = -1;
-    while (lo <= hi) {
-      const mid = (lo + hi) >> 1;
-      if ((list[mid] as { date: string }).date <= d) {
-        best = mid;
-        lo = mid + 1;
-      } else hi = mid - 1;
-    }
-    // Before the first known day: use it if within a week.
-    if (best < 0) {
-      const first = list[0] as { date: string; usd: string };
-      return Date.parse(`${first.date}T00:00:00Z`) - at <= 7 * 86_400_000 ? first.usd : null;
-    }
-    return (list[best] as { usd: string }).usd;
-  };
+  const daily = loadDaily(db);
+  const priceOn = priceLookup(daily);
+
   const cost = fifoCostBasis(
     db
       .select({
@@ -766,4 +799,58 @@ export function syncHistory(db: Db, walletId: string): import("@muny/shared").Cr
       duplicates: r.duplicates,
       message: r.message,
     }));
+}
+
+type Daily = Map<string, { date: string; usd: string }[]>;
+
+/** Daily USD prices per asset, oldest first (all assets, or just these). */
+function loadDaily(db: Db, assets?: (string | null)[]): Daily {
+  const want = assets ? [...new Set(assets.filter((a): a is string => !!a))] : null;
+  const daily: Daily = new Map();
+  if (want && !want.length) return daily;
+  for (const r of db
+    .select({
+      asset: schema.cryptoPrices.asset,
+      date: schema.cryptoPrices.date,
+      usd: schema.cryptoPrices.usd,
+    })
+    .from(schema.cryptoPrices)
+    .where(want ? inArray(schema.cryptoPrices.asset, want) : undefined)
+    .orderBy(schema.cryptoPrices.date)
+    .all()) {
+    const list = daily.get(r.asset) ?? [];
+    list.push({ date: r.date, usd: r.usd });
+    daily.set(r.asset, list);
+  }
+  return daily;
+}
+
+/** The USD price of an asset on the day of `at` (or the closest day before). */
+function priceLookup(daily: Daily) {
+  return (asset: string, at: number): string | null => {
+    const list = daily.get(asset);
+    if (!list?.length) return null;
+    const d = new Date(at).toISOString().slice(0, 10);
+    let lo = 0;
+    let hi = list.length - 1;
+    let best = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if ((list[mid] as { date: string }).date <= d) {
+        best = mid;
+        lo = mid + 1;
+      } else hi = mid - 1;
+    }
+    // Before the first known day: use it if within a week.
+    if (best < 0) {
+      const first = list[0] as { date: string; usd: string };
+      return Date.parse(`${first.date}T00:00:00Z`) - at <= 7 * 86_400_000 ? first.usd : null;
+    }
+    return (list[best] as { usd: string }).usd;
+  };
+}
+
+/** Price lookup for just these assets. */
+function dailyPrices(db: Db, assets: (string | null)[]) {
+  return priceLookup(loadDaily(db, assets));
 }

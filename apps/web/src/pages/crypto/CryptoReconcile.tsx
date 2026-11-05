@@ -321,10 +321,28 @@ function Mismatch({
       keep,
     }),
   );
+  const closeIt = useCryptoMutation((v: { at?: number; toTxnId?: string }) =>
+    api.post("/api/crypto/reconcile/closed", {
+      walletId,
+      asset: m.asset,
+      amount: m.diff,
+      ...v,
+    }),
+  );
+  const isoDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+  const [closedOn, setClosedOn] = useState(() =>
+    isoDay((m.closed?.lastAt ?? Date.now()) + 86_400_000),
+  );
   const more = !m.diff.startsWith("-");
   const gap = fmtAmount(m.diff.replace(/^-/, ""), 8);
   const error =
-    remove.error ?? adjust.error ?? once.error ?? chain.error ?? compare.error ?? correct.error;
+    remove.error ??
+    adjust.error ??
+    once.error ??
+    chain.error ??
+    compare.error ??
+    correct.error ??
+    closeIt.error;
   return (
     <div className="space-y-2 text-sm">
       <p>
@@ -392,7 +410,65 @@ function Mismatch({
           </Button>
         </div>
       )}
-      {more && !m.rewardsTwice && m.extra.length === 0 && (
+      {more && m.closed && (
+        <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
+          <p>
+            <span className="font-medium">The blockchain no longer has this account.</span> It was
+            closed (on Stellar, merging an account sends everything in it to another account and
+            removes it), or the address isn&apos;t right. Your history ends on{" "}
+            {dayLabel(m.closed.lastAt)} with {gap} {m.asset} still here, so the move that emptied it
+            is missing. Where did it go?
+          </p>
+          {m.closed.suggestions.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-xs text-slate-500">
+                Deposits in your other wallets after that, of about that amount:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {m.closed.suggestions.map((s) => (
+                  <Button
+                    key={s.txnId}
+                    variant="secondary"
+                    disabled={closeIt.isPending}
+                    onClick={() => closeIt.mutate({ toTxnId: s.txnId })}
+                  >
+                    To {s.fromWalletName}: {fmtAmount(s.amount, 8)} {m.asset} on {dayLabel(s.at)}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-xs text-slate-500">
+              <span className="sr-only">Date it left</span>
+              <input
+                type="date"
+                value={closedOn}
+                min={isoDay(m.closed.lastAt)}
+                onChange={(e) => setClosedOn(e.target.value)}
+                className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+              />
+            </label>
+            <Button
+              variant="secondary"
+              disabled={closeIt.isPending || !closedOn}
+              onClick={() =>
+                closeIt.mutate({
+                  at: Math.max(Date.parse(`${closedOn}T12:00:00Z`), (m.closed?.lastAt ?? 0) + 1000),
+                })
+              }
+            >
+              Record {gap} {m.asset} as sent out of your wallets on this day
+            </Button>
+          </div>
+          <p className="text-xs text-slate-500">
+            If it went to a wallet of yours that isn&apos;t in Muny yet, add that wallet first and
+            it shows up above. The added row is marked &quot;Added in Reconcile&quot; and can be
+            deleted from Transactions.
+          </p>
+        </div>
+      )}
+      {more && !m.closed && !m.rewardsTwice && m.extra.length === 0 && (
         <p className="text-slate-500">
           No set of deposits adds up to the difference. Look for a withdrawal that&apos;s missing,
           or a deposit recorded twice with different amounts, in its transactions.

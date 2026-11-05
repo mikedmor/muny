@@ -48,6 +48,8 @@ export interface SyncedTxn {
   txHash: string;
   /** e.g. "staking" for rewards. */
   label?: string | null;
+  /** The other address: who sent a deposit, or where a withdrawal went. */
+  counterparty?: string | null;
 }
 
 /** "12345" satoshi with 8 decimals → "0.00012345". */

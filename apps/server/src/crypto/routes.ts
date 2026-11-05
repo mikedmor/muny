@@ -28,6 +28,7 @@ import {
   moveCrossChain,
   preferChain,
   reconcileReport,
+  recordClosing,
   removeDuplicates,
   removeRows,
   undoReconcileRows,
@@ -468,6 +469,27 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
     log(user.id, "crypto.reconcile_adjust", body.walletId, {
       asset: body.asset,
       staking: body.staking,
+    });
+    return res;
+  });
+
+  /** A closed account: record where what was left went. */
+  app.post("/api/crypto/reconcile/closed", async (req) => {
+    const user = requireUser(req);
+    const body = parse(
+      z.object({
+        walletId: z.string().min(1).max(64),
+        asset,
+        amount,
+        at: z.number().int().positive().optional(),
+        toTxnId: z.string().min(1).max(64).optional(),
+      }),
+      req.body,
+    );
+    const res = recordClosing(db, body);
+    log(user.id, "crypto.reconcile_closed", body.walletId, {
+      asset: body.asset,
+      linked: !!body.toTxnId,
     });
     return res;
   });

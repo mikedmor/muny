@@ -648,6 +648,8 @@ export const cryptoTxns = sqliteTable(
     importedGainCents: integer(),
     txHash: text(),
     description: text(),
+    /** The other address: who sent a deposit, or where a withdrawal went. */
+    counterparty: text(),
     /** Stable id for dedupe: provider id, or a hash of the imported row. */
     externalId: text().notNull(),
     source: text({ enum: ["sync", "import", "manual"] }).notNull(),

@@ -37,6 +37,8 @@ export interface ParsedCryptoTxn {
   line: number;
   /** Stable id from the export (full Koinly export: Koinly's transaction ID). */
   externalId?: string;
+  /** The other address (full export: TxSrc for deposits, TxDest for withdrawals). */
+  counterparty?: string | null;
 }
 
 export interface KoinlyParseResult {
@@ -120,6 +122,7 @@ export function parseKoinlyCsv(text: string): KoinlyParseResult {
         importedGainCents: usd(get(row, "Gain (USD)")),
         txHash: (get(row, "TxHash") ?? "").trim() || null,
         description: (get(row, "Description") ?? "").trim() || null,
+        counterparty: null as string | null,
         transferKey: null as string | null,
         line,
       };
@@ -246,6 +249,7 @@ export function parseKoinlyFullCsv(text: string): KoinlyParseResult {
         importedGainCents: null,
         txHash: (get(row, "TxHash") ?? "").trim() || null,
         description: (get(row, "Description") ?? "").trim() || null,
+        counterparty: null as string | null,
         transferKey: null as string | null,
         line,
       };
@@ -294,6 +298,12 @@ export function parseKoinlyFullCsv(text: string): KoinlyParseResult {
         ...(hasReceived ? {} : { receivedAsset: null, receivedAmount: null }),
         wallet,
         type,
+        counterparty:
+          type === "deposit"
+            ? address(get(row, "TxSrc"))
+            : type === "withdrawal"
+              ? address(get(row, "TxDest"))
+              : null,
         externalId: `koinly:${id}`,
       });
     } catch (err) {
@@ -308,6 +318,12 @@ export function parseKoinlyFullCsv(text: string): KoinlyParseResult {
     })),
     errors,
   };
+}
+
+/** An on-chain address (not a label or a sentence). */
+function address(v: string | undefined): string | null {
+  const s = (v ?? "").trim();
+  return /^[A-Za-z0-9:_-]{20,120}$/.test(s) ? s : null;
 }
 
 /** Either Koinly export. */

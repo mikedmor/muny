@@ -66,6 +66,9 @@ interface Group {
   block: number;
   moves: Movement[];
   fee: string;
+  /** First address that sent us something / that we sent something to. */
+  from?: string;
+  to?: string | null;
 }
 
 export function mapEvmHistory(
@@ -91,8 +94,14 @@ export function mapEvmHistory(
     if (toFixed(amount) <= 0n) return;
     const f = from.toLowerCase();
     const t = (to ?? "").toLowerCase();
-    if (f === me && t !== me) g.moves.push({ asset, amount, dir: "out" });
-    if (t === me && f !== me) g.moves.push({ asset, amount, dir: "in" });
+    if (f === me && t !== me) {
+      g.moves.push({ asset, amount, dir: "out" });
+      g.to ??= t || null;
+    }
+    if (t === me && f !== me) {
+      g.moves.push({ asset, amount, dir: "in" });
+      g.from ??= f;
+    }
   };
 
   for (const tx of lists.txs) {
@@ -121,15 +130,22 @@ export function mapEvmHistory(
   for (const [hash, g] of groups) {
     const d = new Deltas();
     for (const m of g.moves) d.add(m.asset, m.amount, m.dir === "in" ? 1 : -1);
-    out.push(
-      ...movementsToTxns({
-        externalId: `evm:${hash}`,
-        at: g.at,
-        txHash: hash,
-        deltas: d.toStrings(),
-        fee: { asset: native.asset, amount: g.fee },
-      }),
-    );
+    for (const m of movementsToTxns({
+      externalId: `evm:${hash}`,
+      at: g.at,
+      txHash: hash,
+      deltas: d.toStrings(),
+      fee: { asset: native.asset, amount: g.fee },
+    }))
+      out.push({
+        ...m,
+        counterparty:
+          m.receivedAsset && !m.sentAsset
+            ? (g.from ?? null)
+            : m.sentAsset && !m.receivedAsset
+              ? (g.to ?? null)
+              : null,
+      });
   }
   out.sort((a, b) => a.at - b.at);
   return { txns: out, maxBlock };

@@ -21,6 +21,7 @@ import {
   fetchFullHistory,
   readCursor,
   type SyncDeps,
+  setChainVersion,
   setRewardsFromImport,
   syncWallet,
   walletCtx,
@@ -211,6 +212,10 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
               r.receivedAsset === c.asset &&
               /staking|reward/.test(r.label ?? ""),
           ),
+          closed:
+            x.lastError && isZeroDec(c.amount) && !diff.startsWith("-")
+              ? closedAccount(x.id, c.asset, diff)
+              : null,
         });
       }
     const dupes = x.sourceEnc ? duplicateSyncRows(db, x.id) : [];
@@ -231,6 +236,35 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
             : 0,
         crossChain,
       });
+  }
+
+  /**
+   * A wallet whose account the chain no longer has (closed, or history the
+   * service doesn't keep): when its last transaction was, and deposits of the
+   * coin in other wallets after that, close to the amount left, that may be
+   * where it went.
+   */
+  function closedAccount(walletId: string, asset: string, left: string) {
+    const mine = rows.filter((r) => r.walletId === walletId);
+    const lastAt = mine.length ? (mine[mine.length - 1] as (typeof rows)[number]).at : 0;
+    const want = toFixed(left);
+    const suggestions: CryptoTransferSuggestion[] = rows
+      .filter((r) => {
+        if (r.walletId === walletId || r.receivedAsset !== asset || !r.receivedAmount) return false;
+        if (r.transferPairId || r.sentAsset || r.at < lastAt) return false;
+        const got = toFixed(r.receivedAmount);
+        // Closing pays a small fee out of the balance, so allow a little less.
+        return got <= want && got * 100n >= want * 99n;
+      })
+      .slice(0, 5)
+      .map((r) => ({
+        txnId: r.id,
+        fromWalletId: r.walletId,
+        fromWalletName: names.get(r.walletId) ?? "",
+        at: r.at,
+        amount: r.receivedAmount as string,
+      }));
+    return { lastAt, suggestions };
   }
 
   /**
@@ -539,6 +573,13 @@ export async function preferChain(db: MunyDb, walletId: string, deps: SyncDeps) 
       dir: r.sentAsset ? ("out" as const) : ("in" as const),
       asset: (r.sentAsset ?? r.receivedAsset) as string,
     }));
+  // What the import knew that the chain doesn't: tags, notes, values, addresses.
+  const meta = new Map(
+    rowsWithHash.map((r) => [
+      `${normHash(r.txHash as string)}|${r.sentAsset ? "out" : "in"}|${r.sentAsset ?? r.receivedAsset}`,
+      r,
+    ]),
+  );
   db.transaction((tx) => {
     // Fixes Reconcile made on top of imported rows go with them.
     undoReconcileRows(tx as unknown as MunyDb, walletId);
@@ -582,8 +623,42 @@ export async function preferChain(db: MunyDb, walletId: string, deps: SyncDeps) 
         .run();
       relinked++;
     }
+    for (const s of tx
+      .select()
+      .from(t)
+      .where(and(eq(t.walletId, walletId), eq(t.source, "sync")))
+      .all()) {
+      if (!s.txHash) continue;
+      const dir = s.sentAsset ? "out" : "in";
+      const m = meta.get(`${normHash(s.txHash)}|${dir}|${s.sentAsset ?? s.receivedAsset}`);
+      const set = m ? enrichment(s, m) : {};
+      if (Object.keys(set).length) tx.update(t).set(set).where(eq(t.id, s.id)).run();
+    }
   });
+  setChainVersion(db, walletId, true);
   return { replaced: rowsWithHash.length, added: res.added, relinked };
+}
+
+type TxnRow = typeof t.$inferSelect;
+type Meta = Pick<
+  TxnRow,
+  "label" | "description" | "valueCents" | "feeValueCents" | "counterparty" | "type"
+>;
+
+/**
+ * What an imported row adds to the synced row for the same transaction:
+ * its tag (unless the synced row is a transfer or already tagged), notes,
+ * USD values and the other address, wherever the synced row has none.
+ */
+export function enrichment(s: TxnRow, m: Meta): Partial<TxnRow> {
+  const set: Partial<TxnRow> = {};
+  if (m.label && !s.label && s.type !== "transfer" && m.type !== "transfer") set.label = m.label;
+  if (m.description && !s.description) set.description = m.description;
+  if (m.valueCents !== null && s.valueCents === null) set.valueCents = m.valueCents;
+  if (m.feeValueCents !== null && s.feeValueCents === null && s.feeAmount)
+    set.feeValueCents = m.feeValueCents;
+  if (m.counterparty && !s.counterparty) set.counterparty = m.counterparty;
+  return set;
 }
 
 /**
@@ -763,6 +838,71 @@ export function removeRows(db: MunyDb, walletId: string, txnIds: string[]) {
     .where(and(eq(t.walletId, walletId), inArray(t.id, txnIds), sql`${t.transferPairId} is null`))
     .run().changes;
   return { removed: n };
+}
+
+/**
+ * A closed account's last move: what was left went to one of your wallets
+ * (linked to the deposit there, as a transfer) or out of your wallets (a
+ * withdrawal on the given day).
+ */
+export function recordClosing(
+  db: MunyDb,
+  input: { walletId: string; asset: string; amount: string; at?: number; toTxnId?: string },
+) {
+  return db.transaction((tx) => {
+    const amount = normDec(input.amount);
+    const id = newId();
+    if (input.toTxnId) {
+      const dep = tx.select().from(t).where(eq(t.id, input.toTxnId)).get();
+      if (
+        !dep?.receivedAmount ||
+        dep.receivedAsset !== input.asset ||
+        dep.sentAsset ||
+        dep.transferPairId ||
+        dep.walletId === input.walletId
+      )
+        throw new Error("That deposit can't be linked");
+      // Whatever didn't arrive was the closing fee.
+      const fee = subDec(amount, dep.receivedAmount);
+      tx.insert(t)
+        .values({
+          id,
+          walletId: input.walletId,
+          at: dep.at,
+          type: "transfer",
+          sentAsset: input.asset,
+          sentAmount: dep.receivedAmount,
+          ...(fee.startsWith("-") || isZeroDec(fee)
+            ? {}
+            : { feeAsset: input.asset, feeAmount: fee }),
+          txHash: dep.txHash,
+          description: "Added in Reconcile: account closed, what was left moved to another wallet",
+          externalId: `manual:${id}`,
+          source: "manual",
+          transferPairId: dep.id,
+        })
+        .run();
+      tx.update(t)
+        .set({ type: "transfer", label: null, transferPairId: id })
+        .where(eq(t.id, dep.id))
+        .run();
+      return { id };
+    }
+    tx.insert(t)
+      .values({
+        id,
+        walletId: input.walletId,
+        at: input.at ?? Date.now(),
+        type: "withdrawal",
+        sentAsset: input.asset,
+        sentAmount: amount,
+        description: "Added in Reconcile: account closed, what was left was sent out",
+        externalId: `manual:${id}`,
+        source: "manual",
+      })
+      .run();
+    return { id };
+  });
 }
 
 /** Add what the chain has and Muny doesn't, as staking rewards or a plain adjustment. */

@@ -65,7 +65,13 @@ describe("use the blockchain's version", () => {
           ...v,
         })
         .run();
-    row("in", hot.id, { receivedAsset: "ETH", receivedAmount: "1.05", txHash: H1.slice(2) });
+    row("in", hot.id, {
+      receivedAsset: "ETH",
+      receivedAmount: "1.05",
+      txHash: H1.slice(2),
+      label: "mining",
+      valueCents: 170_000,
+    });
     row("out", hot.id, {
       type: "transfer",
       sentAsset: "ETH",
@@ -107,5 +113,36 @@ describe("use the blockchain's version", () => {
       transferWalletName: "Coinbase",
       sentAmount: "0.4",
     });
+    // What the import knew stays: the tag, its USD value; the chain adds the sender.
+    const dep = page.items.find((x) => x.type === "deposit");
+    expect(dep).toMatchObject({ label: "mining", valueCents: 170_000, counterparty: OTHER });
+    // Rows without a USD value are valued at that day's price.
+    db.insert(schema.cryptoPrices)
+      .values({ asset: "ETH", date: "2023-01-01", usd: "1200", source: "test" })
+      .run();
+    const priced = (await client.get(`/api/crypto/txns?walletId=${hot.id}`)).json<CryptoTxnPage>();
+    expect(priced.items.find((x) => x.type === "transfer")).toMatchObject({ valueCents: 48_000 });
+
+    // A later Koinly import adds to the synced rows instead of bringing its own back.
+    const H =
+      "ID (read-only),Date (UTC),Type,Tag,From Wallet (read-only),From Amount,From Currency,To Wallet (read-only),To Amount,To Currency,Net Value (read-only),Value Currency (read-only),Deleted,TxSrc,TxHash,Description";
+    const csv = [
+      H,
+      `9,2023-01-01 00:00:00,deposit,mining,,,,Hot;eth,1.05,ETH;1,1700,USD;10,false,${OTHER},${H1.slice(2)},From the pool`,
+    ].join("\n");
+    const imp = (
+      await client.post("/api/crypto/import/commit", {
+        format: "koinly",
+        content: csv,
+        mapping: { Hot: hot.id },
+      })
+    ).json<{ imported: number; duplicates: number }>();
+    expect(imp).toMatchObject({ imported: 0, duplicates: 1 });
+    const after = (await client.get(`/api/crypto/txns?walletId=${hot.id}`)).json<CryptoTxnPage>();
+    expect(after.total).toBe(page.total);
+    expect(after.items.find((x) => x.type === "deposit")).toMatchObject({
+      description: "From the pool",
+    });
+    expect((await report()).wallets.find((x) => x.walletId === hot.id)).toBeUndefined();
   });
 });
