@@ -168,14 +168,13 @@ function CategoriesTable({ b, month }: { b: BudgetMonth; month: string }) {
   const [showAll, setShowAll] = useState(false);
   const scheduled = b.forecast.scheduledByCategory;
   const lines = b.groups.flatMap((g) => g.lines.map((l) => ({ ...l, groupName: g.name })));
-  const shown = lines.filter(
-    (l) =>
-      showAll ||
-      l.budgetCents !== null ||
-      l.spentCents > 0 ||
-      (scheduled[l.categoryId ?? ""] ?? 0) > 0,
-  );
-  const hidden = lines.length - shown.length;
+  // Only budgeted categories by default; everything else is one summary row
+  // (so the table still adds up to total spending) until "show more".
+  const budgeted = lines.filter((l) => l.budgetCents !== null);
+  const unbudgeted = lines.length - budgeted.length;
+  const shown = showAll ? lines : budgeted;
+  const otherSpent = b.total.spentCents - budgeted.reduce((s, l) => s + l.spentCents, 0);
+  const otherCount = lines.filter((l) => l.budgetCents === null && l.spentCents > 0).length;
   return (
     <Card className="p-0">
       <TableHead first="Budget categories" />
@@ -224,12 +223,44 @@ function CategoriesTable({ b, month }: { b: BudgetMonth; month: string }) {
           );
         })}
       </ul>
-      {hidden > 0 && (
+      {!showAll && otherSpent !== 0 && (
+        <div className={cx(ROW, "border-t border-slate-100 px-4 py-3 dark:border-slate-800")}>
+          <span className={cx(NAME_CELL, "flex min-w-0 items-center gap-3")}>
+            <span
+              aria-hidden="true"
+              className="flex size-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-base dark:bg-slate-800"
+            >
+              ⋯
+            </span>
+            <span className="min-w-0">
+              <Link to="/spending" className="block truncate font-medium hover:underline">
+                Everything else
+              </Link>
+              <span className="block truncate text-xs text-slate-500">
+                {otherCount > 0
+                  ? `Spending in ${otherCount} categor${otherCount === 1 ? "y" : "ies"} without a budget`
+                  : "Uncategorized spending"}
+                {b.uncategorizedCents > 0 && otherCount > 0 && ", plus uncategorized"}
+              </span>
+            </span>
+          </span>
+          <span className="text-slate-400 sm:text-right">—</span>
+          <span className="text-right tabular-nums">{formatMoney(otherSpent)}</span>
+          <span />
+          <span className="hidden sm:block" />
+        </div>
+      )}
+      {budgeted.length === 0 && !showAll && (
+        <p className="border-t border-slate-100 px-4 py-4 text-sm text-slate-500 dark:border-slate-800">
+          No category budgets yet. Show all categories below and click a Budgeted amount to set one.
+        </p>
+      )}
+      {unbudgeted > 0 && (
         <div className="border-t border-slate-200 px-4 py-2 dark:border-slate-800">
           <Button variant="ghost" onClick={() => setShowAll((s) => !s)}>
             {showAll
-              ? "Hide categories with no budget or spending"
-              : `Show ${hidden} more categories`}
+              ? "Show only budgeted categories"
+              : `Show ${unbudgeted} more categor${unbudgeted === 1 ? "y" : "ies"}`}
           </Button>
         </div>
       )}
