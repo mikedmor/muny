@@ -74,7 +74,8 @@ describe("recurring", () => {
   it("lists upcoming charges", async () => {
     const { client } = await setup();
     const up = (await client.get("/api/recurring/upcoming")).json<UpcomingCharge[]>();
-    expect(up.map((u) => u.name).sort()).toEqual(["Power Co", "Streamflix"]);
+    // Unique names: on the charge day itself a 30-day window can hold two occurrences.
+    expect([...new Set(up.map((u) => u.name))].sort()).toEqual(["Power Co", "Streamflix"]);
     expect(up.every((u) => u.date >= today)).toBe(true);
     const year = (
       await client.get(`/api/recurring/upcoming?from=${today}&to=${addInterval(today, "annual")}`)

@@ -22,7 +22,46 @@ export interface BudgetGroup {
   lines: BudgetLine[];
 }
 
+/** A recurring charge or paycheck expected later this month. */
+export interface ScheduledItem {
+  seriesId: string;
+  name: string;
+  kind: "subscription" | "bill" | "income";
+  date: string;
+  /** Signed: negative = money out. */
+  amountCents: number;
+  categoryId: string | null;
+}
+
+/**
+ * What the rest of the month should look like, from detected recurring
+ * charges and income. Projected numbers only add what is scheduled; everyday
+ * spending that isn't recurring isn't guessed at.
+ */
+export interface BudgetForecast {
+  /** "past" months are final; "current" is partly forecast; "future" is all forecast. */
+  period: "past" | "current" | "future";
+  incomeSoFarCents: number;
+  /** Recurring income still expected this month. */
+  incomeExpectedCents: number;
+  /** Average monthly income over the previous 3 months. */
+  incomeAverageCents: number;
+  /** Recurring bills/subscriptions already charged this month (positive). */
+  recurringPaidCents: number;
+  /** Recurring bills/subscriptions still due this month (positive). */
+  recurringDueCents: number;
+  scheduled: ScheduledItem[];
+  /** Still-due recurring spending per category id ("" = uncategorized), positive. */
+  scheduledByCategory: Record<string, number>;
+  /** Spent so far + recurring still due. */
+  projectedSpendingCents: number;
+  /** Income so far + recurring income still expected. */
+  projectedIncomeCents: number;
+  projectedLeftoverCents: number;
+}
+
 export interface BudgetMonth {
+  forecast: BudgetForecast;
   month: string;
   total: BudgetLine;
   groups: BudgetGroup[];

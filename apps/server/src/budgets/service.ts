@@ -1,6 +1,15 @@
 import { type MunyDb, newId, schema } from "@muny/db";
-import type { BudgetGroup, BudgetLine, BudgetMonth, SetBudgetInput } from "@muny/shared";
-import { eq, isNull } from "drizzle-orm";
+import type {
+  BudgetForecast,
+  BudgetGroup,
+  BudgetLine,
+  BudgetMonth,
+  ScheduledItem,
+  SetBudgetInput,
+} from "@muny/shared";
+import { and, eq, gte, isNotNull, isNull, lt, lte } from "drizzle-orm";
+import { localToday } from "../lib/dates.js";
+import { listSeries, upcoming } from "../recurring/service.js";
 import {
   addMonths,
   categoryMeta,
@@ -58,6 +67,7 @@ export function budgetMonth(db: Db, month: string): BudgetMonth {
   // spent[month][categoryId] = positive spending (expense categories only).
   const spent = new Map<string, Map<string, number>>();
   let income = 0;
+  const incomeByMonth = new Map<string, number>();
   let uncategorized = 0;
   for (const t of totals) {
     if (t.categoryId === TRANSFER_KEY) continue;
@@ -66,6 +76,7 @@ export function budgetMonth(db: Db, month: string): BudgetMonth {
     if (meta?.kind === "transfer") continue;
     if (meta?.kind === "income") {
       if (t.month === month) income += t.cents;
+      incomeByMonth.set(t.month, (incomeByMonth.get(t.month) ?? 0) + t.cents);
       continue;
     }
     const key = t.categoryId ?? "";
@@ -129,13 +140,103 @@ export function budgetMonth(db: Db, month: string): BudgetMonth {
     .flatMap((g) => g.lines)
     .reduce((s, l) => s + (l.budgetCents ?? 0), 0);
 
+  const total = line(null, "Total spending");
   return {
+    forecast: forecastMonth(db, month, {
+      spentCents: total.spentCents,
+      incomeCents: income,
+      incomeAverageCents: Math.round(
+        prev3.reduce((s, m) => s + (incomeByMonth.get(m) ?? 0), 0) / 3,
+      ),
+      isSpending: (categoryId) => categoryId === null || cats.get(categoryId)?.kind === "expense",
+    }),
     month,
-    total: line(null, "Total spending"),
+    total,
     groups: groupList,
     uncategorizedCents: uncategorized,
     incomeCents: income,
     budgetedCents,
+  };
+}
+
+/**
+ * The rest of the month from recurring series: income still expected and
+ * bills still due (a late bill counts as due today). Past months are final.
+ */
+function forecastMonth(
+  db: Db,
+  month: string,
+  so: {
+    spentCents: number;
+    incomeCents: number;
+    incomeAverageCents: number;
+    isSpending: (categoryId: string | null) => boolean;
+  },
+  today = localToday(),
+): BudgetForecast {
+  const thisMonth = today.slice(0, 7);
+  const period = month < thisMonth ? "past" : month > thisMonth ? "future" : "current";
+  const end = monthEnd(month);
+  const series = new Map(listSeries(db, today).map((s) => [s.id, s]));
+  const scheduled: ScheduledItem[] =
+    period === "past"
+      ? []
+      : upcoming(db, period === "current" ? today : `${month}-01`, end, today)
+          .filter((u) => u.date >= `${month}-01` && u.date <= end)
+          .map((u) => ({
+            seriesId: u.seriesId,
+            name: u.name,
+            kind: u.kind,
+            date: u.date,
+            amountCents: u.amountCents,
+            categoryId: series.get(u.seriesId)?.categoryId ?? null,
+          }));
+  const scheduledByCategory: Record<string, number> = {};
+  let due = 0;
+  let incomeExpected = 0;
+  for (const s of scheduled) {
+    if (s.amountCents > 0) {
+      incomeExpected += s.amountCents;
+      continue;
+    }
+    if (!so.isSpending(s.categoryId)) continue;
+    due -= s.amountCents;
+    const k = s.categoryId ?? "";
+    scheduledByCategory[k] = (scheduledByCategory[k] ?? 0) - s.amountCents;
+  }
+
+  // Recurring charges already paid this month (subscriptions and bills).
+  const t = schema.transactions;
+  const paid = db
+    .select({ cents: t.amountCents, seriesId: t.recurringSeriesId })
+    .from(t)
+    .where(
+      and(
+        gte(t.postedDate, `${month}-01`),
+        lte(t.postedDate, end),
+        eq(t.hidden, false),
+        isNotNull(t.recurringSeriesId),
+        lt(t.amountCents, 0),
+      ),
+    )
+    .all()
+    .filter((r) => series.get(r.seriesId as string)?.kind !== "income")
+    .reduce((s, r) => s - r.cents, 0);
+
+  const projectedSpending = so.spentCents + due;
+  const projectedIncome = so.incomeCents + incomeExpected;
+  return {
+    period,
+    incomeSoFarCents: so.incomeCents,
+    incomeExpectedCents: incomeExpected,
+    incomeAverageCents: so.incomeAverageCents,
+    recurringPaidCents: paid,
+    recurringDueCents: due,
+    scheduled: scheduled.sort((a, b) => a.date.localeCompare(b.date)),
+    scheduledByCategory,
+    projectedSpendingCents: projectedSpending,
+    projectedIncomeCents: projectedIncome,
+    projectedLeftoverCents: projectedIncome - projectedSpending,
   };
 }
 

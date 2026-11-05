@@ -1,5 +1,7 @@
+import { addInterval } from "@muny/core";
 import type { Account, BudgetLine, BudgetMonth, CategoryGroup, Transaction } from "@muny/shared";
 import { describe, expect, it } from "vitest";
+import { localToday } from "../lib/dates.js";
 import { makeSignedInApp } from "../test-utils.js";
 
 // Synthetic data only.
@@ -34,6 +36,43 @@ async function setup() {
 
 const lineOf = (m: BudgetMonth, name: string) =>
   m.groups.flatMap((g) => g.lines).find((l) => l.name === name) as BudgetLine;
+
+describe("budget forecast", () => {
+  it("projects recurring income and bills for the rest of a month", async () => {
+    const { client } = await setup();
+    const today = localToday();
+    const rows: string[] = ["Date,Description,Amount"];
+    for (let i = 6; i >= 1; i--) {
+      const d = addInterval(today, "monthly", -i).slice(0, 8);
+      rows.push(`${d}05,STREAMCO SUBSCRIPTION,-12.00`, `${d}10,ACME CORP PAYROLL,2500.00`);
+    }
+    await client.post("/api/import/commit", {
+      filename: "history.csv",
+      content: rows.join("\n"),
+      accountMap: { csv: "new" },
+    });
+    // Next month is all forecast: both should be scheduled.
+    const next = addInterval(today, "monthly").slice(0, 7);
+    const f = (await client.get(`/api/budgets/${next}`)).json<BudgetMonth>().forecast;
+    expect(f.period).toBe("future");
+    expect(f.scheduled.map((s) => [s.name, s.date, s.amountCents])).toEqual([
+      ["Streamco Subscription", `${next}-05`, -1200],
+      ["Acme Corp Payroll", `${next}-10`, 250_000],
+    ]);
+    expect(f).toMatchObject({
+      incomeExpectedCents: 250_000,
+      recurringDueCents: 1200,
+      projectedIncomeCents: 250_000,
+      projectedSpendingCents: 1200,
+      projectedLeftoverCents: 248_800,
+      scheduledByCategory: { "": 1200 },
+    });
+    // Last month is history: nothing scheduled, and the bill counts as paid.
+    const last = addInterval(today, "monthly", -1).slice(0, 7);
+    const p = (await client.get(`/api/budgets/${last}`)).json<BudgetMonth>().forecast;
+    expect(p).toMatchObject({ period: "past", scheduled: [], recurringPaidCents: 1200 });
+  });
+});
 
 describe("budgets", () => {
   it("tracks spending with refunds, splits and exclusions", async () => {
