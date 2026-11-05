@@ -2,9 +2,11 @@ import {
   CRYPTO_SYNC_CHAINS,
   type CryptoImportPreview,
   type CryptoImportResult,
+  type CryptoSyncChain,
   type CryptoSyncResult,
   type CryptoWallet,
   type CryptoWalletKind,
+  detectCryptoChains,
   formatMoney,
 } from "@muny/shared";
 import { Link } from "@tanstack/react-router";
@@ -13,7 +15,7 @@ import { Modal, SelectField } from "../../components/forms.js";
 import { Alert, Button, Card, cx, Field } from "../../components/ui.js";
 import { MerchantAvatar } from "../../components/visuals.js";
 import { api } from "../../lib/api.js";
-import { useCryptoMutation, useCryptoWallets } from "../../lib/queries.js";
+import { useCryptoMutation, useCryptoSettings, useCryptoWallets } from "../../lib/queries.js";
 import { ago, agoTime, CryptoHeader, dayLabel, fmtAmount } from "./common.js";
 
 /** Wallets & exchanges, Koinly-style: balance, transactions, status; add or import. */
@@ -140,9 +142,32 @@ function ImportKoinly({ onDone }: { onDone: () => void }) {
   );
 }
 
-type ChainKey = (typeof CRYPTO_SYNC_CHAINS)[number]["key"];
+type ChainKey = CryptoSyncChain;
 
-/** Chain + address fields, with what syncing sends where. */
+/** Where each coin's data comes from (shown in the privacy note). */
+const VIA: Record<ChainKey, string> = {
+  btc: "your Blockbook server",
+  ltc: "your Blockbook server",
+  doge: "your Blockbook server",
+  zec: "your Blockbook server",
+  eth: "Blockscout",
+  polygon: "Blockscout",
+  base: "Blockscout",
+  arb: "Blockscout",
+  op: "Blockscout",
+  gnosis: "Blockscout",
+  ada: "Koios",
+  algo: "AlgoNode",
+  xlm: "Stellar's Horizon",
+};
+
+const chainInfo = (k: ChainKey) =>
+  CRYPTO_SYNC_CHAINS.find((c) => c.key === k) ?? CRYPTO_SYNC_CHAINS[0];
+
+/**
+ * Coin + address. Pasting an address picks the coin from its format; the
+ * provider behind each coin is Muny's business.
+ */
 function SourceFields({
   chain,
   setChain,
@@ -154,34 +179,60 @@ function SourceFields({
   source: string;
   setSource: (s: string) => void;
 }) {
-  const info = CRYPTO_SYNC_CHAINS.find((c) => c.key === chain) ?? CRYPTO_SYNC_CHAINS[0];
+  const settings = useCryptoSettings();
+  const info = chainInfo(chain);
+  const detected = detectCryptoChains(source);
+  const paste = (v: string) => {
+    setSource(v);
+    const d = detectCryptoChains(v);
+    if (d.length && !d.includes(chain)) setChain(d[0] as ChainKey);
+  };
+  const needsServer = info.server && !settings.data?.servers[chain];
   return (
     <>
-      <SelectField
-        label="Blockchain"
-        value={chain}
-        onChange={(e) => setChain(e.target.value as ChainKey)}
-      >
-        {CRYPTO_SYNC_CHAINS.map((c) => (
-          <option key={c.key} value={c.key}>
-            {c.name}
-          </option>
-        ))}
-      </SelectField>
       <Field
         label="Public address or extended public key"
         placeholder={info.placeholder}
         autoComplete="off"
         spellCheck={false}
         value={source}
-        onChange={(e) => setSource(e.target.value.trim())}
+        onChange={(e) => paste(e.target.value.trim())}
         className="sm:col-span-2"
       />
+      <SelectField
+        label="Coin"
+        value={chain}
+        onChange={(e) => setChain(e.target.value as ChainKey)}
+      >
+        {CRYPTO_SYNC_CHAINS.map((c) => (
+          <option key={c.key} value={c.key}>
+            {c.name} ({c.coin})
+          </option>
+        ))}
+      </SelectField>
+      <p className="self-end pb-2 text-xs text-slate-500">
+        {source && detected.length === 0
+          ? "Muny doesn't recognise this format yet; check the coin."
+          : detected.length > 1 && info.evm
+            ? "This address works on Ethereum and its sister networks; add one wallet per network you use."
+            : detected.length === 1
+              ? `Recognised as a ${info.name} address.`
+              : null}
+      </p>
+      {needsServer && (
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 sm:col-span-2 dark:bg-amber-950/40 dark:text-amber-200">
+          {info.name} sync currently needs a Blockbook server you run or rent (Crypto → Settings →
+          Advanced). Built-in {info.name} support is coming next; you can add the wallet now and it
+          will sync once that lands.
+        </p>
+      )}
       <p className="text-xs text-slate-500 sm:col-span-2">
-        Public addresses or keys only; never a seed phrase or private key.{" "}
-        {info.evm
-          ? "Muny stores the address encrypted and asks Blockscout (a public blockchain explorer) for its transactions and token balances once a day when you open Crypto, or when you press Sync. Blockscout sees the address; nobody can move funds with it. Using the same address on several chains? Add one wallet per chain."
-          : "For Bitcoin, Litecoin and Dogecoin an xpub/zpub covers every address in the wallet. These chains sync through a Blockbook server you run or rent (Crypto → Settings → Wallet sync servers); that server sees the address, nobody can move funds with it."}
+        Public addresses or keys only; never a seed phrase or private key. Muny stores it encrypted
+        and asks {VIA[chain]} (a public blockchain service) for its transactions once a day when you
+        open Crypto, or when you press Sync. That service sees the address; nobody can move funds
+        with it.
+        {chain === "ada" && " A stake address (stake1…) covers every address in the wallet."}
+        {info.server && " An xpub/zpub covers every address in the wallet."}
       </p>
     </>
   );
@@ -190,37 +241,47 @@ function SourceFields({
 function AddWallet({ onDone }: { onDone: () => void }) {
   const [name, setName] = useState("");
   const [kind, setKind] = useState<CryptoWalletKind>("blockchain");
-  const [chain, setChain] = useState<ChainKey>("eth");
+  const [chain, setChain] = useState<ChainKey>("btc");
   const [source, setSource] = useState("");
   const add = useCryptoMutation((body: object) => api.post("/api/crypto/wallets", body));
   const synced = kind === "blockchain";
+  const fallbackName = synced ? `${chainInfo(chain).name} wallet` : "";
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    add.mutate(synced ? { name, kind, chain, source } : { name, kind }, { onSuccess: onDone });
+    const n = name.trim() || fallbackName;
+    add.mutate(synced ? { name: n, kind, chain, source } : { name: n, kind }, {
+      onSuccess: onDone,
+    });
   };
   return (
     <form onSubmit={submit} className="space-y-3" noValidate>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field
-          label="Name"
-          placeholder="e.g. Trezor BTC"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
         <SelectField
-          label="Type"
+          label="What are you adding?"
           value={kind}
           onChange={(e) => setKind(e.target.value as CryptoWalletKind)}
         >
-          <option value="blockchain">Wallet, synced from the blockchain</option>
-          <option value="manual">Wallet, manual or file only</option>
-          <option value="exchange">Exchange</option>
+          <option value="blockchain">A wallet (sync it from the blockchain)</option>
+          <option value="exchange">An exchange</option>
+          <option value="manual">Something else (add transactions by hand or file)</option>
         </SelectField>
+        <Field
+          label="Name"
+          placeholder={fallbackName || "e.g. Paper wallet"}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
         {synced && (
           <SourceFields chain={chain} setChain={setChain} source={source} setSource={setSource} />
         )}
       </div>
-      {!synced && (
+      {kind === "exchange" && (
+        <p className="text-xs text-slate-500">
+          Exchange sync with a read-only API key is coming. For now, import your exchange history
+          from a file (Koinly CSV) or add transactions by hand.
+        </p>
+      )}
+      {kind === "manual" && (
         <p className="text-xs text-slate-500">
           Add transactions by hand or import a file into this wallet.
         </p>
@@ -230,8 +291,8 @@ function AddWallet({ onDone }: { onDone: () => void }) {
         <Button variant="secondary" onClick={onDone}>
           Cancel
         </Button>
-        <Button type="submit" disabled={!name.trim() || (synced && !source) || add.isPending}>
-          {synced ? "Add and sync" : "Add wallet"}
+        <Button type="submit" disabled={(synced ? !source : !name.trim()) || add.isPending}>
+          {synced ? "Add and sync" : "Add"}
         </Button>
       </div>
     </form>
@@ -241,7 +302,12 @@ function AddWallet({ onDone }: { onDone: () => void }) {
 /** Attach (or replace) the address an existing wallet syncs from, e.g. one imported from Koinly. */
 function ConnectWallet({ w, onDone }: { w: CryptoWallet; onDone: () => void }) {
   const known = CRYPTO_SYNC_CHAINS.find((c) => c.key === w.chain)?.key;
-  const [chain, setChain] = useState<ChainKey>(known ?? "eth");
+  // Unknown: guess from the coins it holds (e.g. an imported "ADA Exodus").
+  const held = new Set(w.balances.map((b) => b.asset));
+  const guess = CRYPTO_SYNC_CHAINS.find(
+    (c) => held.has(c.coin) || new RegExp(`\\b${c.coin}\\b`, "i").test(w.name),
+  )?.key;
+  const [chain, setChain] = useState<ChainKey>(known ?? guess ?? "btc");
   const [source, setSource] = useState("");
   const put = useCryptoMutation((body: object) =>
     api.put(`/api/crypto/wallets/${w.id}/source`, body),

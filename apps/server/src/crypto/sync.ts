@@ -1,33 +1,24 @@
-import {
-  type BbTx,
-  CHAINS,
-  type ChainKey,
-  type EsInternal,
-  type EsTokenTx,
-  type EsTx,
-  fromBaseUnits,
-  isExtendedKey,
-  mapEvmHistory,
-  mapUtxoTx,
-  plausibleSymbol,
-  type SyncedTxn,
-  sourceHint,
-} from "@muny/core";
+import { CHAINS, type ChainKey, type SyncedTxn, sourceHint } from "@muny/core";
 import { type MunyDb, newId, schema } from "@muny/db";
 import type { CryptoSyncResult } from "@muny/shared";
 import { and, eq, ne, sql } from "drizzle-orm";
 import { decryptJson, encryptJson } from "../lib/crypto.js";
-import { BudgetError, budgeted } from "./budget.js";
-import { BLOCKSCOUT_KEY, getCryptoSettings } from "./prices.js";
+import type { BudgetProvider } from "./budget.js";
+import { algorand } from "./chains/algorand.js";
+import { blockbook } from "./chains/blockbook.js";
+import { blockscout } from "./chains/blockscout.js";
+import { cardano } from "./chains/cardano.js";
+import { type Adapter, type Cursor, makeCtx, type SyncDeps, SyncError } from "./chains/ctx.js";
+import { stellar } from "./chains/stellar.js";
+import { getCryptoSettings } from "./prices.js";
+
+export { type SyncDeps, SyncError };
 
 /**
- * Wallet sync from public blockchain data.
- * - EVM chains: Blockscout's Etherscan-compatible account API (txlist,
- *   txlistinternal, tokentx, balance, tokenlist). With a free API key, one
- *   endpoint (api.blockscout.com) serves every chain; without one, each
- *   chain's public instance (e.g. eth.blockscout.com) is used.
- * - Bitcoin-like chains: Blockbook API v2 on a server you run or rent
- *   (Trezor's public servers refuse third-party apps).
+ * Wallet sync from public blockchain data. Each chain has an adapter in
+ * ./chains (one per provider); this file stores the results.
+ * Providers: Blockscout (EVM chains), Koios (Cardano), AlgoNode (Algorand),
+ * Horizon (Stellar), Blockbook (Bitcoin-like chains, on a server you provide).
  *
  * Privacy: syncing sends the wallet's address or extended public key to that
  * service. It is opt-in per wallet; the source is stored encrypted and never
@@ -40,34 +31,25 @@ import { BLOCKSCOUT_KEY, getCryptoSettings } from "./prices.js";
 
 type Db = MunyDb | Parameters<Parameters<MunyDb["transaction"]>[0]>[0];
 
+const ADAPTERS: Record<(typeof CHAINS)[ChainKey]["provider"], Adapter> = {
+  "blockbook-utxo": blockbook,
+  blockscout,
+  koios: cardano,
+  algonode: algorand,
+  horizon: stellar,
+};
+const BUDGET: Record<(typeof CHAINS)[ChainKey]["provider"], BudgetProvider> = {
+  "blockbook-utxo": "blockbook",
+  blockscout: "blockscout",
+  koios: "koios",
+  algonode: "algonode",
+  horizon: "horizon",
+};
+
+const sleep = (ms?: number) => (ms ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
+
 const w = schema.cryptoWallets;
 const t = schema.cryptoTxns;
-const PAGE_SIZE = 1000;
-const MAX_PAGES = 50;
-const BLOCKSCOUT_API = "https://api.blockscout.com";
-
-export interface SyncDeps {
-  secretKey: Buffer | undefined;
-  fetch?: typeof fetch;
-  /** Pause between pages (politeness). */
-  delayMs?: number;
-}
-
-interface Cursor {
-  height: number;
-  balances: { asset: string; amount: string }[];
-}
-
-interface BbPage {
-  page?: number;
-  totalPages?: number;
-  balance?: string;
-  transactions?: BbTx[];
-  tokens?: { type?: string; symbol?: string; decimals?: number; balance?: string }[];
-}
-
-export class SyncError extends Error {}
-
 export function readCursor(raw: string | null): Cursor | null {
   if (!raw) return null;
   try {
@@ -125,35 +107,6 @@ const syncing = new Set<string>();
 export const isSyncing = (walletId?: string) =>
   walletId ? syncing.has(walletId) : syncing.size > 0;
 
-const sleep = (ms?: number) => (ms ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
-
-async function getJson<T>(
-  url: string,
-  f: typeof fetch,
-  headers: Record<string, string> = {},
-): Promise<T> {
-  const host = new URL(url).host;
-  let res: Response;
-  try {
-    res = await f(url, {
-      headers: { accept: "application/json", "user-agent": "Muny (self-hosted)", ...headers },
-      signal: AbortSignal.timeout(60_000),
-    });
-  } catch (err) {
-    if (err instanceof BudgetError) throw new SyncError(err.message);
-    // Never include the URL: it contains the address.
-    throw new SyncError(`Couldn't reach ${host}`);
-  }
-  if (res.status === 429) throw new SyncError(`${host} rate limit hit; try again later`);
-  if (res.status === 400) throw new SyncError(`${host} didn't accept this address or key`);
-  if (res.status === 401 || res.status === 403)
-    throw new SyncError(
-      `${host} refused the request (HTTP ${res.status}). Check the API key or server in Crypto → Settings.`,
-    );
-  if (!res.ok) throw new SyncError(`${host} answered HTTP ${res.status}`);
-  return (await res.json()) as T;
-}
-
 /** True when an imported row in this wallet already covers the synced movement. */
 function coveredByImport(db: Db, walletId: string, s: SyncedTxn): boolean {
   const near = and(
@@ -161,17 +114,19 @@ function coveredByImport(db: Db, walletId: string, s: SyncedTxn): boolean {
     ne(t.source, "sync"),
     sql`abs(${t.at} - ${s.at}) <= ${2 * 3_600_000}`,
   );
-  const byHash = db
-    .select({ id: t.id })
-    .from(t)
-    .where(
-      and(
-        eq(t.walletId, walletId),
-        ne(t.source, "sync"),
-        sql`lower(${t.txHash}) = ${s.txHash.toLowerCase()}`,
-      ),
-    )
-    .get();
+  const byHash =
+    s.txHash &&
+    db
+      .select({ id: t.id })
+      .from(t)
+      .where(
+        and(
+          eq(t.walletId, walletId),
+          ne(t.source, "sync"),
+          sql`lower(${t.txHash}) = ${s.txHash.toLowerCase()}`,
+        ),
+      )
+      .get();
   if (byHash) return true;
   const asset = s.receivedAsset ?? s.sentAsset;
   const amount = s.receivedAmount ?? s.sentAmount;
@@ -249,170 +204,26 @@ export async function syncWallet(
   }
 }
 
-interface Fetched {
-  mapped: SyncedTxn[];
-  height: number;
-  balances: Cursor["balances"];
-}
-
-async function fetchBlockbook(
-  db: MunyDb,
-  chainKey: ChainKey,
-  source: string,
-  cursor: Cursor | null,
-  deps: SyncDeps,
-): Promise<Fetched> {
-  const chain = CHAINS[chainKey];
-  const server = (getCryptoSettings(db).servers[chain.key] || chain.server).replace(/\/+$/, "");
-  if (!server)
-    throw new SyncError(
-      `${chain.name} needs a Blockbook server: add one in Crypto → Settings → Wallet sync servers.`,
-    );
-  const f = budgeted(db, "blockbook", deps.fetch);
-  const path = isExtendedKey(source) ? "xpub" : "address";
-  const from = cursor ? `&from=${cursor.height}` : "";
-  const txs: BbTx[] = [];
-  let first: BbPage | null = null;
-  for (let page = 1; ; page++) {
-    if (page > MAX_PAGES) throw new SyncError("Too many transactions to sync in one go");
-    const data = await getJson<BbPage>(
-      `${server}/api/v2/${path}/${encodeURIComponent(source)}?details=txs&page=${page}&pageSize=${PAGE_SIZE}${from}`,
-      f,
-    );
-    first ??= data;
-    txs.push(...(data.transactions ?? []));
-    if (!data.totalPages || page >= data.totalPages) break;
-    await sleep(deps.delayMs);
-  }
-  const mine = source.toLowerCase();
-  const mapped: SyncedTxn[] = [];
-  let height = cursor?.height ?? 0;
-  for (const tx of txs) {
-    if (tx.blockHeight > height) height = tx.blockHeight;
-    const m = mapUtxoTx(tx, chain.asset, chain.decimals, (x) => x.toLowerCase() === mine);
-    if (m) mapped.push(m);
-  }
-  const balances: Cursor["balances"] = [];
-  if (first?.balance !== undefined)
-    balances.push({ asset: chain.asset, amount: fromBaseUnits(first.balance, chain.decimals) });
-  return { mapped, height, balances };
-}
-
-interface EsResponse<T> {
-  status?: string;
-  message?: string;
-  result?: T[] | string;
-}
-
-/** Etherscan-compatible account API on Blockscout. */
-async function fetchBlockscout(
-  db: MunyDb,
-  chainKey: ChainKey,
-  address: string,
-  cursor: Cursor | null,
-  deps: SyncDeps,
-): Promise<Fetched> {
-  const chain = CHAINS[chainKey];
-  const override = getCryptoSettings(db).servers[chain.key]?.replace(/\/+$/, "");
-  const enc = db
-    .select()
-    .from(schema.appSettings)
-    .where(eq(schema.appSettings.key, BLOCKSCOUT_KEY))
-    .get()?.value as string | undefined;
-  const key = !override && enc && deps.secretKey ? decryptJson<string>(deps.secretKey, enc) : null;
-  // The key goes in a header, never in the URL.
-  const base = override
-    ? `${override}/api`
-    : key
-      ? `${BLOCKSCOUT_API}/${chain.chainId}/api`
-      : `${chain.server}/api`;
-  const headers: Record<string, string> = key ? { authorization: `Bearer ${key}` } : {};
-  const f = budgeted(db, "blockscout", deps.fetch);
-  const host = new URL(base).host;
-  const call = async <T>(params: Record<string, string | number>): Promise<T[] | string> => {
-    const q = new URLSearchParams({ module: "account", address, ...params } as Record<
-      string,
-      string
-    >);
-    const r = await getJson<EsResponse<T>>(`${base}?${q}`, f, headers);
-    await sleep(deps.delayMs);
-    if (r.status === "1" || Array.isArray(r.result)) return r.result ?? [];
-    if (/^no (transactions|token|records)/i.test(r.message ?? "") || /^no /i.test(String(r.result)))
-      return [];
-    // Error text from the service; drop anything that looks like an address.
-    const why = String(typeof r.result === "string" ? r.result : (r.message ?? "error"))
-      .replace(/0x[0-9a-fA-F]{6,}/g, "…")
-      .slice(0, 120);
-    throw new SyncError(`${host}: ${why}`);
-  };
-  /** All rows of a list from `start` on, oldest first, paging by block. */
-  const list = async <T extends { blockNumber: string }>(action: string): Promise<T[]> => {
-    const out: T[] = [];
-    const seen = new Set<string>();
-    let start = cursor?.height ?? 0;
-    for (let round = 0; round < MAX_PAGES; round++) {
-      const rows = await call<T>({
-        action,
-        startblock: start,
-        sort: "asc",
-        page: 1,
-        offset: PAGE_SIZE,
-      });
-      if (typeof rows === "string") return out;
-      for (const r of rows) {
-        const k = JSON.stringify(r);
-        if (!seen.has(k)) {
-          seen.add(k);
-          out.push(r);
-        }
-      }
-      if (rows.length < PAGE_SIZE) return out;
-      const last = Number(rows[rows.length - 1]?.blockNumber ?? start);
-      // A single block with more rows than a page can't be paged by block.
-      if (last <= start) throw new SyncError("Too many transactions in one block to sync");
-      start = last;
-    }
-    throw new SyncError("Too many transactions to sync in one go");
-  };
-
-  const txs = await list<EsTx>("txlist");
-  const internals = await list<EsInternal>("txlistinternal");
-  const tokens = await list<EsTokenTx>("tokentx");
-  const { txns, maxBlock } = mapEvmHistory(
-    address,
-    { asset: chain.asset, decimals: chain.decimals },
-    { txs, internals, tokens },
-  );
-
-  const balances: Cursor["balances"] = [];
-  const bal = await call<never>({ action: "balance" });
-  if (typeof bal === "string" && /^\d+$/.test(bal))
-    balances.push({ asset: chain.asset, amount: fromBaseUnits(bal, chain.decimals) });
-  const held = await call<{ balance?: string; decimals?: string; symbol?: string; type?: string }>({
-    action: "tokenlist",
-  });
-  if (Array.isArray(held))
-    for (const tk of held) {
-      const sym = plausibleSymbol(tk.symbol);
-      if (!sym || (tk.type && !/20/.test(tk.type))) continue;
-      const amount = fromBaseUnits(tk.balance, Number(tk.decimals ?? 18) || 0);
-      if (amount !== "0") balances.push({ asset: sym, amount });
-    }
-  return { mapped: txns, height: Math.max(cursor?.height ?? 0, maxBlock), balances };
-}
-
 async function runSync(
   db: MunyDb,
   wallet: typeof w.$inferSelect,
   deps: SyncDeps,
 ): Promise<CryptoSyncResult> {
-  const chainKey = wallet.chain as ChainKey;
+  const chain = CHAINS[wallet.chain as ChainKey];
   const source = decryptJson<string>(deps.secretKey as Buffer, wallet.sourceEnc as string);
   const cursor = readCursor(wallet.syncCursor);
-  const { mapped, height, balances } =
-    CHAINS[chainKey].provider === "blockscout"
-      ? await fetchBlockscout(db, chainKey, source, cursor, deps)
-      : await fetchBlockbook(db, chainKey, source, cursor, deps);
+  const ctx = makeCtx(
+    {
+      db,
+      chain,
+      source,
+      cursor,
+      override: getCryptoSettings(db).servers[chain.key] ?? "",
+      deps,
+    },
+    BUDGET[chain.provider],
+  );
+  const { mapped, height, balances, pos } = await ADAPTERS[chain.provider](ctx);
 
   let added = 0;
   let duplicates = 0;
@@ -439,7 +250,8 @@ async function runSync(
           receivedAmount: s.receivedAmount,
           feeAsset: s.feeAsset,
           feeAmount: s.feeAmount,
-          txHash: s.txHash,
+          label: s.label ?? null,
+          txHash: s.txHash || null,
           externalId: s.externalId,
           source: "sync",
         })
@@ -448,7 +260,7 @@ async function runSync(
     }
   });
   if (added) pairTransfers(db);
-  const next: Cursor = { height, balances };
+  const next: Cursor = { height, balances, ...(pos ? { pos } : {}) };
   db.update(w)
     .set({ syncCursor: JSON.stringify(next) })
     .where(eq(w.id, wallet.id))

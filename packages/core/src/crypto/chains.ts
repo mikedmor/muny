@@ -4,6 +4,7 @@
  *   or each chain's public instance without a key).
  * - blockbook-utxo: Bitcoin-like chains (Blockbook API v2). Trezor's public
  *   servers refuse third-party apps, so these need a server you run or rent.
+ * - koios (Cardano), algonode (Algorand), horizon (Stellar): free public APIs.
  * Servers are configurable per chain.
  */
 
@@ -17,14 +18,17 @@ export type ChainKey =
   | "op"
   | "arb"
   | "polygon"
-  | "gnosis";
+  | "gnosis"
+  | "ada"
+  | "algo"
+  | "xlm";
 
 export interface ChainInfo {
   key: ChainKey;
   name: string;
   asset: string;
   decimals: number;
-  provider: "blockbook-utxo" | "blockscout";
+  provider: "blockbook-utxo" | "blockscout" | "koios" | "algonode" | "horizon";
   /** Default server: a Blockbook server, or the chain's public Blockscout instance. */
   server: string;
   /** EVM chain id (Blockscout's unified API addresses chains by id). */
@@ -153,6 +157,36 @@ export const CHAINS: Record<ChainKey, ChainInfo> = {
     chainId: 100,
     accepts: "an address (0x…); tokens on the address are included",
     validate: EVM,
+  },
+  ada: {
+    key: "ada",
+    name: "Cardano",
+    asset: "ADA",
+    decimals: 6,
+    provider: "koios",
+    server: "https://api.koios.rest/api/v1",
+    accepts: "a stake address (stake1…, covers the whole wallet) or an address (addr1…)",
+    validate: (s) => /^(stake1[02-9ac-hj-np-z]{50,60}|addr1[02-9ac-hj-np-z]{50,110})$/.test(s),
+  },
+  algo: {
+    key: "algo",
+    name: "Algorand",
+    asset: "ALGO",
+    decimals: 6,
+    provider: "algonode",
+    server: "https://mainnet-idx.algonode.cloud",
+    accepts: "an address (58 capital letters and digits); tokens are included",
+    validate: (s) => /^[A-Z2-7]{58}$/.test(s),
+  },
+  xlm: {
+    key: "xlm",
+    name: "Stellar",
+    asset: "XLM",
+    decimals: 7,
+    provider: "horizon",
+    server: "https://horizon.stellar.org",
+    accepts: "an account (G…, 56 characters); tokens are included",
+    validate: (s) => /^G[A-Z2-7]{55}$/.test(s),
   },
 };
 

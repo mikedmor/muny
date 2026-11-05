@@ -125,26 +125,32 @@ export function CryptoSettings() {
             </Card>
           )}
 
-          <Card className="space-y-3">
-            <h2 className="font-semibold">Wallet sync servers</h2>
-            <p className="text-sm text-slate-500">
-              Ethereum and the other EVM chains sync through Blockscout&apos;s public explorers by
-              default; enter a URL only for your own Blockscout. Bitcoin, Litecoin, Dogecoin and
-              Zcash need a Blockbook server you run or rent (Trezor&apos;s public ones refuse other
-              apps). Whichever server you use sees the addresses you sync.
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {CRYPTO_SYNC_CHAINS.map((c) => (
-                <ServerField
-                  key={c.key}
-                  chain={c.key}
-                  evm={c.evm}
-                  label={c.name}
-                  value={d.servers[c.key] ?? ""}
-                  onSave={(url) => save.mutate({ servers: { ...d.servers, [c.key]: url } })}
-                />
-              ))}
-            </div>
+          <Card className="p-0">
+            <details>
+              <summary className="cursor-pointer px-5 py-4 font-semibold">
+                Advanced: wallet sync servers
+              </summary>
+              <div className="space-y-3 px-5 pb-5">
+                <p className="text-sm text-slate-500">
+                  Muny picks a free public service for each coin. Enter a URL only to use your own
+                  server instead (for example a self-hosted Blockscout or Koios). Bitcoin, Litecoin,
+                  Dogecoin and Zcash need a Blockbook server here until built-in support lands.
+                  Whichever server you use sees the addresses you sync.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {CRYPTO_SYNC_CHAINS.map((c) => (
+                    <ServerField
+                      key={c.key}
+                      chain={c.key}
+                      required={c.server}
+                      label={`${c.name} (${c.coin})`}
+                      value={d.servers[c.key] ?? ""}
+                      onSave={(url) => save.mutate({ servers: { ...d.servers, [c.key]: url } })}
+                    />
+                  ))}
+                </div>
+              </div>
+            </details>
           </Card>
 
           <Card className="space-y-3">
@@ -198,28 +204,33 @@ export function CryptoSettings() {
               refreshing often can&apos;t get you blocked. Prices and wallets refresh on their own
               at most once a day, only when someone opens Crypto.
             </p>
+            {d.usage.every((u) => u.month === 0) && (
+              <p className="text-sm text-slate-500">No requests yet this month.</p>
+            )}
             <ul className="space-y-2 text-sm">
-              {d.usage.map((u) => (
-                <li key={u.provider}>
-                  <span className="flex justify-between gap-3">
-                    <span>{u.label}</span>
-                    <span className="tabular-nums text-slate-500">
-                      {u.today} / {u.dayLimit} today · {u.month} / {u.monthLimit} this month
+              {d.usage
+                .filter((u) => u.month > 0)
+                .map((u) => (
+                  <li key={u.provider}>
+                    <span className="flex justify-between gap-3">
+                      <span>{u.label}</span>
+                      <span className="tabular-nums text-slate-500">
+                        {u.today} / {u.dayLimit} today · {u.month} / {u.monthLimit} this month
+                      </span>
                     </span>
-                  </span>
-                  <span
-                    className="mt-1 block h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"
-                    aria-hidden
-                  >
                     <span
-                      className="block h-full rounded-full bg-brand-600"
-                      style={{
-                        width: `${Math.min(100, (Math.max(u.today / u.dayLimit, u.month / u.monthLimit) || 0) * 100)}%`,
-                      }}
-                    />
-                  </span>
-                </li>
-              ))}
+                      className="mt-1 block h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"
+                      aria-hidden
+                    >
+                      <span
+                        className="block h-full rounded-full bg-brand-600"
+                        style={{
+                          width: `${Math.min(100, (Math.max(u.today / u.dayLimit, u.month / u.monthLimit) || 0) * 100)}%`,
+                        }}
+                      />
+                    </span>
+                  </li>
+                ))}
             </ul>
           </Card>
 
@@ -299,13 +310,13 @@ export function CryptoSettings() {
 
 function ServerField({
   chain,
-  evm,
+  required,
   label,
   value,
   onSave,
 }: {
   chain: string;
-  evm: boolean;
+  required: boolean;
   label: string;
   value: string;
   onSave: (url: string) => void;
@@ -315,7 +326,7 @@ function ServerField({
     <Field
       label={label}
       name={`server-${chain}`}
-      placeholder={evm ? "Default (Blockscout)" : "Required: https://your-blockbook"}
+      placeholder={required ? "https://your-blockbook" : "Default"}
       inputMode="url"
       value={v}
       onChange={(e) => setV(e.target.value.trim())}

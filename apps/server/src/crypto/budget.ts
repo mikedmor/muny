@@ -10,7 +10,14 @@ import { eq } from "drizzle-orm";
  * the published limits.
  */
 
-export type BudgetProvider = "defillama" | "coingecko" | "blockscout" | "blockbook";
+export type BudgetProvider =
+  | "defillama"
+  | "coingecko"
+  | "blockscout"
+  | "blockbook"
+  | "koios"
+  | "algonode"
+  | "horizon";
 
 export const LIMITS: Record<BudgetProvider, { day: number; month: number; label: string }> = {
   // No published key-less quota; stay polite.
@@ -21,6 +28,12 @@ export const LIMITS: Record<BudgetProvider, { day: number; month: number; label:
   blockscout: { day: 1500, month: 30000, label: "Blockscout wallet sync (EVM chains)" },
   // A Blockbook server you run or rent.
   blockbook: { day: 500, month: 10000, label: "Blockbook wallet sync (Bitcoin-like chains)" },
+  // Koios public tier: 100 requests per 10 s per IP, small bodies.
+  koios: { day: 1000, month: 20000, label: "Koios wallet sync (Cardano)" },
+  // AlgoNode free public indexer.
+  algonode: { day: 1000, month: 20000, label: "AlgoNode wallet sync (Algorand)" },
+  // stellar.org Horizon: 3,600 requests an hour per IP.
+  horizon: { day: 1000, month: 20000, label: "Horizon wallet sync (Stellar)" },
 };
 
 const KEY = "crypto.usage";

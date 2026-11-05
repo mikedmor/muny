@@ -176,31 +176,98 @@ export interface CryptoSyncResult {
   duplicates: number;
 }
 
-/** Chains Muny can sync (server validates; see @muny/core CHAINS). */
+/**
+ * Coins Muny can sync, by what the user knows (the coin), not the provider.
+ * The server picks the provider per chain and validates addresses; see
+ * @muny/core CHAINS. `server` marks chains that need a server the user
+ * provides.
+ */
 export const CRYPTO_SYNC_CHAINS = [
-  { key: "eth", name: "Ethereum (and tokens)", placeholder: "0x…", evm: true },
-  { key: "base", name: "Base", placeholder: "0x…", evm: true },
-  { key: "op", name: "Optimism", placeholder: "0x…", evm: true },
-  { key: "arb", name: "Arbitrum One", placeholder: "0x…", evm: true },
-  { key: "polygon", name: "Polygon PoS", placeholder: "0x…", evm: true },
-  { key: "gnosis", name: "Gnosis", placeholder: "0x…", evm: true },
   {
     key: "btc",
-    name: "Bitcoin (needs a Blockbook server)",
+    name: "Bitcoin",
+    coin: "BTC",
     placeholder: "zpub… / xpub… / bc1…",
     evm: false,
+    server: true,
+  },
+  { key: "eth", name: "Ethereum", coin: "ETH", placeholder: "0x…", evm: true, server: false },
+  {
+    key: "ada",
+    name: "Cardano",
+    coin: "ADA",
+    placeholder: "stake1… / addr1…",
+    evm: false,
+    server: false,
   },
   {
+    key: "algo",
+    name: "Algorand",
+    coin: "ALGO",
+    placeholder: "58-character address",
+    evm: false,
+    server: false,
+  },
+  { key: "xlm", name: "Stellar", coin: "XLM", placeholder: "G…", evm: false, server: false },
+  {
     key: "ltc",
-    name: "Litecoin (needs a Blockbook server)",
+    name: "Litecoin",
+    coin: "LTC",
     placeholder: "Ltub… / ltc1… / L…",
     evm: false,
+    server: true,
   },
   {
     key: "doge",
-    name: "Dogecoin (needs a Blockbook server)",
+    name: "Dogecoin",
+    coin: "DOGE",
     placeholder: "dgub… / D…",
     evm: false,
+    server: true,
   },
-  { key: "zec", name: "Zcash (needs a Blockbook server)", placeholder: "t1… / xpub…", evm: false },
+  { key: "zec", name: "Zcash", coin: "ZEC", placeholder: "t1…", evm: false, server: true },
+  { key: "polygon", name: "Polygon", coin: "POL", placeholder: "0x…", evm: true, server: false },
+  { key: "base", name: "Base", coin: "ETH on Base", placeholder: "0x…", evm: true, server: false },
+  {
+    key: "arb",
+    name: "Arbitrum",
+    coin: "ETH on Arbitrum",
+    placeholder: "0x…",
+    evm: true,
+    server: false,
+  },
+  {
+    key: "op",
+    name: "Optimism",
+    coin: "ETH on Optimism",
+    placeholder: "0x…",
+    evm: true,
+    server: false,
+  },
+  { key: "gnosis", name: "Gnosis", coin: "XDAI", placeholder: "0x…", evm: true, server: false },
 ] as const;
+
+export type CryptoSyncChain = (typeof CRYPTO_SYNC_CHAINS)[number]["key"];
+
+/**
+ * Which coins an address (or extended public key) could belong to, from its
+ * format. EVM addresses are shared by every EVM chain, so they return all of
+ * them (Ethereum first). The server does the strict validation.
+ */
+export function detectCryptoChains(input: string): CryptoSyncChain[] {
+  const s = input.trim();
+  if (/^0x[0-9a-fA-F]{40}$/.test(s)) return ["eth", "polygon", "base", "arb", "op", "gnosis"];
+  if (/^(stake1|addr1)[02-9ac-hj-np-z]{40,}$/.test(s)) return ["ada"];
+  if (/^[A-Z2-7]{58}$/.test(s)) return ["algo"];
+  if (/^G[A-Z2-7]{55}$/.test(s)) return ["xlm"];
+  if (/^(xpub|ypub|zpub)/.test(s)) return ["btc", "ltc", "doge", "zec"];
+  if (/^(Ltub|Mtub)/.test(s)) return ["ltc"];
+  if (/^dgub/.test(s)) return ["doge"];
+  if (/^bc1[02-9ac-hj-np-z]{11,71}$/i.test(s)) return ["btc"];
+  if (/^ltc1[02-9ac-hj-np-z]{11,71}$/i.test(s)) return ["ltc"];
+  if (/^t[13][1-9A-HJ-NP-Za-km-z]{33}$/.test(s)) return ["zec"];
+  if (/^[13][1-9A-HJ-NP-Za-km-z]{25,34}$/.test(s)) return ["btc"];
+  if (/^[LM][1-9A-HJ-NP-Za-km-z]{25,34}$/.test(s)) return ["ltc"];
+  if (/^D[1-9A-HJ-NP-Za-km-z]{25,34}$/.test(s)) return ["doge"];
+  return [];
+}

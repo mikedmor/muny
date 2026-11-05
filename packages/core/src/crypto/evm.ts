@@ -1,5 +1,6 @@
 import { fromBaseUnits, type SyncedTxn } from "./blockbook.js";
-import { fromFixed, toFixed } from "./decimal.js";
+import { toFixed } from "./decimal.js";
+import { Deltas, movementsToTxns } from "./movements.js";
 
 /**
  * EVM chain history in the Etherscan-compatible "account" format (served by
@@ -118,64 +119,17 @@ export function mapEvmHistory(
 
   const out: SyncedTxn[] = [];
   for (const [hash, g] of groups) {
-    // Net each asset per direction (e.g. two token transfers in one swap).
-    const net = new Map<string, bigint>();
-    for (const m of g.moves)
-      net.set(m.asset, (net.get(m.asset) ?? 0n) + (m.dir === "in" ? 1n : -1n) * toFixed(m.amount));
-    const ins = [...net]
-      .filter(([, v]) => v > 0n)
-      .map(([a, v]) => ({ asset: a, amount: fromFixed(v) }));
-    const outs = [...net]
-      .filter(([, v]) => v < 0n)
-      .map(([a, v]) => ({ asset: a, amount: fromFixed(-v) }));
-    const hasFee = toFixed(g.fee) > 0n;
-    const base = {
-      at: g.at,
-      txHash: hash,
-      feeAsset: hasFee ? native.asset : null,
-      feeAmount: hasFee ? g.fee : null,
-    };
-    const empty = { sentAsset: null, sentAmount: null, receivedAsset: null, receivedAmount: null };
-    const [o] = outs;
-    const [i] = ins;
-    if (outs.length === 1 && ins.length === 1 && o && i) {
-      out.push({
-        ...base,
+    const d = new Deltas();
+    for (const m of g.moves) d.add(m.asset, m.amount, m.dir === "in" ? 1 : -1);
+    out.push(
+      ...movementsToTxns({
         externalId: `evm:${hash}`,
-        type: "trade",
-        sentAsset: o.asset,
-        sentAmount: o.amount,
-        receivedAsset: i.asset,
-        receivedAmount: i.amount,
-      });
-      continue;
-    }
-    const parts = [
-      ...outs.map((m) => ({
-        ...empty,
-        type: "withdrawal" as const,
-        sentAsset: m.asset,
-        sentAmount: m.amount,
-      })),
-      ...ins.map((m) => ({
-        ...empty,
-        type: "deposit" as const,
-        receivedAsset: m.asset,
-        receivedAmount: m.amount,
-      })),
-    ];
-    if (parts.length === 0) {
-      // Failed call or contract interaction with no value: still costs gas.
-      if (hasFee) out.push({ ...base, ...empty, externalId: `evm:${hash}`, type: "withdrawal" });
-      continue;
-    }
-    for (const [n, p] of parts.entries())
-      out.push({
-        ...base,
-        ...p,
-        externalId: n === 0 ? `evm:${hash}` : `evm:${hash}:${n}`,
-        ...(n > 0 ? { feeAsset: null, feeAmount: null } : {}),
-      });
+        at: g.at,
+        txHash: hash,
+        deltas: d.toStrings(),
+        fee: { asset: native.asset, amount: g.fee },
+      }),
+    );
   }
   out.sort((a, b) => a.at - b.at);
   return { txns: out, maxBlock };

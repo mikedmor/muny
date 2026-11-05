@@ -46,6 +46,8 @@ export interface SyncedTxn {
   feeAsset: string | null;
   feeAmount: string | null;
   txHash: string;
+  /** e.g. "staking" for rewards. */
+  label?: string | null;
 }
 
 /** "12345" satoshi with 8 decimals → "0.00012345". */
