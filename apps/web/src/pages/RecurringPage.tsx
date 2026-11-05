@@ -544,7 +544,7 @@ export function RecurringPage() {
           </div>
 
           {tab === "list" ? (
-            <div className="space-y-6">
+            <div className="space-y-6 min-[112rem]:grid min-[112rem]:grid-cols-2 min-[112rem]:items-start min-[112rem]:gap-6 min-[112rem]:space-y-0">
               <Section
                 title="Subscriptions"
                 items={sortByNext(subs)}

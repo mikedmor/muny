@@ -424,16 +424,21 @@ export function OverviewPage() {
       {d && (
         <div className="space-y-6">
           <AttentionBar d={d} />
-          {/* Two columns on wide screens; on phones the cards interleave by `order`. */}
-          <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
-            <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-6">
-              <div className="order-1 min-w-0 lg:order-none">
+          {/*
+            Phones: one column; the cards interleave by `order` (the column
+            wrappers are display:contents).
+            Desktop: spending/categories and recent transactions stacked on the left, accounts on the right.
+            Ultrawide (1792px+): three columns side by side.
+          */}
+          <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:grid-rows-[auto_1fr] lg:items-start lg:[grid-template-areas:'main_side'_'recent_side'] min-[112rem]:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_26rem] min-[112rem]:grid-rows-1 min-[112rem]:[grid-template-areas:'main_recent_side']">
+            <div className="order-5 min-w-0 lg:order-0 lg:[grid-area:recent]">
+              <RecentTransactions />
+            </div>
+            <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-6 lg:[grid-area:main]">
+              <div className="order-1 min-w-0 lg:order-0">
                 <SpendingCard d={d} />
               </div>
-              <div className="order-5 min-w-0 lg:order-none">
-                <RecentTransactions />
-              </div>
-              <div className="order-6 min-w-0 lg:order-none">
+              <div className="order-6 min-w-0 lg:order-0">
                 <Card>
                   <SectionHeader
                     title="Where your money went this month"
@@ -450,14 +455,14 @@ export function OverviewPage() {
                 </Card>
               </div>
             </div>
-            <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-6">
-              <div className="order-2 min-w-0 lg:order-none">
+            <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-6 lg:[grid-area:side]">
+              <div className="order-2 min-w-0 lg:order-0">
                 <AccountsCard />
               </div>
-              <div className="order-3 min-w-0 lg:order-none">
+              <div className="order-3 min-w-0 lg:order-0">
                 <BudgetCard d={d} />
               </div>
-              <div className="order-4 min-w-0 lg:order-none">
+              <div className="order-4 min-w-0 lg:order-0">
                 <UpcomingCard d={d} />
               </div>
             </div>

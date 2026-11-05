@@ -250,24 +250,27 @@ export function BudgetsPage() {
             )}
           </Card>
 
-          {b.groups.map((g) => {
-            const shown = g.lines.filter(
-              (l) => showAll || l.budgetCents !== null || l.spentCents > 0,
-            );
-            if (shown.length === 0) return null;
-            return (
-              <section key={g.groupId}>
-                <h2 className="mb-2 px-1 text-sm font-semibold uppercase tracking-wide text-slate-500">
-                  {g.name}
-                </h2>
-                <ul className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
-                  {shown.map((l) => (
-                    <Line key={l.categoryId} line={l} month={month} />
-                  ))}
-                </ul>
-              </section>
-            );
-          })}
+          {/* Ultrawide: category groups side by side. */}
+          <div className="space-y-6 min-[112rem]:grid min-[112rem]:grid-cols-2 min-[112rem]:items-start min-[112rem]:gap-6 min-[112rem]:space-y-0">
+            {b.groups.map((g) => {
+              const shown = g.lines.filter(
+                (l) => showAll || l.budgetCents !== null || l.spentCents > 0,
+              );
+              if (shown.length === 0) return null;
+              return (
+                <section key={g.groupId}>
+                  <h2 className="mb-2 px-1 text-sm font-semibold uppercase tracking-wide text-slate-500">
+                    {g.name}
+                  </h2>
+                  <ul className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
+                    {shown.map((l) => (
+                      <Line key={l.categoryId} line={l} month={month} />
+                    ))}
+                  </ul>
+                </section>
+              );
+            })}
+          </div>
           {hiddenCount > 0 && (
             <Button variant="ghost" onClick={() => setShowAll((s) => !s)}>
               {showAll
