@@ -5,10 +5,15 @@ import { loadConfig } from "./config.js";
 
 export const OWNER = { email: "owner@example.com", password: "correct horse battery" };
 
-export async function makeApp(env: Record<string, string> = {}) {
-  const config = loadConfig({ NODE_ENV: "test", ...env });
+export interface AppOptions {
+  env?: Record<string, string>;
+  alertFetch?: typeof fetch;
+}
+
+export async function makeApp(env: Record<string, string> = {}, opts: AppOptions = {}) {
+  const config = loadConfig({ NODE_ENV: "test", ...env, ...opts.env });
   const db = openDb({ filename: ":memory:" });
-  const app = await buildApp({ config, db });
+  const app = await buildApp({ config, db, alertFetch: opts.alertFetch });
   return { app, db, config };
 }
 
@@ -43,8 +48,8 @@ export class TestClient {
 }
 
 /** App with the owner account created and a signed-in client. */
-export async function makeSignedInApp() {
-  const ctx = await makeApp();
+export async function makeSignedInApp(opts: AppOptions = {}) {
+  const ctx = await makeApp({}, opts);
   const client = new TestClient(ctx.app);
   const res = await client.post("/api/auth/setup", OWNER);
   if (res.statusCode !== 201) throw new Error(`setup failed: ${res.body}`);

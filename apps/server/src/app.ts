@@ -5,6 +5,8 @@ import fastifyStatic from "@fastify/static";
 import { appliedMigrationCount, type MunyDb, pingDb } from "@muny/db";
 import type { HealthResponse, MetaResponse } from "@muny/shared";
 import Fastify, { type FastifyInstance } from "fastify";
+import { registerAlertRoutes } from "./alerts/routes.js";
+import type { AlertDeps } from "./alerts/service.js";
 import { registerHouseholdRoutes } from "./auth/household.js";
 import { registerAuth } from "./auth/plugin.js";
 import { registerAuthRoutes } from "./auth/routes.js";
@@ -30,6 +32,8 @@ export interface AppDeps {
   db: MunyDb;
   /** Bank sync providers; defaults to the ones configured in env. Tests inject fakes. */
   providers?: Providers;
+  /** Override outbound HTTP for notification channels (tests). */
+  alertFetch?: typeof fetch;
 }
 
 /**
@@ -66,7 +70,12 @@ export function contentSecurityPolicy(config: Config): string {
 }
 
 /** Build the Fastify app without listening, so tests can use app.inject(). */
-export async function buildApp({ config, db, providers }: AppDeps): Promise<FastifyInstance> {
+export async function buildApp({
+  config,
+  db,
+  providers,
+  alertFetch,
+}: AppDeps): Promise<FastifyInstance> {
   const syncDeps = { config, providers: providers ?? makeProviders(config) };
   const csp = contentSecurityPolicy(config);
   const app = Fastify({
@@ -115,7 +124,14 @@ export async function buildApp({ config, db, providers }: AppDeps): Promise<Fast
   registerRecurringRoutes(app, db);
   registerBudgetRoutes(app, db);
   registerReportRoutes(app, db);
+  const alertDeps: AlertDeps = {
+    secretKey: config.secretKey,
+    publicUrl: config.publicUrl,
+    fetch: alertFetch,
+  };
+  registerAlertRoutes(app, db, alertDeps);
   app.decorate("syncDeps", syncDeps);
+  app.decorate("alertDeps", alertDeps);
 
   // Polled by the Docker healthcheck every 30s; only log problems.
   app.get("/api/health", { logLevel: "warn" }, async (_req, reply) => {

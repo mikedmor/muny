@@ -1,4 +1,5 @@
 import { openDb } from "@muny/db";
+import { ensureAlertRules, startAlertScheduler } from "./alerts/service.js";
 import { buildApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { startBackupScheduler } from "./data/backups.js";
@@ -12,6 +13,7 @@ async function main() {
   const config = loadConfig();
   const db = openDb({ filename: config.dbFile, migrationsFolder: config.migrationsDir });
   seedDefaultCategories(db);
+  ensureAlertRules(db);
   repairRawAchPayees(db);
   // Cheap (well under a second for years of history); picks up detection improvements after upgrades.
   db.transaction((tx) => rescanRecurring(tx));
@@ -37,6 +39,7 @@ async function main() {
   await app.listen({ host: config.host, port: config.port });
   startBackupScheduler(db, config, app.log);
   startSyncScheduler(db, app.syncDeps, app.log);
+  startAlertScheduler(db, app.alertDeps, app.log);
   if (config.plaid) app.log.info({ env: config.plaid.env }, "Plaid sync enabled");
   if (config.teller) app.log.info({ env: config.teller.env }, "Teller sync enabled");
 }

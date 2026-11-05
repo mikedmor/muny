@@ -2,10 +2,12 @@ import type { CurrentUser } from "@muny/shared";
 import { Link, Outlet } from "@tanstack/react-router";
 import { useState } from "react";
 import { useLogout, useMeta } from "../lib/auth.js";
+import { useNotifications } from "../lib/queries.js";
 import { cx } from "./ui.js";
 
 const NAV = [
   { to: "/", label: "Overview", icon: "◎" },
+  { to: "/alerts", label: "Alerts", icon: "🔔" },
   { to: "/transactions", label: "Transactions", icon: "≡" },
   { to: "/recurring", label: "Recurring", icon: "↻" },
   { to: "/budgets", label: "Budgets", icon: "◔" },
@@ -15,7 +17,18 @@ const NAV = [
   { to: "/settings", label: "Settings", icon: "⚙" },
 ] as const;
 
+function UnreadBadge({ count }: { count: number }) {
+  if (!count) return null;
+  return (
+    <span className="ml-auto rounded-full bg-brand-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white tabular-nums">
+      {count > 99 ? "99+" : count}
+      <span className="sr-only"> unread</span>
+    </span>
+  );
+}
+
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
+  const unread = useNotifications().data?.unread ?? 0;
   return (
     <nav className="flex flex-col gap-1">
       {NAV.map((item) => (
@@ -33,6 +46,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
             {item.icon}
           </span>
           {item.label}
+          {item.to === "/alerts" && <UnreadBadge count={unread} />}
         </Link>
       ))}
     </nav>
@@ -41,6 +55,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 
 export function AppShell({ user }: { user: CurrentUser }) {
   const [open, setOpen] = useState(false);
+  const unread = useNotifications().data?.unread ?? 0;
   const logout = useLogout();
   const meta = useMeta();
 
@@ -86,15 +101,33 @@ export function AppShell({ user }: { user: CurrentUser }) {
           <img src="/favicon.svg" alt="" className="size-7" />
           <span className="text-lg font-semibold">Muny</span>
         </Link>
-        <button
-          type="button"
-          aria-label={open ? "Close menu" : "Open menu"}
-          aria-expanded={open}
-          onClick={() => setOpen((o) => !o)}
-          className="rounded-lg px-3 py-1 text-xl hover:bg-slate-100 dark:hover:bg-slate-800"
-        >
-          {open ? "✕" : "☰"}
-        </button>
+        <div className="flex items-center gap-1">
+          <Link
+            to="/alerts"
+            onClick={() => setOpen(false)}
+            aria-label={unread ? `Alerts, ${unread} unread` : "Alerts"}
+            className="relative rounded-lg px-2.5 py-1 text-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            <span aria-hidden="true">🔔</span>
+            {unread > 0 && (
+              <span
+                aria-hidden="true"
+                className="absolute top-0 right-0 rounded-full bg-brand-600 px-1 text-[10px] font-semibold leading-4 text-white"
+              >
+                {unread > 9 ? "9+" : unread}
+              </span>
+            )}
+          </Link>
+          <button
+            type="button"
+            aria-label={open ? "Close menu" : "Open menu"}
+            aria-expanded={open}
+            onClick={() => setOpen((o) => !o)}
+            className="rounded-lg px-3 py-1 text-xl hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            {open ? "✕" : "☰"}
+          </button>
+        </div>
       </header>
       <div
         className={cx(

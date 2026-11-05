@@ -23,6 +23,8 @@ const EnvSchema = z.object({
   MUNY_MIGRATIONS_DIR: optionalString,
   /** Source code link shown in the UI (AGPL-3.0 §13). */
   MUNY_SOURCE_URL: z.string().url().default("https://github.com/mikedmor/muny"),
+  /** Address you open Muny at (e.g. https://muny.example.ts.net), for links in notifications. */
+  MUNY_PUBLIC_URL: optionalString.pipe(z.string().url().optional()),
   /** Where automatic SQLite backups go. Defaults to <data dir>/backups. */
   MUNY_BACKUP_DIR: optionalString,
   /** How many backups to keep. */
@@ -84,6 +86,7 @@ export interface Config {
   webDir: string | undefined;
   migrationsDir: string | undefined;
   sourceUrl: string;
+  publicUrl: string | undefined;
   backupDir: string;
   backupKeep: number;
   backupIntervalHours: number;
@@ -111,6 +114,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     webDir: e.MUNY_WEB_DIR ? resolve(e.MUNY_WEB_DIR) : undefined,
     migrationsDir: e.MUNY_MIGRATIONS_DIR ? resolve(e.MUNY_MIGRATIONS_DIR) : undefined,
     sourceUrl: e.MUNY_SOURCE_URL,
+    publicUrl: e.MUNY_PUBLIC_URL,
     backupDir: e.MUNY_BACKUP_DIR ? resolve(e.MUNY_BACKUP_DIR) : resolve(dataDir, "backups"),
     backupKeep: e.MUNY_BACKUP_KEEP,
     backupIntervalHours: e.MUNY_BACKUP_INTERVAL_HOURS,

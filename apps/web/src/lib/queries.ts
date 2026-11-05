@@ -1,15 +1,22 @@
 import type {
   Account,
+  AlertParams,
+  AlertRule,
+  AlertType,
   BackupInfo,
   BudgetMonth,
   BulkUpdateInput,
   CategoryGroup,
+  ChannelConfig,
+  ChannelType,
   ConnectionSummary,
   CreateAccountInput,
   CreateTransactionInput,
   Interval,
   LinkResult,
   LinkStart,
+  NotificationChannel,
+  NotificationList,
   PayeeCleanupPreview,
   PayeeSummary,
   RecurringKind,
@@ -442,3 +449,89 @@ export const useSetBudget = () =>
 
 export const useDeleteBudget = () =>
   useInvalidatingMutation((id: string) => api.delete(`/api/budgets/${id}`), [keys.budgets]);
+
+// ---------------------------------------------------------------------------
+// Alerts & notifications
+// ---------------------------------------------------------------------------
+
+export const alertKeys = {
+  notifications: ["notifications"] as const,
+  rules: ["alert-rules"] as const,
+  channels: ["alert-channels"] as const,
+};
+
+export function useNotifications() {
+  return useQuery({
+    queryKey: alertKeys.notifications,
+    queryFn: () => api.get<NotificationList>("/api/notifications?limit=100"),
+    // Alerts are checked on the server every 5 minutes.
+    refetchInterval: 60_000,
+  });
+}
+
+export const useMarkRead = () =>
+  useInvalidatingMutation(
+    (ids?: string[]) => api.post("/api/notifications/read", ids ? { ids } : {}),
+    [alertKeys.notifications],
+  );
+
+export const useRunAlerts = () =>
+  useInvalidatingMutation(() => api.post("/api/alerts/run"), [alertKeys.notifications]);
+
+export function useAlertRules() {
+  return useQuery({
+    queryKey: alertKeys.rules,
+    queryFn: () => api.get<AlertRule[]>("/api/alerts/rules"),
+  });
+}
+
+export const useUpdateAlertRule = () =>
+  useInvalidatingMutation(
+    ({
+      type,
+      ...body
+    }: {
+      type: AlertType;
+      enabled?: boolean;
+      params?: AlertParams;
+      channelIds?: string[];
+    }) => api.patch<AlertRule>(`/api/alerts/rules/${type}`, body),
+    [alertKeys.rules],
+  );
+
+export function useChannels() {
+  return useQuery({
+    queryKey: alertKeys.channels,
+    queryFn: () => api.get<NotificationChannel[]>("/api/alerts/channels"),
+  });
+}
+
+export const useSaveChannel = () =>
+  useInvalidatingMutation(
+    ({
+      id,
+      ...body
+    }: {
+      id?: string;
+      type?: ChannelType;
+      name?: string;
+      enabled?: boolean;
+      config?: ChannelConfig;
+    }) =>
+      id
+        ? api.patch<NotificationChannel>(`/api/alerts/channels/${id}`, body)
+        : api.post<NotificationChannel>("/api/alerts/channels", body),
+    [alertKeys.channels],
+  );
+
+export const useDeleteChannel = () =>
+  useInvalidatingMutation(
+    (id: string) => api.delete(`/api/alerts/channels/${id}`),
+    [alertKeys.channels, alertKeys.rules],
+  );
+
+export const useTestChannel = () =>
+  useInvalidatingMutation(
+    (id: string) => api.post(`/api/alerts/channels/${id}/test`),
+    [alertKeys.channels],
+  );

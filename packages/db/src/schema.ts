@@ -418,3 +418,55 @@ export const auditLog = sqliteTable(
     index("audit_log_entity_idx").on(t.entityType, t.entityId),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// Alerts & notifications (Phase 3)
+// ---------------------------------------------------------------------------
+
+export const alertRules = sqliteTable("alert_rules", {
+  id: text().primaryKey(),
+  /** low_balance | large_transaction | unusual_charge | duplicate_charge | bill_due | price_increase | budget | charged_after_cancel | connection_error | trial_ending */
+  type: text().notNull().unique(),
+  enabled: integer({ mode: "boolean" }).notNull().default(true),
+  /** JSON parameters for the type (thresholds etc.), validated by the app. */
+  params: text({ mode: "json" }).notNull().default(sql`'{}'`),
+  /** Also send to these channel ids (in-app is always on). */
+  channelIds: text({ mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const notificationChannels = sqliteTable("notification_channels", {
+  id: text().primaryKey(),
+  type: text({ enum: ["ntfy", "apprise", "smtp", "webhook"] }).notNull(),
+  name: text().notNull(),
+  enabled: integer({ mode: "boolean" }).notNull().default(true),
+  /** AES-256-GCM encrypted JSON config (URLs, tokens, SMTP password). Never logged. */
+  configEnc: text().notNull(),
+  lastSentAt: integer({ mode: "timestamp_ms" }),
+  lastError: text(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const notifications = sqliteTable(
+  "notifications",
+  {
+    id: text().primaryKey(),
+    ruleType: text().notNull(),
+    /** Same alert never fires twice: e.g. "bill_due:<series>:<date>". */
+    dedupeKey: text().notNull().unique(),
+    severity: text({ enum: ["info", "warning"] })
+      .notNull()
+      .default("info"),
+    title: text().notNull(),
+    body: text().notNull(),
+    /** In-app path to open, e.g. /recurring. */
+    link: text(),
+    createdAt: createdAt(),
+    readAt: integer({ mode: "timestamp_ms" }),
+    /** When it was handed to the outbound channels (null = not yet / none). */
+    sentAt: integer({ mode: "timestamp_ms" }),
+  },
+  (t) => [index("notifications_created_idx").on(t.createdAt)],
+);
