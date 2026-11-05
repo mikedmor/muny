@@ -330,6 +330,8 @@ export interface CryptoReconcile {
       deficit: string;
       /** When the balance first went below zero. */
       firstAt: number;
+      /** Earlier Reconcile fixes sending this coin out, whose basis is gone (undo them). */
+      staleFixes: string[];
       suggestions: CryptoTransferSuggestion[];
     }[];
     /** On-chain balance vs. what the transactions add up to. */

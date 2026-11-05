@@ -367,6 +367,7 @@ export function importKoinly(
   let walletsCreated = 0;
   for (const x of parsed.wallets) {
     const chosen = opts.mapping?.[x.name] ?? suggested.get(x.name) ?? "new";
+    if (chosen === "skip") continue;
     if (chosen !== "new" && tx.select({ id: w.id }).from(w).where(eq(w.id, chosen)).get()) {
       ids.set(x.name, chosen);
       continue;
@@ -386,7 +387,8 @@ export function importKoinly(
   let duplicates = 0;
   const byTransfer = new Map<string, string[]>();
   for (const p of parsed.txns) {
-    const walletId = ids.get(p.wallet) as string;
+    const walletId = ids.get(p.wallet);
+    if (!walletId) continue; // skipped wallet
     const id = newId();
     const res = tx
       .insert(t)
@@ -423,7 +425,14 @@ export function importKoinly(
   }
   // Link the two sides of each transfer.
   for (const [a, b] of byTransfer.values()) {
-    if (!a || !b) continue;
+    if (!a || !b) {
+      if (a)
+        tx.update(t)
+          .set({ type: sql`case when ${t.sentAsset} is null then 'deposit' else 'withdrawal' end` })
+          .where(eq(t.id, a))
+          .run();
+      continue;
+    }
     tx.update(t).set({ transferPairId: b }).where(eq(t.id, a)).run();
     tx.update(t).set({ transferPairId: a }).where(eq(t.id, b)).run();
   }

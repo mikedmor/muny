@@ -16,7 +16,14 @@ import { decryptJson } from "../lib/crypto.js";
 import { rewardWithdrawals } from "./chains/cardano.js";
 import { closeAmountsSql, normHash, normHashSql } from "./match.js";
 import { getCryptoSettings } from "./prices.js";
-import { readCursor, type SyncDeps, setRewardsFromImport, syncWallet, walletCtx } from "./sync.js";
+import {
+  fetchFullHistory,
+  readCursor,
+  type SyncDeps,
+  setRewardsFromImport,
+  syncWallet,
+  walletCtx,
+} from "./sync.js";
 
 /**
  * Reconcile: find why a wallet's balance is wrong, and offer fixes.
@@ -117,6 +124,7 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
       source: t.source,
       label: t.label,
       txHash: t.txHash,
+      description: t.description,
     })
     .from(t)
     .orderBy(t.at)
@@ -153,10 +161,26 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
       if (!r.bal.startsWith("-") || FIAT.has(asset) || hidden.has(asset)) continue;
       const deficit = normDec(r.bal.slice(1));
       const firstAt = r.firstNegAt ?? 0;
+      // A Reconcile move out of this wallet with nothing coming in to move:
+      // the imported row it was built on was replaced since.
+      const staleFixes = rows
+        .filter(
+          (r) =>
+            r.walletId === x.id &&
+            r.source === "manual" &&
+            r.sentAsset === asset &&
+            /^Added in Reconcile/.test(r.description ?? "") &&
+            !rows.some(
+              (o) =>
+                o.walletId === x.id && o.receivedAsset === asset && o.id !== r.id && o.at <= r.at,
+            ),
+        )
+        .map((r) => r.id);
       missing.push({
         asset,
         deficit,
         firstAt,
+        staleFixes,
         suggestions: suggest(x.id, asset, deficit, firstAt),
       });
     }
@@ -199,9 +223,10 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
         missing,
         mismatches,
         duplicates: dupes.length,
-        importedWithHash: x.sourceEnc
-          ? rows.filter((r) => r.walletId === x.id && r.source === "import" && r.txHash).length
-          : 0,
+        importedWithHash:
+          x.sourceEnc && !(x.status === "ok" && x.lastError)
+            ? rows.filter((r) => r.walletId === x.id && r.source === "import" && r.txHash).length
+            : 0,
         crossChain,
       });
   }
@@ -494,6 +519,15 @@ export async function preferChain(db: MunyDb, walletId: string, deps: SyncDeps) 
     )
     .all();
   if (!rowsWithHash.length) throw new Error("No imported transactions with a hash in this wallet");
+  // Safety: only replace what the chain service actually has. Closed accounts
+  // (e.g. a merged Stellar account) or pruned nodes return little or nothing.
+  const fetched = await fetchFullHistory(db, walletId, deps);
+  const onChain = new Set(fetched.mapped.map((m) => normHash(m.txHash || "")));
+  const missing = rowsWithHash.filter((r) => !onChain.has(normHash(r.txHash as string)));
+  if (missing.length > 0)
+    throw new Error(
+      `The blockchain service doesn't have ${missing.length} of this wallet's ${rowsWithHash.length} imported transactions${fetched.notice ? ` (${fetched.notice.split(":")[0]})` : ""}, so nothing was changed.`,
+    );
   // Remember transfer partners in other wallets, per transaction and direction.
   const links = rowsWithHash
     .filter((r) => r.transferPairId)
@@ -504,6 +538,8 @@ export async function preferChain(db: MunyDb, walletId: string, deps: SyncDeps) 
       asset: (r.sentAsset ?? r.receivedAsset) as string,
     }));
   db.transaction((tx) => {
+    // Fixes Reconcile made on top of imported rows go with them.
+    undoReconcileRows(tx as unknown as MunyDb, walletId);
     tx.delete(t)
       .where(
         inArray(
@@ -546,6 +582,39 @@ export async function preferChain(db: MunyDb, walletId: string, deps: SyncDeps) 
     }
   });
   return { replaced: rowsWithHash.length, added: res.added, relinked };
+}
+
+/**
+ * Remove rows Reconcile added (moves, links, opening balances) in a wallet,
+ * or just the given ones, and turn their partners back into plain deposits
+ * or withdrawals.
+ */
+export function undoReconcileRows(db: MunyDb, walletId: string, ids?: string[]) {
+  const rowsToUndo = db
+    .select({ id: t.id, pair: t.transferPairId })
+    .from(t)
+    .where(
+      and(
+        eq(t.walletId, walletId),
+        eq(t.source, "manual"),
+        sql`(${t.description} like 'Added in Reconcile%' or ${t.description} like 'Opening balance (added in Reconcile%')`,
+        ids ? inArray(t.id, ids) : undefined,
+      ),
+    )
+    .all();
+  if (!rowsToUndo.length) return { undone: 0 };
+  db.delete(t)
+    .where(
+      inArray(
+        t.id,
+        rowsToUndo.map((r) => r.id),
+      ),
+    )
+    .run();
+  db.run(sql`
+    update crypto_txns set type = case when sent_asset is null then 'deposit' else 'withdrawal' end
+     where type = 'transfer' and transfer_pair_id is null`);
+  return { undone: rowsToUndo.length };
 }
 
 /** Remove a synced wallet's rows that repeat imported ones. */

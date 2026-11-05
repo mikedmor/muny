@@ -28,6 +28,7 @@ import {
   reconcileReport,
   removeDuplicates,
   removeRows,
+  undoReconcileRows,
 } from "./reconcile.js";
 import {
   createWallet,
@@ -468,6 +469,20 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
     } catch (err) {
       throw badRequest(err instanceof Error ? err.message : "Couldn't apply that fix");
     }
+  });
+
+  app.post("/api/crypto/reconcile/undo", async (req) => {
+    const user = requireUser(req);
+    const body = parse(
+      z.object({
+        walletId: z.string().min(1).max(64),
+        txnIds: z.array(z.string().min(1).max(64)).min(1).max(50),
+      }),
+      req.body,
+    );
+    const res = undoReconcileRows(db, body.walletId, body.txnIds);
+    log(user.id, "crypto.reconcile_undo", body.walletId, res);
+    return res;
   });
 
   /** Staking rewards counted twice: keep one version. */

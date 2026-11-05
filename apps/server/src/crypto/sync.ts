@@ -237,6 +237,14 @@ export function walletCtx(db: MunyDb, wallet: typeof w.$inferSelect, deps: SyncD
   );
 }
 
+/** Fetch a wallet's whole history from its chain service without storing anything. */
+export async function fetchFullHistory(db: MunyDb, walletId: string, deps: SyncDeps) {
+  const wallet = db.select().from(w).where(eq(w.id, walletId)).get();
+  if (!wallet) throw new SyncError("Wallet not found");
+  const ctx = walletCtx(db, { ...wallet, syncCursor: null }, deps);
+  return ADAPTERS[CHAINS[wallet.chain as ChainKey].provider](ctx);
+}
+
 /** Wallets whose staking rewards come from an import instead of the chain. */
 const REWARDS_FROM_IMPORT = "crypto.rewards_from_import";
 export function rewardsFromImport(db: MunyDb): Set<string> {

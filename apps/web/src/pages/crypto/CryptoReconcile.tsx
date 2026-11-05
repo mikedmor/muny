@@ -71,6 +71,9 @@ function WalletIssues({ w }: { w: Report["wallets"][number] }) {
       at: m.firstAt,
     }),
   );
+  const undo = useCryptoMutation((txnIds: string[]) =>
+    api.post("/api/crypto/reconcile/undo", { walletId: w.walletId, txnIds }),
+  );
   const move = useCryptoMutation(
     (moves: { txnId: string; toTxnId: string | null; toWalletId: string }[]) =>
       api.post("/api/crypto/reconcile/crosschain", { moves }),
@@ -168,50 +171,74 @@ function WalletIssues({ w }: { w: Report["wallets"][number] }) {
         </div>
       )}
 
-      {w.missing.map((m) => (
-        <div key={m.asset} className="space-y-2 text-sm">
-          <p>
-            <span className="font-medium">
-              {fmtAmount(m.deficit, 8)} {m.asset} more left than arrived.
-            </span>{" "}
-            The balance first goes below zero on {dayLabel(m.firstAt)}, so a deposit before then is
-            missing.{" "}
-            {w.kind !== "exchange" && !w.synced && !SYNCABLE.has(m.asset)
-              ? `Muny can't sync ${m.asset} from a blockchain (no public service for it), so add an opening balance or hide the coin.`
-              : why}
-          </p>
-          {m.suggestions.length > 0 && (
-            <ul className="space-y-1">
-              {m.suggestions.map((s) => (
-                <li
-                  key={s.txnId}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700"
-                >
-                  <span>
-                    Possible match: {fmtAmount(s.amount, 8)} {m.asset} sent from{" "}
-                    <span className="font-medium">{s.fromWalletName}</span> on {dayLabel(s.at)}
-                  </span>
-                  <Button
-                    variant="secondary"
-                    disabled={link.isPending}
-                    onClick={() => link.mutate(s.txnId)}
-                  >
-                    It arrived here
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="flex flex-wrap gap-2">
-            <Button variant="ghost" disabled={opening.isPending} onClick={() => opening.mutate(m)}>
-              Add an opening balance of {fmtAmount(m.deficit, 8)} {m.asset}
+      {w.missing.map((m) =>
+        m.staleFixes.length > 0 ? (
+          <div key={m.asset} className="space-y-2 text-sm">
+            <p>
+              <span className="font-medium">
+                {fmtAmount(m.deficit, 8)} {m.asset} left by an earlier Reconcile fix.
+              </span>{" "}
+              A fix moved this {m.asset} out of {w.walletName}, but what it moved has since been
+              replaced (for example by the blockchain's version), so the move now has nothing to
+              move. Undoing it is safe.
+            </p>
+            <Button
+              variant="secondary"
+              disabled={undo.isPending}
+              onClick={() => undo.mutate(m.staleFixes)}
+            >
+              Undo that fix
             </Button>
-            <Link to="/crypto/wallets" className="self-center text-sm text-brand-600 underline">
-              Import older history instead
-            </Link>
           </div>
-        </div>
-      ))}
+        ) : (
+          <div key={m.asset} className="space-y-2 text-sm">
+            <p>
+              <span className="font-medium">
+                {fmtAmount(m.deficit, 8)} {m.asset} more left than arrived.
+              </span>{" "}
+              The balance first goes below zero on {dayLabel(m.firstAt)}, so a deposit before then
+              is missing.{" "}
+              {w.kind !== "exchange" && !w.synced && !SYNCABLE.has(m.asset)
+                ? `Muny can't sync ${m.asset} from a blockchain (no public service for it), so add an opening balance or hide the coin.`
+                : why}
+            </p>
+            {m.suggestions.length > 0 && (
+              <ul className="space-y-1">
+                {m.suggestions.map((s) => (
+                  <li
+                    key={s.txnId}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700"
+                  >
+                    <span>
+                      Possible match: {fmtAmount(s.amount, 8)} {m.asset} sent from{" "}
+                      <span className="font-medium">{s.fromWalletName}</span> on {dayLabel(s.at)}
+                    </span>
+                    <Button
+                      variant="secondary"
+                      disabled={link.isPending}
+                      onClick={() => link.mutate(s.txnId)}
+                    >
+                      It arrived here
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="ghost"
+                disabled={opening.isPending}
+                onClick={() => opening.mutate(m)}
+              >
+                Add an opening balance of {fmtAmount(m.deficit, 8)} {m.asset}
+              </Button>
+              <Link to="/crypto/wallets" className="self-center text-sm text-brand-600 underline">
+                Import older history instead
+              </Link>
+            </div>
+          </div>
+        ),
+      )}
 
       {w.mismatches.map((x) => (
         <Mismatch key={x.asset} walletId={w.walletId} m={x} imported={w.importedWithHash} />

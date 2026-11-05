@@ -153,6 +153,7 @@ function ImportKoinly({ onDone }: { onDone: () => void }) {
                       New {w.kind === "exchange" ? "exchange" : "wallet"}:{" "}
                       {w.name.replace(/\s*\[Pool\]$/i, "")}
                     </option>
+                    <option value="skip">Skip (don&apos;t import this wallet)</option>
                     {(wallets.data ?? []).map((x) => (
                       <option key={x.id} value={x.id}>
                         {x.name}

@@ -126,4 +126,22 @@ describe("Koinly full export", () => {
     ).json<CryptoImportResult>();
     expect(again).toMatchObject({ imported: 0, duplicates: 4 });
   });
+
+  it("skips wallets marked skip, leaving the other side of their transfers as a plain move", async () => {
+    const { client } = await makeSignedInApp();
+    const res = (
+      await client.post("/api/crypto/import/commit", {
+        format: "koinly",
+        content: CSV,
+        mapping: { Coinbase: "skip", "ETH Exodus": "new" },
+      })
+    ).json<CryptoImportResult>();
+    expect(res).toMatchObject({ imported: 2, walletsCreated: 1 });
+    const wallets = (await client.get("/api/crypto/wallets")).json<CryptoWallet[]>();
+    expect(wallets.map((x) => x.name)).toEqual(["ETH Exodus"]);
+    const page = (
+      await client.get(`/api/crypto/txns?walletId=${wallets[0]?.id}`)
+    ).json<CryptoTxnPage>();
+    expect(page.items.map((x) => x.type).sort()).toEqual(["deposit", "deposit"]);
+  });
 });
