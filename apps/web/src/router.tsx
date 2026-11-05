@@ -67,11 +67,13 @@ const monthSearch = (s: Record<string, unknown>): { month?: string } =>
 
 const cryptoTxnSearch = (s: Record<string, unknown>) => {
   const out: Record<string, string | number> = {};
-  for (const k of ["walletId", "asset", "type", "label", "from", "to"])
-    if (typeof s[k] === "string" && (s[k] as string).length <= 64) out[k] = s[k] as string;
+  for (const k of ["walletId", "asset", "type", "label", "from", "to", "warnings"])
+    if (typeof s[k] === "string" && (s[k] as string).length <= (k === "walletId" ? 4000 : 64))
+      out[k] = s[k] as string;
   if (typeof s.page === "number" && s.page > 0) out.page = Math.floor(s.page);
   return out as {
     walletId?: string;
+    warnings?: "missing";
     asset?: string;
     type?: "deposit" | "withdrawal" | "trade" | "transfer";
     label?: string;

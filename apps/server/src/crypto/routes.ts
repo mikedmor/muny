@@ -37,10 +37,13 @@ import {
   createWallet,
   cryptoOverview,
   importKoinly,
+  linkAsTransfer,
   listTxns,
   listWallets,
   previewKoinly,
   syncHistory,
+  transferMatches,
+  unlinkTransfer,
   walletDetail,
 } from "./service.js";
 import {
@@ -267,7 +270,8 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
   app.get("/api/crypto/txns", async (req) => {
     const q = parse(
       z.object({
-        walletId: z.string().max(64).optional(),
+        walletId: z.string().max(4000).optional(),
+        warnings: z.enum(["missing"]).optional(),
         asset: z.string().max(20).optional(),
         type: z.enum(["deposit", "withdrawal", "trade", "transfer"]).optional(),
         label: z.string().max(30).optional(),
@@ -361,6 +365,37 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
       .run().changes;
     if (!n) throw notFound("Transaction not found");
     log(user.id, "crypto.txn_update", id);
+    return { ok: true };
+  });
+
+  /** Possible other sides of a transfer, for "Mark as transfer". */
+  app.get("/api/crypto/txns/:id/matches", async (req) => {
+    const { id } = parse(IdParams, req.params);
+    return transferMatches(db, id);
+  });
+
+  app.post("/api/crypto/txns/:id/link", async (req) => {
+    const user = requireUser(req);
+    const { id } = parse(IdParams, req.params);
+    const body = parse(z.object({ otherId: z.string().min(1).max(64) }), req.body);
+    try {
+      linkAsTransfer(db, id, body.otherId);
+    } catch (err) {
+      throw badRequest(err instanceof Error ? err.message : "Couldn't link them");
+    }
+    log(user.id, "crypto.txn_link", id);
+    return { ok: true };
+  });
+
+  app.post("/api/crypto/txns/:id/unlink", async (req) => {
+    const user = requireUser(req);
+    const { id } = parse(IdParams, req.params);
+    try {
+      unlinkTransfer(db, id);
+    } catch (err) {
+      throw badRequest(err instanceof Error ? err.message : "Couldn't unlink it");
+    }
+    log(user.id, "crypto.txn_unlink", id);
     return { ok: true };
   });
 

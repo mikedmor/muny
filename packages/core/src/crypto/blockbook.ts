@@ -91,9 +91,17 @@ export function mapUtxoTx(
     feeAsset: null,
     feeAmount: null,
   };
+  const firstOther = (vs: BbVio[]) =>
+    vs.find((v) => !mine(v) && v.addresses?.length)?.addresses?.[0] ?? null;
   if (!positive(ownIn)) {
     if (!positive(ownOut)) return null; // not ours
-    return { ...base, type: "deposit", receivedAsset: asset, receivedAmount: ownOut };
+    return {
+      ...base,
+      type: "deposit",
+      receivedAsset: asset,
+      receivedAmount: ownOut,
+      counterparty: firstOther(tx.vin),
+    };
   }
   // We spent: what left to others = ownIn − ownOut − fee.
   const sent = minus(minus(ownIn, ownOut), fee);
@@ -102,6 +110,7 @@ export function mapUtxoTx(
     type: "withdrawal",
     sentAsset: positive(sent) ? asset : null,
     sentAmount: positive(sent) ? sent : null,
+    counterparty: positive(sent) ? firstOther(tx.vout) : null,
     feeAsset: positive(fee) ? asset : null,
     feeAmount: positive(fee) ? fee : null,
   };

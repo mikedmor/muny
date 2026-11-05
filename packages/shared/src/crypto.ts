@@ -105,6 +105,14 @@ export interface CryptoTxn {
   } | null;
   /** The other address: who sent a deposit, or where a withdrawal went. */
   counterparty: string | null;
+  /**
+   * More left the wallet than it had (purchase history is missing, which
+   * tax reports need): per coin, how much.
+   */
+  missingHistory: { asset: string; amount: string }[];
+  /** Imported cost basis / gain (Koinly), when known. */
+  importedCostBasisCents: number | null;
+  importedGainCents: number | null;
 }
 
 export interface CryptoTxnPage {
@@ -115,7 +123,10 @@ export interface CryptoTxnPage {
 }
 
 export interface CryptoTxnQuery {
+  /** One wallet id, or several separated by commas. */
   walletId?: string;
+  /** "missing": only transactions with missing purchase history. */
+  warnings?: "missing";
   asset?: string;
   type?: CryptoTxnType;
   label?: string;

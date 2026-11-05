@@ -4,6 +4,7 @@ import {
   assetName,
   FIAT,
   fifoCostBasis,
+  fromFixed,
   isZeroDec,
   type ParsedCryptoTxn,
   parseAnyKoinlyCsv,
@@ -198,6 +199,9 @@ export function toTxn(
     txHash: r.txHash,
     description: r.description,
     counterparty: r.counterparty,
+    missingHistory: [],
+    importedCostBasisCents: r.importedCostBasisCents,
+    importedGainCents: r.importedGainCents,
     source: r.source,
     transferPairId: r.transferPairId,
     transferWalletName: pairWallet,
@@ -206,18 +210,27 @@ export function toTxn(
 
 export function listTxns(db: Db, q: CryptoTxnQuery): CryptoTxnPage {
   const conds: (SQL | undefined)[] = [];
-  if (q.walletId) conds.push(eq(t.walletId, q.walletId));
+  const walletIds = (q.walletId ?? "").split(",").filter(Boolean);
+  if (walletIds.length) conds.push(inArray(t.walletId, walletIds));
+  const missing = missingHistory(db);
+  if (q.warnings === "missing") conds.push(inArray(t.id, [...missing.keys()]));
   if (q.type) conds.push(eq(t.type, q.type));
   if (q.label) conds.push(q.label === "none" ? sql`${t.label} is null` : eq(t.label, q.label));
   if (q.asset)
     conds.push(or(eq(t.sentAsset, q.asset), eq(t.receivedAsset, q.asset), eq(t.feeAsset, q.asset)));
   if (q.from) conds.push(gte(t.at, Date.parse(`${q.from}T00:00:00Z`)));
   if (q.to) conds.push(lte(t.at, Date.parse(`${q.to}T23:59:59.999Z`)));
-  // Across all wallets a transfer shows once (from its sending side), as Koinly does.
-  if (!q.walletId)
-    conds.push(
-      sql`not (${t.type} = 'transfer' and ${t.transferPairId} is not null and ${t.sentAsset} is null)`,
-    );
+  // A transfer between shown wallets shows once (from its sending side), as Koinly does.
+  conds.push(
+    walletIds.length
+      ? sql`not (${t.type} = 'transfer' and ${t.transferPairId} is not null and ${t.sentAsset} is null
+          and exists (select 1 from crypto_txns p where p.id = ${t.transferPairId}
+            and p.wallet_id in (${sql.join(
+              walletIds.map((id) => sql`${id}`),
+              sql`, `,
+            )})))`
+      : sql`not (${t.type} = 'transfer' and ${t.transferPairId} is not null and ${t.sentAsset} is null)`,
+  );
   const where = and(...conds);
   const total = db.select({ n: sql<number>`count(*)` }).from(t).where(where).get()?.n ?? 0;
   const limit = Math.min(q.limit ?? 50, 500);
@@ -271,10 +284,13 @@ export function listTxns(db: Db, q: CryptoTxnQuery): CryptoTxnPage {
     items: rows.map(priced).map((r) => {
       const pr = r.transferPairId ? pairs.get(r.transferPairId) : undefined;
       const pw = pr ? wallets.get(pr.walletId) : undefined;
-      return toTxn(r, wallets.get(r.walletId)?.name ?? "", pw?.name ?? null, {
-        wallet: wallets.get(r.walletId),
-        pair: pr && pw ? { row: pr, wallet: pw } : null,
-      });
+      return {
+        ...toTxn(r, wallets.get(r.walletId)?.name ?? "", pw?.name ?? null, {
+          wallet: wallets.get(r.walletId),
+          pair: pr && pw ? { row: pr, wallet: pw } : null,
+        }),
+        missingHistory: missing.get(r.id) ?? (pr ? (missing.get(pr.id) ?? []) : []),
+      };
     }),
     total: Number(total),
     offset,
@@ -853,4 +869,166 @@ function priceLookup(daily: Daily) {
 /** Price lookup for just these assets. */
 function dailyPrices(db: Db, assets: (string | null)[]) {
   return priceLookup(loadDaily(db, assets));
+}
+
+/**
+ * Transactions that send more of a coin than the wallet had at the time:
+ * the purchase history before them is missing (tax reports need it), as
+ * Koinly warns. Per wallet and coin, in time order, arrivals first within
+ * the same moment. Transaction id → what was missing.
+ */
+export function missingHistory(db: Db): Map<string, { asset: string; amount: string }[]> {
+  const hidden = hiddenAssets(db);
+  const rows = db
+    .select({
+      id: t.id,
+      walletId: t.walletId,
+      sentAsset: t.sentAsset,
+      sentAmount: t.sentAmount,
+      receivedAsset: t.receivedAsset,
+      receivedAmount: t.receivedAmount,
+      feeAsset: t.feeAsset,
+      feeAmount: t.feeAmount,
+    })
+    .from(t)
+    .orderBy(
+      t.at,
+      sql`case when ${t.sentAsset} is null and ${t.feeAsset} is null then 0 else 1 end`,
+      t.id,
+    )
+    .all();
+  const bal = new Map<string, bigint>();
+  const out = new Map<string, { asset: string; amount: string }[]>();
+  const skip = (a: string) => FIAT.has(a) || hidden.has(a);
+  for (const r of rows) {
+    if (r.receivedAsset && r.receivedAmount && !skip(r.receivedAsset)) {
+      const k = `${r.walletId}|${r.receivedAsset}`;
+      bal.set(k, (bal.get(k) ?? 0n) + toFixed(r.receivedAmount));
+    }
+    const spent = new Map<string, bigint>();
+    if (r.sentAsset && r.sentAmount) spent.set(r.sentAsset, toFixed(r.sentAmount));
+    if (r.feeAsset && r.feeAmount)
+      spent.set(r.feeAsset, (spent.get(r.feeAsset) ?? 0n) + toFixed(r.feeAmount));
+    for (const [asset, n] of spent) {
+      if (skip(asset) || n <= 0n) continue;
+      const k = `${r.walletId}|${asset}`;
+      const had = bal.get(k) ?? 0n;
+      const short = had >= n ? 0n : had > 0n ? n - had : n;
+      bal.set(k, had - n);
+      if (short > 0n)
+        out.set(r.id, [...(out.get(r.id) ?? []), { asset, amount: fromFixed(short) }]);
+    }
+  }
+  return out;
+}
+
+/** A possible other side of a transfer, for "Mark as transfer". */
+export interface TransferMatch {
+  id: string;
+  walletId: string;
+  walletName: string;
+  at: number;
+  asset: string;
+  amount: string;
+}
+
+/**
+ * Sends (for a deposit) or receipts (for a withdrawal) of the same coin in
+ * your other wallets, not linked yet, within 3 days and of about the amount
+ * (what left can be up to half again more: fees).
+ */
+export function transferMatches(db: Db, id: string): TransferMatch[] {
+  const r = db.select().from(t).where(eq(t.id, id)).get();
+  if (!r || r.transferPairId) return [];
+  const incoming = !!r.receivedAsset && !r.sentAsset;
+  const outgoing = !!r.sentAsset && !r.receivedAsset;
+  if (!incoming && !outgoing) return [];
+  const asset = (incoming ? r.receivedAsset : r.sentAsset) as string;
+  const mine = toFixed((incoming ? r.receivedAmount : r.sentAmount) ?? "0");
+  const day = 86_400_000;
+  const names = new Map(
+    db
+      .select({ id: w.id, name: w.name })
+      .from(w)
+      .all()
+      .map((x) => [x.id, x.name]),
+  );
+  return db
+    .select()
+    .from(t)
+    .where(
+      and(
+        sql`${t.walletId} <> ${r.walletId}`,
+        sql`${t.transferPairId} is null`,
+        gte(t.at, r.at - 3 * day),
+        lte(t.at, r.at + 3 * day),
+        incoming
+          ? and(eq(t.sentAsset, asset), sql`${t.receivedAsset} is null`)
+          : and(eq(t.receivedAsset, asset), sql`${t.sentAsset} is null`),
+      ),
+    )
+    .all()
+    .filter((o) => {
+      const theirs = toFixed((incoming ? o.sentAmount : o.receivedAmount) ?? "0");
+      const fee = o.feeAsset === asset && o.feeAmount ? toFixed(o.feeAmount) : 0n;
+      const [sent, got] = incoming ? [theirs + fee, mine] : [mine, theirs];
+      return got > 0n && sent >= got && sent * 2n <= got * 3n;
+    })
+    .sort((a, b) => Math.abs(a.at - r.at) - Math.abs(b.at - r.at))
+    .slice(0, 10)
+    .map((o) => ({
+      id: o.id,
+      walletId: o.walletId,
+      walletName: names.get(o.walletId) ?? "",
+      at: o.at,
+      asset,
+      amount: (incoming ? o.sentAmount : o.receivedAmount) as string,
+    }));
+}
+
+/** Link a send and a receipt in two of your wallets as one transfer. */
+export function linkAsTransfer(db: Db, id: string, otherId: string) {
+  return db.transaction((tx) => {
+    const a = tx.select().from(t).where(eq(t.id, id)).get();
+    const b = tx.select().from(t).where(eq(t.id, otherId)).get();
+    if (!a || !b) throw new Error("Transaction not found");
+    if (a.transferPairId || b.transferPairId) throw new Error("Already part of a transfer");
+    if (a.walletId === b.walletId) throw new Error("Pick a transaction in another wallet");
+    const [out, inn] = a.sentAsset ? [a, b] : [b, a];
+    if (
+      !out.sentAsset ||
+      out.receivedAsset ||
+      !inn.receivedAsset ||
+      inn.sentAsset ||
+      out.sentAsset !== inn.receivedAsset
+    )
+      throw new Error("A transfer needs a send and a receipt of the same coin");
+    for (const [x, pair] of [
+      [out, inn],
+      [inn, out],
+    ] as const)
+      tx.update(t)
+        .set({ type: "transfer", label: null, transferPairId: pair.id, userModified: true })
+        .where(eq(t.id, x.id))
+        .run();
+    return { ok: true };
+  });
+}
+
+/** Undo a transfer link: both sides become a plain deposit and withdrawal again. */
+export function unlinkTransfer(db: Db, id: string) {
+  return db.transaction((tx) => {
+    const a = tx.select().from(t).where(eq(t.id, id)).get();
+    if (!a?.transferPairId) throw new Error("This isn't a transfer between your wallets");
+    for (const x of [a.id, a.transferPairId])
+      tx.update(t)
+        .set({
+          transferPairId: null,
+          type: sql`case when ${t.sentAsset} is null then 'deposit' when ${t.receivedAsset} is null then 'withdrawal' else 'trade' end`,
+          userModified: true,
+        })
+        .where(eq(t.id, x))
+        .run();
+    return { ok: true };
+  });
 }

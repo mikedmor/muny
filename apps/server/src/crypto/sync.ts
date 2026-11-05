@@ -313,13 +313,57 @@ export function setChainVersion(db: MunyDb, walletId: string, on: boolean) {
     .run();
 }
 
+/** Providers that report the other address of a transaction. */
+const ADDRESS_PROVIDERS = new Set(["blockscout", "esplora", "blockcypher"]);
+const ADDRESSES_FILLED = "crypto.addresses_filled";
+function idSetting(db: MunyDb, key: string): Set<string> {
+  const v = db.select().from(schema.appSettings).where(eq(schema.appSettings.key, key)).get()
+    ?.value as string[] | undefined;
+  return new Set(v ?? []);
+}
+function addToIdSetting(db: MunyDb, key: string, id: string) {
+  const value = [...idSetting(db, key).add(id)];
+  db.insert(schema.appSettings)
+    .values({ key, value })
+    .onConflictDoUpdate({ target: schema.appSettings.key, set: { value } })
+    .run();
+}
+
 async function runSync(
   db: MunyDb,
   wallet: typeof w.$inferSelect,
   deps: SyncDeps,
 ): Promise<CryptoSyncResult & { notice: string | null }> {
   const chain = CHAINS[wallet.chain as ChainKey];
-  const ctx = walletCtx(db, wallet, deps);
+  // Rows synced before addresses were kept: read the whole history once more
+  // to fill them in (a few requests, once per wallet).
+  const backfill =
+    ADDRESS_PROVIDERS.has(chain.provider) &&
+    !idSetting(db, ADDRESSES_FILLED).has(wallet.id) &&
+    !!db
+      .select({ id: t.id })
+      .from(t)
+      .where(
+        and(
+          eq(t.walletId, wallet.id),
+          sql`${t.counterparty} is null and ${t.txHash} is not null`,
+          sql`(${t.sentAsset} is null) <> (${t.receivedAsset} is null)`,
+        ),
+      )
+      .get();
+  // Re-reading everything must not bring back rows removed in Reconcile:
+  // only what happened after the last sync is new.
+  const syncedUntil = backfill
+    ? Math.max(
+        wallet.lastSyncAt?.getTime() ?? 0,
+        Number(
+          db.get<{ m: number | null }>(
+            sql`select max(at) as m from crypto_txns where wallet_id = ${wallet.id} and source = 'sync'`,
+          )?.m ?? 0,
+        ),
+      )
+    : 0;
+  const ctx = walletCtx(db, backfill ? { ...wallet, syncCursor: null } : wallet, deps);
   const fetched = await ADAPTERS[chain.provider](ctx);
   const { height, balances, pos, notice } = fetched;
   // Rewards already counted from an import (the user chose that version).
@@ -337,9 +381,17 @@ async function runSync(
         .where(and(eq(t.walletId, wallet.id), eq(t.externalId, s.externalId)))
         .get();
       if (exists || coveredByImport(tx, wallet.id, s)) {
-        duplicates++;
+        if (s.counterparty && s.txHash) {
+          const a = s.receivedAsset ?? s.sentAsset;
+          tx.run(sql`update crypto_txns set counterparty = ${s.counterparty}
+            where wallet_id = ${wallet.id} and counterparty is null
+              and ${normHashSql("tx_hash")} = ${normHash(s.txHash)}
+              and ${s.receivedAsset ? sql`received_asset = ${a} and sent_asset is null` : sql`sent_asset = ${a} and received_asset is null`}`);
+        }
+        if (!backfill || !exists) duplicates++;
         continue;
       }
+      if (backfill && s.at <= syncedUntil) continue;
       tx.insert(t)
         .values({
           id: newId(),
@@ -363,6 +415,7 @@ async function runSync(
     }
   });
   if (added) pairTransfers(db);
+  if (backfill) addToIdSetting(db, ADDRESSES_FILLED, wallet.id);
   const next: Cursor = { height, balances, ...(pos ? { pos } : {}) };
   db.update(w)
     .set({ syncCursor: JSON.stringify(next) })

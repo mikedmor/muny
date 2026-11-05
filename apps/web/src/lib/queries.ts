@@ -710,3 +710,19 @@ export const useCryptoSettings = () =>
   });
 export const useCryptoMutation = <TIn, TOut>(fn: (input: TIn) => Promise<TOut>) =>
   useInvalidatingMutation(fn, [cryptoKeys.all]);
+
+/** Possible other sides of a transfer for one transaction ("Mark as transfer"). */
+export interface CryptoTransferMatch {
+  id: string;
+  walletId: string;
+  walletName: string;
+  at: number;
+  asset: string;
+  amount: string;
+}
+export const useCryptoTransferMatches = (id: string, enabled: boolean) =>
+  useQuery({
+    queryKey: [...cryptoKeys.txns, "matches", id],
+    queryFn: () => api.get<CryptoTransferMatch[]>(`/api/crypto/txns/${id}/matches`),
+    enabled,
+  });
