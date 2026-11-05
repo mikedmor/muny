@@ -101,6 +101,72 @@ describe("Siacoin", () => {
   });
 });
 
+describe("Siacoin's other addresses", () => {
+  it("finds the address an imported deposit was paid to, and adds it", async () => {
+    const C = "12".repeat(38);
+    const TX = "9a".repeat(32);
+    const fake = (async (url: string) => {
+      const u = new URL(url);
+      const parts = u.pathname.split("/");
+      if (u.pathname === `/transactions/${TX}`)
+        return Response.json({
+          id: TX,
+          siacoinOutputs: [
+            { siacoinOutput: { address: C, value: `3000000${"0".repeat(18)}` } },
+            { siacoinOutput: { address: EXT, value: H("1") } },
+          ],
+        });
+      if (parts[1] !== "addresses") return new Response("no transaction found", { status: 404 });
+      const addr = parts[2];
+      if (parts[3] === "events")
+        return Response.json(
+          Number(u.searchParams.get("offset")) || addr !== C
+            ? []
+            : [
+                {
+                  id: TX,
+                  index: { height: 5 },
+                  type: "v1Transaction",
+                  timestamp: "2017-07-11T00:00:00Z",
+                  data: {
+                    transaction: {
+                      siacoinInputs: [{ address: EXT, value: H("4") }],
+                      siacoinOutputs: [{ siacoinOutput: { address: C, value: H("3") } }],
+                    },
+                  },
+                },
+              ],
+        );
+      return Response.json({ unspentSiacoins: addr === C ? H("3") : "0", immatureSiacoins: "0" });
+    }) as unknown as typeof fetch;
+    const { client, db, w, settle } = await wallet(fake, "sc", A);
+    await settle();
+    const { schema } = await import("@muny/db");
+    db.insert(schema.cryptoTxns)
+      .values({
+        id: "imp",
+        walletId: w.id,
+        at: Date.UTC(2017, 6, 11),
+        externalId: "koinly:imp",
+        source: "import",
+        type: "deposit",
+        receivedAsset: "SC",
+        receivedAmount: "3.000001",
+        txHash: TX,
+      })
+      .run();
+    const res = (
+      await client.post("/api/crypto/reconcile/sia-addresses", { walletId: w.id })
+    ).json();
+    expect(res).toEqual({ checked: 1, added: 1 });
+    const done = await settle();
+    expect(done.onChain).toEqual([{ asset: "SC", amount: "3" }]);
+    // The imported deposit stays; its synced copy isn't added again.
+    const page = (await client.get(`/api/crypto/txns?walletId=${w.id}`)).json<CryptoTxnPage>();
+    expect(page.items.map((t) => t.id)).toEqual(["imp"]);
+  });
+});
+
 describe("Zcash", () => {
   const ZEC = `t1${"a".repeat(33)}`;
   it("asks for a Blockbook server first, then syncs through it", async () => {

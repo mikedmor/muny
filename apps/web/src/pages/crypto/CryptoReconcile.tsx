@@ -249,6 +249,7 @@ function WalletIssues({ w }: { w: Report["wallets"][number] }) {
           m={x}
           imported={w.importedWithHash}
           exchange={!w.chain}
+          chainKey={w.chain}
           evm={!!w.chain && EVM_CHAINS.get(w.chain) === x.asset}
         />
       ))}
@@ -345,13 +346,20 @@ function Mismatch({
   imported,
   evm,
   exchange,
+  chainKey,
 }: {
   walletId: string;
   m: MismatchT;
   imported: number;
   evm: boolean;
   exchange: boolean;
+  chainKey: string | null;
 }) {
+  const siaFind = useCryptoMutation(() =>
+    api.post<{ checked: number; added: number }>("/api/crypto/reconcile/sia-addresses", {
+      walletId,
+    }),
+  );
   const compare = useCryptoMutation(() =>
     api.post<{ asset: string; diffs: TxnDiff[] }>("/api/crypto/reconcile/compare", { walletId }),
   );
@@ -471,6 +479,29 @@ function Mismatch({
           </Button>
         </div>
       )}
+      {more && chainKey === "sc" && (
+        <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
+          <p>
+            <span className="font-medium">This wallet probably has more addresses.</span> The Sia
+            app makes a new address every time you press Receive, and Muny only reads the ones you
+            gave it. Muny can look up your imported deposits on SiaScan and add the addresses they
+            were paid to.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button disabled={siaFind.isPending} onClick={() => siaFind.mutate(undefined)}>
+              {siaFind.isPending ? "Looking them up…" : "Find my other addresses"}
+            </Button>
+            {siaFind.data && (
+              <span className="text-xs text-slate-500">
+                {siaFind.data.added
+                  ? `Added ${siaFind.data.added} ${siaFind.data.added === 1 ? "address" : "addresses"} and synced again.`
+                  : `Checked ${siaFind.data.checked} imported ${siaFind.data.checked === 1 ? "deposit" : "deposits"}: no new address found. Add them by hand (“change” on the wallet page; in the Sia app, Receive lists your addresses).`}
+              </span>
+            )}
+          </div>
+          {siaFind.error && <p className="text-xs text-red-600">{siaFind.error.message}</p>}
+        </div>
+      )}
       {more && m.closed && (
         <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
           <p>
@@ -529,7 +560,7 @@ function Mismatch({
           </p>
         </div>
       )}
-      {more && !m.closed && !m.rewardsTwice && m.extra.length === 0 && (
+      {more && !m.closed && chainKey !== "sc" && !m.rewardsTwice && m.extra.length === 0 && (
         <p className="text-slate-500">
           No set of deposits adds up to the difference. Look for a withdrawal that&apos;s missing,
           or a deposit recorded twice with different amounts, in its transactions.

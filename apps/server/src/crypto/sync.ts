@@ -1,4 +1,4 @@
-import { CHAINS, type ChainKey, type SyncedTxn, sourceHint } from "@muny/core";
+import { CHAINS, type ChainKey, type SyncedTxn, sourceHint, toFixed } from "@muny/core";
 import { type MunyDb, newId, schema } from "@muny/db";
 import type { CryptoSyncResult } from "@muny/shared";
 import { and, eq, sql } from "drizzle-orm";
@@ -19,7 +19,7 @@ import {
   safeText,
 } from "./chains/ctx.js";
 import { esplora } from "./chains/esplora.js";
-import { sia } from "./chains/sia.js";
+import { sia, siaAddresses, siaTxnOutputs } from "./chains/sia.js";
 import { stellar } from "./chains/stellar.js";
 import { tron } from "./chains/tron.js";
 import { binanceus } from "./exchanges/binanceus.js";
@@ -580,4 +580,58 @@ export function walletsDue(db: MunyDb, now = new Date()): string[] {
     .all()
     .filter((r) => !r.last || r.last.getTime() < start)
     .map((r) => r.id);
+}
+
+/**
+ * A Sia wallet uses many addresses. Look up the wallet's imported SC deposits
+ * that the chain sync doesn't have on SiaScan, take the address each one paid
+ * (the output of that amount), add those addresses to the wallet and read its
+ * history again. Returns how many addresses were added.
+ */
+export async function findSiaAddresses(db: MunyDb, walletId: string, deps: SyncDeps) {
+  const wallet = db.select().from(w).where(eq(w.id, walletId)).get();
+  if (!wallet?.sourceEnc || wallet.chain !== "sc" || !deps.secretKey)
+    throw new SyncError("This isn't a synced Siacoin wallet");
+  const ctx = walletCtx(db, wallet, deps);
+  const known = new Set(siaAddresses(ctx.source));
+  const synced = new Set(
+    db
+      .select({ h: t.txHash })
+      .from(t)
+      .where(and(eq(t.walletId, walletId), eq(t.source, "sync")))
+      .all()
+      .map((r) => normHash(r.h ?? "")),
+  );
+  const deposits = db
+    .select()
+    .from(t)
+    .where(
+      and(
+        eq(t.walletId, walletId),
+        sql`${t.source} <> 'sync' and ${t.receivedAsset} = 'SC' and ${t.txHash} is not null`,
+      ),
+    )
+    .all()
+    .filter((r) => !synced.has(normHash(r.txHash as string)))
+    .slice(0, 50);
+  const found = new Set<string>();
+  for (const d of deposits) {
+    const outs = await siaTxnOutputs(ctx, d.txHash as string);
+    const want = toFixed(d.receivedAmount ?? "0");
+    // The output of the deposited amount (exports round to 6 decimals).
+    const match = outs.filter((o) => {
+      const diff = toFixed(o.amount) - want;
+      return (diff < 0n ? -diff : diff) <= toFixed("0.000001");
+    });
+    if (match.length === 1 && match[0] && !known.has(match[0].address)) found.add(match[0].address);
+  }
+  if (found.size) {
+    const source = [...known, ...found].join(", ");
+    db.update(w)
+      .set({ sourceEnc: encryptJson(deps.secretKey, source), syncCursor: null })
+      .where(eq(w.id, walletId))
+      .run();
+    await syncWallet(db, walletId, deps);
+  }
+  return { checked: deposits.length, added: found.size };
 }

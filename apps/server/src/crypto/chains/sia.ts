@@ -1,5 +1,5 @@
 import { Deltas, fromBaseUnits, movementsToTxns, type SyncedTxn } from "@muny/core";
-import type { Adapter } from "./ctx.js";
+import type { Adapter, ChainCtx } from "./ctx.js";
 
 /**
  * Siacoin through SiaScan's public explorer API (api.siascan.com, the Sia
@@ -44,6 +44,42 @@ export const siaAddresses = (source: string) => [
   ),
 ];
 
+/** Hastings (24 decimals) → SC; Muny keeps 18 decimals (anything smaller is dust). */
+export function hastingsToSc(hastings: string): string {
+  const digits = (hastings || "0").replace(/^0+/, "") || "0";
+  if (!/^\d+$/.test(digits)) return "0";
+  const trimmed =
+    digits.length > HASTINGS - 18 ? digits.slice(0, digits.length - (HASTINGS - 18)) : "0";
+  return fromBaseUnits(trimmed, 18);
+}
+
+/**
+ * Who a transaction paid, and how much (v1 or v2 transaction): to find the
+ * wallet's other addresses from imported deposits.
+ */
+export async function siaTxnOutputs(
+  ctx: Pick<ChainCtx, "get" | "override">,
+  id: string,
+): Promise<{ address: string; amount: string }[]> {
+  const base = (ctx.override || SIASCAN).replace(/\/+$/, "");
+  const txid = id.replace(/^(txn:|0x)/i, "").toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(txid)) return [];
+  type Tx = { siacoinOutputs?: ({ siacoinOutput: Out } | Out)[] };
+  let tx: Tx | null = null;
+  for (const path of [`transactions/${txid}`, `v2/transactions/${txid}`]) {
+    try {
+      tx = await ctx.get<Tx>(`${base}/${path}`);
+      break;
+    } catch {
+      // Not that version: try the other.
+    }
+  }
+  return (tx?.siacoinOutputs ?? []).map((o) => {
+    const out = "siacoinOutput" in o ? o.siacoinOutput : o;
+    return { address: out.address.toLowerCase(), amount: hastingsToSc(out.value) };
+  });
+}
+
 export const sia: Adapter = async (ctx) => {
   const base = (ctx.override || SIASCAN).replace(/\/+$/, "");
   const mine = new Set(siaAddresses(ctx.source));
@@ -69,14 +105,7 @@ export const sia: Adapter = async (ctx) => {
     }
   }
 
-  // Hastings have 24 decimals; Muny keeps 18 (anything smaller is dust).
-  const sc = (hastings: string) => {
-    const digits = (hastings || "0").replace(/^0+/, "") || "0";
-    if (!/^\d+$/.test(digits)) return "0";
-    const trimmed =
-      digits.length > HASTINGS - 18 ? digits.slice(0, digits.length - (HASTINGS - 18)) : "0";
-    return fromBaseUnits(trimmed, 18);
-  };
+  const sc = hastingsToSc;
   const mapped: SyncedTxn[] = [];
   for (const e of events.values()) {
     const d = new Deltas();

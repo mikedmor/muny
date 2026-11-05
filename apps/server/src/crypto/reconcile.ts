@@ -211,7 +211,10 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
             const twice = diff.startsWith("-") ? null : rewardsTwice(x.id, c.asset, diff);
             return {
               rewardsTwice: twice ? { synced: twice, chain: x.chain } : null,
-              extra: twice || diff.startsWith("-") ? [] : explainExtra(x.id, c.asset, diff),
+              extra:
+                twice || diff.startsWith("-") || x.chain === "sc"
+                  ? []
+                  : explainExtra(x.id, c.asset, diff),
             };
           })(),
           staking: rows.some(

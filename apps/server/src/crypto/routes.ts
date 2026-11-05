@@ -50,6 +50,7 @@ import {
   walletDetail,
 } from "./service.js";
 import {
+  findSiaAddresses,
   isSyncing,
   removeWalletSource,
   SyncError,
@@ -571,6 +572,22 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
       staking: body.staking,
     });
     return res;
+  });
+
+  /** A Sia wallet's other addresses, from its imported deposits (looked up on SiaScan). */
+  app.post("/api/crypto/reconcile/sia-addresses", async (req) => {
+    const user = requireUser(req);
+    const body = parse(z.object({ walletId: z.string().min(1).max(64) }), req.body);
+    try {
+      const res = await findSiaAddresses(db, body.walletId, {
+        ...priceDeps,
+        delayMs: priceDeps.delayMs ?? 500,
+      });
+      log(user.id, "crypto.reconcile_sia_addresses", body.walletId, res);
+      return res;
+    } catch (err) {
+      throw badRequest(err instanceof Error ? err.message : "Couldn't look them up");
+    }
   });
 
   /** A closed account: record where what was left went. */
