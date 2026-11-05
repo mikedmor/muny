@@ -168,8 +168,9 @@ export function monthlyReport(db: Db, fromMonth: string, toMonth: string): Month
  * posted since). Accounts without transactions (a house, a car) use their
  * value history (balance snapshots), else their current value.
  */
-export function netWorthReport(db: Db, dates: string[]): NetWorthReport {
-  const accounts = listAccounts(db).filter((a) => !a.excludeFromReports);
+/** Balances as of a past date: walk transactions back from today, or use snapshots. */
+function balanceHistory(db: Db, includeExcluded = false) {
+  const accounts = listAccounts(db).filter((a) => includeExcluded || !a.excludeFromReports);
   const t = schema.transactions;
   const txns = db
     .select({ accountId: t.accountId, date: t.postedDate, cents: t.amountCents })
@@ -203,6 +204,11 @@ export function netWorthReport(db: Db, dates: string[]): NetWorthReport {
     return now;
   };
 
+  return { accounts, balanceAt };
+}
+
+export function netWorthReport(db: Db, dates: string[]): NetWorthReport {
+  const { accounts, balanceAt } = balanceHistory(db);
   const points: NetWorthPoint[] = dates.map((date) => {
     let assets = 0;
     let debts = 0;
@@ -250,6 +256,19 @@ export function cumulativeDailySpending(db: Db, from: string, to: string): numbe
     out.push(run);
   }
   return out;
+}
+
+const CASH_TYPES: ReadonlySet<string> = new Set(["checking", "cash", "savings"]);
+
+/** Cash in checking & savings on each date (same accounts as the dashboard headline). */
+export function cashTrend(db: Db, dates: string[]): { date: string; cents: number }[] {
+  // Match the Accounts card, which shows every visible account.
+  const { accounts, balanceAt } = balanceHistory(db, true);
+  const cash = accounts.filter((a) => !a.hidden && CASH_TYPES.has(a.type));
+  return dates.map((date) => ({
+    date,
+    cents: cash.reduce((sum, a) => sum + balanceAt(a.id, a.balanceCents, date), 0),
+  }));
 }
 
 export function overview(db: Db, today = localToday()): Overview {
@@ -318,7 +337,25 @@ export function overview(db: Db, today = localToday()): Overview {
         date: u.date,
         amountCents: u.amountCents,
       })),
-    topCategories: mtd.items.slice(0, 5).map((i) => ({ id: i.id, name: i.name, cents: i.cents })),
+    topCategories: mtd.items.slice(0, 6).map((i) => ({
+      id: i.id,
+      name: i.name,
+      cents: i.cents,
+      groupName: i.groupName ?? null,
+    })),
+    topMerchants: spendingReport(db, `${month}-01`, today, "merchant")
+      .items.slice(0, 6)
+      .map((i) => ({ name: i.name, cents: i.cents, count: i.count })),
+    cashFlow: monthlyReport(db, addMonths(month, -5), month).months.map((m) => ({
+      month: m.month,
+      incomeCents: m.incomeCents,
+      spendingCents: m.spendingCents,
+    })),
+    // Weekly points over the last 26 weeks, ending today.
+    cashTrend: cashTrend(
+      db,
+      Array.from({ length: 27 }, (_, i) => addDays(today, (i - 26) * 7)),
+    ),
     attention: {
       uncategorized: Number(uncategorized?.n ?? 0),
       connectionsNeedingLogin: Number(login?.n ?? 0),

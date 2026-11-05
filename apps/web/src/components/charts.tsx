@@ -68,6 +68,8 @@ export interface BarItem {
   key: string;
   label: string;
   sublabel?: string;
+  /** Decorative icon shown before the label. */
+  icon?: ReactNode;
   cents: number;
 }
 
@@ -95,8 +97,9 @@ export function RankedBars({
           const body = (
             <>
               <div className="flex items-baseline justify-between gap-3 text-sm">
-                <span className="min-w-0 truncate">
-                  {i.label}
+                <span className="flex min-w-0 items-baseline gap-1.5 truncate">
+                  {i.icon}
+                  <span className="truncate">{i.label}</span>
                   {i.sublabel && (
                     <span className="ml-1.5 text-xs text-slate-500">{i.sublabel}</span>
                   )}

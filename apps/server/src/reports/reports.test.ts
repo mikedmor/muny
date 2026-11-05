@@ -133,6 +133,13 @@ describe("reports", () => {
     expect(o.spending.thisMonthDaily[day - 1]).toBe(4200);
     expect(o.spending.lastMonthDaily.length).toBeGreaterThanOrEqual(28);
     expect(o.spending.daysInMonth).toBeGreaterThanOrEqual(day);
+    expect(o.topMerchants[0]).toMatchObject({ name: "Corner Cafe", cents: 4200, count: 1 });
+    expect(o.cashFlow).toHaveLength(6);
+    expect(o.cashFlow[5]).toMatchObject({ month: today.slice(0, 7), spendingCents: 4200 });
+    // Checking opened with $1000 and nothing moved in it; the card isn't cash.
+    expect(o.cashTrend).toHaveLength(27);
+    expect(o.cashTrend[26]).toEqual({ date: today, cents: 100000 });
+    expect(o.cashTrend[0]?.cents).toBe(100000);
   });
 
   it("daily spending runs up through the month, skipping income and transfers", async () => {

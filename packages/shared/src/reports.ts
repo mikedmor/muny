@@ -64,6 +64,12 @@ export interface Overview {
   incomeMonthToDateCents: number;
   budget: { budgetCents: number | null; spentCents: number } | null;
   upcoming: { seriesId: string; name: string; date: string; amountCents: number }[];
-  topCategories: { id: string | null; name: string; cents: number }[];
+  topCategories: { id: string | null; name: string; cents: number; groupName: string | null }[];
+  /** Biggest merchants by spending this month. */
+  topMerchants: { name: string; cents: number; count: number }[];
+  /** Income and spending for the last 6 months, this month last. */
+  cashFlow: { month: string; incomeCents: number; spendingCents: number }[];
+  /** Cash in checking & savings, weekly over the last 26 weeks. */
+  cashTrend: { date: string; cents: number }[];
   attention: { uncategorized: number; connectionsNeedingLogin: number; newRecurring: number };
 }

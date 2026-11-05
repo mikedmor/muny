@@ -7,9 +7,10 @@ import {
 } from "@muny/shared";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { type ReactNode, useState } from "react";
-import { PaceChart, RankedBars } from "../components/charts.js";
+import { type ReactNode, useEffect, useState } from "react";
+import { ColumnChart, LineChart, PaceChart, RankedBars } from "../components/charts.js";
 import { Alert, Card, cx, PageHeader } from "../components/ui.js";
+import { CategoryIcon, MerchantAvatar } from "../components/visuals.js";
 import { api } from "../lib/api.js";
 import { keys, useAccounts, useConnections } from "../lib/queries.js";
 
@@ -67,7 +68,9 @@ function SpendingCard({ d }: { d: Overview }) {
   return (
     <Card>
       <p className="text-sm font-medium text-slate-500">Spent this month</p>
-      <p className="mt-1 text-3xl font-semibold tabular-nums">{formatMoney(s.monthToDateCents)}</p>
+      <p className="mt-1 text-4xl font-semibold tracking-tight tabular-nums">
+        {formatMoney(s.monthToDateCents)}
+      </p>
       <p className="mt-1 text-sm">
         {diff === 0 ? (
           <span className="text-slate-500">The same as this point in {lastName}</span>
@@ -200,7 +203,9 @@ function AccountsCard() {
           </Link>
         </div>
         <p className="mt-2 text-sm text-slate-500">Cash in checking &amp; savings</p>
-        <p className="text-3xl font-semibold tabular-nums">{formatMoney(checking + savings)}</p>
+        <p className="text-4xl font-semibold tracking-tight tabular-nums">
+          {formatMoney(checking + savings)}
+        </p>
         {lastSync > 0 && <p className="mt-1 text-xs text-slate-500">{syncedAgo(lastSync)}</p>}
       </div>
       <ul className="divide-y divide-slate-100 border-t border-slate-200 text-sm dark:divide-slate-800 dark:border-slate-800">
@@ -298,8 +303,9 @@ function UpcomingCard({ d }: { d: Overview }) {
       </div>
       <ul className="divide-y divide-slate-100 border-t border-slate-200 text-sm dark:divide-slate-800 dark:border-slate-800">
         {d.upcoming.map((u) => (
-          <li key={`${u.seriesId}-${u.date}`} className="flex justify-between gap-3 px-4 py-2">
-            <span className="min-w-0">
+          <li key={`${u.seriesId}-${u.date}`} className="flex items-center gap-3 px-4 py-2">
+            <MerchantAvatar name={u.name} size="sm" />
+            <span className="min-w-0 flex-1">
               <span className="block truncate">{u.name}</span>
               <span className="text-xs text-slate-500">
                 {u.date === d.today ? "Today" : weekday(u.date)}
@@ -316,10 +322,10 @@ function UpcomingCard({ d }: { d: Overview }) {
   );
 }
 
-function RecentTransactions() {
+function RecentTransactions({ limit }: { limit: number }) {
   const recent = useQuery({
-    queryKey: [...keys.transactions, "recent"],
-    queryFn: () => api.get<TransactionPage>("/api/transactions?limit=8&offset=0"),
+    queryKey: [...keys.transactions, "recent", limit],
+    queryFn: () => api.get<TransactionPage>(`/api/transactions?limit=${limit}&offset=0`),
   });
   return (
     <Card className="p-0">
@@ -327,33 +333,194 @@ function RecentTransactions() {
         <SectionHeader title="Recent transactions" link={<Link to="/transactions">See all</Link>} />
       </div>
       <ul className="divide-y divide-slate-100 border-t border-slate-200 text-sm dark:divide-slate-800 dark:border-slate-800">
-        {recent.data?.items.map((t) => (
-          <li key={t.id} className="flex items-center justify-between gap-3 px-4 py-2">
-            <span className="min-w-0">
-              <span className="block truncate font-medium">{t.payeeName ?? t.description}</span>
-              <span className="block truncate text-xs text-slate-500">
-                {shortDate(t.postedDate)} ·{" "}
-                {t.transferPairId
-                  ? "Transfer"
-                  : (t.categoryName ?? (t.splits.length ? "Split" : "Uncategorized"))}
-                {t.pending && " · Pending"}
+        {recent.data?.items.map((t) => {
+          const name = t.payeeName ?? t.description;
+          const category = t.transferPairId
+            ? "Transfer"
+            : (t.categoryName ?? (t.splits.length ? "Split" : "Uncategorized"));
+          return (
+            <li key={t.id} className="flex items-center gap-3 px-4 py-2.5">
+              <MerchantAvatar name={name} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium">{name}</span>
+                <span className="flex items-center gap-1 truncate text-xs text-slate-500">
+                  <CategoryIcon
+                    name={t.transferPairId ? "Transfer" : t.categoryName}
+                    group={t.categoryGroupName}
+                    className="w-4"
+                  />
+                  <span className="truncate">
+                    {category} · {shortDate(t.postedDate)}
+                    {t.pending && " · Pending"}
+                  </span>
+                </span>
               </span>
-            </span>
-            <span
-              className={cx(
-                "shrink-0 tabular-nums",
-                t.amountCents > 0 && "text-emerald-700 dark:text-emerald-400",
-              )}
-            >
-              {t.amountCents > 0 ? "+" : ""}
-              {formatMoney(Math.abs(t.amountCents))}
-            </span>
-          </li>
-        ))}
+              <span
+                className={cx(
+                  "shrink-0 font-medium tabular-nums",
+                  t.amountCents > 0 && "text-emerald-700 dark:text-emerald-400",
+                )}
+              >
+                {t.amountCents > 0 ? "+" : ""}
+                {formatMoney(Math.abs(t.amountCents))}
+              </span>
+            </li>
+          );
+        })}
         {recent.data?.items.length === 0 && (
           <li className="px-4 py-3 text-slate-500">No transactions yet.</li>
         )}
       </ul>
+    </Card>
+  );
+}
+
+function CategoriesCard({ d }: { d: Overview }) {
+  return (
+    <Card>
+      <SectionHeader
+        title="Where your money went this month"
+        link={<Link to="/reports">Reports</Link>}
+      />
+      <RankedBars
+        total={d.spending.monthToDateCents}
+        items={d.topCategories.map((c) => ({
+          key: c.id ?? "uncategorized",
+          label: c.name,
+          icon: <CategoryIcon name={c.id ? c.name : null} group={c.groupName} />,
+          cents: c.cents,
+        }))}
+      />
+    </Card>
+  );
+}
+
+function TopMerchantsCard({ d }: { d: Overview }) {
+  const max = Math.max(1, ...d.topMerchants.map((m) => m.cents));
+  return (
+    <Card className="p-0">
+      <div className="px-4 pt-4">
+        <SectionHeader
+          title="Top merchants this month"
+          link={
+            <Link to="/reports" hash="spending">
+              More
+            </Link>
+          }
+        />
+      </div>
+      <ul className="divide-y divide-slate-100 border-t border-slate-200 text-sm dark:divide-slate-800 dark:border-slate-800">
+        {d.topMerchants.map((m, i) => (
+          <li key={m.name} className="flex items-center gap-3 px-4 py-2.5">
+            <span className="w-4 text-right text-xs text-slate-400 tabular-nums">{i + 1}</span>
+            <MerchantAvatar name={m.name} />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-medium">{m.name}</span>
+              <span className="mt-1 block h-1.5 rounded-full bg-slate-100 dark:bg-slate-800">
+                <span
+                  className="block h-full rounded-full"
+                  style={{
+                    width: `${Math.max(2, (m.cents / max) * 100)}%`,
+                    background: "var(--viz-series-1)",
+                  }}
+                />
+              </span>
+            </span>
+            <span className="shrink-0 text-right">
+              <span className="block font-medium tabular-nums">{formatMoney(m.cents)}</span>
+              <span className="block text-xs text-slate-500">
+                {m.count} {m.count === 1 ? "charge" : "charges"}
+              </span>
+            </span>
+          </li>
+        ))}
+        {d.topMerchants.length === 0 && (
+          <li className="px-4 py-3 text-slate-500">No spending yet this month.</li>
+        )}
+      </ul>
+    </Card>
+  );
+}
+
+const shortMonth = (ym: string) =>
+  new Date(`${ym}-15T00:00:00`).toLocaleDateString(undefined, { month: "short" });
+
+function CashFlowCard({ d }: { d: Overview }) {
+  const months = d.cashFlow;
+  const full = months.slice(0, -1);
+  const avgNet = full.length
+    ? Math.round(full.reduce((s, m) => s + m.incomeCents - m.spendingCents, 0) / full.length)
+    : 0;
+  return (
+    <Card>
+      <SectionHeader
+        title="Income vs. spending"
+        link={
+          <Link to="/reports" hash="cash-flow">
+            Cash flow
+          </Link>
+        }
+      />
+      {full.length > 0 && (
+        <p className="-mt-1 mb-3 text-sm text-slate-500">
+          Over the last {full.length} full months you {avgNet >= 0 ? "kept" : "overspent by"}{" "}
+          <span
+            className={cx(
+              "font-medium",
+              avgNet >= 0
+                ? "text-emerald-700 dark:text-emerald-400"
+                : "text-red-600 dark:text-red-400",
+            )}
+          >
+            {formatMoney(Math.abs(avgNet))}
+          </span>{" "}
+          a month on average.
+        </p>
+      )}
+      <ColumnChart
+        ariaLabel="Income and spending for the last six months"
+        seriesNames={["Income", "Spending"]}
+        data={months.map((m, i) => ({
+          key: m.month,
+          label: shortMonth(m.month),
+          title: i === months.length - 1 ? `${shortMonth(m.month)} (so far)` : shortMonth(m.month),
+          values: [m.incomeCents, m.spendingCents],
+        }))}
+      />
+    </Card>
+  );
+}
+
+function CashTrendCard({ d }: { d: Overview }) {
+  const pts = d.cashTrend;
+  const diff = (pts[pts.length - 1]?.cents ?? 0) - (pts[0]?.cents ?? 0);
+  return (
+    <Card>
+      <SectionHeader
+        title="Cash over time"
+        link={
+          <Link to="/reports" hash="net-worth">
+            Net worth
+          </Link>
+        }
+      />
+      <p className="-mt-1 mb-3 text-sm text-slate-500">
+        Checking &amp; savings{" "}
+        <span
+          className={cx(
+            "font-medium",
+            diff >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400",
+          )}
+        >
+          {diff >= 0 ? "up" : "down"} {formatMoney(Math.abs(diff))}
+        </span>{" "}
+        over 6 months
+      </p>
+      <LineChart
+        ariaLabel="Cash in checking and savings, weekly over the last six months"
+        height={160}
+        points={pts.map((p) => ({ date: p.date, label: shortDate(p.date), value: p.cents }))}
+      />
     </Card>
   );
 }
@@ -390,10 +557,23 @@ function AttentionBar({ d }: { d: Overview }) {
 
 // ---------------------------------------------------------------------------
 
+function useMediaQuery(query: string): boolean {
+  const [match, setMatch] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const m = window.matchMedia(query);
+    const on = () => setMatch(m.matches);
+    m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, [query]);
+  return match;
+}
+
 export function OverviewPage() {
   const accounts = useAccounts();
   const o = useQuery({ queryKey: ["overview"], queryFn: () => api.get<Overview>("/api/overview") });
   const d = o.data;
+  // In the wide layouts recent transactions get a full-height column of their own.
+  const tall = useMediaQuery("(min-width: 112rem)");
 
   if (accounts.isSuccess && accounts.data.length === 0) {
     return (
@@ -427,35 +607,34 @@ export function OverviewPage() {
           {/*
             Phones: one column; the cards interleave by `order` (the column
             wrappers are display:contents).
-            Desktop: spending/categories and recent transactions stacked on the left, accounts on the right.
-            Ultrawide (1792px+): three columns side by side.
+            Desktop (lg): charts stacked on the left, accounts on the right.
+            Wide (112rem+): charts | recent transactions | accounts.
+            Ultrawide (150rem+): four columns.
           */}
-          <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:grid-rows-[auto_1fr] lg:items-start lg:[grid-template-areas:'main_side'_'recent_side'] min-[112rem]:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_26rem] min-[112rem]:grid-rows-1 min-[112rem]:[grid-template-areas:'main_recent_side']">
-            <div className="order-5 min-w-0 lg:order-0 lg:[grid-area:recent]">
-              <RecentTransactions />
-            </div>
-            <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-6 lg:[grid-area:main]">
+          <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:grid-rows-[auto_auto_1fr] lg:items-start lg:[grid-template-areas:'a_s'_'b_s'_'c_s'] min-[112rem]:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_26rem] min-[112rem]:grid-rows-[auto_1fr] min-[112rem]:[grid-template-areas:'a_c_s'_'b_c_s'] min-[150rem]:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)_26rem] min-[150rem]:grid-rows-1 min-[150rem]:[grid-template-areas:'a_b_c_s']">
+            <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-6 lg:[grid-area:a]">
               <div className="order-1 min-w-0 lg:order-0">
                 <SpendingCard d={d} />
               </div>
-              <div className="order-6 min-w-0 lg:order-0">
-                <Card>
-                  <SectionHeader
-                    title="Where your money went this month"
-                    link={<Link to="/reports">Reports</Link>}
-                  />
-                  <RankedBars
-                    total={d.spending.monthToDateCents}
-                    items={d.topCategories.map((c) => ({
-                      key: c.id ?? "uncategorized",
-                      label: c.name,
-                      cents: c.cents,
-                    }))}
-                  />
-                </Card>
+              <div className="order-7 min-w-0 lg:order-0">
+                <CashFlowCard d={d} />
               </div>
             </div>
-            <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-6 lg:[grid-area:side]">
+            <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-6 lg:[grid-area:b]">
+              <div className="order-6 min-w-0 lg:order-0">
+                <CategoriesCard d={d} />
+              </div>
+              <div className="order-8 min-w-0 lg:order-0">
+                <TopMerchantsCard d={d} />
+              </div>
+              <div className="order-9 min-w-0 lg:order-0">
+                <CashTrendCard d={d} />
+              </div>
+            </div>
+            <div className="order-5 min-w-0 lg:order-0 lg:[grid-area:c]">
+              <RecentTransactions limit={tall ? 20 : 8} />
+            </div>
+            <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-6 lg:[grid-area:s]">
               <div className="order-2 min-w-0 lg:order-0">
                 <AccountsCard />
               </div>
