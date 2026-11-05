@@ -270,12 +270,24 @@ function SourceFields({
             spellCheck={false}
             value={source}
             onChange={(e) => paste(e.target.value)}
+            onPaste={(e) => {
+              // Anything with addresses in it (a copied list, JSON…): keep just the addresses.
+              const found = e.clipboardData.getData("text").match(/\b[0-9a-fA-F]{76}\b/g);
+              if (!found?.length) return;
+              e.preventDefault();
+              const all = new Set([
+                ...source.split(/[\s,;]+/).filter(Boolean),
+                ...found.map((a) => a.toLowerCase()),
+              ]);
+              paste([...all].join("\n"));
+            }}
             className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
           />
           <span className="text-xs text-slate-500">
-            {source.split(/[\s,;]+/).filter(Boolean).length} addresses. Sia has no extended public
-            key, so paste every address your wallet has used (up to 1,000): the Sia wallet app lists
-            them under its addresses. Never paste the seed.
+            {source.split(/[\s,;]+/).filter(Boolean).length} addresses. One is enough to start: each
+            sync finds the wallet's other addresses from your imported Sia transactions. You can
+            also paste any text that lists addresses; Muny keeps just the addresses. Never paste the
+            seed.
           </span>
         </label>
       ) : (

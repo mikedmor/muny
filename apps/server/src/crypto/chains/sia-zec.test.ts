@@ -189,6 +189,57 @@ describe("Siacoin's other addresses", () => {
   });
 });
 
+describe("Siacoin addresses from an imported send", () => {
+  it("adds what a send spent from and where its change went, on its own", async () => {
+    const B2 = "34".repeat(38);
+    const C2 = "56".repeat(38);
+    const TX2 = "7b".repeat(32);
+    const spend = {
+      id: TX2,
+      index: { height: 9 },
+      type: "v1Transaction",
+      timestamp: "2021-02-05T00:00:00Z",
+      data: {
+        transaction: {
+          siacoinInputs: [{ address: B2, value: H("6138") }],
+          siacoinOutputs: [{ siacoinOutput: { address: C2, value: `6137982${"0".repeat(21)}` } }],
+          minerFees: [`18${"0".repeat(21)}`],
+        },
+      },
+    };
+    const fake = (async (url: string) => {
+      const u = new URL(url);
+      const parts = u.pathname.split("/");
+      if (u.pathname === `/transactions/${TX2}`) return Response.json(spend.data.transaction);
+      if (parts[1] !== "addresses") return new Response("no transaction found", { status: 404 });
+      const addr = parts[2] as string;
+      if (parts[3] === "events")
+        return Response.json(Number(u.searchParams.get("offset")) || addr === A ? [] : [spend]);
+      return Response.json({ unspentSiacoins: addr === C2 ? `6137982${"0".repeat(21)}` : "0" });
+    }) as unknown as typeof fetch;
+    const { client, db, w, settle } = await wallet(fake, "sc", A);
+    await settle();
+    const { schema } = await import("@muny/db");
+    db.insert(schema.cryptoTxns)
+      .values({
+        id: "fee",
+        walletId: w.id,
+        at: Date.UTC(2021, 1, 5),
+        externalId: "koinly:fee",
+        source: "import",
+        type: "withdrawal",
+        sentAsset: "SC",
+        sentAmount: "0.018",
+        txHash: TX2,
+      })
+      .run();
+    await client.post(`/api/crypto/wallets/${w.id}/sync`);
+    const done = await settle();
+    expect(done.sourceHint).toBe("3 addresses");
+    expect(done.onChain).toEqual([{ asset: "SC", amount: "6137.982" }]);
+  });
+});
+
 describe("Zcash", () => {
   const ZEC = `t1${"a".repeat(33)}`;
   it("asks for a Blockbook server first, then syncs through it", async () => {

@@ -479,13 +479,14 @@ function Mismatch({
           </Button>
         </div>
       )}
-      {more && chainKey === "sc" && (
+      {chainKey === "sc" && (
         <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
           <p>
             <span className="font-medium">This wallet probably has more addresses.</span> The Sia
-            app makes a new address every time you press Receive, and Muny only reads the ones you
-            gave it. Muny can look up your imported deposits on SiaScan and add the addresses they
-            were paid to.
+            app makes a new address every time you press Receive, and Muny only reads the ones it
+            knows. Each sync looks up your imported Siacoin transactions on SiaScan and adds the
+            addresses they reveal: where deposits arrived, what sends spent from, and where their
+            change went. You can also run it now.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <Button disabled={siaFind.isPending} onClick={() => siaFind.mutate(undefined)}>

@@ -55,17 +55,26 @@ export function hastingsToSc(hastings: string): string {
 }
 
 /**
- * Who a transaction paid, and how much (v1 or v2 transaction): to find the
- * wallet's other addresses from imported deposits.
+ * A transaction's inputs (who paid), outputs (who got what) and miner fees,
+ * v1 or v2: to find a wallet's other addresses from its imported rows.
  */
-export async function siaTxnOutputs(
+export async function siaTxn(
   ctx: Pick<ChainCtx, "get" | "override">,
   id: string,
-): Promise<{ address: string; amount: string }[]> {
+): Promise<{
+  inputs: string[];
+  outputs: { address: string; amount: string }[];
+  fee: string;
+} | null> {
   const base = (ctx.override || SIASCAN).replace(/\/+$/, "");
   const txid = id.replace(/^(txn:|0x)/i, "").toLowerCase();
-  if (!/^[0-9a-f]{64}$/.test(txid)) return [];
-  type Tx = { siacoinOutputs?: ({ siacoinOutput: Out } | Out)[] };
+  if (!/^[0-9a-f]{64}$/.test(txid)) return null;
+  type Tx = {
+    siacoinInputs?: (Out | { parent: { siacoinOutput: Out } })[];
+    siacoinOutputs?: ({ siacoinOutput: Out } | Out)[];
+    minerFees?: string[];
+    minerFee?: string;
+  };
   let tx: Tx | null = null;
   for (const path of [`transactions/${txid}`, `v2/transactions/${txid}`]) {
     try {
@@ -75,10 +84,20 @@ export async function siaTxnOutputs(
       // Not that version: try the other.
     }
   }
-  return (tx?.siacoinOutputs ?? []).map((o) => {
-    const out = "siacoinOutput" in o ? o.siacoinOutput : o;
-    return { address: out.address.toLowerCase(), amount: hastingsToSc(out.value) };
-  });
+  if (!tx) return null;
+  const fee = new Deltas();
+  for (const x of tx.minerFees ?? (tx.minerFee ? [tx.minerFee] : []))
+    fee.add("SC", hastingsToSc(x));
+  return {
+    inputs: (tx.siacoinInputs ?? []).map((i) =>
+      ("parent" in i ? i.parent.siacoinOutput.address : i.address).toLowerCase(),
+    ),
+    outputs: (tx.siacoinOutputs ?? []).map((o) => {
+      const out = "siacoinOutput" in o ? o.siacoinOutput : o;
+      return { address: out.address.toLowerCase(), amount: hastingsToSc(out.value) };
+    }),
+    fee: fee.toStrings().get("SC") ?? "0",
+  };
 }
 
 export const sia: Adapter = async (ctx) => {

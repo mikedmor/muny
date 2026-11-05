@@ -1,4 +1,12 @@
-import { CHAINS, type ChainKey, type SyncedTxn, sourceHint, toFixed } from "@muny/core";
+import { createHash } from "node:crypto";
+import {
+  addDec as addDecs,
+  CHAINS,
+  type ChainKey,
+  type SyncedTxn,
+  sourceHint,
+  toFixed,
+} from "@muny/core";
 import { type MunyDb, newId, schema } from "@muny/db";
 import type { CryptoSyncResult } from "@muny/shared";
 import { and, eq, sql } from "drizzle-orm";
@@ -19,7 +27,7 @@ import {
   safeText,
 } from "./chains/ctx.js";
 import { esplora } from "./chains/esplora.js";
-import { sia, siaAddresses, siaTxnOutputs } from "./chains/sia.js";
+import { sia, siaAddresses, siaTxn } from "./chains/sia.js";
 import { stellar } from "./chains/stellar.js";
 import { tron } from "./chains/tron.js";
 import { binanceus } from "./exchanges/binanceus.js";
@@ -434,9 +442,13 @@ function addToIdSetting(db: MunyDb, key: string, id: string) {
 
 async function runSync(
   db: MunyDb,
-  wallet: typeof w.$inferSelect,
+  start: typeof w.$inferSelect,
   deps: SyncDeps,
 ): Promise<CryptoSyncResult & { notice: string | null }> {
+  // Siacoin: first add the wallet's other addresses its imported rows reveal.
+  let wallet = start;
+  if (wallet.chain === "sc" && (await discoverSiaAddresses(db, wallet, deps)).added)
+    wallet = db.select().from(w).where(eq(w.id, wallet.id)).get() ?? wallet;
   const chain = wallet.chain ? CHAINS[wallet.chain as ChainKey] : null;
   // Rows synced before addresses were kept: read the whole history once more
   // to fill them in (a few requests, once per wallet).
@@ -585,48 +597,86 @@ export function walletsDue(db: MunyDb, now = new Date()): string[] {
     .map((r) => r.id);
 }
 
+/** Imported Sia transactions already looked up (short hashes of their ids). */
+const SIA_CHECKED = "crypto.sia_checked";
+
 /**
- * A Sia wallet uses many addresses. Look up the wallet's imported SC deposits
- * that the chain sync doesn't have on SiaScan, take the address each one paid
- * (the output of that amount), add those addresses to the wallet and read its
- * history again. Returns how many addresses were added.
+ * A Sia wallet receives at a new address each time (a wallet can have 100+),
+ * and has no extended public key. Its imported rows show the rest: an
+ * imported deposit's transaction paid one of the wallet's addresses (the
+ * output of that amount); an imported send spent from the wallet's addresses
+ * (its inputs) and returned the change to another (outputs other than the
+ * payment). Each transaction is looked up on SiaScan once. Adds what it finds
+ * to the wallet's addresses; returns how many.
  */
-export async function findSiaAddresses(db: MunyDb, walletId: string, deps: SyncDeps) {
-  const wallet = db.select().from(w).where(eq(w.id, walletId)).get();
-  if (!wallet?.sourceEnc || wallet.chain !== "sc" || !deps.secretKey)
-    throw new SyncError("This isn't a synced Siacoin wallet");
+export async function discoverSiaAddresses(
+  db: MunyDb,
+  wallet: typeof w.$inferSelect,
+  deps: SyncDeps,
+): Promise<{ checked: number; added: number }> {
+  if (!wallet.sourceEnc || wallet.chain !== "sc" || !deps.secretKey)
+    return { checked: 0, added: 0 };
   const ctx = walletCtx(db, wallet, deps);
   const known = new Set(siaAddresses(ctx.source));
+  const tag = (h: string) => createHash("sha256").update(normHash(h)).digest("hex").slice(0, 12);
+  const checked = idSetting(db, SIA_CHECKED);
   const synced = new Set(
     db
       .select({ h: t.txHash })
       .from(t)
-      .where(and(eq(t.walletId, walletId), eq(t.source, "sync")))
+      .where(and(eq(t.walletId, wallet.id), eq(t.source, "sync")))
       .all()
       .map((r) => normHash(r.h ?? "")),
   );
-  const deposits = db
+  const rows = db
     .select()
     .from(t)
     .where(
       and(
-        eq(t.walletId, walletId),
-        sql`${t.source} <> 'sync' and ${t.receivedAsset} = 'SC' and ${t.txHash} is not null`,
+        eq(t.walletId, wallet.id),
+        sql`${t.source} <> 'sync' and ${t.txHash} is not null`,
+        sql`(${t.receivedAsset} = 'SC' or ${t.sentAsset} = 'SC' or ${t.feeAsset} = 'SC')`,
       ),
     )
     .all()
-    .filter((r) => !synced.has(normHash(r.txHash as string)))
+    .filter(
+      (r) => !synced.has(normHash(r.txHash as string)) && !checked.has(tag(r.txHash as string)),
+    )
     .slice(0, 50);
+  const close = (a: string, b: string) => {
+    const d = toFixed(a) - toFixed(b);
+    return (d < 0n ? -d : d) <= toFixed("0.000001");
+  };
   const found = new Set<string>();
-  for (const d of deposits) {
-    const outs = await siaTxnOutputs(ctx, d.txHash as string);
-    const want = toFixed(d.receivedAmount ?? "0");
-    // The output of the deposited amount (exports round to 6 decimals).
-    const match = outs.filter((o) => {
-      const diff = toFixed(o.amount) - want;
-      return (diff < 0n ? -diff : diff) <= toFixed("0.000001");
-    });
-    if (match.length === 1 && match[0] && !known.has(match[0].address)) found.add(match[0].address);
+  for (const r of rows) {
+    const tx = await siaTxn(ctx, r.txHash as string);
+    checked.add(tag(r.txHash as string));
+    if (!tx) continue;
+    if (r.receivedAsset === "SC" && r.receivedAmount) {
+      // The output of the deposited amount (exports round to 6 decimals).
+      const got = tx.outputs.filter((o) => close(o.amount, r.receivedAmount as string));
+      if (got.length === 1 && got[0]) found.add(got[0].address);
+      continue;
+    }
+    // A send: it spent from the wallet's addresses…
+    for (const a of tx.inputs) found.add(a);
+    // …and the change went back to one of them: every output but the payment.
+    const sent = r.sentAsset === "SC" ? (r.sentAmount ?? "0") : "0";
+    const feeOnly = toFixed(sent) === 0n || close(sent, tx.fee);
+    const payment = tx.outputs.filter(
+      (o) => close(o.amount, sent) || close(addDecs(o.amount, tx.fee), sent),
+    );
+    if (feeOnly) for (const o of tx.outputs) found.add(o.address);
+    else if (payment.length === 1)
+      for (const o of tx.outputs) if (o !== payment[0]) found.add(o.address);
+  }
+  for (const a of known) found.delete(a);
+  if (rows.length) {
+    const value = [...checked];
+    db.insert(schema.appSettings)
+      .values({ key: SIA_CHECKED, value })
+      .onConflictDoUpdate({ target: schema.appSettings.key, set: { value } })
+      .run();
   }
   if (found.size) {
     const source = [...known, ...found].join(", ");
@@ -634,11 +684,21 @@ export async function findSiaAddresses(db: MunyDb, walletId: string, deps: SyncD
       .set({
         sourceEnc: encryptJson(deps.secretKey, source),
         sourceHint: `${known.size + found.size} addresses`,
+        // Read every address's history again (rows are keyed, so nothing doubles).
         syncCursor: null,
       })
-      .where(eq(w.id, walletId))
+      .where(eq(w.id, wallet.id))
       .run();
-    await syncWallet(db, walletId, deps);
   }
-  return { checked: deposits.length, added: found.size };
+  return { checked: rows.length, added: found.size };
+}
+
+/** Reconcile's "Find my other addresses": discover, then sync. */
+export async function findSiaAddresses(db: MunyDb, walletId: string, deps: SyncDeps) {
+  const wallet = db.select().from(w).where(eq(w.id, walletId)).get();
+  if (!wallet?.sourceEnc || wallet.chain !== "sc")
+    throw new SyncError("This isn't a synced Siacoin wallet");
+  const res = await discoverSiaAddresses(db, wallet, deps);
+  await syncWallet(db, walletId, deps);
+  return res;
 }
