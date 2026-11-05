@@ -11,9 +11,9 @@ import {
 } from "@muny/shared";
 import { Link } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
+import { CoinIcon, WalletIcon } from "../../components/coins.js";
 import { Modal, SelectField } from "../../components/forms.js";
 import { Alert, Button, Card, cx, Field } from "../../components/ui.js";
-import { MerchantAvatar } from "../../components/visuals.js";
 import { api } from "../../lib/api.js";
 import { useCryptoMutation, useCryptoWallets } from "../../lib/queries.js";
 import { ago, agoTime, CryptoHeader, dayLabel, fmtAmount } from "./common.js";
@@ -408,10 +408,11 @@ function WalletRow({ w, onConnect }: { w: CryptoWallet; onConnect: () => void })
     api.patch(`/api/crypto/wallets/${w.id}`, { name: n }),
   );
   const del = useCryptoMutation(() => api.delete(`/api/crypto/wallets/${w.id}`));
+  const [open, setOpen] = useState(false);
   return (
     <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_9rem_8rem_19rem]">
       <span className="flex min-w-0 items-center gap-3">
-        <MerchantAvatar name={w.name} />
+        <WalletIcon name={w.name} chain={w.chain} kind={w.kind} />
         <span className="min-w-0">
           {renaming ? (
             <form
@@ -442,11 +443,9 @@ function WalletRow({ w, onConnect }: { w: CryptoWallet; onConnect: () => void })
           <span className="block truncate text-xs text-slate-500">
             {KIND_LABEL[w.kind]}
             {w.sourceHint && <span className="ml-1 font-mono">{w.sourceHint}</span>}
-            {w.balances.length > 0 &&
-              ` · ${w.balances
-                .slice(0, 3)
-                .map((b) => `${fmtAmount(b.amount, 4)} ${b.asset}`)
-                .join(", ")}${w.balances.length > 3 ? "…" : ""}`}
+            {w.balances.length === 1 &&
+              ` · ${fmtAmount(w.balances[0]?.amount, 4)} ${w.balances[0]?.asset}`}
+            {w.balances.length > 1 && ` · ${w.balances.length} coins`}
           </span>
           {w.status === "ok" && w.lastError && !w.syncing && (
             <span className="block text-xs text-slate-500">{w.lastError}</span>
@@ -470,7 +469,29 @@ function WalletRow({ w, onConnect }: { w: CryptoWallet; onConnect: () => void })
         </span>
       </span>
       <span className="text-right tabular-nums sm:text-right">
-        {w.valueCents > 0 ? formatMoney(w.valueCents) : <span className="text-slate-400">$0</span>}
+        {w.balances.length > 0 ? (
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={`coins-${w.id}`}
+            aria-label={`${open ? "Hide" : "Show"} coins in ${w.name}`}
+            onClick={() => setOpen((o) => !o)}
+            className="inline-flex items-center gap-1 rounded px-1 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            <span
+              className={cx("text-xs text-slate-400 transition-transform", open && "rotate-180")}
+            >
+              ▾
+            </span>
+            {w.valueCents > 0 ? (
+              formatMoney(w.valueCents)
+            ) : (
+              <span className="text-slate-400">$0</span>
+            )}
+          </button>
+        ) : (
+          <span className="text-slate-400">$0</span>
+        )}
       </span>
       <span className="hidden text-right text-sm sm:block">
         <span className="block tabular-nums">{w.txnCount}</span>
@@ -516,6 +537,46 @@ function WalletRow({ w, onConnect }: { w: CryptoWallet; onConnect: () => void })
           🗑
         </Button>
       </span>
+      {open && (
+        <div id={`coins-${w.id}`} className="col-span-full mt-2">
+          <table className="w-full text-sm sm:ml-12 sm:w-[calc(100%-3rem)] sm:max-w-xl">
+            <caption className="sr-only">Coins in {w.name}</caption>
+            <thead>
+              <tr className="text-xs text-slate-500">
+                <th className="py-1 text-left font-medium">Coin</th>
+                <th className="py-1 text-right font-medium">Balance</th>
+                <th className="py-1 text-right font-medium">Value</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {w.balances.map((b) => (
+                <tr key={b.asset}>
+                  <td className="py-1.5">
+                    <Link
+                      to="/crypto/transactions"
+                      search={{ walletId: w.id, asset: b.asset }}
+                      className="flex items-center gap-2 hover:underline"
+                    >
+                      <CoinIcon asset={b.asset} size="sm" />
+                      <span className="font-medium">{b.asset}</span>
+                    </Link>
+                  </td>
+                  <td className="py-1.5 text-right font-mono tabular-nums">
+                    {fmtAmount(b.amount)}
+                  </td>
+                  <td className="py-1.5 text-right tabular-nums">
+                    {b.valueCents !== null ? (
+                      formatMoney(b.valueCents)
+                    ) : (
+                      <span className="text-slate-400">no price</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </li>
   );
 }

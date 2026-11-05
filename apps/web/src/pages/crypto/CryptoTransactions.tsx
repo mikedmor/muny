@@ -1,9 +1,9 @@
 import { CRYPTO_LABELS, type CryptoTxn, type CryptoTxnType, formatMoney } from "@muny/shared";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
+import { CoinIcon, WalletIcon } from "../../components/coins.js";
 import { Modal, SelectField } from "../../components/forms.js";
 import { Alert, Button, Card, cx, Field } from "../../components/ui.js";
-import { MerchantAvatar } from "../../components/visuals.js";
 import { api } from "../../lib/api.js";
 import { useCryptoMutation, useCryptoTxns, useCryptoWallets } from "../../lib/queries.js";
 import { CryptoHeader, fmtAmount, LABELS, labelName, when } from "./common.js";
@@ -57,7 +57,7 @@ function Side({
     );
   return (
     <span className={cx("flex items-center gap-2", sign === "-" && "flex-row-reverse text-right")}>
-      <MerchantAvatar name={asset} size="sm" />
+      <CoinIcon asset={asset} size="sm" />
       <span>
         {wallet && <span className="block text-xs text-slate-500">{wallet}</span>}
         <span
@@ -95,7 +95,7 @@ function TxnRow({ t }: { t: CryptoTxn }) {
   return (
     <li className="grid grid-cols-1 items-center gap-3 px-4 py-3 md:grid-cols-[12rem_minmax(0,1fr)_auto_minmax(0,1fr)_10rem]">
       <span className="flex items-center gap-3">
-        <MerchantAvatar name={t.walletName} />
+        <WalletIcon name={t.walletName} />
         <span>
           <span className="block text-sm font-medium">{title(t)}</span>
           <span className="text-xs text-slate-500">

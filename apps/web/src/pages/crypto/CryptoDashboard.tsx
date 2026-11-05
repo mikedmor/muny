@@ -2,8 +2,8 @@ import { type CryptoHolding, formatMoney } from "@muny/shared";
 import { Link } from "@tanstack/react-router";
 import { Fragment, useMemo, useState } from "react";
 import { Donut, type DonutSlice, LineChart } from "../../components/charts.js";
+import { CoinIcon } from "../../components/coins.js";
 import { Alert, Button, Card, cx } from "../../components/ui.js";
-import { MerchantAvatar } from "../../components/visuals.js";
 import { api } from "../../lib/api.js";
 import { useCryptoMutation, useCryptoOverview } from "../../lib/queries.js";
 import { agoTime, CryptoHeader, fmtAmount, fmtPrice } from "./common.js";
@@ -52,7 +52,7 @@ function HoldingRow({ h }: { h: CryptoHolding }) {
         </td>
         <td className="py-3 pr-2">
           <span className="flex items-center gap-3">
-            <MerchantAvatar name={h.asset} />
+            <CoinIcon asset={h.asset} />
             <span>
               <span className="block font-semibold">{h.asset}</span>
               <span className="text-xs text-slate-500">{h.name}</span>
@@ -289,7 +289,7 @@ export function CryptoDashboard() {
               <ul className="space-y-2 text-sm">
                 {movers.map(({ h, delta }) => (
                   <li key={h.asset} className="flex items-center gap-3">
-                    <MerchantAvatar name={h.asset} size="sm" />
+                    <CoinIcon asset={h.asset} size="sm" />
                     <span className="flex-1 font-medium">{h.asset}</span>
                     <span className="tabular-nums text-slate-600 dark:text-slate-300">
                       {delta >= 0 ? "+" : "−"}
