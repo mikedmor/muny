@@ -52,6 +52,10 @@ export interface CryptoWallet {
   queued: boolean;
   createdAt: number;
   notes: string | null;
+  /** Which exchange (catalog key in CRYPTO_EXCHANGES), when it is one. */
+  exchange: string | null;
+  /** Kept for history but out of the way. */
+  archived: boolean;
 }
 
 /** One sync attempt (the wallet page's history). */
@@ -315,6 +319,13 @@ export const CRYPTO_SYNC_CHAINS = [
     evm: false,
   },
   { key: "zec", name: "Zcash", coin: "ZEC", placeholder: "t1…", evm: false },
+  {
+    key: "sc",
+    name: "Siacoin",
+    coin: "SC",
+    placeholder: "76-character address (several: separate with commas)",
+    evm: false,
+  },
   { key: "polygon", name: "Polygon", coin: "POL", placeholder: "0x…", evm: true },
   { key: "base", name: "Base", coin: "ETH on Base", placeholder: "0x…", evm: true },
   {
@@ -356,6 +367,7 @@ export function detectCryptoChains(input: string): CryptoSyncChain[] {
   if (/^bc1[02-9ac-hj-np-z]{11,71}$/i.test(s)) return ["btc"];
   if (/^ltc1[02-9ac-hj-np-z]{11,71}$/i.test(s)) return ["ltc"];
   if (/^t[13][1-9A-HJ-NP-Za-km-z]{33}$/.test(s)) return ["zec"];
+  if (/^[0-9a-fA-F]{76}([\s,;]+[0-9a-fA-F]{76})*$/.test(s)) return ["sc"];
   if (/^[13][1-9A-HJ-NP-Za-km-z]{25,34}$/.test(s)) return ["btc"];
   if (/^[LM][1-9A-HJ-NP-Za-km-z]{25,34}$/.test(s)) return ["ltc"];
   if (/^D[1-9A-HJ-NP-Za-km-z]{25,34}$/.test(s)) return ["doge"];
@@ -438,4 +450,144 @@ export interface CryptoReconcile {
       toTxnId: string | null;
     }[];
   }[];
+}
+
+/**
+ * Exchanges Muny knows: whether they still run, whether Muny can sync them
+ * (read-only API key), and how to set that up. Closed ones keep their history
+ * from imports; archive them once nothing is left (or mark what's left lost).
+ */
+export interface CryptoExchangeInfo {
+  key: string;
+  name: string;
+  status: "active" | "closed";
+  /** "api": Muny syncs it with a read-only key; "import": history from files only. */
+  sync: "api" | "import";
+  /** Roughly when it stopped serving customers (closed ones), YYYY-MM-DD. */
+  closedOn?: string;
+  /** What to know (why it can't sync, what happened to it). */
+  note: string;
+  /** For "api": the fields to paste and how to make a read-only key. */
+  setup?: {
+    keyLabel: string;
+    secretLabel: string;
+    passphrase?: string;
+    steps: string;
+    url: string;
+  };
+}
+
+export const CRYPTO_EXCHANGES: CryptoExchangeInfo[] = [
+  {
+    key: "coinbase",
+    name: "Coinbase",
+    status: "active",
+    sync: "api",
+    note: "Syncs buys, sells, Advanced Trade fills, sends and receives, and rewards for every coin in your account.",
+    setup: {
+      keyLabel: "API key name (organizations/…/apiKeys/…)",
+      secretLabel: "Private key (-----BEGIN EC PRIVATE KEY----- …)",
+      steps:
+        "In the Coinbase Developer Platform, create a Secret API key: give it the View permission only, and under Advanced settings choose the ECDSA signature algorithm (Coinbase's account API doesn't accept Ed25519 keys). Paste the key name and the private key.",
+      url: "https://portal.cdp.coinbase.com/projects/api-keys",
+    },
+  },
+  {
+    key: "coinbase_pro",
+    name: "Coinbase Pro",
+    status: "closed",
+    sync: "import",
+    closedOn: "2023-01-01",
+    note: "Coinbase retired Coinbase Pro; its balances moved into Coinbase (Advanced Trade), so syncing Coinbase covers what came after. Older Pro history comes from your import. Archive this wallet once it holds nothing.",
+  },
+  {
+    key: "kraken",
+    name: "Kraken",
+    status: "active",
+    sync: "api",
+    note: "Syncs Kraken's ledger: trades, deposits, withdrawals, staking and earn rewards.",
+    setup: {
+      keyLabel: "API key",
+      secretLabel: "Private key",
+      steps:
+        "In Kraken, open Settings → Connections & API and create a key with only Query Funds and Query Ledger Entries ticked (nothing that trades, deposits or withdraws).",
+      url: "https://www.kraken.com/u/security/api",
+    },
+  },
+  {
+    key: "gemini",
+    name: "Gemini",
+    status: "active",
+    sync: "api",
+    note: "Syncs trades, deposits and withdrawals.",
+    setup: {
+      keyLabel: "API key (account-…)",
+      secretLabel: "API secret",
+      steps:
+        "In Gemini, open Settings → API and create a key for your Primary account with the Auditor role (read-only).",
+      url: "https://exchange.gemini.com/settings/api",
+    },
+  },
+  {
+    key: "binance_us",
+    name: "Binance US",
+    status: "active",
+    sync: "api",
+    note: "Syncs trades, buys and conversions, deposits, withdrawals and staking rewards. Binance US only answers coin by coin, so Muny asks about coins this wallet has held; the first sync takes a few minutes.",
+    setup: {
+      keyLabel: "API key",
+      secretLabel: "Secret key",
+      steps:
+        "In Binance.US, open API Management, create a system-generated key and leave only “Can Read” enabled.",
+      url: "https://www.binance.us/settings/api-management",
+    },
+  },
+  {
+    key: "uphold",
+    name: "Uphold",
+    status: "active",
+    sync: "import",
+    note: "Uphold only gives API access to registered developer apps and business accounts, so Muny can't sync a personal account. Import your history (Koinly, or Uphold's transaction export) and add new transactions by hand.",
+  },
+  {
+    key: "changelly",
+    name: "Changelly",
+    status: "active",
+    sync: "import",
+    note: "Changelly swaps coins without keeping an account balance, and has no API for your history. Each swap shows up in the wallets that sent and received it; imported rows keep the record.",
+  },
+  {
+    key: "bittrex",
+    name: "Bittrex",
+    status: "closed",
+    sync: "import",
+    closedOn: "2023-12-04",
+    note: "Bittrex closed: Bittrex US stopped trading in 2023 and went through bankruptcy, and Bittrex Global shut down in December 2023. Its history comes from your import. If coins were still there, mark them lost (or record the withdrawal you got); then archive it.",
+  },
+  {
+    key: "tradeogre",
+    name: "TradeOgre",
+    status: "closed",
+    sync: "import",
+    closedOn: "2025-09-18",
+    note: "TradeOgre was shut down and its funds seized by Canadian police (RCMP) in September 2025; withdrawals aren't possible. Its history comes from your import. If coins were still there, mark them lost; then archive it.",
+  },
+];
+
+export const cryptoExchange = (key: string | null | undefined) =>
+  CRYPTO_EXCHANGES.find((x) => x.key === key) ?? null;
+
+/** An exchange from a wallet's name ("Coinbase Pro", "Binance US", "Kraken"…). */
+export function guessCryptoExchange(name: string): string | null {
+  const n = name.toLowerCase();
+  if (/coinbase\s*pro|gdax/.test(n)) return "coinbase_pro";
+  if (/coinbase/.test(n)) return "coinbase";
+  if (/binance\s*\.?\s*us/.test(n)) return "binance_us";
+  if (/kraken/.test(n)) return "kraken";
+  if (/gemini/.test(n)) return "gemini";
+  if (/uphold/.test(n)) return "uphold";
+  if (/bittrex/.test(n)) return "bittrex";
+  if (/changelly/.test(n)) return "changelly";
+  if (/trade\s*ogre/.test(n)) return "tradeogre";
+  return null;
 }

@@ -598,6 +598,10 @@ export const cryptoWallets = sqliteTable("crypto_wallets", {
   syncCursor: text(),
   /** The user's own notes about this wallet. */
   notes: text(),
+  /** Which exchange this is (catalog key, e.g. "kraken"); with sourceEnc, its encrypted API key. */
+  exchange: text(),
+  /** Kept for history but out of the way (e.g. a closed exchange). */
+  archived: integer({ mode: "boolean" }).notNull().default(false),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

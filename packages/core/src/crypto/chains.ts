@@ -6,7 +6,8 @@ import { type HdCoin, isSupportedXpub } from "./hd.js";
  *   or each chain's public instance without a key).
  * - esplora (Bitcoin, Litecoin: mempool.space / litecoinspace.org) and
  *   blockcypher (Dogecoin); extended public keys are expanded locally.
- * - none: no free public service yet (Zcash); imported history only.
+ * - blockbook: a Blockbook server you set (Zcash: no free public one).
+ * - siascan: Siacoin through SiaScan's public explorer API.
  * - koios (Cardano), algonode (Algorand), horizon (Stellar), cosmos (Cosmos Hub
  *   REST node), trongrid (TRON): free public APIs.
  * Servers are configurable per chain.
@@ -17,6 +18,7 @@ export type ChainKey =
   | "ltc"
   | "doge"
   | "zec"
+  | "sc"
   | "eth"
   | "base"
   | "op"
@@ -38,6 +40,8 @@ export interface ChainInfo {
     | "esplora"
     | "blockcypher"
     | "none"
+    | "blockbook"
+    | "siascan"
     | "blockscout"
     | "koios"
     | "algonode"
@@ -105,10 +109,23 @@ export const CHAINS: Record<ChainKey, ChainInfo> = {
     name: "Zcash",
     asset: "ZEC",
     decimals: 8,
-    provider: "none",
+    provider: "blockbook",
     server: "",
     accepts: "xpub or a transparent address (starts with t1 or t3)",
     validate: (s) => xpubFor("zec")(s) || (/^t[13]/.test(s) && BASE58.test(s) && s.length === 35),
+  },
+  sc: {
+    key: "sc",
+    name: "Siacoin",
+    asset: "SC",
+    decimals: 24,
+    provider: "siascan",
+    server: "https://api.siascan.com",
+    accepts: "address (76 characters; several separated by commas, since a Sia wallet uses many)",
+    validate: (s) => {
+      const list = s.split(/[\s,;]+/).filter(Boolean);
+      return list.length > 0 && list.length <= 50 && list.every((a) => /^[0-9a-fA-F]{76}$/.test(a));
+    },
   },
   eth: {
     key: "eth",

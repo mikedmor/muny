@@ -24,6 +24,7 @@ import type {
   CryptoWallet,
   CryptoWalletKind,
 } from "@muny/shared";
+import { guessCryptoExchange } from "@muny/shared";
 import { and, desc, eq, gte, inArray, lte, or, type SQL, sql } from "drizzle-orm";
 import { normHash, normHashSql } from "./match.js";
 import { getCryptoSettings } from "./prices.js";
@@ -147,6 +148,8 @@ export function listWallets(db: Db): CryptoWallet[] {
         queued: isQueued(r.id),
         createdAt: r.createdAt.getTime(),
         notes: r.notes,
+        exchange: r.exchange,
+        archived: r.archived,
       };
     });
 }
@@ -157,7 +160,13 @@ export function createWallet(
 ): string {
   const id = newId();
   db.insert(w)
-    .values({ id, name: input.name.trim(), kind: input.kind, chain: input.chain ?? null })
+    .values({
+      id,
+      name: input.name.trim(),
+      kind: input.kind,
+      chain: input.chain ?? null,
+      exchange: input.kind === "exchange" ? guessCryptoExchange(input.name) : null,
+    })
     .run();
   return id;
 }
@@ -1183,4 +1192,39 @@ export function deleteTxn(db: Db, id: string) {
     tx.delete(t).where(inArray(t.id, ids)).run();
     return { deleted: ids.length };
   });
+}
+
+/**
+ * A closed exchange kept what was on it: record each coin still there as a
+ * "lost" withdrawal on that day (a loss, not a sale). Deleting those rows
+ * undoes it.
+ */
+export function markRemainingLost(db: Db, walletId: string, at: number) {
+  const wallet = db.select().from(w).where(eq(w.id, walletId)).get();
+  if (!wallet) throw new Error("Wallet not found");
+  const left = [...(balancesByWallet(db).get(walletId) ?? new Map<string, string>())].filter(
+    ([, amount]) => !isZeroDec(amount) && !amount.startsWith("-"),
+  );
+  const hidden = hiddenAssets(db);
+  let coins = 0;
+  for (const [asset, amount] of left) {
+    if (hidden.has(asset)) continue;
+    const id = newId();
+    db.insert(t)
+      .values({
+        id,
+        walletId,
+        at,
+        type: "withdrawal",
+        label: "lost",
+        sentAsset: asset,
+        sentAmount: amount,
+        description: `Lost: still on ${wallet.name} when it closed`,
+        externalId: `manual:${id}`,
+        source: "manual",
+      })
+      .run();
+    coins++;
+  }
+  return { coins };
 }

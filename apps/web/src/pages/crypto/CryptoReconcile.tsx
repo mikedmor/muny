@@ -246,6 +246,7 @@ function WalletIssues({ w }: { w: Report["wallets"][number] }) {
           walletId={w.walletId}
           m={x}
           imported={w.importedWithHash}
+          exchange={!w.chain}
           evm={!!w.chain && EVM_CHAINS.get(w.chain) === x.asset}
         />
       ))}
@@ -341,11 +342,13 @@ function Mismatch({
   m,
   imported,
   evm,
+  exchange,
 }: {
   walletId: string;
   m: MismatchT;
   imported: number;
   evm: boolean;
+  exchange: boolean;
 }) {
   const compare = useCryptoMutation(() =>
     api.post<{ asset: string; diffs: TxnDiff[] }>("/api/crypto/reconcile/compare", { walletId }),
@@ -403,8 +406,8 @@ function Mismatch({
     <div className="space-y-2 text-sm">
       <p>
         <span className="font-medium">
-          {m.asset}: the blockchain shows {fmtAmount(m.onChain, 8)}, Muny has{" "}
-          {fmtAmount(m.computed, 8)}
+          {m.asset}: {exchange ? "the exchange reports" : "the blockchain shows"}{" "}
+          {fmtAmount(m.onChain, 8)}, Muny has {fmtAmount(m.computed, 8)}
         </span>{" "}
         ({gap} {more ? "more" : "less"} in Muny).
       </p>

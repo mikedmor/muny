@@ -5,6 +5,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { decryptJson, encryptJson } from "../lib/crypto.js";
 import type { BudgetProvider } from "./budget.js";
 import { algorand } from "./chains/algorand.js";
+import { blockbook } from "./chains/blockbook.js";
 import { blockcypher, unsupported } from "./chains/blockcypher.js";
 import { blockscout } from "./chains/blockscout.js";
 import { cardano } from "./chains/cardano.js";
@@ -18,8 +19,14 @@ import {
   safeText,
 } from "./chains/ctx.js";
 import { esplora } from "./chains/esplora.js";
+import { sia } from "./chains/sia.js";
 import { stellar } from "./chains/stellar.js";
 import { tron } from "./chains/tron.js";
+import { binanceus } from "./exchanges/binanceus.js";
+import { coinbase } from "./exchanges/coinbase.js";
+import { gemini } from "./exchanges/gemini.js";
+import { type ExchangeAdapter, type ExchangeCreds, makeExchangeCtx } from "./exchanges/http.js";
+import { kraken } from "./exchanges/kraken.js";
 import { closeAmountsSql, normHash, normHashSql } from "./match.js";
 import { getCryptoSettings } from "./prices.js";
 
@@ -47,6 +54,8 @@ const ADAPTERS: Record<(typeof CHAINS)[ChainKey]["provider"], Adapter> = {
   esplora,
   blockcypher,
   none: unsupported,
+  blockbook,
+  siascan: sia,
   blockscout,
   koios: cardano,
   algonode: algorand,
@@ -58,6 +67,8 @@ const BUDGET: Record<(typeof CHAINS)[ChainKey]["provider"], BudgetProvider> = {
   esplora: "esplora",
   blockcypher: "blockcypher",
   none: "blockcypher",
+  blockbook: "blockbook",
+  siascan: "siascan",
   blockscout: "blockscout",
   koios: "koios",
   algonode: "algonode",
@@ -190,8 +201,11 @@ export async function syncWallet(
 ): Promise<CryptoSyncResult> {
   const wallet = db.select().from(w).where(eq(w.id, walletId)).get();
   if (!wallet) throw new SyncError("Wallet not found");
-  if (!wallet.sourceEnc || !wallet.chain || !(wallet.chain in CHAINS))
-    throw new SyncError("This wallet has no address to sync from");
+  if (
+    !wallet.sourceEnc ||
+    (wallet.chain ? !(wallet.chain in CHAINS) : !canSyncExchange(wallet.exchange))
+  )
+    throw new SyncError("This wallet has no address or exchange key to sync from");
   if (!deps.secretKey) throw new SyncError("MUNY_SECRET_KEY is not set");
   if (syncing.has(walletId)) return { added: 0, duplicates: 0 };
   syncing.add(walletId);
@@ -259,10 +273,83 @@ export function walletCtx(db: MunyDb, wallet: typeof w.$inferSelect, deps: SyncD
   );
 }
 
-/** Fetch a wallet's whole history from its chain service without storing anything. */
+/** Exchanges Muny syncs with a read-only API key (catalog keys in CRYPTO_EXCHANGES). */
+const EXCHANGES: Record<
+  string,
+  { adapter: ExchangeAdapter; budget: BudgetProvider; label: string }
+> = {
+  coinbase: { adapter: coinbase, budget: "coinbase", label: "Coinbase" },
+  kraken: { adapter: kraken, budget: "kraken", label: "Kraken" },
+  gemini: { adapter: gemini, budget: "gemini", label: "Gemini" },
+  binance_us: { adapter: binanceus, budget: "binanceus", label: "Binance US" },
+};
+export const canSyncExchange = (key: string | null | undefined) => !!key && key in EXCHANGES;
+
+/** Run an exchange wallet's adapter (its encrypted key is decrypted only here). */
+function fetchExchange(db: MunyDb, wallet: typeof w.$inferSelect, deps: SyncDeps) {
+  const ex = wallet.exchange ? EXCHANGES[wallet.exchange] : undefined;
+  if (!ex || !wallet.sourceEnc || !deps.secretKey)
+    throw new SyncError("This wallet has no exchange API key to sync with");
+  const knownAssets = db
+    .all<{ a: string }>(
+      sql`select distinct a from (select sent_asset as a from crypto_txns where wallet_id = ${wallet.id}
+        union select received_asset from crypto_txns where wallet_id = ${wallet.id}
+        union select fee_asset from crypto_txns where wallet_id = ${wallet.id}) where a is not null`,
+    )
+    .map((r) => r.a);
+  const ctx = makeExchangeCtx(
+    {
+      db,
+      creds: decryptJson<ExchangeCreds>(deps.secretKey, wallet.sourceEnc),
+      cursor: readCursor(wallet.syncCursor),
+      deps,
+      knownAssets,
+    },
+    ex.budget,
+    ex.label,
+  );
+  return ex.adapter(ctx);
+}
+
+/** Attach (or replace) the read-only API key an exchange wallet syncs with. */
+export function setExchangeKey(
+  db: MunyDb,
+  walletId: string,
+  input: { exchange: string; key: string; secret: string; passphrase?: string },
+  secretKey: Buffer | undefined,
+) {
+  if (!secretKey)
+    throw new SyncError("Set MUNY_SECRET_KEY first: the API key is stored encrypted.");
+  if (!canSyncExchange(input.exchange)) throw new SyncError("Muny can't sync that exchange");
+  const creds: ExchangeCreds = {
+    key: input.key.trim(),
+    secret: input.secret.trim(),
+    ...(input.passphrase ? { passphrase: input.passphrase.trim() } : {}),
+  };
+  if (!creds.key || !creds.secret) throw new SyncError("Paste both the key and the secret");
+  const n = db
+    .update(w)
+    .set({
+      kind: "exchange",
+      exchange: input.exchange,
+      chain: null,
+      sourceEnc: encryptJson(secretKey, creds),
+      sourceHint: `API key …${creds.key.replace(/\s+/g, "").slice(-4)}`,
+      syncEnabled: true,
+      status: "never",
+      lastError: null,
+      syncCursor: null,
+    })
+    .where(eq(w.id, walletId))
+    .run().changes;
+  if (!n) throw new SyncError("Wallet not found");
+}
+
+/** Fetch a wallet's whole history from its chain service or exchange without storing anything. */
 export async function fetchFullHistory(db: MunyDb, walletId: string, deps: SyncDeps) {
   const wallet = db.select().from(w).where(eq(w.id, walletId)).get();
   if (!wallet) throw new SyncError("Wallet not found");
+  if (!wallet.chain) return fetchExchange(db, { ...wallet, syncCursor: null }, deps);
   const ctx = walletCtx(db, { ...wallet, syncCursor: null }, deps);
   return ADAPTERS[CHAINS[wallet.chain as ChainKey].provider](ctx);
 }
@@ -334,10 +421,11 @@ async function runSync(
   wallet: typeof w.$inferSelect,
   deps: SyncDeps,
 ): Promise<CryptoSyncResult & { notice: string | null }> {
-  const chain = CHAINS[wallet.chain as ChainKey];
+  const chain = wallet.chain ? CHAINS[wallet.chain as ChainKey] : null;
   // Rows synced before addresses were kept: read the whole history once more
   // to fill them in (a few requests, once per wallet).
   const backfill =
+    !!chain &&
     ADDRESS_PROVIDERS.has(chain.provider) &&
     !idSetting(db, ADDRESSES_FILLED).has(wallet.id) &&
     !!db
@@ -363,8 +451,11 @@ async function runSync(
         ),
       )
     : 0;
-  const ctx = walletCtx(db, backfill ? { ...wallet, syncCursor: null } : wallet, deps);
-  const fetched = await ADAPTERS[chain.provider](ctx);
+  const fetched = chain
+    ? await ADAPTERS[chain.provider](
+        walletCtx(db, backfill ? { ...wallet, syncCursor: null } : wallet, deps),
+      )
+    : await fetchExchange(db, wallet, deps);
   const { height, balances, pos, notice } = fetched;
   // Rewards already counted from an import (the user chose that version).
   const mapped = rewardsFromImport(db).has(wallet.id)
@@ -429,7 +520,7 @@ export async function syncAll(db: MunyDb, deps: SyncDeps): Promise<CryptoSyncRes
   const ids = db
     .select({ id: w.id })
     .from(w)
-    .where(and(eq(w.syncEnabled, true), sql`${w.sourceEnc} is not null`))
+    .where(and(eq(w.syncEnabled, true), eq(w.archived, false), sql`${w.sourceEnc} is not null`))
     .all()
     .map((r) => r.id);
   return syncMany(db, ids, deps);
@@ -472,7 +563,7 @@ export function walletsDue(db: MunyDb, now = new Date()): string[] {
   return db
     .select({ id: w.id, last: w.lastSyncAt })
     .from(w)
-    .where(and(eq(w.syncEnabled, true), sql`${w.sourceEnc} is not null`))
+    .where(and(eq(w.syncEnabled, true), eq(w.archived, false), sql`${w.sourceEnc} is not null`))
     .all()
     .filter((r) => !r.last || r.last.getTime() < start)
     .map((r) => r.id);

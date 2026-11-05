@@ -1,4 +1,10 @@
-import { type CryptoTxnType, formatMoney } from "@muny/shared";
+import {
+  CRYPTO_EXCHANGES,
+  type CryptoTxnType,
+  type CryptoWallet,
+  cryptoExchange,
+  formatMoney,
+} from "@muny/shared";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { CoinIcon, WalletIcon } from "../../components/coins.js";
@@ -11,6 +17,7 @@ import {
   useCryptoSyncRuns,
   useCryptoWallet,
 } from "../../lib/queries.js";
+import { AddTxn } from "./CryptoTransactions.js";
 import { ConnectWallet, ImportKoinly, mismatches, SyncChip } from "./CryptoWallets.js";
 import { agoTime, CryptoHeader, fmtAmount, when } from "./common.js";
 
@@ -82,12 +89,203 @@ function History({ id }: { id: string }) {
   );
 }
 
+/** Which exchange this is, what Muny can do with it, and closing it out. */
+function ExchangeCard({
+  w,
+  onConnect,
+  onWithdrawal,
+}: {
+  w: CryptoWallet;
+  onConnect: () => void;
+  onWithdrawal: () => void;
+}) {
+  const ex = cryptoExchange(w.exchange);
+  const patch = useCryptoMutation((body: object) => api.patch(`/api/crypto/wallets/${w.id}`, body));
+  const lost = useCryptoMutation((at: number) =>
+    api.post<{ coins: number }>(`/api/crypto/wallets/${w.id}/lost`, { at }),
+  );
+  const [lostOn, setLostOn] = useState(ex?.closedOn ?? new Date().toISOString().slice(0, 10));
+  const holds = w.balances.length > 0;
+  if (!ex)
+    return (
+      <Card className="space-y-2 text-sm">
+        <p className="font-medium">Which exchange is this?</p>
+        <p className="text-slate-500">
+          Muny can then tell you whether it still runs and whether it can sync.
+        </p>
+        <select
+          aria-label="Exchange"
+          defaultValue=""
+          onChange={(e) => e.target.value && patch.mutate({ exchange: e.target.value })}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+        >
+          <option value="">Choose…</option>
+          {CRYPTO_EXCHANGES.map((x) => (
+            <option key={x.key} value={x.key}>
+              {x.name}
+            </option>
+          ))}
+        </select>
+      </Card>
+    );
+  return (
+    <Card className="space-y-3 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium">{ex.name}</span>
+        <span
+          className={cx(
+            "rounded-full px-2 py-0.5 text-xs",
+            ex.status === "active"
+              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200"
+              : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
+          )}
+        >
+          {ex.status === "active"
+            ? ex.sync === "api"
+              ? "Active · can sync"
+              : "Active · import only"
+            : `Closed${ex.closedOn ? ` ${ex.closedOn.slice(0, 7)}` : ""}`}
+        </span>
+        {w.archived && (
+          <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs dark:bg-slate-700">
+            Archived
+          </span>
+        )}
+      </div>
+      <p className="text-slate-600 dark:text-slate-300">{ex.note}</p>
+      <div className="flex flex-wrap gap-2">
+        {ex.sync === "api" && (
+          <Button variant={w.sourceHint ? "secondary" : "primary"} onClick={onConnect}>
+            {w.sourceHint ? "Change API key" : "🔗 Sync with a read-only API key"}
+          </Button>
+        )}
+        {ex.status === "closed" && (
+          <Button variant="secondary" onClick={onWithdrawal}>
+            Add the transfer out
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          disabled={patch.isPending}
+          onClick={() => patch.mutate({ archived: !w.archived })}
+        >
+          {w.archived ? "Unarchive" : "Archive"}
+        </Button>
+      </div>
+      {ex.status === "closed" && holds && (
+        <div className="space-y-2 rounded-lg border border-amber-200 px-3 py-2 dark:border-amber-900">
+          <p>
+            Muny&apos;s history still has coins here. If you withdrew them, add that transfer out
+            (or import it). If they were stuck when {ex.name} closed, mark them lost: one
+            &quot;lost&quot; withdrawal per coin on that day, which counts as a loss rather than a
+            sale. Deleting those rows undoes it.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="date"
+              aria-label="Lost on"
+              value={lostOn}
+              onChange={(e) => setLostOn(e.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+            />
+            <Button
+              variant="secondary"
+              disabled={lost.isPending || !lostOn}
+              onClick={() =>
+                window.confirm(`Record everything left on ${w.name} as lost on ${lostOn}?`) &&
+                lost.mutate(Date.parse(`${lostOn}T12:00:00Z`))
+              }
+            >
+              Mark what&apos;s left as lost
+            </Button>
+          </div>
+        </div>
+      )}
+      {ex.status === "closed" && !holds && !w.archived && (
+        <p className="text-xs text-slate-500">
+          Nothing is left here, so it can be archived: its history stays, out of the way.
+        </p>
+      )}
+      {(patch.error ?? lost.error) && <Alert>{(patch.error ?? lost.error)?.message}</Alert>}
+    </Card>
+  );
+}
+
+/** Paste a read-only API key (stored encrypted; sent only to that exchange). */
+function ConnectExchange({ w, onDone }: { w: CryptoWallet; onDone: () => void }) {
+  const ex = cryptoExchange(w.exchange);
+  const [key, setKey] = useState("");
+  const [secret, setSecret] = useState("");
+  const save = useCryptoMutation(() =>
+    api.put(`/api/crypto/wallets/${w.id}/exchange`, { exchange: w.exchange, key, secret }),
+  );
+  if (!ex?.setup) return null;
+  return (
+    <form
+      className="space-y-3 text-sm"
+      onSubmit={(e) => {
+        e.preventDefault();
+        save.mutate(undefined, { onSuccess: onDone });
+      }}
+    >
+      <p className="text-slate-600 dark:text-slate-300">
+        {ex.setup.steps}{" "}
+        <a
+          href={ex.setup.url}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="text-brand-600 underline"
+        >
+          Open {ex.name} ↗
+        </a>
+      </p>
+      <label className="block">
+        <span className="text-xs text-slate-500">{ex.setup.keyLabel}</span>
+        <input
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
+        />
+      </label>
+      <label className="block">
+        <span className="text-xs text-slate-500">{ex.setup.secretLabel}</span>
+        <textarea
+          value={secret}
+          onChange={(e) => setSecret(e.target.value)}
+          rows={w.exchange === "coinbase" ? 5 : 2}
+          autoComplete="off"
+          spellCheck={false}
+          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
+        />
+      </label>
+      <p className="text-xs text-slate-500">
+        Muny stores the key encrypted on your server and sends it only to {ex.name}, to read
+        balances and history. Give it read-only permissions: Muny never trades or moves money. The
+        first sync runs in the background.
+      </p>
+      {save.error && <Alert>{save.error.message}</Alert>}
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" onClick={onDone}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={!key.trim() || !secret.trim() || save.isPending}>
+          Save and sync
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 export function CryptoWalletPage() {
   const { walletId } = useParams({ strict: false }) as { walletId: string };
   const q = useCryptoWallet(walletId);
   const settings = useCryptoSettings();
   const navigate = useNavigate();
-  const [modal, setModal] = useState<"import" | "connect" | "history" | null>(null);
+  const [modal, setModal] = useState<
+    "import" | "connect" | "history" | "exchange" | "withdrawal" | null
+  >(null);
   const [showHidden, setShowHidden] = useState(false);
   const sync = useCryptoMutation(() => api.post(`/api/crypto/wallets/${walletId}/sync`));
   const hide = useCryptoMutation((hiddenAssets: string[]) =>
@@ -201,13 +399,21 @@ export function CryptoWalletPage() {
                 )}
                 {diff.length > 0 && (
                   <p className="text-xs text-amber-700 dark:text-amber-400">
-                    The blockchain shows {diff.join(", ")}.{" "}
+                    {w.chain ? "The blockchain shows" : "The exchange reports"} {diff.join(", ")}.{" "}
                     <Link to="/crypto/reconcile" hash={`wallet-${w.id}`} className="underline">
                       Find out why
                     </Link>
                   </p>
                 )}
               </Card>
+
+              {w.kind === "exchange" && (
+                <ExchangeCard
+                  w={w}
+                  onConnect={() => setModal("exchange")}
+                  onWithdrawal={() => setModal("withdrawal")}
+                />
+              )}
 
               <div className="flex flex-wrap gap-2">
                 {CHIPS.map(([type, one, many]) => {
@@ -339,14 +545,22 @@ export function CryptoWalletPage() {
         title={
           modal === "import"
             ? "Import Koinly history"
-            : modal === "history"
-              ? `Sync history: ${w?.name ?? ""}`
-              : `Sync ${w?.name ?? ""} from the blockchain`
+            : modal === "exchange"
+              ? `Sync ${w?.name ?? ""} with a read-only API key`
+              : modal === "withdrawal"
+                ? "Add the transfer out"
+                : modal === "history"
+                  ? `Sync history: ${w?.name ?? ""}`
+                  : `Sync ${w?.name ?? ""} from the blockchain`
         }
       >
         {modal === "import" && <ImportKoinly onDone={() => setModal(null)} />}
         {modal === "connect" && w && <ConnectWallet w={w} onDone={() => setModal(null)} />}
         {modal === "history" && <History id={walletId} />}
+        {modal === "exchange" && w && <ConnectExchange w={w} onDone={() => setModal(null)} />}
+        {modal === "withdrawal" && (
+          <AddTxn onDone={() => setModal(null)} defaultWallet={walletId} defaultType="withdrawal" />
+        )}
       </Modal>
     </>
   );

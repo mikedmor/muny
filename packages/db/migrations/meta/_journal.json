@@ -99,6 +99,13 @@
       "when": 1793907828765,
       "tag": "0013_crypto_counterparty",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1793913384875,
+      "tag": "0014_crypto_exchanges",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,6 @@
 import { CHAINS, type ChainKey, normDec } from "@muny/core";
 import { type MunyDb, newId, schema } from "@muny/db";
-import type { CryptoTxnType } from "@muny/shared";
+import { type CryptoTxnType, cryptoExchange } from "@muny/shared";
 import { eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -42,6 +42,7 @@ import {
   listTxns,
   listWallets,
   markNotDuplicate,
+  markRemainingLost,
   previewKoinly,
   syncHistory,
   transferMatches,
@@ -52,6 +53,7 @@ import {
   isSyncing,
   removeWalletSource,
   SyncError,
+  setExchangeKey,
   setWalletSource,
   syncAll,
   syncMany,
@@ -177,9 +179,46 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
     return listWallets(db).find((x) => x.id === id);
   });
 
+  /** Sync an exchange with a read-only API key (stored encrypted, sent only to that exchange). */
+  app.put("/api/crypto/wallets/:id/exchange", async (req) => {
+    const user = requireUser(req);
+    const { id } = parse(IdParams, req.params);
+    const body = parse(
+      z.object({
+        exchange: z.string().min(1).max(40),
+        key: z.string().min(1).max(500),
+        secret: z.string().min(1).max(4000),
+        passphrase: z.string().max(200).optional(),
+      }),
+      req.body,
+    );
+    syncErr(() => setExchangeKey(db, id, body, priceDeps.secretKey));
+    // Never log the key: only which exchange.
+    log(user.id, "crypto.wallet_exchange_key", id, { exchange: body.exchange });
+    quiet(syncWallet(db, id, bg).then(() => refreshPrices(db, bg)));
+    return listWallets(db).find((x) => x.id === id);
+  });
+
+  /** What's left on a closed exchange is gone: one "lost" withdrawal per coin. */
+  app.post("/api/crypto/wallets/:id/lost", async (req) => {
+    const user = requireUser(req);
+    const { id } = parse(IdParams, req.params);
+    const body = parse(z.object({ at: z.number().int().positive() }), req.body);
+    const res = markRemainingLost(db, id, body.at);
+    log(user.id, "crypto.wallet_lost", id, { coins: res.coins });
+    return res;
+  });
+
   app.post("/api/crypto/wallets/:id/sync", async (req) => {
     const user = requireUser(req);
     const { id } = parse(IdParams, req.params);
+    // Exchanges can take minutes (Binance US asks coin by coin): sync in the background.
+    const wallet = listWallets(db).find((x) => x.id === id);
+    if (wallet?.exchange && !wallet.chain) {
+      log(user.id, "crypto.wallet_sync", id);
+      quiet(syncWallet(db, id, bg).then((r) => (r.added ? refreshPrices(db, bg) : undefined)));
+      return { added: 0, duplicates: 0, started: true };
+    }
     try {
       // Paced (but quicker than background syncs) to stay inside rate limits.
       const res = await syncWallet(db, id, { ...priceDeps, delayMs: priceDeps.delayMs ?? 500 });
@@ -244,6 +283,13 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
         name: z.string().trim().min(1).max(80).optional(),
         syncEnabled: z.boolean().optional(),
         notes: z.string().max(5000).nullable().optional(),
+        archived: z.boolean().optional(),
+        exchange: z
+          .string()
+          .max(40)
+          .refine((k) => !!cryptoExchange(k), "Unknown exchange")
+          .nullable()
+          .optional(),
       }),
       req.body,
     );

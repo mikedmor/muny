@@ -751,10 +751,18 @@ function TxnRow({ t }: { t: CryptoTxn }) {
   );
 }
 
-function AddTxn({ onDone, defaultWallet }: { onDone: () => void; defaultWallet?: string }) {
+export function AddTxn({
+  onDone,
+  defaultWallet,
+  defaultType,
+}: {
+  onDone: () => void;
+  defaultWallet?: string;
+  defaultType?: "deposit" | "withdrawal" | "trade";
+}) {
   const wallets = useCryptoWallets();
   const [walletId, setWalletId] = useState(defaultWallet ?? "");
-  const [type, setType] = useState<"deposit" | "withdrawal" | "trade">("deposit");
+  const [type, setType] = useState<"deposit" | "withdrawal" | "trade">(defaultType ?? "deposit");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 16));
   const [label, setLabel] = useState("");
   const [sent, setSent] = useState({ amount: "", asset: "" });

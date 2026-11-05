@@ -231,7 +231,7 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
         mismatches,
         duplicates: dupes.length,
         importedWithHash:
-          x.sourceEnc && !(x.status === "ok" && x.lastError)
+          x.sourceEnc && x.chain && !(x.status === "ok" && x.lastError)
             ? rows.filter((r) => r.walletId === x.id && r.source === "import" && r.txHash).length
             : 0,
         crossChain,

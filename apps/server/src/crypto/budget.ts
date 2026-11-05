@@ -20,7 +20,13 @@ export type BudgetProvider =
   | "trongrid"
   | "koios"
   | "algonode"
-  | "horizon";
+  | "horizon"
+  | "siascan"
+  | "blockbook"
+  | "coinbase"
+  | "kraken"
+  | "gemini"
+  | "binanceus";
 
 export const LIMITS: Record<BudgetProvider, { day: number; month: number; label: string }> = {
   // No published key-less quota; stay polite.
@@ -41,6 +47,19 @@ export const LIMITS: Record<BudgetProvider, { day: number; month: number; label:
   algonode: { day: 1000, month: 20000, label: "AlgoNode wallet sync (Algorand)" },
   // stellar.org Horizon: 3,600 requests an hour per IP.
   horizon: { day: 1000, month: 20000, label: "Horizon wallet sync (Stellar)" },
+  // SiaScan's public explorer API (no published quota; stay polite).
+  siascan: { day: 500, month: 10000, label: "SiaScan wallet sync (Siacoin)" },
+  // A Blockbook server you set (e.g. a free GetBlock endpoint: 50K a day).
+  blockbook: { day: 1000, month: 20000, label: "Blockbook wallet sync (Zcash)" },
+  // Exchanges, with your own read-only API keys (limits are per key).
+  // Coinbase: 10,000 requests an hour.
+  coinbase: { day: 4000, month: 40000, label: "Coinbase sync" },
+  // Kraken: ledger calls cost 2 of a slowly refilling 15-20 point counter.
+  kraken: { day: 1500, month: 20000, label: "Kraken sync" },
+  // Gemini: 600 private requests a minute.
+  gemini: { day: 1500, month: 20000, label: "Gemini sync" },
+  // Binance US: 1,200 request weight a minute; history is asked coin by coin.
+  binanceus: { day: 4000, month: 40000, label: "Binance US sync" },
 };
 
 const KEY = "crypto.usage";

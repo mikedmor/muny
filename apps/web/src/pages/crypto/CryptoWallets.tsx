@@ -6,6 +6,7 @@ import {
   type CryptoSyncResult,
   type CryptoWallet,
   type CryptoWalletKind,
+  cryptoExchange,
   detectCryptoChains,
   formatMoney,
 } from "@muny/shared";
@@ -214,8 +215,9 @@ type ChainKey = CryptoSyncChain;
 const VIA: Record<ChainKey, string> = {
   btc: "mempool.space",
   ltc: "litecoinspace.org",
-  doge: "Blockchair",
-  zec: "Blockchair",
+  doge: "BlockCypher",
+  zec: "the Blockbook server set in Settings",
+  sc: "SiaScan",
   atom: "a public Cosmos node",
   trx: "TronGrid",
   eth: "Blockscout",
@@ -463,7 +465,15 @@ export function SyncChip({ w }: { w: CryptoWallet }) {
   );
 }
 
-function WalletRow({ w, onConnect }: { w: CryptoWallet; onConnect: () => void }) {
+function WalletRow({
+  w,
+  onConnect,
+  dim,
+}: {
+  w: CryptoWallet;
+  onConnect: () => void;
+  dim?: boolean;
+}) {
   const [renaming, setRenaming] = useState(false);
   const sync = useCryptoMutation(() =>
     api.post<CryptoSyncResult>(`/api/crypto/wallets/${w.id}/sync`),
@@ -476,7 +486,12 @@ function WalletRow({ w, onConnect }: { w: CryptoWallet; onConnect: () => void })
   const del = useCryptoMutation(() => api.delete(`/api/crypto/wallets/${w.id}`));
   const [open, setOpen] = useState(false);
   return (
-    <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_9rem_8rem_19rem]">
+    <li
+      className={cx(
+        "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_9rem_8rem_19rem]",
+        dim && "opacity-60",
+      )}
+    >
       <span className="flex min-w-0 items-center gap-3">
         <WalletIcon name={w.name} chain={w.chain} kind={w.kind} />
         <span className="min-w-0">
@@ -508,6 +523,11 @@ function WalletRow({ w, onConnect }: { w: CryptoWallet; onConnect: () => void })
           )}
           <span className="block truncate text-xs text-slate-500">
             {KIND_LABEL[w.kind]}
+            {cryptoExchange(w.exchange)?.status === "closed" && (
+              <span className="ml-1 rounded bg-amber-100 px-1 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                closed
+              </span>
+            )}
             {w.sourceHint && <span className="ml-1 font-mono">{w.sourceHint}</span>}
             {w.balances.length === 1 &&
               ` · ${fmtAmount(w.balances[0]?.amount, 4)} ${w.balances[0]?.asset}`}
@@ -526,7 +546,7 @@ function WalletRow({ w, onConnect }: { w: CryptoWallet; onConnect: () => void })
           )}
           {diff.length > 0 && (
             <span className="block text-xs text-amber-700 dark:text-amber-400">
-              The blockchain shows {diff.join(", ")}.{" "}
+              {w.chain ? "The blockchain shows" : "The exchange reports"} {diff.join(", ")}.{" "}
               <Link to="/crypto/reconcile" className="underline">
                 Find out why
               </Link>
@@ -655,9 +675,12 @@ export function CryptoWallets() {
   const anySynced = (wallets.data ?? []).some((w) => w.sourceHint);
   const anySyncing = (wallets.data ?? []).some((w) => w.syncing || w.queued);
   const [find, setFind] = useState("");
-  const list = (wallets.data ?? []).filter((w) =>
+  const [showArchived, setShowArchived] = useState(false);
+  const matching = (wallets.data ?? []).filter((w) =>
     w.name.toLowerCase().includes(find.toLowerCase()),
   );
+  const list = matching.filter((w) => !w.archived);
+  const archived = matching.filter((w) => w.archived);
   const total = (wallets.data ?? []).reduce((s, w) => s + w.valueCents, 0);
   return (
     <>
@@ -703,7 +726,22 @@ export function CryptoWallets() {
           {list.map((w) => (
             <WalletRow key={w.id} w={w} onConnect={() => setConnect(w)} />
           ))}
-          {wallets.isSuccess && list.length === 0 && (
+          {archived.length > 0 && (
+            <li className="px-4 py-2 text-xs text-slate-500">
+              <button
+                type="button"
+                aria-expanded={showArchived}
+                onClick={() => setShowArchived((v) => !v)}
+                className="hover:underline"
+              >
+                {archived.length} archived {archived.length === 1 ? "wallet" : "wallets"} ·{" "}
+                <span className="text-brand-600">{showArchived ? "Hide" : "Show"}</span>
+              </button>
+            </li>
+          )}
+          {showArchived &&
+            archived.map((w) => <WalletRow key={w.id} w={w} dim onConnect={() => setConnect(w)} />)}
+          {wallets.isSuccess && list.length === 0 && archived.length === 0 && (
             <li className="px-4 py-8 text-center text-sm text-slate-500">
               {find
                 ? "No wallet matches."
