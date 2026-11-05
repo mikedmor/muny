@@ -163,4 +163,60 @@ describe("crypto reconcile", () => {
     await client.post("/api/crypto/reconcile/duplicates", { walletId: w.id });
     expect((await report()).wallets).toEqual([]);
   });
+
+  it("explains a surplus with the deposits that add up to it, and fills a shortfall", async () => {
+    const { client, db, report, settle } = await setup();
+    const w = (
+      await client.post("/api/crypto/wallets", {
+        name: "Hot",
+        kind: "blockchain",
+        chain: "eth",
+        source: ME,
+      })
+    ).json<CryptoWallet>();
+    await settle();
+    const { schema } = await import("@muny/db");
+    const imp = (id: string, at: number, v: Record<string, string>) =>
+      db
+        .insert(schema.cryptoTxns)
+        .values({
+          id,
+          walletId: w.id,
+          at,
+          type: "deposit",
+          externalId: `koinly:${id}`,
+          source: "import",
+          ...v,
+        })
+        .run();
+    // Reward withdrawals Koinly recorded as deposits (counted twice), plus one unrelated.
+    imp("r1", T + 10 * 86_400_000, {
+      receivedAsset: "ETH",
+      receivedAmount: "0.3",
+      label: "reward",
+    });
+    imp("r2", T + 20 * 86_400_000, { receivedAsset: "ETH", receivedAmount: "0.2" });
+    imp("x", T + 30 * 86_400_000, { receivedAsset: "ETH", receivedAmount: "0.7" });
+    imp("out", T + 40 * 86_400_000, { type: "withdrawal", sentAsset: "ETH", sentAmount: "0.7" });
+    let m = (await report()).wallets[0]?.mismatches[0];
+    expect(m).toMatchObject({ asset: "ETH", diff: "0.5" });
+    expect(m?.extra.map((e) => e.txnId).sort()).toEqual(["r1", "r2"]);
+    await client.post("/api/crypto/reconcile/remove", {
+      walletId: w.id,
+      txnIds: m?.extra.map((e) => e.txnId),
+    });
+    expect((await report()).wallets).toEqual([]);
+
+    // A shortfall: history the service doesn't have.
+    imp("gone", T + 50 * 86_400_000, { type: "withdrawal", sentAsset: "ETH", sentAmount: "0.25" });
+    m = (await report()).wallets[0]?.mismatches[0];
+    expect(m).toMatchObject({ diff: "-0.25", extra: [] });
+    await client.post("/api/crypto/reconcile/adjust", {
+      walletId: w.id,
+      asset: "ETH",
+      amount: "0.25",
+      staking: false,
+    });
+    expect((await report()).wallets).toEqual([]);
+  });
 });

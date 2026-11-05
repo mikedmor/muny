@@ -212,7 +212,7 @@ export const CHAINS: Record<ChainKey, ChainInfo> = {
     asset: "ATOM",
     decimals: 6,
     provider: "cosmos",
-    server: "https://cosmos-rest.publicnode.com",
+    server: "https://rest.cosmos.directory/cosmoshub",
     accepts: "an address (cosmos1…)",
     validate: (s) => /^cosmos1[02-9ac-hj-np-z]{38}$/.test(s),
   },

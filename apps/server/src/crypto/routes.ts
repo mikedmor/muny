@@ -18,12 +18,14 @@ import {
   saveCryptoSettings,
 } from "./prices.js";
 import {
+  addAdjustment,
   addOpeningBalance,
   linkTransfer,
   mergeWallets,
   moveCrossChain,
   reconcileReport,
   removeDuplicates,
+  removeRows,
 } from "./reconcile.js";
 import {
   createWallet,
@@ -419,6 +421,34 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
     const res = fix(() => body.moves.map((m) => moveCrossChain(db, m.txnId, m)));
     log(user.id, "crypto.reconcile_crosschain", undefined, { count: res.length });
     return { moved: res.length };
+  });
+
+  app.post("/api/crypto/reconcile/remove", async (req) => {
+    const user = requireUser(req);
+    const body = parse(
+      z.object({
+        walletId: z.string().min(1).max(64),
+        txnIds: z.array(z.string().min(1).max(64)).min(1).max(20),
+      }),
+      req.body,
+    );
+    const res = removeRows(db, body.walletId, body.txnIds);
+    log(user.id, "crypto.reconcile_remove", body.walletId, res);
+    return res;
+  });
+
+  app.post("/api/crypto/reconcile/adjust", async (req) => {
+    const user = requireUser(req);
+    const body = parse(
+      z.object({ walletId: z.string().min(1).max(64), asset, amount, staking: z.boolean() }),
+      req.body,
+    );
+    const res = addAdjustment(db, body);
+    log(user.id, "crypto.reconcile_adjust", body.walletId, {
+      asset: body.asset,
+      staking: body.staking,
+    });
+    return res;
   });
 
   app.post("/api/crypto/reconcile/opening", async (req) => {

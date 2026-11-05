@@ -14,7 +14,8 @@ import { type Adapter, SyncError } from "./ctx.js";
  * They also refuse height-range queries, so searches run newest first.
  */
 
-const LCD = "https://cosmos-rest.publicnode.com";
+// cosmos.directory spreads requests over many public nodes, some of which keep history.
+const LCD = "https://rest.cosmos.directory/cosmoshub";
 const DENOM = "uatom";
 const DECIMALS = 6;
 const PAGE = 100;
@@ -146,5 +147,9 @@ export const cosmos: Adapter = async (ctx) => {
     mapped,
     height,
     balances: [{ asset: "ATOM", amount: fromBaseUnits(total.toString(), DECIMALS) }],
+    notice:
+      (ctx.cursor?.height ?? 0) === 0 && all.size === 0 && total > 0n
+        ? "The Cosmos node returned no transactions for this address: public nodes often keep only recent history. Your imported history stays; Reconcile can add what's missing."
+        : undefined,
   };
 };

@@ -175,7 +175,10 @@ function WalletIssues({ w }: { w: Report["wallets"][number] }) {
               {fmtAmount(m.deficit, 8)} {m.asset} more left than arrived.
             </span>{" "}
             The balance first goes below zero on {dayLabel(m.firstAt)}, so a deposit before then is
-            missing. {why}
+            missing.{" "}
+            {w.kind !== "exchange" && !w.synced && !SYNCABLE.has(m.asset)
+              ? `Muny can't sync ${m.asset} from a blockchain (no public service for it), so add an opening balance or hide the coin.`
+              : why}
           </p>
           {m.suggestions.length > 0 && (
             <ul className="space-y-1">
@@ -210,28 +213,118 @@ function WalletIssues({ w }: { w: Report["wallets"][number] }) {
         </div>
       ))}
 
-      {w.mismatches.length > 0 && (
-        <div className="space-y-1 text-sm">
-          <p className="font-medium">The blockchain disagrees with the transactions:</p>
-          <ul className="space-y-1">
-            {w.mismatches.map((x) => {
-              const more = !x.diff.startsWith("-");
-              return (
-                <li key={x.asset}>
-                  {x.asset}: blockchain {fmtAmount(x.onChain, 8)}, Muny {fmtAmount(x.computed, 8)}.{" "}
-                  <span className="text-slate-500">
-                    {more
-                      ? "Muny has more: something is counted twice (see duplicates or same-address wallets above), or a withdrawal is missing."
-                      : "Muny has less: some history is missing (older imports, or deposits from before the synced address was used)."}
-                  </span>
-                </li>
-              );
-            })}
+      {w.mismatches.map((x) => (
+        <Mismatch key={x.asset} walletId={w.walletId} m={x} />
+      ))}
+      {error && <Alert>{error.message}</Alert>}
+    </Card>
+  );
+}
+
+const SYNCABLE = new Set<string>([
+  "BTC",
+  "ETH",
+  "ADA",
+  "ALGO",
+  "XLM",
+  "ATOM",
+  "TRX",
+  "LTC",
+  "DOGE",
+  "POL",
+  "XDAI",
+]);
+
+type MismatchT = Report["wallets"][number]["mismatches"][number];
+
+/** Synced wallet vs. its blockchain: explain the gap and offer the fitting fix. */
+function Mismatch({ walletId, m }: { walletId: string; m: MismatchT }) {
+  const remove = useCryptoMutation(() =>
+    api.post("/api/crypto/reconcile/remove", { walletId, txnIds: m.extra.map((e) => e.txnId) }),
+  );
+  const adjust = useCryptoMutation((staking: boolean) =>
+    api.post("/api/crypto/reconcile/adjust", {
+      walletId,
+      asset: m.asset,
+      amount: m.diff.replace(/^-/, ""),
+      staking,
+    }),
+  );
+  const more = !m.diff.startsWith("-");
+  const gap = fmtAmount(m.diff.replace(/^-/, ""), 8);
+  const error = remove.error ?? adjust.error;
+  return (
+    <div className="space-y-2 text-sm">
+      <p>
+        <span className="font-medium">
+          {m.asset}: the blockchain shows {fmtAmount(m.onChain, 8)}, Muny has{" "}
+          {fmtAmount(m.computed, 8)}
+        </span>{" "}
+        ({gap} {more ? "more" : "less"} in Muny).
+      </p>
+      {more && m.extra.length > 0 && (
+        <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
+          <p>
+            {m.extra.length === 1 ? "This deposit adds" : `These ${m.extra.length} deposits add`} up
+            to exactly the difference, so {m.extra.length === 1 ? "it's" : "they're"} most likely
+            counted twice.
+            {m.extra.some((e) => e.source === "import") &&
+              m.staking &&
+              " Koinly records withdrawing staking rewards as a new deposit, but Muny already counts each reward when it's earned."}
+          </p>
+          <ul className="text-slate-600 dark:text-slate-300">
+            {m.extra.map((e) => (
+              <li key={e.txnId}>
+                {dayLabel(e.at)}: {fmtAmount(e.amount, 8)} {m.asset}
+                {e.label ? ` (${e.label})` : ""}, {e.source === "sync" ? "synced" : "imported"}
+              </li>
+            ))}
           </ul>
+          <Button
+            variant="secondary"
+            disabled={remove.isPending}
+            onClick={() => remove.mutate(undefined)}
+          >
+            Remove {m.extra.length === 1 ? "it" : "them"}
+          </Button>
+        </div>
+      )}
+      {more && m.extra.length === 0 && (
+        <p className="text-slate-500">
+          No set of deposits adds up to the difference. Look for a withdrawal that&apos;s missing,
+          or a deposit recorded twice with different amounts, in its transactions.
+        </p>
+      )}
+      {!more && (
+        <div className="space-y-2">
+          <p className="text-slate-500">
+            Some history is missing: the blockchain service may not keep old transactions, or
+            deposits came before this address was synced.{" "}
+            {m.staking && "For a staking wallet this is usually rewards that were never recorded. "}
+            You can add the difference so the balance matches.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {m.staking && (
+              <Button
+                variant="secondary"
+                disabled={adjust.isPending}
+                onClick={() => adjust.mutate(true)}
+              >
+                Add {gap} {m.asset} as staking rewards
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              disabled={adjust.isPending}
+              onClick={() => adjust.mutate(false)}
+            >
+              Add {gap} {m.asset} as a balance adjustment (not income)
+            </Button>
+          </div>
         </div>
       )}
       {error && <Alert>{error.message}</Alert>}
-    </Card>
+    </div>
   );
 }
 

@@ -113,6 +113,7 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
       feeAmount: t.feeAmount,
       transferPairId: t.transferPairId,
       source: t.source,
+      label: t.label,
     })
     .from(t)
     .orderBy(t.at)
@@ -163,11 +164,19 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
         if (hidden.has(c.asset)) continue;
         const mine = computed.get(c.asset) ?? "0";
         if (normDec(mine) === normDec(c.amount)) continue;
+        const diff = subDec(mine, c.amount);
         mismatches.push({
           asset: c.asset,
           onChain: c.amount,
           computed: mine,
-          diff: subDec(mine, c.amount),
+          diff,
+          extra: diff.startsWith("-") ? [] : explainExtra(x.id, c.asset, diff),
+          staking: rows.some(
+            (r) =>
+              r.walletId === x.id &&
+              r.receivedAsset === c.asset &&
+              /staking|reward/.test(r.label ?? ""),
+          ),
         });
       }
     const dupes = x.sourceEnc ? duplicateSyncRows(db, x.id) : [];
@@ -258,6 +267,60 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
       }
     }
     return out;
+  }
+
+  /**
+   * Muny has `diff` more than the chain: find unmatched deposits that add up
+   * to exactly that (within 0.05%, for rounded exports). Imported rows are
+   * tried first (Koinly often records reward withdrawals as new deposits),
+   * then synced ones. At most 4 rows from the 30 most recent candidates.
+   */
+  function explainExtra(walletId: string, asset: string, diff: string) {
+    const target = toFixed(diff);
+    const tol = target / 2000n;
+    const pick = (src: (s: string) => boolean) =>
+      rows
+        .filter(
+          (r) =>
+            r.walletId === walletId &&
+            src(r.source) &&
+            r.receivedAsset === asset &&
+            !r.transferPairId &&
+            r.type === "deposit" &&
+            !r.sentAsset,
+        )
+        .slice(-30);
+    for (const cands of [pick((s) => s !== "sync"), pick((s) => s === "sync")]) {
+      const v = cands.map((r) => toFixed(r.receivedAmount ?? "0"));
+      const n = cands.length;
+      const hit = (idx: number[]) => {
+        const sum = idx.reduce((s, i) => s + (v[i] as bigint), 0n);
+        return sum - target <= tol && target - sum <= tol;
+      };
+      let found: number[] | null = null;
+      for (let a = 0; a < n && !found; a++) {
+        if (hit([a])) found = [a];
+        for (let b = a + 1; b < n && !found; b++) {
+          if (hit([a, b])) found = [a, b];
+          for (let c = b + 1; c < n && !found; c++) {
+            if (hit([a, b, c])) found = [a, b, c];
+            for (let d = c + 1; d < n && !found; d++) if (hit([a, b, c, d])) found = [a, b, c, d];
+          }
+        }
+      }
+      if (found)
+        return found.map((i) => {
+          const r = cands[i] as (typeof cands)[number];
+          return {
+            txnId: r.id,
+            at: r.at,
+            amount: r.receivedAmount as string,
+            source: r.source,
+            label: r.label,
+          };
+        });
+    }
+    return [];
   }
 
   function suggest(
@@ -416,6 +479,40 @@ export function linkTransfer(db: MunyDb, walletId: string, txnId: string) {
       .run();
     return { id };
   });
+}
+
+/** Remove rows Reconcile found counted twice (only from this wallet). */
+export function removeRows(db: MunyDb, walletId: string, txnIds: string[]) {
+  const n = db
+    .delete(t)
+    .where(and(eq(t.walletId, walletId), inArray(t.id, txnIds), sql`${t.transferPairId} is null`))
+    .run().changes;
+  return { removed: n };
+}
+
+/** Add what the chain has and Muny doesn't, as staking rewards or a plain adjustment. */
+export function addAdjustment(
+  db: MunyDb,
+  input: { walletId: string; asset: string; amount: string; staking: boolean },
+) {
+  const id = newId();
+  db.insert(t)
+    .values({
+      id,
+      walletId: input.walletId,
+      at: Date.now(),
+      type: "deposit",
+      label: input.staking ? "staking" : null,
+      receivedAsset: input.asset,
+      receivedAmount: normDec(input.amount),
+      description: input.staking
+        ? "Added in Reconcile: staking rewards the blockchain shows but history doesn't"
+        : "Added in Reconcile: balance adjustment to match the blockchain",
+      externalId: `manual:${id}`,
+      source: "manual",
+    })
+    .run();
+  return { id };
 }
 
 /** An opening balance just before history goes missing. */

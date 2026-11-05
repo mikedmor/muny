@@ -303,7 +303,19 @@ export interface CryptoReconcile {
       suggestions: CryptoTransferSuggestion[];
     }[];
     /** On-chain balance vs. what the transactions add up to. */
-    mismatches: { asset: string; onChain: string; computed: string; diff: string }[];
+    mismatches: {
+      asset: string;
+      onChain: string;
+      computed: string;
+      diff: string;
+      /**
+       * When Muny has more: deposits that add up to exactly the difference
+       * (most likely counted twice). Empty when none do.
+       */
+      extra: { txnId: string; at: number; amount: string; source: string; label: string | null }[];
+      /** The wallet earns staking rewards (so a shortfall may be rewards). */
+      staking: boolean;
+    }[];
     /** Synced transactions that repeat imported ones. */
     duplicates: number;
     /** Swap proceeds recorded here that arrived in another wallet. */
