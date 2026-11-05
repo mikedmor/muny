@@ -47,6 +47,14 @@ optgroup {
   --viz-series-2: #eb6834;
   --viz-deemph: #c3c2b7;
   --viz-area: rgba(42, 120, 214, 0.12);
+  /* Categorical slots 3-8 (validated order; see the dataviz palette). */
+  --viz-series-3: #1baf7a;
+  --viz-series-4: #eda100;
+  --viz-series-5: #e87ba4;
+  --viz-series-6: #008300;
+  --viz-series-7: #6250d6;
+  --viz-series-8: #e34948;
+  --viz-other: #a8a69e;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -60,5 +68,12 @@ optgroup {
     --viz-series-2: #d95926;
     --viz-deemph: #4a4a46;
     --viz-area: rgba(57, 135, 229, 0.18);
+    --viz-series-3: #199e70;
+    --viz-series-4: #c98500;
+    --viz-series-5: #d55181;
+    --viz-series-6: #008300;
+    --viz-series-7: #9085e9;
+    --viz-series-8: #e66767;
+    --viz-other: #5f5e59;
   }
 }

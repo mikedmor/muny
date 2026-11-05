@@ -12,12 +12,25 @@ import {
   spendingReport,
 } from "./service.js";
 import { addMonths } from "./spending.js";
+import { spendingOverview } from "./spending-page.js";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 const month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Use YYYY-MM");
 
 export function registerReportRoutes(app: FastifyInstance, db: MunyDb) {
   app.get("/api/overview", async () => overview(db));
+
+  /** Spending page: category breakdown, monthly chart, summary, largest purchases. */
+  app.get("/api/spending", async (req) => {
+    const q = parse(
+      z.object({
+        month: month.optional(),
+        includeBills: z.enum(["true", "false"]).default("true"),
+      }),
+      req.query,
+    );
+    return spendingOverview(db, q.month ?? localToday().slice(0, 7), q.includeBills === "true");
+  });
 
   /** One category's monthly totals, budget and stats (category detail page). */
   app.get("/api/categories/:id/activity", async (req) => {

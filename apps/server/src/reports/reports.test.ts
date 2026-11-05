@@ -1,3 +1,4 @@
+import { addInterval } from "@muny/core";
 import type {
   Account,
   CategoryActivity,
@@ -5,6 +6,7 @@ import type {
   MonthlyReport,
   NetWorthReport,
   Overview,
+  SpendingOverview,
   SpendingReport,
 } from "@muny/shared";
 import { describe, expect, it } from "vitest";
@@ -185,6 +187,45 @@ describe("reports", () => {
       items: { description: string }[];
     }>();
     expect(page.items.map((i) => i.description)).toEqual(["SOMETHING"]);
+  });
+
+  it("builds the spending page, with and without bills", async () => {
+    const { client, card, add } = await setup();
+    const today = localToday();
+    const thisMonth = today.slice(0, 7);
+    // A recurring subscription (6 months, including this one) on the card.
+    const rows = ["Date,Description,Amount"];
+    for (let i = 5; i >= 0; i--)
+      rows.push(`${addInterval(`${thisMonth}-01`, "monthly", -i)},STREAMCO,-20.00`);
+    await client.post("/api/import/commit", {
+      filename: "card.csv",
+      content: rows.join("\n"),
+      accountMap: { csv: card.id },
+    });
+    await add(card.id, `${thisMonth}-01`, -7500, "KROGER", "Groceries");
+    await add(card.id, `${thisMonth}-01`, -500, "CAFE", "Coffee");
+
+    const all = (await client.get(`/api/spending?month=${thisMonth}`)).json<SpendingOverview>();
+    expect(all.period).toBe("current");
+    expect(all.totalCents).toBe(7500 + 500 + 2000);
+    expect(all.categories.map((c) => [c.name, c.cents])).toEqual([
+      ["Groceries", 7500],
+      ["Uncategorized", 2000],
+      ["Coffee", 500],
+    ]);
+    expect(all.largest.map((l) => [l.name, l.cents])).toEqual([
+      ["Kroger", 7500],
+      ["Streamco", 2000],
+      ["Cafe", 500],
+    ]);
+    expect(all.months).toHaveLength(6);
+
+    const noBills = (
+      await client.get(`/api/spending?month=${thisMonth}&includeBills=false`)
+    ).json<SpendingOverview>();
+    expect(noBills.totalCents).toBe(8000);
+    expect(noBills.largest.map((l) => l.name)).toEqual(["Kroger", "Cafe"]);
+    expect(noBills.summary.billsPaidCents).toBe(2000);
   });
 
   it("builds month-end dates", () => {

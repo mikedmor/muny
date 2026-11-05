@@ -15,6 +15,7 @@ import { RecurringPage } from "./pages/RecurringPage.js";
 import { ReportsPage } from "./pages/ReportsPage.js";
 import { SavingsPage } from "./pages/SavingsPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
+import { SpendingPage } from "./pages/SpendingPage.js";
 import { TransactionsPage } from "./pages/TransactionsPage.js";
 
 /** Root: decides between first-run setup, sign-in, and the app. */
@@ -63,6 +64,7 @@ const routeTree = rootRoute.addChildren([
   searchPage("/categories/$categoryId", CategoryPage, monthSearch),
   page("/alerts", NotificationsPage),
   page("/recurring", RecurringPage),
+  page("/spending", SpendingPage),
   page("/savings", SavingsPage),
   page("/budgets", BudgetsPage),
   page("/reports", ReportsPage),

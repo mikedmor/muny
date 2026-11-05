@@ -737,3 +737,93 @@ export function TableToggle({
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Donut (part-to-whole, ≤ 8 slices: fold the rest into "Other")
+// ---------------------------------------------------------------------------
+
+export interface DonutSlice {
+  key: string;
+  label: string;
+  cents: number;
+  /** CSS color (a --viz-* token). */
+  color: string;
+}
+
+/**
+ * Donut with a 2px surface gap between slices. Hovering or focusing a slice
+ * shows it in the center; otherwise the center shows `children`. Always pair
+ * it with a table/legend that names each slice (identity isn't color-only).
+ */
+export function Donut({
+  slices,
+  ariaLabel,
+  size = 260,
+  thickness = 44,
+  children,
+}: {
+  slices: DonutSlice[];
+  ariaLabel: string;
+  size?: number;
+  thickness?: number;
+  children?: ReactNode;
+}) {
+  const [hover, setHover] = useState<number | null>(null);
+  const total = slices.reduce((s, x) => s + Math.max(0, x.cents), 0);
+  const r = (size - thickness) / 2;
+  const c = 2 * Math.PI * r;
+  const gap = slices.length > 1 ? 2 : 0;
+  let acc = 0;
+  const hp = hover !== null ? slices[hover] : undefined;
+  return (
+    <div className="relative mx-auto" style={{ width: size, height: size }}>
+      <svg width={size} height={size} role="img" aria-label={ariaLabel} className="-rotate-90">
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke="var(--viz-grid)"
+          strokeWidth={thickness}
+        />
+        {total > 0 &&
+          slices.map((s, i) => {
+            const len = (Math.max(0, s.cents) / total) * c;
+            const start = acc;
+            acc += len;
+            if (len <= 0) return null;
+            return (
+              // biome-ignore lint/a11y/noStaticElementInteractions: hover detail duplicates the table
+              <circle
+                key={s.key}
+                cx={size / 2}
+                cy={size / 2}
+                r={r}
+                fill="none"
+                stroke={s.color}
+                strokeWidth={hover === i ? thickness + 6 : thickness}
+                strokeDasharray={`${Math.max(0.5, len - gap)} ${c}`}
+                strokeDashoffset={-start}
+                onMouseEnter={() => setHover(i)}
+                onMouseLeave={() => setHover(null)}
+                style={{ transition: "stroke-width 120ms" }}
+              />
+            );
+          })}
+      </svg>
+      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-10 text-center">
+        {hp ? (
+          <>
+            <span className="text-xs text-slate-500">{hp.label}</span>
+            <span className="text-2xl font-semibold tabular-nums">{formatMoney(hp.cents)}</span>
+            <span className="text-xs text-slate-500">
+              {total > 0 ? `${Math.round((hp.cents / total) * 100)}% of spend` : ""}
+            </span>
+          </>
+        ) : (
+          children
+        )}
+      </div>
+    </div>
+  );
+}

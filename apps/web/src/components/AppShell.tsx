@@ -10,10 +10,11 @@ const NAV = [
   { to: "/alerts", label: "Alerts", icon: "🔔" },
   { to: "/transactions", label: "Transactions", icon: "≡" },
   { to: "/recurring", label: "Recurring", icon: "↻" },
-  { to: "/savings", label: "Savings", icon: "💰" },
+  { to: "/spending", label: "Spending", icon: "◑" },
   { to: "/budgets", label: "Budgets", icon: "◔" },
   { to: "/reports", label: "Reports", icon: "▤" },
   { to: "/accounts", label: "Accounts", icon: "▣" },
+  { to: "/savings", label: "Savings", icon: "💰" },
   { to: "/import", label: "Import", icon: "⇪" },
   { to: "/settings", label: "Settings", icon: "⚙" },
 ] as const;

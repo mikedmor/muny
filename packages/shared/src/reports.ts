@@ -91,3 +91,37 @@ export interface CategoryActivity {
   /** Transactions (or split parts) in this category in the selected month. */
   stats: { count: number; totalCents: number; averageCents: number; largestCents: number };
 }
+
+/** The Spending page: breakdown by category plus a monthly summary. */
+export interface SpendingOverview {
+  month: string;
+  period: "past" | "current" | "future";
+  includeBills: boolean;
+  /** Income vs spending per month for the chart, oldest first. */
+  months: { month: string; incomeCents: number; spendingCents: number }[];
+  totalCents: number;
+  /** Same span last month (to today's day for the current month, else the full month). */
+  compareCents: number;
+  categories: {
+    id: string | null;
+    name: string;
+    groupName: string | null;
+    cents: number;
+    /** Same category over the comparison span. */
+    compareCents: number;
+  }[];
+  summary: {
+    incomeCents: number;
+    nextPayday: { date: string; name: string; amountCents: number } | null;
+    billsPaidCents: number;
+    billsDueCents: number;
+  };
+  largest: {
+    id: string;
+    date: string;
+    name: string;
+    cents: number;
+    categoryName: string | null;
+    groupName: string | null;
+  }[];
+}
