@@ -1,5 +1,5 @@
 import { Deltas, fromBaseUnits, movementsToTxns, type SyncedTxn } from "@muny/core";
-import { type Adapter, SyncError } from "./ctx.js";
+import { type Adapter, type ChainCtx, SyncError } from "./ctx.js";
 
 /**
  * Cardano through Koios (free public API, no key). A stake address (stake1…)
@@ -150,3 +150,38 @@ export const cardano: Adapter = async (ctx) => {
   }
   return { mapped: mapped.filter((t) => t.receivedAmount !== "0"), height, balances };
 };
+
+/**
+ * Rewards withdrawn (ADA) by this wallet's stake address in the given
+ * transactions, keyed by hash. Used to tell Koinly's "deposit" rows apart
+ * from reward withdrawals Muny already counted when earned.
+ */
+export async function rewardWithdrawals(
+  ctx: ChainCtx,
+  hashes: string[],
+): Promise<Map<string, string>> {
+  const base = (ctx.override || KOIOS).replace(/\/+$/, "");
+  let stake = ctx.source.startsWith("stake1") ? ctx.source : null;
+  if (!stake) {
+    const info = await ctx.post<{ stake_address?: string | null }[]>(`${base}/address_info`, {
+      _addresses: [ctx.source],
+    });
+    stake = info[0]?.stake_address ?? null;
+  }
+  const out = new Map<string, string>();
+  if (!stake) return out;
+  for (let i = 0; i < hashes.length; i += HASHES_PER_CALL) {
+    const infos = await ctx.post<TxInfo[]>(`${base}/tx_info`, {
+      _tx_hashes: hashes.slice(i, i + HASHES_PER_CALL),
+      _withdrawals: true,
+    });
+    for (const tx of infos) {
+      const d = new Deltas();
+      for (const w of tx.withdrawals ?? [])
+        if (w.stake_addr === stake) d.add("ADA", fromBaseUnits(w.amount, ADA));
+      const v = d.toStrings().get("ADA");
+      if (v) out.set(tx.tx_hash.toLowerCase(), v);
+    }
+  }
+  return out;
+}

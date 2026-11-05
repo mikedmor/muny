@@ -20,6 +20,7 @@ import {
 import {
   addAdjustment,
   addOpeningBalance,
+  countRewardsOnce,
   linkTransfer,
   mergeWallets,
   moveCrossChain,
@@ -450,6 +451,25 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
       staking: body.staking,
     });
     return res;
+  });
+
+  /** Staking rewards counted twice: keep one version. */
+  app.post("/api/crypto/reconcile/rewards", async (req) => {
+    const user = requireUser(req);
+    const body = parse(
+      z.object({ walletId: z.string().min(1).max(64), keep: z.enum(["imported", "synced"]) }),
+      req.body,
+    );
+    try {
+      const res = await countRewardsOnce(db, body.walletId, body.keep, {
+        ...priceDeps,
+        delayMs: priceDeps.delayMs ?? 500,
+      });
+      log(user.id, "crypto.reconcile_rewards", body.walletId, { keep: body.keep, ...res });
+      return res;
+    } catch (err) {
+      throw badRequest(err instanceof Error ? err.message : "Couldn't apply that fix");
+    }
   });
 
   app.post("/api/crypto/reconcile/opening", async (req) => {

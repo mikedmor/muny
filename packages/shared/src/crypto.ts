@@ -345,6 +345,11 @@ export interface CryptoReconcile {
       extra: { txnId: string; at: number; amount: string; source: string; label: string | null }[];
       /** The wallet earns staking rewards (so a shortfall may be rewards). */
       staking: boolean;
+      /**
+       * Synced staking rewards add up to exactly the difference: the import
+       * already has them (Koinly records rewards when withdrawn).
+       */
+      rewardsTwice: { synced: number; chain: string | null } | null;
     }[];
     /** Synced transactions that repeat imported ones. */
     duplicates: number;

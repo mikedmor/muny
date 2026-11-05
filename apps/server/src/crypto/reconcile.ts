@@ -3,6 +3,7 @@ import {
   CHAINS,
   type ChainKey,
   FIAT,
+  fromFixed,
   isZeroDec,
   normDec,
   subDec,
@@ -12,9 +13,10 @@ import { type MunyDb, newId, schema } from "@muny/db";
 import type { CryptoReconcile, CryptoTransferSuggestion } from "@muny/shared";
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { decryptJson } from "../lib/crypto.js";
-import { closeAmountsSql, normHashSql } from "./match.js";
+import { rewardWithdrawals } from "./chains/cardano.js";
+import { closeAmountsSql, normHash, normHashSql } from "./match.js";
 import { getCryptoSettings } from "./prices.js";
-import { readCursor } from "./sync.js";
+import { readCursor, type SyncDeps, setRewardsFromImport, walletCtx } from "./sync.js";
 
 /**
  * Reconcile: find why a wallet's balance is wrong, and offer fixes.
@@ -170,7 +172,13 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
           onChain: c.amount,
           computed: mine,
           diff,
-          extra: diff.startsWith("-") ? [] : explainExtra(x.id, c.asset, diff),
+          ...(() => {
+            const twice = diff.startsWith("-") ? null : rewardsTwice(x.id, c.asset, diff);
+            return {
+              rewardsTwice: twice ? { synced: twice, chain: x.chain } : null,
+              extra: twice || diff.startsWith("-") ? [] : explainExtra(x.id, c.asset, diff),
+            };
+          })(),
           staking: rows.some(
             (r) =>
               r.walletId === x.id &&
@@ -275,6 +283,22 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
    * tried first (Koinly often records reward withdrawals as new deposits),
    * then synced ones. At most 4 rows from the 30 most recent candidates.
    */
+  /** Count of synced staking rewards when, together, they equal the surplus. */
+  function rewardsTwice(walletId: string, asset: string, diff: string): number | null {
+    const rewards = rows.filter(
+      (r) =>
+        r.walletId === walletId &&
+        r.source === "sync" &&
+        r.label === "staking" &&
+        r.receivedAsset === asset,
+    );
+    if (rewards.length < 2) return null;
+    const sum = rewards.reduce((s, r) => s + toFixed(r.receivedAmount ?? "0"), 0n);
+    const target = toFixed(diff);
+    const tol = target / 2000n;
+    return sum - target <= tol && target - sum <= tol ? rewards.length : null;
+  }
+
   function explainExtra(walletId: string, asset: string, diff: string) {
     const target = toFixed(diff);
     const tol = target / 2000n;
@@ -513,6 +537,81 @@ export function addAdjustment(
     })
     .run();
   return { id };
+}
+
+/**
+ * Staking rewards counted twice. "imported": drop the synced per-epoch rewards
+ * and stop syncing them for this wallet. "synced" (Cardano): keep per-epoch
+ * rewards and take the withdrawn rewards out of the imported deposits that
+ * withdrew them (found by looking the transactions up on the chain).
+ */
+export async function countRewardsOnce(
+  db: MunyDb,
+  walletId: string,
+  keep: "imported" | "synced",
+  deps: SyncDeps,
+) {
+  const wallet = db.select().from(w).where(eq(w.id, walletId)).get();
+  if (!wallet) throw new Error("Wallet not found");
+  if (keep === "imported") {
+    const n = db
+      .delete(t)
+      .where(and(eq(t.walletId, walletId), eq(t.source, "sync"), eq(t.label, "staking")))
+      .run().changes;
+    setRewardsFromImport(db, walletId, true);
+    return { removedRewards: n, adjusted: 0 };
+  }
+  if (wallet.chain !== "ada")
+    throw new Error("Only Cardano wallets can keep per-epoch rewards this way");
+  setRewardsFromImport(db, walletId, false);
+  const deposits = db
+    .select()
+    .from(t)
+    .where(
+      and(
+        eq(t.walletId, walletId),
+        ne(t.source, "sync"),
+        eq(t.type, "deposit"),
+        eq(t.receivedAsset, "ADA"),
+        sql`${t.txHash} is not null and ${t.txHash} <> ''`,
+      ),
+    )
+    .all();
+  const withdrawn = await rewardWithdrawals(
+    walletCtx(db, wallet, deps),
+    deposits.map((d) => normHash(d.txHash as string)),
+  );
+  let adjusted = 0;
+  db.transaction((tx) => {
+    for (const d of deposits) {
+      const wd = withdrawn.get(normHash(d.txHash as string));
+      if (!wd) continue;
+      const left = toFixed(d.receivedAmount ?? "0") - toFixed(wd);
+      adjusted++;
+      if (left <= 0n) {
+        tx.delete(t).where(eq(t.id, d.id)).run();
+        continue;
+      }
+      // Keep the rest (e.g. a returned staking deposit); scale its value to match.
+      const amount = fromFixed(left);
+      const scale = (c: number | null) =>
+        c === null ? null : Number((BigInt(c) * left) / toFixed(d.receivedAmount ?? "1"));
+      tx.update(t)
+        .set({
+          receivedAmount: amount,
+          valueCents: scale(d.valueCents),
+          description: [
+            d.description,
+            "Reward withdrawal taken out in Reconcile (counted when earned)",
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        })
+        .where(eq(t.id, d.id))
+        .run();
+    }
+  });
+  return { removedRewards: 0, adjusted };
 }
 
 /** An opening balance just before history goes missing. */

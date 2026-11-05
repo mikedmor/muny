@@ -219,26 +219,58 @@ export async function syncWallet(
   }
 }
 
+/** A chain context (budgeted HTTP, decrypted source) for one synced wallet. */
+export function walletCtx(db: MunyDb, wallet: typeof w.$inferSelect, deps: SyncDeps) {
+  if (!wallet.sourceEnc || !wallet.chain || !(wallet.chain in CHAINS) || !deps.secretKey)
+    throw new SyncError("This wallet has no address to sync from");
+  const chain = CHAINS[wallet.chain as ChainKey];
+  return makeCtx(
+    {
+      db,
+      chain,
+      source: decryptJson<string>(deps.secretKey, wallet.sourceEnc),
+      cursor: readCursor(wallet.syncCursor),
+      override: getCryptoSettings(db).servers[chain.key] ?? "",
+      deps,
+    },
+    BUDGET[chain.provider],
+  );
+}
+
+/** Wallets whose staking rewards come from an import instead of the chain. */
+const REWARDS_FROM_IMPORT = "crypto.rewards_from_import";
+export function rewardsFromImport(db: MunyDb): Set<string> {
+  const v = db
+    .select()
+    .from(schema.appSettings)
+    .where(eq(schema.appSettings.key, REWARDS_FROM_IMPORT))
+    .get()?.value as string[] | undefined;
+  return new Set(v ?? []);
+}
+export function setRewardsFromImport(db: MunyDb, walletId: string, on: boolean) {
+  const s = rewardsFromImport(db);
+  if (on) s.add(walletId);
+  else s.delete(walletId);
+  const value = [...s];
+  db.insert(schema.appSettings)
+    .values({ key: REWARDS_FROM_IMPORT, value })
+    .onConflictDoUpdate({ target: schema.appSettings.key, set: { value } })
+    .run();
+}
+
 async function runSync(
   db: MunyDb,
   wallet: typeof w.$inferSelect,
   deps: SyncDeps,
 ): Promise<CryptoSyncResult & { notice: string | null }> {
   const chain = CHAINS[wallet.chain as ChainKey];
-  const source = decryptJson<string>(deps.secretKey as Buffer, wallet.sourceEnc as string);
-  const cursor = readCursor(wallet.syncCursor);
-  const ctx = makeCtx(
-    {
-      db,
-      chain,
-      source,
-      cursor,
-      override: getCryptoSettings(db).servers[chain.key] ?? "",
-      deps,
-    },
-    BUDGET[chain.provider],
-  );
-  const { mapped, height, balances, pos, notice } = await ADAPTERS[chain.provider](ctx);
+  const ctx = walletCtx(db, wallet, deps);
+  const fetched = await ADAPTERS[chain.provider](ctx);
+  const { height, balances, pos, notice } = fetched;
+  // Rewards already counted from an import (the user chose that version).
+  const mapped = rewardsFromImport(db).has(wallet.id)
+    ? fetched.mapped.filter((m) => m.label !== "staking")
+    : fetched.mapped;
 
   let added = 0;
   let duplicates = 0;

@@ -250,9 +250,15 @@ function Mismatch({ walletId, m }: { walletId: string; m: MismatchT }) {
       staking,
     }),
   );
+  const once = useCryptoMutation((keep: "imported" | "synced") =>
+    api.post<{ removedRewards: number; adjusted: number }>("/api/crypto/reconcile/rewards", {
+      walletId,
+      keep,
+    }),
+  );
   const more = !m.diff.startsWith("-");
   const gap = fmtAmount(m.diff.replace(/^-/, ""), 8);
-  const error = remove.error ?? adjust.error;
+  const error = remove.error ?? adjust.error ?? once.error;
   return (
     <div className="space-y-2 text-sm">
       <p>
@@ -262,7 +268,38 @@ function Mismatch({ walletId, m }: { walletId: string; m: MismatchT }) {
         </span>{" "}
         ({gap} {more ? "more" : "less"} in Muny).
       </p>
-      {more && m.extra.length > 0 && (
+      {more && m.rewardsTwice && (
+        <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
+          <p>
+            <span className="font-medium">Staking rewards are counted twice.</span> The{" "}
+            {m.rewardsTwice.synced} rewards Muny synced (one per{" "}
+            {m.rewardsTwice.chain === "ada" ? "5-day epoch" : "payout"}) add up to exactly the
+            difference, so your import has them too: Koinly records rewards when you withdraw them,
+            as ordinary deposits. Keep one version:
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {m.rewardsTwice.chain === "ada" && (
+              <Button disabled={once.isPending} onClick={() => once.mutate("synced")}>
+                Keep per-epoch rewards (recommended)
+              </Button>
+            )}
+            <Button
+              variant="secondary"
+              disabled={once.isPending}
+              onClick={() => once.mutate("imported")}
+            >
+              Keep the imported version
+            </Button>
+          </div>
+          <p className="text-xs text-slate-500">
+            {m.rewardsTwice.chain === "ada" &&
+              "Per-epoch: each reward is income when earned, at that day's price; Muny looks up the withdrawal transactions on Cardano and takes the withdrawn rewards out of the imported deposits (anything else in them, like a returned staking deposit, stays). "}
+            Imported: Muny removes its synced rewards and stops adding them for this wallet; rewards
+            count as income when withdrawn.
+          </p>
+        </div>
+      )}
+      {more && !m.rewardsTwice && m.extra.length > 0 && (
         <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
           <p>
             {m.extra.length === 1 ? "This deposit adds" : `These ${m.extra.length} deposits add`} up
@@ -289,7 +326,7 @@ function Mismatch({ walletId, m }: { walletId: string; m: MismatchT }) {
           </Button>
         </div>
       )}
-      {more && m.extra.length === 0 && (
+      {more && !m.rewardsTwice && m.extra.length === 0 && (
         <p className="text-slate-500">
           No set of deposits adds up to the difference. Look for a withdrawal that&apos;s missing,
           or a deposit recorded twice with different amounts, in its transactions.
