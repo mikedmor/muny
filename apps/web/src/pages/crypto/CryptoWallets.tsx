@@ -366,6 +366,12 @@ function SyncChip({ w }: { w: CryptoWallet }) {
         Syncing…
       </span>
     );
+  if (w.queued)
+    return (
+      <span className="self-center whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+        Waiting to sync
+      </span>
+    );
   if (!w.sourceHint)
     return (
       <span className="self-center whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
@@ -477,7 +483,7 @@ function WalletRow({ w, onConnect }: { w: CryptoWallet; onConnect: () => void })
             variant="ghost"
             aria-label={`Sync ${w.name} now`}
             title="Sync now"
-            disabled={w.syncing || sync.isPending}
+            disabled={w.syncing || w.queued || sync.isPending}
             onClick={() => sync.mutate(undefined)}
           >
             <span className={cx("inline-block", (w.syncing || sync.isPending) && "animate-spin")}>
@@ -520,7 +526,7 @@ export function CryptoWallets() {
   const [connect, setConnect] = useState<CryptoWallet | null>(null);
   const syncAll = useCryptoMutation(() => api.post("/api/crypto/sync"));
   const anySynced = (wallets.data ?? []).some((w) => w.sourceHint);
-  const anySyncing = (wallets.data ?? []).some((w) => w.syncing);
+  const anySyncing = (wallets.data ?? []).some((w) => w.syncing || w.queued);
   const [find, setFind] = useState("");
   const list = (wallets.data ?? []).filter((w) =>
     w.name.toLowerCase().includes(find.toLowerCase()),

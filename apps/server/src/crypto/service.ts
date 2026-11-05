@@ -22,7 +22,7 @@ import type {
 } from "@muny/shared";
 import { and, desc, eq, gte, inArray, lte, or, type SQL, sql } from "drizzle-orm";
 import { getCryptoSettings } from "./prices.js";
-import { isSyncing, readCursor } from "./sync.js";
+import { isQueued, isSyncing, readCursor } from "./sync.js";
 
 /** Assets the user hid (spam tokens): left out of holdings and warnings. */
 const hiddenAssets = (db: Db) => new Set(getCryptoSettings(db as MunyDb).hiddenAssets);
@@ -126,6 +126,7 @@ export function listWallets(db: Db): CryptoWallet[] {
         valueCents: bal.reduce((s, b) => s + Math.max(0, b.valueCents ?? 0), 0),
         onChain: r.sourceEnc ? (readCursor(r.syncCursor)?.balances ?? null) : null,
         syncing: isSyncing(r.id),
+        queued: isQueued(r.id),
       };
     });
 }

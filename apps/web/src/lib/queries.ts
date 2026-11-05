@@ -662,9 +662,10 @@ export function useCryptoWallets() {
   const q = useQuery({
     queryKey: cryptoKeys.wallets,
     queryFn: () => api.get<CryptoWallet[]>("/api/crypto/wallets"),
-    refetchInterval: (query) => (query.state.data?.some((w) => w.syncing) ? BUSY_POLL_MS : false),
+    refetchInterval: (query) =>
+      query.state.data?.some((w) => w.syncing || w.queued) ? BUSY_POLL_MS : false,
   });
-  useCryptoBusy(!!q.data?.some((w) => w.syncing));
+  useCryptoBusy(!!q.data?.some((w) => w.syncing || w.queued));
   return q;
 }
 export function useCryptoTxns(q: CryptoTxnQuery) {

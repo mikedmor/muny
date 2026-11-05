@@ -124,8 +124,12 @@ export function removeWalletSource(db: MunyDb, walletId: string) {
 }
 
 const syncing = new Set<string>();
+/** Wallets waiting their turn in a sync-all / daily run. */
+const queued = new Set<string>();
+/** Syncing now, or (for the whole app) any run still in progress. */
 export const isSyncing = (walletId?: string) =>
-  walletId ? syncing.has(walletId) : syncing.size > 0;
+  walletId ? syncing.has(walletId) : syncing.size > 0 || queued.size > 0;
+export const isQueued = (walletId: string) => queued.has(walletId) && !syncing.has(walletId);
 
 /** True when an imported row in this wallet already covers the synced movement. */
 function coveredByImport(db: Db, walletId: string, s: SyncedTxn): boolean {
@@ -285,17 +289,38 @@ export async function syncAll(db: MunyDb, deps: SyncDeps): Promise<CryptoSyncRes
     .select({ id: w.id })
     .from(w)
     .where(and(eq(w.syncEnabled, true), sql`${w.sourceEnc} is not null`))
-    .all();
+    .all()
+    .map((r) => r.id);
+  return syncMany(db, ids, deps);
+}
+
+/**
+ * Sync these wallets one after another. All of them show as queued until
+ * their turn is over, so the app keeps showing progress between wallets.
+ */
+export async function syncMany(
+  db: MunyDb,
+  ids: string[],
+  deps: SyncDeps,
+): Promise<CryptoSyncResult> {
+  const todo = ids.filter((id) => !queued.has(id));
+  for (const id of todo) queued.add(id);
   const total = { added: 0, duplicates: 0 };
-  for (const { id } of ids) {
-    try {
-      const r = await syncWallet(db, id, deps);
-      total.added += r.added;
-      total.duplicates += r.duplicates;
-    } catch {
-      // Recorded on the wallet (status/lastError).
+  try {
+    for (const id of todo) {
+      try {
+        const r = await syncWallet(db, id, deps);
+        total.added += r.added;
+        total.duplicates += r.duplicates;
+      } catch {
+        // Recorded on the wallet (status/lastError).
+      } finally {
+        queued.delete(id);
+      }
+      await sleep(deps.delayMs);
     }
-    await sleep(deps.delayMs);
+  } finally {
+    for (const id of todo) queued.delete(id);
   }
   return total;
 }

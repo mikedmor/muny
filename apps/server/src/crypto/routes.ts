@@ -39,6 +39,7 @@ import {
   SyncError,
   setWalletSource,
   syncAll,
+  syncMany,
   syncWallet,
   walletsDue,
 } from "./sync.js";
@@ -86,7 +87,7 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
     if (due.length && !isSyncing())
       quiet(
         (async () => {
-          for (const id of due) await syncWallet(db, id, bg).catch(() => {});
+          await syncMany(db, due, bg);
           // After syncing (new coins may need prices); a same-day repeat only fills gaps.
           if (pricesDue(db)) await refreshPrices(db, bg);
         })(),

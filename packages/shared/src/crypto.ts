@@ -46,6 +46,8 @@ export interface CryptoWallet {
   onChain: { asset: string; amount: string }[] | null;
   /** A sync is running right now. */
   syncing: boolean;
+  /** Waiting its turn in a sync-all run. */
+  queued: boolean;
 }
 
 export interface CryptoTxn {
