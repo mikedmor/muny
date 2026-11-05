@@ -1,19 +1,34 @@
 /**
- * Chains Muny can sync from public data. Each wallet syncs through a provider
- * (Blockbook: the open-source indexer Trezor runs for Trezor Suite). Servers are
- * configurable so a self-hosted Blockbook can be used instead.
+ * Chains Muny can sync from public data. Each wallet syncs through a provider:
+ * - blockscout: EVM chains (open-source explorer; one free key covers them all,
+ *   or each chain's public instance without a key).
+ * - blockbook-utxo: Bitcoin-like chains (Blockbook API v2). Trezor's public
+ *   servers refuse third-party apps, so these need a server you run or rent.
+ * Servers are configurable per chain.
  */
 
-export type ChainKey = "btc" | "ltc" | "doge" | "zec" | "eth";
+export type ChainKey =
+  | "btc"
+  | "ltc"
+  | "doge"
+  | "zec"
+  | "eth"
+  | "base"
+  | "op"
+  | "arb"
+  | "polygon"
+  | "gnosis";
 
 export interface ChainInfo {
   key: ChainKey;
   name: string;
   asset: string;
   decimals: number;
-  provider: "blockbook-utxo" | "blockbook-eth";
-  /** Default public Blockbook server. */
+  provider: "blockbook-utxo" | "blockscout";
+  /** Default server: a Blockbook server, or the chain's public Blockscout instance. */
   server: string;
+  /** EVM chain id (Blockscout's unified API addresses chains by id). */
+  chainId?: number;
   /** What the user can paste. */
   accepts: string;
   /** Validate an address or extended public key for this chain. */
@@ -23,6 +38,7 @@ export interface ChainInfo {
 // Extended public keys (BIP32/44/49/84) by prefix; base58 body.
 const XPUB = /^(xpub|ypub|zpub|Ltub|Mtub|dgub|tpub|vpub|upub)[1-9A-HJ-NP-Za-km-z]{100,112}$/;
 const BASE58 = /^[1-9A-HJ-NP-Za-km-z]+$/;
+const EVM = (s: string) => /^0x[0-9a-fA-F]{40}$/.test(s);
 
 export const CHAINS: Record<ChainKey, ChainInfo> = {
   btc: {
@@ -31,7 +47,7 @@ export const CHAINS: Record<ChainKey, ChainInfo> = {
     asset: "BTC",
     decimals: 8,
     provider: "blockbook-utxo",
-    server: "https://btc1.trezor.io",
+    server: "",
     accepts: "xpub / ypub / zpub (recommended: covers every address) or a single address",
     validate: (s) =>
       XPUB.test(s) ||
@@ -44,7 +60,7 @@ export const CHAINS: Record<ChainKey, ChainInfo> = {
     asset: "LTC",
     decimals: 8,
     provider: "blockbook-utxo",
-    server: "https://ltc1.trezor.io",
+    server: "",
     accepts: "Ltub / Mtub / zpub or a single address",
     validate: (s) =>
       XPUB.test(s) ||
@@ -57,7 +73,7 @@ export const CHAINS: Record<ChainKey, ChainInfo> = {
     asset: "DOGE",
     decimals: 8,
     provider: "blockbook-utxo",
-    server: "https://doge1.trezor.io",
+    server: "",
     accepts: "dgub / xpub or a single address (starts with D)",
     validate: (s) =>
       XPUB.test(s) || (/^[DA9]/.test(s) && BASE58.test(s) && s.length >= 26 && s.length <= 35),
@@ -68,7 +84,7 @@ export const CHAINS: Record<ChainKey, ChainInfo> = {
     asset: "ZEC",
     decimals: 8,
     provider: "blockbook-utxo",
-    server: "https://zec1.trezor.io",
+    server: "",
     accepts: "xpub or a transparent address (starts with t1 or t3)",
     validate: (s) => XPUB.test(s) || (/^t[13]/.test(s) && BASE58.test(s) && s.length === 35),
   },
@@ -77,10 +93,66 @@ export const CHAINS: Record<ChainKey, ChainInfo> = {
     name: "Ethereum",
     asset: "ETH",
     decimals: 18,
-    provider: "blockbook-eth",
-    server: "https://eth1.trezor.io",
-    accepts: "an Ethereum address (0x…); tokens on the address are included",
-    validate: (s) => /^0x[0-9a-fA-F]{40}$/.test(s),
+    provider: "blockscout",
+    server: "https://eth.blockscout.com",
+    chainId: 1,
+    accepts: "an address (0x…); tokens on the address are included",
+    validate: EVM,
+  },
+  base: {
+    key: "base",
+    name: "Base",
+    asset: "ETH",
+    decimals: 18,
+    provider: "blockscout",
+    server: "https://base.blockscout.com",
+    chainId: 8453,
+    accepts: "an address (0x…); tokens on the address are included",
+    validate: EVM,
+  },
+  op: {
+    key: "op",
+    name: "Optimism",
+    asset: "ETH",
+    decimals: 18,
+    provider: "blockscout",
+    server: "https://optimism.blockscout.com",
+    chainId: 10,
+    accepts: "an address (0x…); tokens on the address are included",
+    validate: EVM,
+  },
+  arb: {
+    key: "arb",
+    name: "Arbitrum One",
+    asset: "ETH",
+    decimals: 18,
+    provider: "blockscout",
+    server: "https://arbitrum.blockscout.com",
+    chainId: 42161,
+    accepts: "an address (0x…); tokens on the address are included",
+    validate: EVM,
+  },
+  polygon: {
+    key: "polygon",
+    name: "Polygon PoS",
+    asset: "POL",
+    decimals: 18,
+    provider: "blockscout",
+    server: "https://polygon.blockscout.com",
+    chainId: 137,
+    accepts: "an address (0x…); tokens on the address are included",
+    validate: EVM,
+  },
+  gnosis: {
+    key: "gnosis",
+    name: "Gnosis",
+    asset: "XDAI",
+    decimals: 18,
+    provider: "blockscout",
+    server: "https://gnosis.blockscout.com",
+    chainId: 100,
+    accepts: "an address (0x…); tokens on the address are included",
+    validate: EVM,
   },
 };
 

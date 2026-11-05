@@ -155,8 +155,10 @@ export interface CryptoSettings {
   hasApiKey: boolean;
   /** Overrides: asset symbol → CoinGecko id. */
   assetIds: Record<string, string>;
-  /** Blockbook server overrides per chain key (e.g. a self-hosted one). */
+  /** Server overrides per chain key (a Blockbook or Blockscout instance). */
   servers: Record<string, string>;
+  /** A Blockscout API key is saved (write-only). */
+  hasBlockscoutKey: boolean;
 }
 
 /** Requests used against a free provider budget. */
@@ -176,9 +178,29 @@ export interface CryptoSyncResult {
 
 /** Chains Muny can sync (server validates; see @muny/core CHAINS). */
 export const CRYPTO_SYNC_CHAINS = [
-  { key: "btc", name: "Bitcoin", placeholder: "zpub… / xpub… / bc1…" },
-  { key: "eth", name: "Ethereum (and ERC-20 tokens)", placeholder: "0x…" },
-  { key: "ltc", name: "Litecoin", placeholder: "Ltub… / ltc1… / L…" },
-  { key: "doge", name: "Dogecoin", placeholder: "dgub… / D…" },
-  { key: "zec", name: "Zcash (transparent)", placeholder: "t1… / xpub…" },
+  { key: "eth", name: "Ethereum (and tokens)", placeholder: "0x…", evm: true },
+  { key: "base", name: "Base", placeholder: "0x…", evm: true },
+  { key: "op", name: "Optimism", placeholder: "0x…", evm: true },
+  { key: "arb", name: "Arbitrum One", placeholder: "0x…", evm: true },
+  { key: "polygon", name: "Polygon PoS", placeholder: "0x…", evm: true },
+  { key: "gnosis", name: "Gnosis", placeholder: "0x…", evm: true },
+  {
+    key: "btc",
+    name: "Bitcoin (needs a Blockbook server)",
+    placeholder: "zpub… / xpub… / bc1…",
+    evm: false,
+  },
+  {
+    key: "ltc",
+    name: "Litecoin (needs a Blockbook server)",
+    placeholder: "Ltub… / ltc1… / L…",
+    evm: false,
+  },
+  {
+    key: "doge",
+    name: "Dogecoin (needs a Blockbook server)",
+    placeholder: "dgub… / D…",
+    evm: false,
+  },
+  { key: "zec", name: "Zcash (needs a Blockbook server)", placeholder: "t1… / xpub…", evm: false },
 ] as const;

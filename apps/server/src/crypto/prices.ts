@@ -20,6 +20,7 @@ import { BudgetError, budgeted } from "./budget.js";
 const SETTINGS_KEY = "crypto.settings";
 const KEY_KEY = "crypto.coingecko_key";
 const STATE_KEY = "crypto.price_state";
+export const BLOCKSCOUT_KEY = "crypto.blockscout_key";
 const LLAMA = "https://coins.llama.fi";
 const GECKO = "https://api.coingecko.com/api/v3";
 /** DefiLlama allows 500 data points per chart request (coins × days). */
@@ -59,6 +60,7 @@ export function getCryptoSettings(db: MunyDb): CryptoSettings {
     hasApiKey: !!getSetting<string>(db, KEY_KEY),
     assetIds: s.assetIds ?? {},
     servers: s.servers ?? {},
+    hasBlockscoutKey: !!getSetting<string>(db, BLOCKSCOUT_KEY),
   };
 }
 
@@ -70,6 +72,7 @@ export function saveCryptoSettings(
     assetIds?: Record<string, string>;
     servers?: Record<string, string>;
     apiKey?: string | null;
+    blockscoutKey?: string | null;
   },
   secretKey: Buffer | undefined,
 ) {
@@ -80,6 +83,14 @@ export function saveCryptoSettings(
     assetIds: input.assetIds ?? cur.assetIds,
     servers: input.servers ?? cur.servers,
   });
+  if (input.blockscoutKey !== undefined) {
+    if (!input.blockscoutKey)
+      db.delete(schema.appSettings).where(eq(schema.appSettings.key, BLOCKSCOUT_KEY)).run();
+    else {
+      if (!secretKey) throw new Error("Set MUNY_SECRET_KEY first: the key is stored encrypted.");
+      putSetting(db, BLOCKSCOUT_KEY, encryptJson(secretKey, input.blockscoutKey));
+    }
+  }
   if (input.apiKey !== undefined) {
     if (!input.apiKey)
       db.delete(schema.appSettings).where(eq(schema.appSettings.key, KEY_KEY)).run();

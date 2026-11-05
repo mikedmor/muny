@@ -395,6 +395,7 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
           )
           .optional(),
         apiKey: z.string().trim().max(200).nullable().optional(),
+        blockscoutKey: z.string().trim().max(200).nullable().optional(),
         servers: z
           .partialRecord(
             chainKey,

@@ -1,4 +1,4 @@
-import { fromFixed, isZeroDec, SCALE, toFixed } from "./decimal.js";
+import { fromFixed, SCALE, toFixed } from "./decimal.js";
 
 /**
  * Blockbook (API v2) transactions → Muny crypto transactions, from the
@@ -101,88 +101,4 @@ export function mapUtxoTx(
     feeAsset: positive(fee) ? asset : null,
     feeAmount: positive(fee) ? fee : null,
   };
-}
-
-/**
- * Ethereum transaction for `address`: ETH value, token transfers and gas.
- * One out + one in → a trade (a swap); otherwise one Muny transaction per
- * movement, the fee on the first.
- */
-export function mapEthTx(tx: BbTx, address: string): SyncedTxn[] {
-  if (tx.blockHeight < 0) return [];
-  const me = address.toLowerCase();
-  const from = (tx.vin[0]?.addresses?.[0] ?? "").toLowerCase();
-  const to = (tx.vout[0]?.addresses?.[0] ?? "").toLowerCase();
-  const failed = tx.ethereumSpecific?.status === 0;
-  const outs: { asset: string; amount: string }[] = [];
-  const ins: { asset: string; amount: string }[] = [];
-  const eth = fromBaseUnits(tx.value, 18);
-  if (!failed && positive(eth)) {
-    if (from === me && to !== me) outs.push({ asset: "ETH", amount: eth });
-    if (to === me && from !== me) ins.push({ asset: "ETH", amount: eth });
-  }
-  if (!failed)
-    for (const t of tx.tokenTransfers ?? []) {
-      if (t.standard && t.standard !== "ERC20") continue; // NFTs: not tracked yet
-      const sym = (t.symbol ?? "").trim().toUpperCase();
-      if (!sym || sym.length > 20) continue;
-      const amt = fromBaseUnits(t.value, t.decimals ?? 18);
-      if (!positive(amt)) continue;
-      const tf = t.from.toLowerCase();
-      const tt = t.to.toLowerCase();
-      if (tf === me && tt !== me) outs.push({ asset: sym, amount: amt });
-      if (tt === me && tf !== me) ins.push({ asset: sym, amount: amt });
-    }
-  // We pay gas only when we sent the transaction.
-  const fee = from === me ? fromBaseUnits(tx.fees, 18) : "0";
-  const base = {
-    at: tx.blockTime * 1000,
-    txHash: tx.txid,
-    feeAsset: positive(fee) ? "ETH" : null,
-    feeAmount: positive(fee) ? fee : null,
-  };
-  const empty = { sentAsset: null, sentAmount: null, receivedAsset: null, receivedAmount: null };
-  if (outs.length === 1 && ins.length === 1) {
-    const [o, i] = [
-      outs[0] as { asset: string; amount: string },
-      ins[0] as { asset: string; amount: string },
-    ];
-    return [
-      {
-        ...base,
-        externalId: `bb:${tx.txid}`,
-        type: "trade",
-        sentAsset: o.asset,
-        sentAmount: o.amount,
-        receivedAsset: i.asset,
-        receivedAmount: i.amount,
-      },
-    ];
-  }
-  const parts: SyncedTxn[] = [
-    ...outs.map((o) => ({
-      ...empty,
-      type: "withdrawal" as const,
-      sentAsset: o.asset,
-      sentAmount: o.amount,
-    })),
-    ...ins.map((i) => ({
-      ...empty,
-      type: "deposit" as const,
-      receivedAsset: i.asset,
-      receivedAmount: i.amount,
-    })),
-  ].map((p, n) => ({
-    ...base,
-    ...p,
-    externalId: n === 0 ? `bb:${tx.txid}` : `bb:${tx.txid}:${n}`,
-    // The fee belongs to one row only.
-    ...(n > 0 ? { feeAsset: null, feeAmount: null } : {}),
-  }));
-  // A failed or contract-only call we sent still costs gas.
-  if (parts.length === 0 && base.feeAmount)
-    return [{ ...base, ...empty, externalId: `bb:${tx.txid}`, type: "withdrawal" }];
-  return parts.filter(
-    (p) => !isZeroDec(p.sentAmount) || !isZeroDec(p.receivedAmount) || p.feeAmount,
-  );
 }

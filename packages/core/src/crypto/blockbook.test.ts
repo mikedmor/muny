@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { type BbTx, fromBaseUnits, mapEthTx, mapUtxoTx } from "./blockbook.js";
+import { type BbTx, fromBaseUnits, mapUtxoTx } from "./blockbook.js";
 import { CHAINS, sourceHint } from "./chains.js";
 
 // Synthetic transactions in Blockbook API v2 shape.
 const T = 1_700_000_000;
 const ME = "0x1111111111111111111111111111111111111111";
-const OTHER = "0x2222222222222222222222222222222222222222";
 
 describe("blockbook mapping", () => {
   it("converts smallest units exactly", () => {
@@ -66,81 +65,6 @@ describe("blockbook mapping", () => {
       type: "deposit",
       receivedAmount: "5",
     });
-  });
-
-  it("maps Ethereum sends, receives, token swaps and failed calls", () => {
-    const send: BbTx = {
-      txid: "e1",
-      blockHeight: 1,
-      blockTime: T,
-      value: "500000000000000000",
-      fees: "210000000000000",
-      vin: [{ addresses: [ME] }],
-      vout: [{ addresses: [OTHER] }],
-    };
-    expect(mapEthTx(send, ME)).toEqual([
-      expect.objectContaining({
-        type: "withdrawal",
-        sentAsset: "ETH",
-        sentAmount: "0.5",
-        feeAmount: "0.00021",
-      }),
-    ]);
-    expect(mapEthTx(send, OTHER)).toEqual([
-      expect.objectContaining({ type: "deposit", receivedAmount: "0.5", feeAmount: null }),
-    ]);
-    const swap: BbTx = {
-      txid: "e2",
-      blockHeight: 2,
-      blockTime: T,
-      value: "0",
-      fees: "1000000000000000",
-      vin: [{ addresses: [ME] }],
-      vout: [{ addresses: ["0xrouter"] }],
-      tokenTransfers: [
-        {
-          from: ME,
-          to: "0xpool",
-          contract: "0xdai",
-          symbol: "DAI",
-          decimals: 18,
-          value: "100000000000000000000",
-          standard: "ERC20",
-        },
-        {
-          from: "0xpool",
-          to: ME,
-          contract: "0xbat",
-          symbol: "bat",
-          decimals: 18,
-          value: "250000000000000000000",
-          standard: "ERC20",
-        },
-        {
-          from: "0xspam",
-          to: ME,
-          contract: "0xnft",
-          symbol: "NFT",
-          decimals: 0,
-          value: "1",
-          standard: "ERC721",
-        },
-      ],
-    };
-    expect(mapEthTx(swap, ME)).toEqual([
-      expect.objectContaining({
-        type: "trade",
-        sentAsset: "DAI",
-        sentAmount: "100",
-        receivedAsset: "BAT",
-        receivedAmount: "250",
-        feeAmount: "0.001",
-      }),
-    ]);
-    const failed: BbTx = { ...send, txid: "e3", ethereumSpecific: { status: 0 } };
-    expect(mapEthTx(failed, ME)).toEqual([
-      expect.objectContaining({ type: "withdrawal", sentAmount: null, feeAmount: "0.00021" }),
-    ]);
   });
 
   it("validates sources per chain and hides most of them", () => {

@@ -178,11 +178,10 @@ function SourceFields({
         className="sm:col-span-2"
       />
       <p className="text-xs text-slate-500 sm:col-span-2">
-        Public keys only; never a seed phrase or private key. For Bitcoin, Litecoin and Dogecoin an
-        xpub/zpub covers every address in the wallet. Muny stores it encrypted and asks a public
-        Blockbook server (Trezor&apos;s, or your own under Settings) for its transactions once a day
-        when you open Crypto, or when you press Sync. That server sees the address; nobody can move
-        funds with it.
+        Public addresses or keys only; never a seed phrase or private key.{" "}
+        {info.evm
+          ? "Muny stores the address encrypted and asks Blockscout (a public blockchain explorer) for its transactions and token balances once a day when you open Crypto, or when you press Sync. Blockscout sees the address; nobody can move funds with it. Using the same address on several chains? Add one wallet per chain."
+          : "For Bitcoin, Litecoin and Dogecoin an xpub/zpub covers every address in the wallet. These chains sync through a Blockbook server you run or rent (Crypto → Settings → Wallet sync servers); that server sees the address, nobody can move funds with it."}
       </p>
     </>
   );
@@ -191,7 +190,7 @@ function SourceFields({
 function AddWallet({ onDone }: { onDone: () => void }) {
   const [name, setName] = useState("");
   const [kind, setKind] = useState<CryptoWalletKind>("blockchain");
-  const [chain, setChain] = useState<ChainKey>("btc");
+  const [chain, setChain] = useState<ChainKey>("eth");
   const [source, setSource] = useState("");
   const add = useCryptoMutation((body: object) => api.post("/api/crypto/wallets", body));
   const synced = kind === "blockchain";
@@ -242,7 +241,7 @@ function AddWallet({ onDone }: { onDone: () => void }) {
 /** Attach (or replace) the address an existing wallet syncs from, e.g. one imported from Koinly. */
 function ConnectWallet({ w, onDone }: { w: CryptoWallet; onDone: () => void }) {
   const known = CRYPTO_SYNC_CHAINS.find((c) => c.key === w.chain)?.key;
-  const [chain, setChain] = useState<ChainKey>(known ?? "btc");
+  const [chain, setChain] = useState<ChainKey>(known ?? "eth");
   const [source, setSource] = useState("");
   const put = useCryptoMutation((body: object) =>
     api.put(`/api/crypto/wallets/${w.id}/source`, body),

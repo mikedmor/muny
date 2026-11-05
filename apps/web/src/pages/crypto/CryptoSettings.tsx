@@ -16,6 +16,7 @@ export function CryptoSettings() {
     api.post<{ assets: number; days: number }>("/api/crypto/prices/refresh"),
   );
   const [key, setKey] = useState("");
+  const [bsKey, setBsKey] = useState("");
   const [mapAsset, setMapAsset] = useState("");
   const [mapId, setMapId] = useState("");
   const d = s.data;
@@ -127,20 +128,66 @@ export function CryptoSettings() {
           <Card className="space-y-3">
             <h2 className="font-semibold">Wallet sync servers</h2>
             <p className="text-sm text-slate-500">
-              Synced wallets use Trezor&apos;s free public Blockbook servers, which see the
-              addresses you sync. To keep that private, run your own Blockbook and enter its URL.
-              Leave blank for the default.
+              Ethereum and the other EVM chains sync through Blockscout&apos;s public explorers by
+              default; enter a URL only for your own Blockscout. Bitcoin, Litecoin, Dogecoin and
+              Zcash need a Blockbook server you run or rent (Trezor&apos;s public ones refuse other
+              apps). Whichever server you use sees the addresses you sync.
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
               {CRYPTO_SYNC_CHAINS.map((c) => (
                 <ServerField
                   key={c.key}
                   chain={c.key}
+                  evm={c.evm}
                   label={c.name}
                   value={d.servers[c.key] ?? ""}
                   onSave={(url) => save.mutate({ servers: { ...d.servers, [c.key]: url } })}
                 />
               ))}
+            </div>
+          </Card>
+
+          <Card className="space-y-3">
+            <h2 className="font-semibold">Blockscout API key (recommended)</h2>
+            <p className="text-sm text-slate-500">
+              Without a key, EVM wallets sync through each chain&apos;s public Blockscout site,
+              whose limits are shared with everyone. A free key from{" "}
+              <a
+                href="https://dev.blockscout.com"
+                target="_blank"
+                rel="noreferrer"
+                className="text-brand-600 underline"
+              >
+                dev.blockscout.com
+              </a>{" "}
+              gives you your own limits (100K credits a day) on one endpoint for every chain. Stored
+              encrypted; never shown again.
+            </p>
+            <div className="flex flex-wrap items-end gap-2">
+              <Field
+                label={d.hasBlockscoutKey ? "Replace key" : "Key"}
+                type="password"
+                autoComplete="off"
+                value={bsKey}
+                onChange={(e) => setBsKey(e.target.value.trim())}
+              />
+              <Button
+                disabled={!bsKey || save.isPending}
+                onClick={() =>
+                  save.mutate({ blockscoutKey: bsKey }, { onSuccess: () => setBsKey("") })
+                }
+              >
+                Save key
+              </Button>
+              {d.hasBlockscoutKey && (
+                <Button
+                  variant="ghost"
+                  className="text-red-600"
+                  onClick={() => save.mutate({ blockscoutKey: null })}
+                >
+                  Remove key
+                </Button>
+              )}
             </div>
           </Card>
 
@@ -252,11 +299,13 @@ export function CryptoSettings() {
 
 function ServerField({
   chain,
+  evm,
   label,
   value,
   onSave,
 }: {
   chain: string;
+  evm: boolean;
   label: string;
   value: string;
   onSave: (url: string) => void;
@@ -266,7 +315,7 @@ function ServerField({
     <Field
       label={label}
       name={`server-${chain}`}
-      placeholder="Default (Trezor)"
+      placeholder={evm ? "Default (Blockscout)" : "Required: https://your-blockbook"}
       inputMode="url"
       value={v}
       onChange={(e) => setV(e.target.value.trim())}

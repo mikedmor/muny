@@ -23,6 +23,7 @@ export const KNOWN_ASSETS: Record<string, { id: string; name: string }> = {
   AVAX: { id: "avalanche-2", name: "Avalanche" },
   MATIC: { id: "matic-network", name: "Polygon (MATIC)" },
   POL: { id: "polygon-ecosystem-token", name: "Polygon" },
+  XDAI: { id: "xdai", name: "xDai" },
   BNB: { id: "binancecoin", name: "BNB" },
   TRX: { id: "tron", name: "TRON" },
   NEAR: { id: "near", name: "NEAR" },

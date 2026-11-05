@@ -6,50 +6,81 @@ import { describe, expect, it } from "vitest";
 import { makeSignedInApp } from "../test-utils.js";
 import { localDay } from "./budget.js";
 
-// Synthetic address and transactions in Blockbook API v2 shape. No network.
+// Synthetic address and history in the Etherscan-compatible format Blockscout
+// serves. No network.
 const ME = "0x1111111111111111111111111111111111111111";
 const OTHER = "0x2222222222222222222222222222222222222222";
-const T = Date.UTC(2025, 5, 1) / 1000;
+const T = String(Date.UTC(2025, 5, 1) / 1000);
 
 const TXS = [
   {
-    txid: "0xd1",
-    blockHeight: 10,
-    blockTime: T,
+    hash: "0xd1",
+    blockNumber: "10",
+    timeStamp: T,
+    from: OTHER,
+    to: ME,
     value: "1000000000000000000",
-    fees: "100",
-    vin: [{ addresses: [OTHER] }],
-    vout: [{ addresses: [ME] }],
+    gasUsed: "21000",
+    gasPrice: "1",
   },
   {
-    txid: "0xs2",
-    blockHeight: 11,
-    blockTime: T + 3600,
+    hash: "0xs2",
+    blockNumber: "11",
+    timeStamp: T,
+    from: ME,
+    to: OTHER,
     value: "500000000000000000",
-    fees: "210000000000000",
-    vin: [{ addresses: [ME] }],
-    vout: [{ addresses: [OTHER] }],
+    gasUsed: "21000",
+    gasPrice: "10000000000",
   },
-  { txid: "0xpending", blockHeight: -1, blockTime: T + 7200, value: "1", vin: [], vout: [] },
+];
+const TOKENS = [
+  {
+    hash: "0xt3",
+    blockNumber: "11",
+    timeStamp: T,
+    from: OTHER,
+    to: ME,
+    value: "5000000",
+    tokenSymbol: "USDC",
+    tokenDecimal: "6",
+  },
 ];
 
-function fakeBlockbook(txs = TXS) {
-  const urls: string[] = [];
-  const f = (async (url: string) => {
-    urls.push(url);
-    const from = Number(new URL(url).searchParams.get("from") ?? 0);
-    return Response.json({
-      page: 1,
-      totalPages: 1,
-      balance: "499790000000000000",
-      transactions: txs.filter((t) => t.blockHeight < 0 || t.blockHeight >= from),
-      tokens: [
-        { type: "ERC20", symbol: "DAI", decimals: 18, balance: "5000000000000000000" },
-        { type: "ERC721", symbol: "SPAM", decimals: 0, balance: "1" },
-      ],
-    });
+interface Call {
+  url: URL;
+  auth: string | null;
+}
+
+function fakeBlockscout(txs = TXS, tokens = TOKENS) {
+  const calls: Call[] = [];
+  const f = (async (url: string, init?: RequestInit) => {
+    const u = new URL(url);
+    calls.push({ url: u, auth: new Headers(init?.headers).get("authorization") });
+    const p = u.searchParams;
+    const from = Number(p.get("startblock") ?? 0);
+    const after = <R extends { blockNumber: string }>(rows: R[]) =>
+      rows.filter((r) => Number(r.blockNumber) >= from);
+    const ok = (result: unknown) => Response.json({ status: "1", message: "OK", result });
+    switch (p.get("action")) {
+      case "txlist":
+        return ok(after(txs));
+      case "txlistinternal":
+        return Response.json({ status: "0", message: "No transactions found", result: [] });
+      case "tokentx":
+        return ok(after(tokens));
+      case "balance":
+        return ok("499790000000000000");
+      case "tokenlist":
+        return ok([
+          { balance: "5000000", decimals: "6", symbol: "USDC", type: "ERC-20" },
+          { balance: "1", decimals: "0", symbol: "Claim at spam.example", type: "ERC-20" },
+        ]);
+      default:
+        return new Response("not found", { status: 404 });
+    }
   }) as unknown as typeof fetch;
-  return { f, urls };
+  return { f, calls };
 }
 
 async function setup(f: typeof fetch) {
@@ -70,9 +101,9 @@ async function setup(f: typeof fetch) {
 }
 
 describe("crypto wallet sync", () => {
-  it("syncs an Ethereum address incrementally and stores it encrypted", async () => {
-    const bb = fakeBlockbook();
-    const { client, db, settle } = await setup(bb.f);
+  it("syncs an Ethereum address from Blockscout incrementally and stores it encrypted", async () => {
+    const bs = fakeBlockscout();
+    const { client, db, settle } = await setup(bs.f);
     const bad = await client.post("/api/crypto/wallets", {
       name: "Hot",
       kind: "blockchain",
@@ -91,12 +122,19 @@ describe("crypto wallet sync", () => {
     ).json<CryptoWallet>();
     const w = await settle(created.id);
     expect(w).toMatchObject({ status: "ok", sourceHint: "0x1111…11111", syncEnabled: true });
-    expect(w.balances).toEqual([{ asset: "ETH", amount: "0.49979", valueCents: null }]);
+    expect(Object.fromEntries(w.balances.map((b) => [b.asset, b.amount]))).toEqual({
+      ETH: "0.49979",
+      USDC: "5",
+    });
+    // Spam tokens are ignored; on-chain balances match the transactions.
     expect(w.onChain).toEqual([
       { asset: "ETH", amount: "0.49979" },
-      { asset: "DAI", amount: "5" },
+      { asset: "USDC", amount: "5" },
     ]);
-    expect(bb.urls[0]).toMatch(/^https:\/\/eth1\.trezor\.io\/api\/v2\/address\/0x1+\?details=txs/);
+    // Without a key: the chain's public instance, no auth header.
+    expect(bs.calls[0]?.url.origin).toBe("https://eth.blockscout.com");
+    expect(bs.calls[0]?.url.pathname).toBe("/api");
+    expect(bs.calls.every((c) => c.auth === null)).toBe(true);
 
     const row = db
       .select()
@@ -106,36 +144,63 @@ describe("crypto wallet sync", () => {
     expect(row?.sourceEnc).not.toContain(ME.slice(2, 12));
 
     // Manual sync: only from the last synced block; nothing new.
+    bs.calls.length = 0;
     const again = (await client.post(`/api/crypto/wallets/${w.id}/sync`)).json();
-    expect(again).toEqual({ added: 0, duplicates: 1 });
-    expect(bb.urls.at(-1)).toContain("&from=11");
+    expect(again).toMatchObject({ added: 0 });
+    const lists = bs.calls.filter((c) => c.url.searchParams.has("startblock"));
+    expect(lists.every((c) => c.url.searchParams.get("startblock") === "11")).toBe(true);
 
     // Visiting again the same day doesn't sync again.
-    const n = bb.urls.length;
+    const n = bs.calls.length;
     await client.get("/api/crypto/wallets");
     await client.get("/api/crypto/overview");
-    expect(bb.urls.length).toBe(n);
+    expect(bs.calls.length).toBe(n);
 
     const page = (await client.get(`/api/crypto/txns?walletId=${w.id}`)).json<CryptoTxnPage>();
-    expect(page.items.map((t) => [t.type, t.txHash])).toEqual([
-      ["withdrawal", "0xs2"],
+    expect(page.items.map((t) => [t.type, t.txHash]).sort()).toEqual([
       ["deposit", "0xd1"],
+      ["deposit", "0xt3"],
+      ["withdrawal", "0xs2"],
     ]);
   });
 
-  it("doesn't duplicate imported transactions and pairs transfers between own wallets", async () => {
-    const bb = fakeBlockbook([
-      {
-        txid: "0xabc",
-        blockHeight: 20,
-        blockTime: Date.UTC(2025, 1, 1, 12) / 1000,
-        value: "299000000000000000",
-        fees: "0",
-        vin: [{ addresses: [OTHER] }],
-        vout: [{ addresses: [ME] }],
-      },
-    ]);
-    const { client, settle } = await setup(bb.f);
+  it("uses the unified API with a saved key, sent as a header and never in the URL", async () => {
+    const bs = fakeBlockscout();
+    const { client, settle } = await setup(bs.f);
+    const s = await client.put("/api/crypto/settings", { blockscoutKey: "proapi_test_key" });
+    expect(s.json()).toMatchObject({ hasBlockscoutKey: true });
+    const w = (
+      await client.post("/api/crypto/wallets", {
+        name: "Base",
+        kind: "blockchain",
+        chain: "base",
+        source: ME,
+      })
+    ).json<CryptoWallet>();
+    expect((await settle(w.id)).status).toBe("ok");
+    const u = bs.calls[0]?.url as URL;
+    expect(u.origin + u.pathname).toBe("https://api.blockscout.com/8453/api");
+    expect(bs.calls.every((c) => c.auth === "Bearer proapi_test_key")).toBe(true);
+    expect(bs.calls.some((c) => c.url.href.includes("proapi"))).toBe(false);
+  });
+
+  it("doesn't duplicate imported transactions", async () => {
+    const bs = fakeBlockscout(
+      [
+        {
+          hash: "0xabc",
+          blockNumber: "20",
+          timeStamp: String(Date.UTC(2025, 1, 1, 12) / 1000),
+          from: OTHER,
+          to: ME,
+          value: "299000000000000000",
+          gasUsed: "1",
+          gasPrice: "1",
+        },
+      ],
+      [],
+    );
+    const { client, settle } = await setup(bs.f);
     const csv = [
       "Date,Type,Tag,Sending Wallet,Sent Amount,Sent Currency,Sent Cost Basis,Receiving Wallet,Received Amount,Received Currency,Received Cost Basis,Fee Amount,Fee Currency,Gain (USD),Net Value (USD),Fee Value (USD),TxSrc,TxDest,TxHash,Description",
       "2025-02-01 12:00:00 UTC,crypto_deposit,,,,,,Cold ETH,0.299,ETH,,,,,600.00,,,,0xABC,",
@@ -155,14 +220,30 @@ describe("crypto wallet sync", () => {
     expect(w.balances[0]?.amount).toBe("0.299");
   });
 
+  it("asks for a Blockbook server for Bitcoin instead of calling one that refuses apps", async () => {
+    const bs = fakeBlockscout();
+    const { client } = await setup(bs.f);
+    const w = (
+      await client.post("/api/crypto/wallets", { name: "BTC", kind: "manual" })
+    ).json<CryptoWallet>();
+    await client.put(`/api/crypto/wallets/${w.id}/source`, {
+      chain: "btc",
+      source: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+    });
+    const res = await client.post(`/api/crypto/wallets/${w.id}/sync`);
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toMatch(/needs a Blockbook server/);
+    expect(bs.calls).toEqual([]);
+  });
+
   it("never goes over the daily request budget", async () => {
-    const bb = fakeBlockbook();
-    const { client, db } = await setup(bb.f);
+    const bs = fakeBlockscout();
+    const { client, db } = await setup(bs.f);
     const day = localDay();
     db.insert(schema.appSettings)
       .values({
         key: "crypto.usage",
-        value: { blockbook: { day, dayCount: 500, month: day.slice(0, 7), monthCount: 500 } },
+        value: { blockscout: { day, dayCount: 1500, month: day.slice(0, 7), monthCount: 1500 } },
       })
       .run();
     const w = (
@@ -171,14 +252,14 @@ describe("crypto wallet sync", () => {
     await client.put(`/api/crypto/wallets/${w.id}/source`, { chain: "eth", source: ME });
     const res = await client.post(`/api/crypto/wallets/${w.id}/sync`);
     expect(res.statusCode).toBe(400);
-    expect(res.json().message ?? res.body).toMatch(/Daily limit/);
-    expect(bb.urls).toEqual([]);
+    expect(res.body).toMatch(/Daily limit/);
+    expect(bs.calls).toEqual([]);
     const s = (await client.get("/api/crypto/settings")).json<{
       usage: { provider: string; today: number; dayLimit: number }[];
     }>();
-    expect(s.usage.find((u) => u.provider === "blockbook")).toMatchObject({
-      today: 500,
-      dayLimit: 500,
+    expect(s.usage.find((u) => u.provider === "blockscout")).toMatchObject({
+      today: 1500,
+      dayLimit: 1500,
     });
   });
 });

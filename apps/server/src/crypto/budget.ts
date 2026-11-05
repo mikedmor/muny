@@ -10,15 +10,17 @@ import { eq } from "drizzle-orm";
  * the published limits.
  */
 
-export type BudgetProvider = "defillama" | "coingecko" | "blockbook";
+export type BudgetProvider = "defillama" | "coingecko" | "blockscout" | "blockbook";
 
 export const LIMITS: Record<BudgetProvider, { day: number; month: number; label: string }> = {
   // No published key-less quota; stay polite.
   defillama: { day: 300, month: 6000, label: "DefiLlama prices" },
   // Free Demo plan: 10,000 calls a month, 30 a minute.
   coingecko: { day: 200, month: 5000, label: "CoinGecko prices" },
-  // Trezor's public Blockbook servers (a self-hosted one counts too).
-  blockbook: { day: 500, month: 10000, label: "Blockbook wallet sync" },
+  // Free plan: 100K credits a day at 20-40 credits per call (~2,500+ calls).
+  blockscout: { day: 1500, month: 30000, label: "Blockscout wallet sync (EVM chains)" },
+  // A Blockbook server you run or rent.
+  blockbook: { day: 500, month: 10000, label: "Blockbook wallet sync (Bitcoin-like chains)" },
 };
 
 const KEY = "crypto.usage";
