@@ -7,6 +7,7 @@ const TABS = [
   ["/crypto", "Dashboard"],
   ["/crypto/wallets", "Wallets"],
   ["/crypto/transactions", "Transactions"],
+  ["/crypto/reconcile", "Reconcile"],
   ["/crypto/settings", "Settings"],
 ] as const;
 

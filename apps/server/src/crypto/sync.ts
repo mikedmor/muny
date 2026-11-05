@@ -5,11 +5,18 @@ import { and, eq, ne, sql } from "drizzle-orm";
 import { decryptJson, encryptJson } from "../lib/crypto.js";
 import type { BudgetProvider } from "./budget.js";
 import { algorand } from "./chains/algorand.js";
-import { blockchair } from "./chains/blockchair.js";
+import { blockcypher, unsupported } from "./chains/blockcypher.js";
 import { blockscout } from "./chains/blockscout.js";
 import { cardano } from "./chains/cardano.js";
 import { cosmos } from "./chains/cosmos.js";
-import { type Adapter, type Cursor, makeCtx, type SyncDeps, SyncError } from "./chains/ctx.js";
+import {
+  type Adapter,
+  type Cursor,
+  makeCtx,
+  type SyncDeps,
+  SyncError,
+  safeText,
+} from "./chains/ctx.js";
 import { esplora } from "./chains/esplora.js";
 import { stellar } from "./chains/stellar.js";
 import { tron } from "./chains/tron.js";
@@ -21,8 +28,8 @@ export { type SyncDeps, SyncError };
  * Wallet sync from public blockchain data. Each chain has an adapter in
  * ./chains (one per provider); this file stores the results.
  * Providers: Blockscout (EVM chains), Koios (Cardano), AlgoNode (Algorand),
- * Horizon (Stellar), mempool.space/litecoinspace (Bitcoin, Litecoin), Blockchair
- * (Dogecoin, Zcash), a Cosmos Hub REST node and TronGrid.
+ * Horizon (Stellar), mempool.space/litecoinspace (Bitcoin, Litecoin), BlockCypher
+ * (Dogecoin), a Cosmos Hub REST node and TronGrid.
  *
  * Privacy: syncing sends the wallet's address or extended public key to that
  * service. It is opt-in per wallet; the source is stored encrypted and never
@@ -37,7 +44,8 @@ type Db = MunyDb | Parameters<Parameters<MunyDb["transaction"]>[0]>[0];
 
 const ADAPTERS: Record<(typeof CHAINS)[ChainKey]["provider"], Adapter> = {
   esplora,
-  blockchair,
+  blockcypher,
+  none: unsupported,
   blockscout,
   koios: cardano,
   algonode: algorand,
@@ -47,7 +55,8 @@ const ADAPTERS: Record<(typeof CHAINS)[ChainKey]["provider"], Adapter> = {
 };
 const BUDGET: Record<(typeof CHAINS)[ChainKey]["provider"], BudgetProvider> = {
   esplora: "esplora",
-  blockchair: "blockchair",
+  blockcypher: "blockcypher",
+  none: "blockcypher",
   blockscout: "blockscout",
   koios: "koios",
   algonode: "algonode",
@@ -196,14 +205,19 @@ export async function syncWallet(
   if (syncing.has(walletId)) return { added: 0, duplicates: 0 };
   syncing.add(walletId);
   try {
-    const res = await runSync(db, wallet, deps);
+    const { notice, ...res } = await runSync(db, wallet, deps);
+    // A notice (status ok) is shown under the wallet, like an error but calmer.
     db.update(w)
-      .set({ status: "ok", lastError: null, lastSyncAt: new Date() })
+      .set({ status: "ok", lastError: notice, lastSyncAt: new Date() })
       .where(eq(w.id, walletId))
       .run();
     return res;
   } catch (err) {
-    const msg = err instanceof SyncError ? err.message : "Sync failed";
+    // Unexpected errors: show what happened, minus anything address-like.
+    const msg =
+      err instanceof SyncError
+        ? err.message
+        : `Sync failed: ${safeText(err instanceof Error ? err.message : err) || "unknown error"}`;
     db.update(w)
       .set({ status: "error", lastError: msg, lastSyncAt: new Date() })
       .where(eq(w.id, walletId))
@@ -218,7 +232,7 @@ async function runSync(
   db: MunyDb,
   wallet: typeof w.$inferSelect,
   deps: SyncDeps,
-): Promise<CryptoSyncResult> {
+): Promise<CryptoSyncResult & { notice: string | null }> {
   const chain = CHAINS[wallet.chain as ChainKey];
   const source = decryptJson<string>(deps.secretKey as Buffer, wallet.sourceEnc as string);
   const cursor = readCursor(wallet.syncCursor);
@@ -233,7 +247,7 @@ async function runSync(
     },
     BUDGET[chain.provider],
   );
-  const { mapped, height, balances, pos } = await ADAPTERS[chain.provider](ctx);
+  const { mapped, height, balances, pos, notice } = await ADAPTERS[chain.provider](ctx);
 
   let added = 0;
   let duplicates = 0;
@@ -275,7 +289,7 @@ async function runSync(
     .set({ syncCursor: JSON.stringify(next) })
     .where(eq(w.id, wallet.id))
     .run();
-  return { added, duplicates };
+  return { added, duplicates, notice: notice ?? null };
 }
 
 /** Sync every wallet with sync on, one at a time. Errors are kept per wallet. */

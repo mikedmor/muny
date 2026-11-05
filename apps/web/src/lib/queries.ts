@@ -14,6 +14,7 @@ import type {
   CreateAccountInput,
   CreateTransactionInput,
   CryptoOverview,
+  CryptoReconcile,
   CryptoSettings,
   CryptoTxnPage,
   CryptoTxnQuery,
@@ -624,6 +625,7 @@ export const cryptoKeys = {
   wallets: ["crypto", "wallets"] as const,
   txns: ["crypto", "txns"] as const,
   settings: ["crypto", "settings"] as const,
+  reconcile: ["crypto", "reconcile"] as const,
 };
 
 /**
@@ -651,6 +653,11 @@ export function useCryptoOverview() {
   useCryptoBusy(!!(q.data?.syncing || q.data?.pricesRefreshing));
   return q;
 }
+export const useCryptoReconcile = () =>
+  useQuery({
+    queryKey: cryptoKeys.reconcile,
+    queryFn: () => api.get<CryptoReconcile>("/api/crypto/reconcile"),
+  });
 export function useCryptoWallets() {
   const q = useQuery({
     queryKey: cryptoKeys.wallets,

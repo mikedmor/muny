@@ -157,6 +157,8 @@ export interface CryptoSettings {
   assetIds: Record<string, string>;
   /** Server overrides per chain key (a Blockbook or Blockscout instance). */
   servers: Record<string, string>;
+  /** Assets hidden everywhere (e.g. airdropped spam tokens). */
+  hiddenAssets: string[];
   /** A Blockscout API key is saved (write-only). */
   hasBlockscoutKey: boolean;
 }
@@ -267,4 +269,39 @@ export function detectCryptoChains(input: string): CryptoSyncChain[] {
   if (/^[LM][1-9A-HJ-NP-Za-km-z]{25,34}$/.test(s)) return ["ltc"];
   if (/^D[1-9A-HJ-NP-Za-km-z]{25,34}$/.test(s)) return ["doge"];
   return [];
+}
+
+export interface CryptoTransferSuggestion {
+  txnId: string;
+  fromWalletId: string;
+  fromWalletName: string;
+  at: number;
+  amount: string;
+}
+
+/** Why balances are off, per wallet, with what Muny can do about it. */
+export interface CryptoReconcile {
+  /** Several wallets syncing the same address (everything counted again). */
+  sameAddress: {
+    chain: string;
+    chainName: string;
+    wallets: { id: string; name: string; txnCount: number }[];
+  }[];
+  wallets: {
+    walletId: string;
+    walletName: string;
+    synced: boolean;
+    /** More left than arrived: earlier deposits are missing. */
+    missing: {
+      asset: string;
+      deficit: string;
+      /** When the balance first went below zero. */
+      firstAt: number;
+      suggestions: CryptoTransferSuggestion[];
+    }[];
+    /** On-chain balance vs. what the transactions add up to. */
+    mismatches: { asset: string; onChain: string; computed: string; diff: string }[];
+    /** Synced transactions that repeat imported ones. */
+    duplicates: number;
+  }[];
 }

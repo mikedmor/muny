@@ -8,6 +8,7 @@ import { InvitePage, LoginPage, SetupPage } from "./pages/AuthPages.js";
 import { BudgetsPage } from "./pages/BudgetsPage.js";
 import { CategoryPage } from "./pages/CategoryPage.js";
 import { CryptoDashboard } from "./pages/crypto/CryptoDashboard.js";
+import { CryptoReconcile } from "./pages/crypto/CryptoReconcile.js";
 import { CryptoSettings } from "./pages/crypto/CryptoSettings.js";
 import { CryptoTransactions } from "./pages/crypto/CryptoTransactions.js";
 import { CryptoWallets } from "./pages/crypto/CryptoWallets.js";
@@ -93,6 +94,7 @@ const routeTree = rootRoute.addChildren([
   page("/crypto", CryptoDashboard),
   page("/crypto/wallets", CryptoWallets),
   searchPage("/crypto/transactions", CryptoTransactions, cryptoTxnSearch),
+  page("/crypto/reconcile", CryptoReconcile),
   page("/crypto/settings", CryptoSettings),
   page("/accounts", AccountsPage),
   page("/import", ImportPage),

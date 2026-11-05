@@ -11,6 +11,7 @@ import { type Adapter, SyncError } from "./ctx.js";
  * transaction, not from the fee collector transfer.
  *
  * Public nodes may prune old transactions; imported history fills the gap.
+ * They also refuse height-range queries, so searches run newest first.
  */
 
 const LCD = "https://cosmos-rest.publicnode.com";
@@ -50,22 +51,25 @@ const atomIn = (amount: string) => {
 export const cosmos: Adapter = async (ctx) => {
   const base = (ctx.override || LCD).replace(/\/+$/, "");
   const me = ctx.source;
-  const from = (ctx.cursor?.height ?? 0) + 1;
+  // Public nodes refuse height ranges, so search newest first and stop at the
+  // last synced block.
+  const after = ctx.cursor?.height ?? 0;
   const search = async (filter: string) => {
     const out: TxResponse[] = [];
     for (let page = 1; page <= 100; page++) {
       const q = new URLSearchParams({
-        query: `${filter}='${me}' AND tx.height>=${from}`,
+        query: `${filter}='${me}'`,
         page: String(page),
         limit: String(PAGE),
-        order_by: "ORDER_BY_ASC",
+        order_by: "ORDER_BY_DESC",
       });
       const r = await ctx.get<{ tx_responses?: TxResponse[]; total?: string }>(
         `${base}/cosmos/tx/v1beta1/txs?${q}`,
       );
       const rows = r.tx_responses ?? [];
-      out.push(...rows);
-      if (rows.length < PAGE) return out;
+      const fresh = rows.filter((t) => Number(t.height) > after);
+      out.push(...fresh);
+      if (rows.length < PAGE || fresh.length < rows.length) return out;
     }
     throw new SyncError("Too many transactions to sync in one go");
   };

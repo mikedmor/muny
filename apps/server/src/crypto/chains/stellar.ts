@@ -77,7 +77,22 @@ export const stellar: Adapter = async (ctx) => {
     throw new SyncError("Too many transactions to sync in one go");
   };
 
-  const effects = await all<Effect>("effects", "effects");
+  let effects: Effect[];
+  try {
+    effects = await all<Effect>("effects", "effects");
+  } catch (err) {
+    // Horizon has no history for accounts that were closed (merged into another)
+    // or never funded. That's not a sync failure.
+    if (err instanceof SyncError && /HTTP 404/.test(err.message))
+      return {
+        mapped: [],
+        height: ctx.cursor?.height ?? 0,
+        balances: [{ asset: "XLM", amount: "0" }],
+        notice:
+          "Stellar has no history for this account: it was closed (merged into another account) or never funded. If you moved its XLM elsewhere, import that history or add the wallet that received it.",
+      };
+    throw err;
+  }
   const txs = await all<Tx>("transactions", "txs");
 
   // Group effects by operation (an effect id is "<operation id>-<n>").

@@ -1,7 +1,7 @@
 import { CHAINS, type ChainKey } from "@muny/core";
 import { openDb } from "@muny/db";
 import { describe, expect, it } from "vitest";
-import { blockchair } from "./blockchair.js";
+import { blockcypher } from "./blockcypher.js";
 import { cosmos } from "./cosmos.js";
 import { type Adapter, type Cursor, makeCtx } from "./ctx.js";
 import { esplora } from "./esplora.js";
@@ -84,40 +84,46 @@ describe("Bitcoin (mempool.space) with an extended public key", () => {
   });
 });
 
-describe("Dogecoin (Blockchair)", () => {
+describe("Dogecoin (BlockCypher)", () => {
   const ME = `D${"a".repeat(33)}`;
-  it("maps net balance changes and remembers the count", async () => {
-    const { result, urls } = run(blockchair, "doge", ME, (u) => {
-      if (!u.pathname.startsWith("/dogecoin/dashboards/addresses/")) return undefined;
-      return {
-        data: {
-          set: { balance: 15_000_000_000, transaction_count: 2 },
-          addresses: { [ME]: { output_count: 2 } },
-          transactions: [
+  it("maps transactions with fees and remembers counts", async () => {
+    const { result, urls } = run(blockcypher, "doge", ME, (u) => {
+      if (u.pathname.endsWith("/balance")) return { n_tx: 2, final_balance: 14_999_000_000 };
+      if (u.pathname.endsWith("/full"))
+        return {
+          hasMore: false,
+          txs: [
             {
-              block_id: 20,
               hash: "d2",
-              time: "2021-05-02 10:00:00",
-              balance_change: -5_000_000_000,
+              block_height: 20,
+              confirmed: "2021-05-02T10:00:00Z",
+              fees: 1_000_000,
+              inputs: [{ addresses: [ME], output_value: 20_000_000_000 }],
+              outputs: [
+                { addresses: ["Dother"], value: 5_000_000_000 },
+                { addresses: [ME], value: 14_999_000_000 },
+              ],
             },
             {
-              block_id: 10,
               hash: "d1",
-              time: "2021-05-01 10:00:00",
-              balance_change: 20_000_000_000,
+              block_height: 10,
+              confirmed: "2021-05-01T10:00:00Z",
+              fees: 1_000_000,
+              inputs: [{ addresses: ["Dother"], output_value: 20_001_000_000 }],
+              outputs: [{ addresses: [ME], value: 20_000_000_000 }],
             },
           ],
-        },
-      };
+        };
+      return undefined;
     });
     const r = await result;
     const t = byId(r.mapped);
-    expect(t["bc:d1"]).toMatchObject({ type: "deposit", receivedAmount: "200" });
-    expect(t["bc:d2"]).toMatchObject({ type: "withdrawal", sentAmount: "50" });
-    expect(t["bc:d1"]?.at).toBe(Date.UTC(2021, 4, 1, 10));
-    expect(r.balances).toEqual([{ asset: "DOGE", amount: "150" }]);
-    expect(r.pos).toEqual({ count: 2 });
-    expect(urls[0]).toContain("transaction_details=true");
+    expect(t["bb:d1"]).toMatchObject({ type: "deposit", receivedAmount: "200" });
+    expect(t["bb:d2"]).toMatchObject({ type: "withdrawal", sentAmount: "50", feeAmount: "0.01" });
+    expect(t["bb:d1"]?.at).toBe(Date.UTC(2021, 4, 1, 10));
+    expect(r.balances).toEqual([{ asset: "DOGE", amount: "149.99" }]);
+    expect(r.pos).toEqual({ a: 2 });
+    expect(urls[0]).toContain("api.blockcypher.com/v1/doge/main/addrs/");
   });
 });
 

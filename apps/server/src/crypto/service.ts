@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   addDec,
   assetName,
+  FIAT,
   isZeroDec,
   type ParsedCryptoTxn,
   parseKoinlyCsv,
@@ -20,7 +21,11 @@ import type {
   CryptoWalletKind,
 } from "@muny/shared";
 import { and, desc, eq, gte, inArray, lte, or, type SQL, sql } from "drizzle-orm";
+import { getCryptoSettings } from "./prices.js";
 import { isSyncing, readCursor } from "./sync.js";
+
+/** Assets the user hid (spam tokens): left out of holdings and warnings. */
+const hiddenAssets = (db: Db) => new Set(getCryptoSettings(db as MunyDb).hiddenAssets);
 
 type Tx = Parameters<Parameters<MunyDb["transaction"]>[0]>[0];
 type Db = MunyDb | Tx;
@@ -80,6 +85,7 @@ export function latestPrices(db: Db): Map<string, { usd: string; date: string }>
 
 export function listWallets(db: Db): CryptoWallet[] {
   const balances = balancesByWallet(db);
+  const hidden = hiddenAssets(db);
   const prices = latestPrices(db);
   const counts = new Map(
     db
@@ -96,7 +102,9 @@ export function listWallets(db: Db): CryptoWallet[] {
     .map((r) => {
       const bal: CryptoBalance[] = [...(balances.get(r.id) ?? new Map()).entries()]
         // Negative balances mean missing history; they show as warnings instead.
-        .filter(([, amount]) => !isZeroDec(amount) && !amount.startsWith("-"))
+        .filter(
+          ([asset, amount]) => !isZeroDec(amount) && !amount.startsWith("-") && !hidden.has(asset),
+        )
         .map(([asset, amount]) => {
           const p = prices.get(asset);
           return { asset, amount, valueCents: p ? valueCents(amount, p.usd) : null };
@@ -352,6 +360,7 @@ export function cryptoOverview(
 ): Omit<import("@muny/shared").CryptoOverview, "pricesRefreshing" | "syncing" | "walletsSyncedAt"> {
   const balances = balancesByWallet(db);
   const prices = latestPrices(db);
+  const hidden = hiddenAssets(db);
   const names = new Map(
     db
       .select({ id: w.id, name: w.name })
@@ -367,8 +376,10 @@ export function cryptoOverview(
   >();
   for (const [walletId, m] of balances)
     for (const [asset, amount] of m) {
-      if (isZeroDec(amount)) continue;
+      if (isZeroDec(amount) || hidden.has(asset)) continue;
       if (amount.startsWith("-")) {
+        // Fiat deposits from a bank are often missing from exports; not a crypto problem.
+        if (FIAT.has(asset)) continue;
         missingHistory.push({ asset, walletName: names.get(walletId) ?? "", amount });
         continue;
       }

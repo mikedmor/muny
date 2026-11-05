@@ -5,7 +5,8 @@ import { type HdCoin, isSupportedXpub } from "./hd.js";
  * - blockscout: EVM chains (open-source explorer; one free key covers them all,
  *   or each chain's public instance without a key).
  * - esplora (Bitcoin, Litecoin: mempool.space / litecoinspace.org) and
- *   blockchair (Dogecoin, Zcash); extended public keys are expanded locally.
+ *   blockcypher (Dogecoin); extended public keys are expanded locally.
+ * - none: no free public service yet (Zcash); imported history only.
  * - koios (Cardano), algonode (Algorand), horizon (Stellar), cosmos (Cosmos Hub
  *   REST node), trongrid (TRON): free public APIs.
  * Servers are configurable per chain.
@@ -35,7 +36,8 @@ export interface ChainInfo {
   decimals: number;
   provider:
     | "esplora"
-    | "blockchair"
+    | "blockcypher"
+    | "none"
     | "blockscout"
     | "koios"
     | "algonode"
@@ -91,8 +93,8 @@ export const CHAINS: Record<ChainKey, ChainInfo> = {
     name: "Dogecoin",
     asset: "DOGE",
     decimals: 8,
-    provider: "blockchair",
-    server: "https://api.blockchair.com/dogecoin",
+    provider: "blockcypher",
+    server: "https://api.blockcypher.com/v1/doge/main",
     accepts: "dgub / xpub or a single address (starts with D)",
     validate: (s) =>
       xpubFor("doge")(s) ||
@@ -103,8 +105,8 @@ export const CHAINS: Record<ChainKey, ChainInfo> = {
     name: "Zcash",
     asset: "ZEC",
     decimals: 8,
-    provider: "blockchair",
-    server: "https://api.blockchair.com/zcash",
+    provider: "none",
+    server: "",
     accepts: "xpub or a transparent address (starts with t1 or t3)",
     validate: (s) => xpubFor("zec")(s) || (/^t[13]/.test(s) && BASE58.test(s) && s.length === 35),
   },

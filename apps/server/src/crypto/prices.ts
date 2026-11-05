@@ -60,6 +60,7 @@ export function getCryptoSettings(db: MunyDb): CryptoSettings {
     hasApiKey: !!getSetting<string>(db, KEY_KEY),
     assetIds: s.assetIds ?? {},
     servers: s.servers ?? {},
+    hiddenAssets: s.hiddenAssets ?? [],
     hasBlockscoutKey: !!getSetting<string>(db, BLOCKSCOUT_KEY),
   };
 }
@@ -71,6 +72,7 @@ export function saveCryptoSettings(
     provider?: CryptoPriceProvider;
     assetIds?: Record<string, string>;
     servers?: Record<string, string>;
+    hiddenAssets?: string[];
     apiKey?: string | null;
     blockscoutKey?: string | null;
   },
@@ -82,6 +84,7 @@ export function saveCryptoSettings(
     provider: input.provider ?? cur.provider,
     assetIds: input.assetIds ?? cur.assetIds,
     servers: input.servers ?? cur.servers,
+    hiddenAssets: input.hiddenAssets ?? cur.hiddenAssets,
   });
   if (input.blockscoutKey !== undefined) {
     if (!input.blockscoutKey)

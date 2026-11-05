@@ -193,25 +193,22 @@ export function CryptoDashboard() {
             </div>
           )}
           {(d.missingHistory.length > 0 || (d.pricesEnabled && d.unpricedAssets.length > 0)) && (
-            <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-              {d.missingHistory.length > 0 && (
-                <p>
-                  <span className="font-semibold">Missing history:</span> more left these wallets
-                  than arrived, so earlier transactions are missing:{" "}
-                  {d.missingHistory.map((m) => `${m.asset} in ${m.walletName}`).join(", ")}. Import
-                  older history or add the deposits.
-                </p>
-              )}
-              {d.unpricedAssets.length > 0 && d.pricesEnabled && (
-                <p className={d.missingHistory.length ? "mt-1" : ""}>
-                  <span className="font-semibold">No price for:</span> {d.unpricedAssets.join(", ")}{" "}
-                  (map them in{" "}
-                  <Link to="/crypto/settings" className="underline">
-                    Settings
-                  </Link>
-                  ).
-                </p>
-              )}
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              <span>
+                {[
+                  d.missingHistory.length > 0 &&
+                    `${d.missingHistory.length} wallet balances are missing history`,
+                  d.pricesEnabled &&
+                    d.unpricedAssets.length > 0 &&
+                    `${d.unpricedAssets.length} coins have no price`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+                . Values may be off until these are sorted out.
+              </span>
+              <Link to="/crypto/reconcile" className="font-medium underline">
+                Review and fix
+              </Link>
             </div>
           )}
 

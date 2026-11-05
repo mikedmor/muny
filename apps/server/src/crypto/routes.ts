@@ -18,6 +18,13 @@ import {
   saveCryptoSettings,
 } from "./prices.js";
 import {
+  addOpeningBalance,
+  linkTransfer,
+  mergeWallets,
+  reconcileReport,
+  removeDuplicates,
+} from "./reconcile.js";
+import {
   createWallet,
   cryptoOverview,
   importKoinly,
@@ -144,7 +151,8 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
     const user = requireUser(req);
     const { id } = parse(IdParams, req.params);
     try {
-      const res = await syncWallet(db, id, priceDeps);
+      // Paced (but quicker than background syncs) to stay inside rate limits.
+      const res = await syncWallet(db, id, { ...priceDeps, delayMs: priceDeps.delayMs ?? 500 });
       log(user.id, "crypto.wallet_sync", id, res);
       if (res.added) quiet(refreshPrices(db, bg));
       return res;
@@ -342,6 +350,68 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
     return { ok: true };
   });
 
+  // --- Reconcile ---------------------------------------------------------------
+
+  app.get("/api/crypto/reconcile", async () => reconcileReport(db, priceDeps.secretKey));
+
+  const fix = <T>(fn: () => T) => {
+    try {
+      return fn();
+    } catch (err) {
+      throw badRequest(err instanceof Error ? err.message : "Couldn't apply that fix");
+    }
+  };
+
+  /** Merge wallets that sync the same address into one. */
+  app.post("/api/crypto/reconcile/merge", async (req) => {
+    const user = requireUser(req);
+    const body = parse(
+      z.object({
+        into: z.string().min(1).max(64),
+        from: z.array(z.string().min(1).max(64)).min(1).max(20),
+      }),
+      req.body,
+    );
+    const res = fix(() => mergeWallets(db, body.into, body.from));
+    log(user.id, "crypto.reconcile_merge", body.into, { from: body.from.length, ...res });
+    return res;
+  });
+
+  app.post("/api/crypto/reconcile/duplicates", async (req) => {
+    const user = requireUser(req);
+    const body = parse(z.object({ walletId: z.string().min(1).max(64) }), req.body);
+    const res = removeDuplicates(db, body.walletId);
+    log(user.id, "crypto.reconcile_duplicates", body.walletId, res);
+    return res;
+  });
+
+  app.post("/api/crypto/reconcile/link", async (req) => {
+    const user = requireUser(req);
+    const body = parse(
+      z.object({ walletId: z.string().min(1).max(64), txnId: z.string().min(1).max(64) }),
+      req.body,
+    );
+    const res = fix(() => linkTransfer(db, body.walletId, body.txnId));
+    log(user.id, "crypto.reconcile_link", body.walletId, { txnId: body.txnId });
+    return res;
+  });
+
+  app.post("/api/crypto/reconcile/opening", async (req) => {
+    const user = requireUser(req);
+    const body = parse(
+      z.object({
+        walletId: z.string().min(1).max(64),
+        asset,
+        amount,
+        at: z.number().int().min(0).max(4_102_444_800_000),
+      }),
+      req.body,
+    );
+    const res = fix(() => addOpeningBalance(db, body));
+    log(user.id, "crypto.reconcile_opening", body.walletId, { asset: body.asset });
+    return res;
+  });
+
   // --- Import ------------------------------------------------------------------
 
   const ImportBody = z.object({
@@ -396,6 +466,7 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
           .optional(),
         apiKey: z.string().trim().max(200).nullable().optional(),
         blockscoutKey: z.string().trim().max(200).nullable().optional(),
+        hiddenAssets: z.array(asset).max(500).optional(),
         servers: z
           .partialRecord(
             chainKey,

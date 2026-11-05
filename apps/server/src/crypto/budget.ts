@@ -15,7 +15,7 @@ export type BudgetProvider =
   | "coingecko"
   | "blockscout"
   | "esplora"
-  | "blockchair"
+  | "blockcypher"
   | "cosmos"
   | "trongrid"
   | "koios"
@@ -31,8 +31,8 @@ export const LIMITS: Record<BudgetProvider, { day: number; month: number; label:
   blockscout: { day: 1500, month: 30000, label: "Blockscout wallet sync (EVM chains)" },
   // mempool.space / litecoinspace.org public APIs (per-IP rate limits).
   esplora: { day: 1500, month: 30000, label: "mempool.space wallet sync (Bitcoin, Litecoin)" },
-  // Blockchair without a key: about 1,440 requests a day.
-  blockchair: { day: 300, month: 6000, label: "Blockchair wallet sync (Dogecoin, Zcash)" },
+  // BlockCypher without a key: about 100 requests an hour.
+  blockcypher: { day: 400, month: 8000, label: "BlockCypher wallet sync (Dogecoin)" },
   cosmos: { day: 500, month: 10000, label: "Cosmos Hub wallet sync (ATOM)" },
   trongrid: { day: 500, month: 10000, label: "TronGrid wallet sync (TRON)" },
   // Koios public tier: 100 requests per 10 s per IP, small bodies.

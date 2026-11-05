@@ -442,6 +442,9 @@ function WalletRow({ w, onConnect }: { w: CryptoWallet; onConnect: () => void })
                 .map((b) => `${fmtAmount(b.amount, 4)} ${b.asset}`)
                 .join(", ")}${w.balances.length > 3 ? "…" : ""}`}
           </span>
+          {w.status === "ok" && w.lastError && !w.syncing && (
+            <span className="block text-xs text-slate-500">{w.lastError}</span>
+          )}
           {w.status === "error" && w.lastError && !w.syncing && (
             <span className="block text-xs text-red-600 dark:text-red-400">{w.lastError}</span>
           )}
@@ -452,7 +455,10 @@ function WalletRow({ w, onConnect }: { w: CryptoWallet; onConnect: () => void })
           )}
           {diff.length > 0 && (
             <span className="block text-xs text-amber-700 dark:text-amber-400">
-              The blockchain shows {diff.join(", ")}; some history is missing or counted twice.
+              The blockchain shows {diff.join(", ")}.{" "}
+              <Link to="/crypto/reconcile" className="underline">
+                Find out why
+              </Link>
             </span>
           )}
         </span>

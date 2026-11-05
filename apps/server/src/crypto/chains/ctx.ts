@@ -26,6 +26,8 @@ export interface Fetched {
   height: number;
   balances: Cursor["balances"];
   pos?: Cursor["pos"];
+  /** Something worth telling the user that isn't an error (e.g. a closed account). */
+  notice?: string;
 }
 
 export interface ChainCtx {
@@ -52,27 +54,33 @@ export function makeCtx(base: Omit<ChainCtx, "get" | "post">, provider: BudgetPr
   const f = base.deps.fetch ?? fetch;
   const request = async <T>(url: string, init: RequestInit, extra?: Record<string, string>) => {
     const host = new URL(url).host;
-    try {
-      spend(base.db, provider);
-    } catch (err) {
-      throw new SyncError(err instanceof BudgetError ? err.message : "Request limit reached");
+    let res: Response | null = null;
+    // Rate limited: back off and retry twice (only when pacing is on).
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        spend(base.db, provider);
+      } catch (err) {
+        throw new SyncError(err instanceof BudgetError ? err.message : "Request limit reached");
+      }
+      try {
+        res = await f(url, {
+          ...init,
+          headers: {
+            accept: "application/json",
+            "user-agent": "Muny (self-hosted)",
+            ...(init.headers as Record<string, string>),
+            ...extra,
+          },
+          signal: AbortSignal.timeout(60_000),
+        });
+      } catch {
+        throw new SyncError(`Couldn't reach ${host}`);
+      }
+      await sleep(base.deps.delayMs);
+      if (res.status !== 429 || !base.deps.delayMs || attempt === 2) break;
+      await sleep(Math.max(5_000, base.deps.delayMs * 10) * (attempt + 1));
     }
-    let res: Response;
-    try {
-      res = await f(url, {
-        ...init,
-        headers: {
-          accept: "application/json",
-          "user-agent": "Muny (self-hosted)",
-          ...(init.headers as Record<string, string>),
-          ...extra,
-        },
-        signal: AbortSignal.timeout(60_000),
-      });
-    } catch {
-      throw new SyncError(`Couldn't reach ${host}`);
-    }
-    await sleep(base.deps.delayMs);
+    if (!res) throw new SyncError(`Couldn't reach ${host}`);
     if (res.status === 429) throw new SyncError(`${host} rate limit hit; try again later`);
     if (res.status === 401 || res.status === 403)
       throw new SyncError(

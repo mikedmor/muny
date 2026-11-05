@@ -148,9 +148,8 @@ describe("crypto", () => {
       change24hPct: 5.5,
     });
     expect(o.unpricedAssets).toEqual([]);
-    expect(o.missingHistory).toEqual([
-      { asset: "USD", walletName: "Demo Exchange", amount: "-750" },
-    ]);
+    // USD going negative (the bank deposit is not in the file) is not flagged: fiat.
+    expect(o.missingHistory).toEqual([]);
     expect(o.totalValueCents).toBe(79_600 + 2); // + 0.01 ATOM at $1.50
     expect(o.history.length).toBeGreaterThanOrEqual(2);
     expect(o.history[0]).toEqual({ date: "2025-01-10", valueCents: 100_000 });
