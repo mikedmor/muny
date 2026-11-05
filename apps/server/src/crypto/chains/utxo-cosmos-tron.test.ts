@@ -144,7 +144,7 @@ describe("Cosmos Hub", () => {
   it("ignores staking pool moves and records rewards and fees", async () => {
     const { result } = run(cosmos, "atom", ME, (u) => {
       const q = u.searchParams.get("query") ?? "";
-      if (u.pathname === "/cosmos/tx/v1beta1/txs")
+      if (u.pathname.endsWith("/cosmos/tx/v1beta1/txs"))
         return q.startsWith("message.sender")
           ? {
               tx_responses: [
@@ -171,7 +171,7 @@ describe("Cosmos Hub", () => {
                 },
               ],
             };
-      if (u.pathname.startsWith("/cosmos/bank/"))
+      if (u.pathname.includes("/cosmos/bank/"))
         return { balances: [{ denom: "uatom", amount: "11495000" }] };
       if (u.pathname.includes("/delegations/"))
         return { delegation_responses: [{ balance: { amount: "10000000" } }] };
