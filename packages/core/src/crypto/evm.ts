@@ -150,3 +150,14 @@ export function mapEvmHistory(
   out.sort((a, b) => a.at - b.at);
   return { txns: out, maxBlock };
 }
+
+/**
+ * Token contracts that were replaced by a new contract under the same symbol,
+ * with holders given the new token 1:1 (no transfer shows it). What's left on
+ * the old contract is worthless, so a wallet's balance of it isn't compared
+ * with its history (which, like Koinly, treats old and new as one coin).
+ */
+export const SUPERSEDED_TOKENS = new Set([
+  // Augur REP (Serpent), replaced in July 2017 by 0xe94327d07fc17907b4db788e5adf2ed424addff6.
+  "0x48c80f1f4d53d5951e5d5438b54cba84f29f32a5",
+]);

@@ -1,10 +1,12 @@
 import {
+  Deltas,
   type EsInternal,
   type EsTokenTx,
   type EsTx,
   fromBaseUnits,
   mapEvmHistory,
   plausibleSymbol,
+  SUPERSEDED_TOKENS,
 } from "@muny/core";
 import { schema } from "@muny/db";
 import { eq } from "drizzle-orm";
@@ -141,15 +143,25 @@ export const blockscout: Adapter = async (ctx) => {
   const bal = await call<never>({ action: "balance" });
   if (typeof bal === "string" && /^\d+$/.test(bal))
     balances.push({ asset: chain.asset, amount: fromBaseUnits(bal, chain.decimals) });
-  const held = await call<{ balance?: string; decimals?: string; symbol?: string; type?: string }>({
+  const held = await call<{
+    balance?: string;
+    decimals?: string;
+    symbol?: string;
+    type?: string;
+    contractAddress?: string;
+  }>({
     action: "tokenlist",
   });
+  // Tokens sharing a symbol add up; a replaced contract's leftovers don't count.
+  const held20 = new Deltas();
   if (Array.isArray(held))
     for (const tk of held) {
       const sym = plausibleSymbol(tk.symbol);
       if (!sym || (tk.type && !/20/.test(tk.type))) continue;
-      const amount = fromBaseUnits(tk.balance, Number(tk.decimals ?? 18) || 0);
-      if (amount !== "0") balances.push({ asset: sym, amount });
+      if (SUPERSEDED_TOKENS.has((tk.contractAddress ?? "").toLowerCase())) continue;
+      held20.add(sym, fromBaseUnits(tk.balance, Number(tk.decimals ?? 18) || 0));
     }
+  for (const [asset, amount] of held20.toStrings())
+    if (amount !== "0") balances.push({ asset, amount });
   return { mapped: txns, height: Math.max(cursor?.height ?? 0, maxBlock), balances };
 };
