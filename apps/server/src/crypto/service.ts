@@ -1083,7 +1083,8 @@ type DupeOf = { id: string; at: number; walletId: string; otherWalletId: string 
 /**
  * Rows that look recorded twice: the same coin and the same total (within
  * 0.1%) leaving, or arriving in, the same wallet within 10 minutes, unless
- * both have different transaction hashes or both came from the chain.
+ * both have different transaction hashes, both came from the chain, or
+ * both are rewards or other income.
  * Exports sometimes hold one transfer twice, once with the fee split out.
  * Row id → the row it may repeat (and that row's transfer partner wallet).
  */
@@ -1102,11 +1103,15 @@ export function possibleDuplicates(db: Db): Map<string, DupeOf> {
       feeAsset: t.feeAsset,
       feeAmount: t.feeAmount,
       pair: t.transferPairId,
+      label: t.label,
     })
     .from(t)
     .orderBy(t.at)
     .all();
   type R = (typeof rows)[number];
+  // Rewards often arrive as several equal payouts minutes apart (e.g. an
+  // exchange's learn-and-earn lessons): not duplicates.
+  const INCOME = new Set(["reward", "staking", "airdrop", "mining", "income", "fee_refund"]);
   const walletOf = new Map(rows.map((r) => [r.id, r.walletId]));
   const groups = new Map<string, { r: R; total: bigint }[]>();
   for (const r of rows) {
@@ -1142,6 +1147,7 @@ export function possibleDuplicates(db: Db): Map<string, DupeOf> {
         const b = list[j] as { r: R; total: bigint };
         if (b.r.at - a.r.at > WINDOW) break;
         if (a.r.source === "sync" && b.r.source === "sync") continue;
+        if (INCOME.has(a.r.label ?? "") && INCOME.has(b.r.label ?? "")) continue;
         if (a.r.txHash && b.r.txHash && normHash(a.r.txHash) !== normHash(b.r.txHash)) continue;
         const big = a.total > b.total ? a.total : b.total;
         const diff = a.total > b.total ? a.total - b.total : b.total - a.total;

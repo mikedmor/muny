@@ -170,6 +170,25 @@ describe("transaction tools", () => {
     expect((await list("warnings=duplicates")).total).toBe(0);
   });
 
+  it("doesn't flag equal reward payouts minutes apart", async () => {
+    const { db, exodus, list } = await setup();
+    for (const id of ["r1", "r2"])
+      db.insert(schema.cryptoTxns)
+        .values({
+          id,
+          walletId: exodus.id,
+          at: T + (id === "r1" ? 0 : 30_000) + 9 * 86_400_000,
+          externalId: `koinly:${id}`,
+          source: "import",
+          type: "deposit",
+          label: "reward",
+          receivedAsset: "XLM",
+          receivedAmount: "2",
+        })
+        .run();
+    expect((await list("warnings=duplicates")).total).toBe(0);
+  });
+
   it("won't delete a synced row", async () => {
     const { client, db, exodus } = await setup();
     db.insert(schema.cryptoTxns)
