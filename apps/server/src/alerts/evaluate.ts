@@ -5,6 +5,7 @@ import { and, eq, gte, isNull, sql } from "drizzle-orm";
 import { budgetMonth } from "../budgets/service.js";
 import { listAccounts } from "../ledger/accounts.js";
 import { listSeries, merchantKey, upcoming } from "../recurring/service.js";
+import { listTrials } from "../trials/routes.js";
 
 /**
  * Turns alert rules into candidate notifications. Pure reads plus a small
@@ -42,6 +43,7 @@ export const DEFAULT_PARAMS: Record<AlertType, AlertParams> = {
   budget: { percents: [80, 100] },
   charged_after_cancel: {},
   connection_error: {},
+  trial_ending: { daysBefore: 3 },
 };
 
 const STATE_KEY = "alerts.state";
@@ -300,6 +302,27 @@ export function evaluateRules(
             title: `${s.name} charged you after you cancelled`,
             body: `${money(s.lastAmountCents)} on ${dayLabel(s.lastDate)}. You may be owed a refund.`,
             link: "/recurring",
+          });
+        }
+        break;
+      }
+      case "trial_ending": {
+        const ahead = p.daysBefore ?? 3;
+        for (const tr of listTrials(db, today)) {
+          if (tr.status !== "active" || tr.daysLeft < 0 || tr.daysLeft > ahead) continue;
+          const price = tr.priceCents
+            ? ` It becomes ${formatMoney(tr.priceCents)}${tr.interval ? ` (${tr.interval})` : ""}.`
+            : "";
+          out.push({
+            type: rule.type,
+            dedupeKey: `trial:${tr.id}:${tr.endDate}`,
+            severity: "warning",
+            title:
+              tr.daysLeft === 0
+                ? `Your ${tr.name} trial ends today`
+                : `Your ${tr.name} trial ends ${dayLabel(tr.endDate)}`,
+            body: `Cancel before then if you don’t want to keep it.${price}`,
+            link: "/recurring#trials",
           });
         }
         break;

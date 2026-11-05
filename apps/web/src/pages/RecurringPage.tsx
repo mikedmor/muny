@@ -20,6 +20,7 @@ import {
   useUpcoming,
   useUpdateRecurring,
 } from "../lib/queries.js";
+import { TrialsTab } from "./TrialsTab.js";
 
 const KIND_LABEL: Record<RecurringKind, string> = {
   subscription: "Subscription",
@@ -463,7 +464,9 @@ function Upcoming() {
 export function RecurringPage() {
   const recurring = useRecurring();
   const rescan = useRescanRecurring();
-  const [tab, setTab] = useState<"list" | "upcoming">("list");
+  const [tab, setTab] = useState<"list" | "upcoming" | "trials">(() =>
+    window.location.hash === "#trials" ? "trials" : "list",
+  );
   const [open, setOpen] = useState<RecurringSeries | null>(null);
   const all = recurring.data ?? [];
 
@@ -523,6 +526,7 @@ export function RecurringPage() {
               [
                 ["list", `Subscriptions & bills${newCount ? ` (${newCount} new)` : ""}`],
                 ["upcoming", "Upcoming"],
+                ["trials", "Free trials"],
               ] as const
             ).map(([k, label]) => (
               <button
@@ -566,8 +570,10 @@ export function RecurringPage() {
               <Section title="Inactive or cancelled" items={inactive} onOpen={setOpen} collapsed />
               <Section title="Not recurring" items={ignored} onOpen={setOpen} collapsed />
             </div>
-          ) : (
+          ) : tab === "upcoming" ? (
             <Upcoming />
+          ) : (
+            <TrialsTab />
           )}
         </>
       )}

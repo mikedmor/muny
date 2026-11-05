@@ -470,3 +470,28 @@ export const notifications = sqliteTable(
   },
   (t) => [index("notifications_created_idx").on(t.createdAt)],
 );
+
+// ---------------------------------------------------------------------------
+// Free trials (Phase 3)
+// ---------------------------------------------------------------------------
+
+export const trials = sqliteTable("trials", {
+  id: text().primaryKey(),
+  name: text().notNull(),
+  /** YYYY-MM-DD */
+  startDate: text().notNull(),
+  /** YYYY-MM-DD: the last day before it turns into a paid charge. */
+  endDate: text().notNull(),
+  /** What it will cost once it converts (positive), if known. */
+  priceCents: integer(),
+  interval: text({ enum: ["weekly", "monthly", "quarterly", "annual"] }),
+  /** active → cancelled (you stopped it) or kept (you decided to pay). */
+  status: text({ enum: ["active", "cancelled", "kept"] })
+    .notNull()
+    .default("active"),
+  /** Where to cancel (a URL or instructions). */
+  cancelInfo: text(),
+  notes: text(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});

@@ -49,6 +49,10 @@ const RULES: Record<AlertType, { label: string; description: string }> = {
     label: "Charged after cancelling",
     description: "Something you marked cancelled charged you again.",
   },
+  trial_ending: {
+    label: "Free trial ending",
+    description: "A free trial you are tracking is about to turn into a charge.",
+  },
   connection_error: {
     label: "Bank needs attention",
     description: "A bank connection needs you to log in again or failed to sync.",
@@ -141,6 +145,7 @@ function RuleParams({ rule, save }: { rule: AlertRule; save: (params: AlertParam
           onCommit={(v) => save({ days: v })}
         />
       );
+    case "trial_ending":
     case "bill_due":
       return (
         <NumberInput

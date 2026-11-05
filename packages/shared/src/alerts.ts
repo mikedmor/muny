@@ -10,6 +10,7 @@ export const ALERT_TYPES = [
   "budget",
   "charged_after_cancel",
   "connection_error",
+  "trial_ending",
 ] as const;
 export type AlertType = (typeof ALERT_TYPES)[number];
 

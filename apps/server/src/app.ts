@@ -25,6 +25,7 @@ import { registerReportRoutes } from "./reports/routes.js";
 import { registerRuleRoutes } from "./rules/routes.js";
 import { makeProviders, type Providers } from "./sync/engine.js";
 import { registerSyncRoutes } from "./sync/routes.js";
+import { registerTrialRoutes } from "./trials/routes.js";
 import { VERSION } from "./version.js";
 
 export interface AppDeps {
@@ -124,6 +125,7 @@ export async function buildApp({
   registerRecurringRoutes(app, db);
   registerBudgetRoutes(app, db);
   registerReportRoutes(app, db);
+  registerTrialRoutes(app, db);
   const alertDeps: AlertDeps = {
     secretKey: config.secretKey,
     publicUrl: config.publicUrl,

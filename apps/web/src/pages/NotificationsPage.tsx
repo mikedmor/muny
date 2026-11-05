@@ -13,6 +13,7 @@ const ICON: Record<string, string> = {
   budget: "🎯",
   charged_after_cancel: "🚫",
   connection_error: "🔌",
+  trial_ending: "⏳",
 };
 
 function when(ms: number) {
