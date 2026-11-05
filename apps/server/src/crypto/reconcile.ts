@@ -12,6 +12,7 @@ import { type MunyDb, newId, schema } from "@muny/db";
 import type { CryptoReconcile, CryptoTransferSuggestion } from "@muny/shared";
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { decryptJson } from "../lib/crypto.js";
+import { closeAmountsSql, normHashSql } from "./match.js";
 import { getCryptoSettings } from "./prices.js";
 import { readCursor } from "./sync.js";
 
@@ -48,12 +49,14 @@ function duplicateSyncRows(db: MunyDb | Tx, walletId: string): string[] {
       select distinct s.id from crypto_txns s
       join crypto_txns i on i.wallet_id = s.wallet_id and i.source <> 'sync'
       where s.wallet_id = ${walletId} and s.source = 'sync' and (
-        (s.tx_hash is not null and s.tx_hash <> '' and lower(i.tx_hash) = lower(s.tx_hash))
+        (s.tx_hash is not null and s.tx_hash <> ''
+          and ${normHashSql("i.tx_hash")} = ${normHashSql("s.tx_hash")}
+          and (i.received_asset is s.received_asset or i.sent_asset is s.sent_asset))
         or (abs(i.at - s.at) <= ${DUP_WINDOW} and (
           (s.received_asset is not null and i.received_asset = s.received_asset
-            and i.received_amount = s.received_amount)
+            and ${closeAmountsSql("i.received_amount", "s.received_amount")})
           or (s.sent_asset is not null and i.sent_asset = s.sent_asset
-            and i.sent_amount = s.sent_amount)))
+            and ${closeAmountsSql("i.sent_amount", "s.sent_amount")})))
       )`)
     .map((r) => r.id);
 }
@@ -109,6 +112,7 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
       feeAsset: t.feeAsset,
       feeAmount: t.feeAmount,
       transferPairId: t.transferPairId,
+      source: t.source,
     })
     .from(t)
     .orderBy(t.at)
@@ -167,15 +171,65 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
         });
       }
     const dupes = x.sourceEnc ? duplicateSyncRows(db, x.id) : [];
-    if (missing.length || mismatches.length || dupes.length)
+    const crossChain = crossChainFor(x.id);
+    if (missing.length || mismatches.length || dupes.length || crossChain.length)
       report.push({
         walletId: x.id,
         walletName: x.name,
+        kind: x.kind,
         synced: !!x.sourceEnc,
         missing,
         mismatches,
         duplicates: dupes.length,
+        crossChain,
       });
+  }
+
+  /**
+   * Cross-chain swaps: Koinly records the coin received by a swap (e.g. Exodus's
+   * built-in exchange, ETH → ADA) in the wallet the swap started from, but it
+   * actually arrived in the wallet on the other chain, where sync recorded it
+   * again. Match an imported receive here with a synced deposit of the same
+   * coin and amount (within 1%) in another wallet within a day, when this
+   * wallet never received that coin on-chain.
+   */
+  function crossChainFor(walletId: string): CryptoReconcile["wallets"][number]["crossChain"] {
+    const syncedHere = new Set(
+      rows
+        .filter((r) => r.walletId === walletId && r.source === "sync")
+        .map((r) => r.receivedAsset),
+    );
+    const out: CryptoReconcile["wallets"][number]["crossChain"] = [];
+    const used = new Set<string>();
+    for (const r of rows) {
+      if (r.walletId !== walletId || r.source === "sync" || !r.receivedAsset || !r.receivedAmount)
+        continue;
+      if (r.transferPairId || syncedHere.has(r.receivedAsset)) continue;
+      const want = Number(r.receivedAmount);
+      const d = rows.find(
+        (o) =>
+          o.walletId !== walletId &&
+          o.source === "sync" &&
+          o.type === "deposit" &&
+          !o.transferPairId &&
+          !used.has(o.id) &&
+          o.receivedAsset === r.receivedAsset &&
+          Math.abs(o.at - r.at) <= DAY &&
+          Math.abs(Number(o.receivedAmount) - want) <= want * 0.01,
+      );
+      if (!d) continue;
+      used.add(d.id);
+      out.push({
+        txnId: r.id,
+        asset: r.receivedAsset,
+        amount: r.receivedAmount,
+        at: r.at,
+        toWalletId: d.walletId,
+        toWalletName: names.get(d.walletId) ?? "",
+        toTxnId: d.id,
+      });
+    }
+    return out;
   }
 
   function suggest(
@@ -233,6 +287,42 @@ export function mergeWallets(db: MunyDb, into: string, from: string[]) {
     const dupes = duplicateSyncRows(tx, into);
     if (dupes.length) tx.delete(t).where(inArray(t.id, dupes)).run();
     return { moved, removedDuplicates: dupes.length, walletsRemoved: ids.length };
+  });
+}
+
+/**
+ * Move a cross-chain swap's proceeds to the wallet they arrived in: a transfer
+ * out of this wallet, linked to the synced deposit there (which then stops
+ * counting as income).
+ */
+export function moveCrossChain(db: MunyDb, txnId: string, toTxnId: string) {
+  return db.transaction((tx) => {
+    const src = tx.select().from(t).where(eq(t.id, txnId)).get();
+    const dst = tx.select().from(t).where(eq(t.id, toTxnId)).get();
+    if (!src?.receivedAsset || !src.receivedAmount || !dst || dst.transferPairId)
+      throw new Error("Those transactions can't be linked");
+    if (dst.receivedAsset !== src.receivedAsset || dst.walletId === src.walletId)
+      throw new Error("Those transactions don't match");
+    const id = newId();
+    tx.insert(t)
+      .values({
+        id,
+        walletId: src.walletId,
+        at: src.at + 1000,
+        type: "transfer",
+        sentAsset: src.receivedAsset,
+        sentAmount: src.receivedAmount,
+        description: "Added in Reconcile: swap proceeds arrived in another wallet",
+        externalId: `manual:${id}`,
+        source: "manual",
+        transferPairId: dst.id,
+      })
+      .run();
+    tx.update(t)
+      .set({ type: "transfer", label: null, transferPairId: id })
+      .where(eq(t.id, dst.id))
+      .run();
+    return { id };
   });
 }
 

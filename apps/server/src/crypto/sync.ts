@@ -1,7 +1,7 @@
 import { CHAINS, type ChainKey, type SyncedTxn, sourceHint } from "@muny/core";
 import { type MunyDb, newId, schema } from "@muny/db";
 import type { CryptoSyncResult } from "@muny/shared";
-import { and, eq, ne, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { decryptJson, encryptJson } from "../lib/crypto.js";
 import type { BudgetProvider } from "./budget.js";
 import { algorand } from "./chains/algorand.js";
@@ -20,6 +20,7 @@ import {
 import { esplora } from "./chains/esplora.js";
 import { stellar } from "./chains/stellar.js";
 import { tron } from "./chains/tron.js";
+import { closeAmountsSql, normHash, normHashSql } from "./match.js";
 import { getCryptoSettings } from "./prices.js";
 
 export { type SyncDeps, SyncError };
@@ -128,40 +129,26 @@ export const isSyncing = (walletId?: string) =>
 
 /** True when an imported row in this wallet already covers the synced movement. */
 function coveredByImport(db: Db, walletId: string, s: SyncedTxn): boolean {
-  const near = and(
-    eq(t.walletId, walletId),
-    ne(t.source, "sync"),
-    sql`abs(${t.at} - ${s.at}) <= ${2 * 3_600_000}`,
-  );
-  const byHash =
+  if (
     s.txHash &&
-    db
-      .select({ id: t.id })
-      .from(t)
-      .where(
-        and(
-          eq(t.walletId, walletId),
-          ne(t.source, "sync"),
-          sql`lower(${t.txHash}) = ${s.txHash.toLowerCase()}`,
-        ),
-      )
-      .get();
-  if (byHash) return true;
+    db.get(sql`
+      select 1 from crypto_txns
+       where wallet_id = ${walletId} and source <> 'sync'
+         and ${normHashSql("tx_hash")} = ${normHash(s.txHash)}`)
+  )
+    return true;
   const asset = s.receivedAsset ?? s.sentAsset;
   const amount = s.receivedAmount ?? s.sentAmount;
   if (!asset || !amount) return false;
-  return !!db
-    .select({ id: t.id })
-    .from(t)
-    .where(
-      and(
-        near,
-        s.receivedAmount
-          ? and(eq(t.receivedAsset, asset), eq(t.receivedAmount, amount))
-          : and(eq(t.sentAsset, asset), eq(t.sentAmount, amount)),
-      ),
-    )
-    .get();
+  const [ac, am] = s.receivedAmount
+    ? ["received_asset", "received_amount"]
+    : ["sent_asset", "sent_amount"];
+  return !!db.get(sql`
+    select 1 from crypto_txns
+     where wallet_id = ${walletId} and source <> 'sync'
+       and abs(at - ${s.at}) <= ${2 * 3_600_000}
+       and ${sql.raw(ac)} = ${asset}
+       and ${closeAmountsSql(am, `'${amount.replace(/[^0-9.]/g, "")}'`)}`);
 }
 
 /** Link sends and receives between own wallets that share a transaction hash. */
@@ -169,7 +156,7 @@ export function pairTransfers(db: MunyDb) {
   const rows = db.all<{ a: string; b: string }>(sql`
     select o.id as a, i.id as b
       from crypto_txns o join crypto_txns i
-        on lower(o.tx_hash) = lower(i.tx_hash) and o.wallet_id <> i.wallet_id
+        on ${normHashSql("o.tx_hash")} = ${normHashSql("i.tx_hash")} and o.wallet_id <> i.wallet_id
      where o.tx_hash is not null and o.transfer_pair_id is null and i.transfer_pair_id is null
        and o.type = 'withdrawal' and i.type = 'deposit'
        and o.sent_asset = i.received_asset

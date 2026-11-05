@@ -290,6 +290,7 @@ export interface CryptoReconcile {
   wallets: {
     walletId: string;
     walletName: string;
+    kind: CryptoWalletKind;
     synced: boolean;
     /** More left than arrived: earlier deposits are missing. */
     missing: {
@@ -303,5 +304,15 @@ export interface CryptoReconcile {
     mismatches: { asset: string; onChain: string; computed: string; diff: string }[];
     /** Synced transactions that repeat imported ones. */
     duplicates: number;
+    /** Swap proceeds recorded here that arrived in another wallet. */
+    crossChain: {
+      txnId: string;
+      asset: string;
+      amount: string;
+      at: number;
+      toWalletId: string;
+      toWalletName: string;
+      toTxnId: string;
+    }[];
   }[];
 }

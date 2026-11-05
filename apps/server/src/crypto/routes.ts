@@ -21,6 +21,7 @@ import {
   addOpeningBalance,
   linkTransfer,
   mergeWallets,
+  moveCrossChain,
   reconcileReport,
   removeDuplicates,
 } from "./reconcile.js";
@@ -394,6 +395,23 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
     const res = fix(() => linkTransfer(db, body.walletId, body.txnId));
     log(user.id, "crypto.reconcile_link", body.walletId, { txnId: body.txnId });
     return res;
+  });
+
+  /** Move swap proceeds to the wallet they arrived in (one or many). */
+  app.post("/api/crypto/reconcile/crosschain", async (req) => {
+    const user = requireUser(req);
+    const body = parse(
+      z.object({
+        moves: z
+          .array(z.object({ txnId: z.string().min(1).max(64), toTxnId: z.string().min(1).max(64) }))
+          .min(1)
+          .max(500),
+      }),
+      req.body,
+    );
+    const res = fix(() => body.moves.map((m) => moveCrossChain(db, m.txnId, m.toTxnId)));
+    log(user.id, "crypto.reconcile_crosschain", undefined, { count: res.length });
+    return { moved: res.length };
   });
 
   app.post("/api/crypto/reconcile/opening", async (req) => {

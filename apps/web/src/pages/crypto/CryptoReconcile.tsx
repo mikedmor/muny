@@ -71,7 +71,16 @@ function WalletIssues({ w }: { w: Report["wallets"][number] }) {
       at: m.firstAt,
     }),
   );
-  const error = dedupe.error ?? link.error ?? opening.error;
+  const move = useCryptoMutation((moves: { txnId: string; toTxnId: string }[]) =>
+    api.post("/api/crypto/reconcile/crosschain", { moves }),
+  );
+  const error = dedupe.error ?? link.error ?? opening.error ?? move.error;
+  const why =
+    w.kind === "exchange"
+      ? "Exchanges keep their history off the blockchain, so it can't be synced from there: it needs the exchange's own history (exchange sync is coming), an older import, or an opening balance."
+      : w.synced
+        ? "This wallet syncs its full history from the blockchain, so the gap is usually an imported row that doesn't match the chain (for example a swap recorded in the wrong wallet, see above)."
+        : "This wallet isn't synced: connect its address (🔗 on the Wallets tab) and Muny pulls its whole history from the blockchain. Otherwise add the deposit by hand or an opening balance.";
   return (
     <Card className="space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -102,6 +111,47 @@ function WalletIssues({ w }: { w: Report["wallets"][number] }) {
         </div>
       )}
 
+      {w.crossChain.length > 0 && (
+        <div className="space-y-2 text-sm">
+          <p>
+            <span className="font-medium">Swaps recorded in the wrong wallet.</span> Koinly puts the
+            coin you got from a cross-chain swap (like Exodus&apos;s built-in exchange) in the
+            wallet you swapped from, but it arrived in your wallet on the other chain, where it was
+            synced too. Moving it there counts it once, as a transfer.
+          </p>
+          <ul className="space-y-1">
+            {w.crossChain.map((c) => (
+              <li
+                key={c.txnId}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700"
+              >
+                <span>
+                  {fmtAmount(c.amount, 8)} {c.asset} on {dayLabel(c.at)} arrived in{" "}
+                  <span className="font-medium">{c.toWalletName}</span>
+                </span>
+                <Button
+                  variant="secondary"
+                  disabled={move.isPending}
+                  onClick={() => move.mutate([{ txnId: c.txnId, toTxnId: c.toTxnId }])}
+                >
+                  Move there
+                </Button>
+              </li>
+            ))}
+          </ul>
+          {w.crossChain.length > 1 && (
+            <Button
+              disabled={move.isPending}
+              onClick={() =>
+                move.mutate(w.crossChain.map((c) => ({ txnId: c.txnId, toTxnId: c.toTxnId })))
+              }
+            >
+              Move all {w.crossChain.length}
+            </Button>
+          )}
+        </div>
+      )}
+
       {w.missing.map((m) => (
         <div key={m.asset} className="space-y-2 text-sm">
           <p>
@@ -109,8 +159,7 @@ function WalletIssues({ w }: { w: Report["wallets"][number] }) {
               {fmtAmount(m.deficit, 8)} {m.asset} more left than arrived.
             </span>{" "}
             The balance first goes below zero on {dayLabel(m.firstAt)}, so a deposit before then is
-            missing: usually a transfer from another wallet or exchange, or a purchase from a year
-            you haven&apos;t imported.
+            missing. {why}
           </p>
           {m.suggestions.length > 0 && (
             <ul className="space-y-1">
