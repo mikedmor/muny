@@ -26,7 +26,7 @@ const KIND_LABEL: Record<CryptoWalletKind, string> = {
   manual: "Wallet",
 };
 
-function ImportKoinly({ onDone }: { onDone: () => void }) {
+export function ImportKoinly({ onDone }: { onDone: () => void }) {
   const [content, setContent] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
   const [preview, setPreview] = useState<CryptoImportPreview | null>(null);
@@ -360,7 +360,7 @@ function AddWallet({ onDone }: { onDone: () => void }) {
 }
 
 /** Attach (or replace) the address an existing wallet syncs from, e.g. one imported from Koinly. */
-function ConnectWallet({ w, onDone }: { w: CryptoWallet; onDone: () => void }) {
+export function ConnectWallet({ w, onDone }: { w: CryptoWallet; onDone: () => void }) {
   const known = CRYPTO_SYNC_CHAINS.find((c) => c.key === w.chain)?.key;
   // Unknown: guess from the coins it holds (e.g. an imported "ADA Exodus").
   const held = new Set(w.balances.map((b) => b.asset));
@@ -415,7 +415,7 @@ function ConnectWallet({ w, onDone }: { w: CryptoWallet; onDone: () => void }) {
 }
 
 /** Where the chain's balance differs from the transactions (missing or extra history). */
-function mismatches(w: CryptoWallet): string[] {
+export function mismatches(w: CryptoWallet): string[] {
   if (!w.onChain || w.syncing) return [];
   const mine = new Map(w.balances.map((b) => [b.asset, b.amount]));
   const norm = (x: string | undefined) =>
@@ -425,7 +425,7 @@ function mismatches(w: CryptoWallet): string[] {
     .map((c) => `${fmtAmount(c.amount, 6)} ${c.asset}`);
 }
 
-function SyncChip({ w }: { w: CryptoWallet }) {
+export function SyncChip({ w }: { w: CryptoWallet }) {
   if (w.syncing)
     return (
       <span className="self-center whitespace-nowrap rounded-full bg-brand-50 px-2 py-0.5 text-xs text-brand-700 dark:bg-brand-700/20 dark:text-brand-500">
@@ -499,8 +499,8 @@ function WalletRow({ w, onConnect }: { w: CryptoWallet; onConnect: () => void })
             </form>
           ) : (
             <Link
-              to="/crypto/transactions"
-              search={{ walletId: w.id }}
+              to="/crypto/wallets/$walletId"
+              params={{ walletId: w.id }}
               className="block truncate font-medium hover:underline"
             >
               {w.name}

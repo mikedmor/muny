@@ -195,8 +195,29 @@ export async function syncWallet(
   if (!deps.secretKey) throw new SyncError("MUNY_SECRET_KEY is not set");
   if (syncing.has(walletId)) return { added: 0, duplicates: 0 };
   syncing.add(walletId);
+  const startedAt = Date.now();
+  const record = (
+    status: "ok" | "error",
+    added: number,
+    duplicates: number,
+    message: string | null,
+  ) =>
+    db
+      .insert(schema.cryptoSyncRuns)
+      .values({
+        id: newId(),
+        walletId,
+        startedAt,
+        finishedAt: Date.now(),
+        status,
+        added,
+        duplicates,
+        message,
+      })
+      .run();
   try {
     const { notice, ...res } = await runSync(db, wallet, deps);
+    record("ok", res.added, res.duplicates, notice);
     // A notice (status ok) is shown under the wallet, like an error but calmer.
     db.update(w)
       .set({ status: "ok", lastError: notice, lastSyncAt: new Date() })
@@ -213,6 +234,7 @@ export async function syncWallet(
       .set({ status: "error", lastError: msg, lastSyncAt: new Date() })
       .where(eq(w.id, walletId))
       .run();
+    record("error", 0, 0, msg);
     throw err instanceof SyncError ? err : new SyncError(msg);
   } finally {
     syncing.delete(walletId);

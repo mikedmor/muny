@@ -96,3 +96,70 @@ export function agoTime(ms: number | null) {
   if (m < 48 * 60) return `${Math.round(m / 60)} h ago`;
   return ago(ms);
 }
+
+/** Block explorer page for a transaction (opened only when the user clicks). */
+const EXPLORERS: Record<string, (h: string) => string> = {
+  btc: (h) => `https://mempool.space/tx/${h}`,
+  ltc: (h) => `https://litecoinspace.org/tx/${h}`,
+  doge: (h) => `https://blockchair.com/dogecoin/transaction/${h}`,
+  zec: (h) => `https://blockchair.com/zcash/transaction/${h}`,
+  eth: (h) => `https://etherscan.io/tx/${h}`,
+  base: (h) => `https://basescan.org/tx/${h}`,
+  op: (h) => `https://optimistic.etherscan.io/tx/${h}`,
+  arb: (h) => `https://arbiscan.io/tx/${h}`,
+  polygon: (h) => `https://polygonscan.com/tx/${h}`,
+  gnosis: (h) => `https://gnosisscan.io/tx/${h}`,
+  ada: (h) => `https://cardanoscan.io/transaction/${h}`,
+  algo: (h) => `https://allo.info/tx/${h}`,
+  xlm: (h) => `https://stellar.expert/explorer/public/tx/${h}`,
+  atom: (h) => `https://www.mintscan.io/cosmos/tx/${h}`,
+  trx: (h) => `https://tronscan.org/#/transaction/${h}`,
+};
+const EVM = new Set(["eth", "base", "op", "arb", "polygon", "gnosis"]);
+
+export function explorerTxUrl(
+  chain: string | null | undefined,
+  hash: string | null,
+): string | null {
+  if (!chain || !hash) return null;
+  const f = EXPLORERS[chain];
+  if (!f) return null;
+  const h = EVM.has(chain) && !hash.startsWith("0x") ? `0x${hash}` : hash;
+  return f(h);
+}
+
+export const shortHash = (h: string) => `${h.replace(/^0x/, "").slice(0, 4)}…${h.slice(-4)}`;
+
+/** Native coin → chain, to guess where an imported wallet's transactions live. */
+const COIN_CHAIN: Record<string, string> = {
+  BTC: "btc",
+  LTC: "ltc",
+  DOGE: "doge",
+  ZEC: "zec",
+  ETH: "eth",
+  ADA: "ada",
+  ALGO: "algo",
+  XLM: "xlm",
+  ATOM: "atom",
+  TRX: "trx",
+  POL: "polygon",
+  MATIC: "polygon",
+};
+
+/**
+ * The chain a transaction is on: the wallet's (when synced), else guessed from
+ * a coin in the wallet's name ("ETH Exodus"), else from the fee coin (gas).
+ */
+export function guessChain(
+  chain: string | null | undefined,
+  walletName: string,
+  feeAsset: string | null,
+): string | null {
+  if (chain) return chain;
+  const fromName = walletName
+    .toUpperCase()
+    .split(/[^A-Z0-9]+/)
+    .map((w) => COIN_CHAIN[w])
+    .find(Boolean);
+  return fromName ?? (feeAsset ? (COIN_CHAIN[feeAsset] ?? null) : null);
+}

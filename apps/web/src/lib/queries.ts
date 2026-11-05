@@ -16,10 +16,12 @@ import type {
   CryptoOverview,
   CryptoReconcile,
   CryptoSettings,
+  CryptoSyncRun,
   CryptoTxnPage,
   CryptoTxnQuery,
   CryptoUsage,
   CryptoWallet,
+  CryptoWalletDetail,
   DiyInput,
   DiyProject,
   InfraCost,
@@ -653,6 +655,23 @@ export function useCryptoOverview() {
   useCryptoBusy(!!(q.data?.syncing || q.data?.pricesRefreshing));
   return q;
 }
+/** The wallet page: one wallet with counts; polls while it syncs. */
+export function useCryptoWallet(id: string) {
+  const q = useQuery({
+    queryKey: [...cryptoKeys.wallets, id],
+    queryFn: () => api.get<CryptoWalletDetail>(`/api/crypto/wallets/${id}`),
+    refetchInterval: (query) =>
+      query.state.data?.syncing || query.state.data?.queued ? BUSY_POLL_MS : false,
+  });
+  useCryptoBusy(!!(q.data?.syncing || q.data?.queued));
+  return q;
+}
+export const useCryptoSyncRuns = (id: string, enabled: boolean) =>
+  useQuery({
+    queryKey: [...cryptoKeys.wallets, id, "syncs"],
+    queryFn: () => api.get<CryptoSyncRun[]>(`/api/crypto/wallets/${id}/syncs`),
+    enabled,
+  });
 export const useCryptoReconcile = () =>
   useQuery({
     queryKey: cryptoKeys.reconcile,

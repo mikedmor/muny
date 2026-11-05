@@ -6,7 +6,16 @@ import { Modal, SelectField } from "../../components/forms.js";
 import { Alert, Button, Card, cx, Field } from "../../components/ui.js";
 import { api } from "../../lib/api.js";
 import { useCryptoMutation, useCryptoTxns, useCryptoWallets } from "../../lib/queries.js";
-import { CryptoHeader, fmtAmount, LABELS, labelName, when } from "./common.js";
+import {
+  CryptoHeader,
+  explorerTxUrl,
+  fmtAmount,
+  guessChain,
+  LABELS,
+  labelName,
+  shortHash,
+  when,
+} from "./common.js";
 
 /** Crypto transactions, Koinly-style: grouped by day, sent → received, labels, filters. */
 
@@ -37,41 +46,68 @@ function title(t: CryptoTxn) {
   return t.type === "deposit" ? "Receive" : "Send";
 }
 
+/** One side of a transaction: wallet, coin and amount, or "outside". */
 function Side({
   amount,
   asset,
   wallet,
+  chain,
+  kind,
   sign,
+  value,
 }: {
   amount: string | null;
   asset: string | null;
   wallet?: string | null;
+  chain?: string | null;
+  kind?: string;
   sign: "+" | "-";
+  value?: number | null;
 }) {
+  const out = sign === "-";
   if (!amount || !asset)
     return (
-      <span
-        aria-hidden="true"
-        className="inline-block size-8 rounded-full border border-dashed border-slate-300 dark:border-slate-700"
-      />
+      <span className={cx("flex items-center gap-2 text-xs text-slate-400", out && "justify-end")}>
+        {wallet ? (
+          <>
+            <WalletIcon name={wallet} chain={chain} kind={kind} size="sm" />
+            {wallet}
+          </>
+        ) : (
+          <span className="rounded-full border border-dashed border-slate-300 px-2 py-1 dark:border-slate-700">
+            outside your wallets
+          </span>
+        )}
+      </span>
     );
   return (
-    <span className={cx("flex items-center gap-2", sign === "-" && "flex-row-reverse text-right")}>
+    <span className={cx("flex items-center gap-2", out && "flex-row-reverse text-right")}>
       <CoinIcon asset={asset} size="sm" />
-      <span>
-        {wallet && <span className="block text-xs text-slate-500">{wallet}</span>}
+      <span className="min-w-0">
+        {wallet && <span className="block truncate text-xs text-slate-500">{wallet}</span>}
         <span
           className={cx(
             "font-mono text-sm tabular-nums",
-            sign === "+" ? "text-emerald-700 dark:text-emerald-400" : "",
+            !out ? "text-emerald-700 dark:text-emerald-400" : "",
           )}
         >
-          {sign === "+" ? "+" : "−"} {fmtAmount(amount)}{" "}
+          {out ? "−" : "+"} {fmtAmount(amount)}{" "}
           <span className="font-sans font-medium">{asset}</span>
         </span>
+        {value !== null && value !== undefined && (
+          <span className="block text-xs text-slate-500">≈ {formatMoney(value)}</span>
+        )}
       </span>
     </span>
   );
+}
+
+/** Fee as a share of what was sent, when both are the same coin. */
+function feePct(t: CryptoTxn): string | null {
+  if (!t.feeAmount || !t.sentAmount || t.feeAsset !== t.sentAsset) return null;
+  const pct = (Number(t.feeAmount) / Number(t.sentAmount)) * 100;
+  if (!Number.isFinite(pct) || pct <= 0) return null;
+  return pct < 0.01 ? "< 0.01% fee" : `${pct < 1 ? pct.toFixed(2) : pct.toFixed(1)}% fee`;
 }
 
 function TxnRow({ t }: { t: CryptoTxn }) {
@@ -80,32 +116,70 @@ function TxnRow({ t }: { t: CryptoTxn }) {
     api.patch(`/api/crypto/txns/${t.id}`, { label }),
   );
   const del = useCryptoMutation(() => api.delete(`/api/crypto/txns/${t.id}`));
-  const fromWallet =
-    t.type === "transfer" && t.receivedAmount
-      ? t.transferWalletName
-      : t.sentAmount
-        ? t.walletName
-        : null;
-  const toWallet =
-    t.type === "transfer" && t.sentAmount
-      ? t.transferWalletName
+  const me = { wallet: t.walletName, chain: t.walletChain, kind: t.walletKind };
+  const other = t.transfer
+    ? { wallet: t.transfer.walletName, chain: t.transfer.walletChain, kind: t.transfer.walletKind }
+    : null;
+  // A fee-only row (a failed call, a token approval, a staking action).
+  const feeOnly = !t.sentAmount && !t.receivedAmount && !!t.feeAmount;
+  const incoming = !t.sentAmount && !!t.receivedAmount;
+  // Left = where it came from, right = where it went.
+  const left = feeOnly
+    ? { ...me, amount: t.feeAmount, asset: t.feeAsset, value: t.feeValueCents }
+    : t.type === "transfer" && incoming && other
+      ? {
+          ...other,
+          amount: t.transfer?.amount ?? null,
+          asset: t.transfer?.asset ?? null,
+          value: t.valueCents,
+        }
+      : incoming
+        ? { wallet: null, chain: null, kind: undefined, amount: null, asset: null, value: null }
+        : { ...me, amount: t.sentAmount, asset: t.sentAsset, value: t.valueCents };
+  const right = feeOnly
+    ? { wallet: null, chain: null, kind: undefined, amount: null, asset: null, value: null }
+    : t.type === "transfer" && !incoming && other
+      ? {
+          ...other,
+          amount: t.transfer?.amount ?? null,
+          asset: t.transfer?.asset ?? null,
+          value: null,
+        }
       : t.receivedAmount
-        ? t.walletName
-        : null;
+        ? {
+            ...me,
+            amount: t.receivedAmount,
+            asset: t.receivedAsset,
+            value: t.sentAmount ? null : t.valueCents,
+          }
+        : { wallet: null, chain: null, kind: undefined, amount: null, asset: null, value: null };
+  const link = explorerTxUrl(
+    guessChain(t.walletChain ?? t.transfer?.walletChain, t.walletName, t.feeAsset),
+    t.txHash,
+  );
+  const pct = feePct(t);
+  const heading = feeOnly ? "Fee" : title(t);
   return (
-    <li className="grid grid-cols-1 items-center gap-3 px-4 py-3 md:grid-cols-[12rem_minmax(0,1fr)_auto_minmax(0,1fr)_10rem]">
+    <li className="grid grid-cols-1 items-center gap-3 px-4 py-3 md:grid-cols-[12rem_minmax(0,1fr)_1.5rem_minmax(0,1fr)_11rem]">
       <span className="flex items-center gap-3">
-        <WalletIcon name={t.walletName} />
+        <span className="relative">
+          <WalletIcon name={t.walletName} chain={t.walletChain} kind={t.walletKind} />
+          {other && (
+            <span className="absolute -right-1.5 -bottom-1.5 rounded-full ring-2 ring-white dark:ring-slate-900">
+              <WalletIcon name={other.wallet} chain={other.chain} kind={other.kind} size="sm" />
+            </span>
+          )}
+        </span>
         <span>
-          <span className="block text-sm font-medium">{title(t)}</span>
+          <span className="block text-sm font-medium">{heading}</span>
           <span className="text-xs text-slate-500">
-            {when(t.at)} · {TYPE_LABEL[t.type]}
+            {when(t.at)} · {feeOnly ? "Network fee" : TYPE_LABEL[t.type]}
           </span>
         </span>
       </span>
       <span className="md:justify-self-end">
-        <Side amount={t.sentAmount} asset={t.sentAsset} wallet={fromWallet} sign="-" />
-        {t.feeAmount && (
+        <Side {...left} sign="-" />
+        {!feeOnly && t.feeAmount && (
           <span className="block text-right text-xs text-slate-500">
             fee {fmtAmount(t.feeAmount)} {t.feeAsset}
           </span>
@@ -115,18 +189,40 @@ function TxnRow({ t }: { t: CryptoTxn }) {
         aria-hidden="true"
         className={cx(
           "hidden text-lg md:block",
-          t.receivedAmount ? "text-emerald-600" : "text-red-500",
+          t.type === "transfer" ? "text-brand-600" : incoming ? "text-emerald-600" : "text-red-500",
         )}
       >
-        →
+        {t.type === "transfer" ? "»" : "→"}
       </span>
       <span>
-        <Side amount={t.receivedAmount} asset={t.receivedAsset} wallet={toWallet} sign="+" />
-        {t.valueCents !== null && (
-          <span className="block text-xs text-slate-500">≈ {formatMoney(t.valueCents)}</span>
+        {feeOnly ? (
+          <span className="text-xs text-slate-500">paid to the network</span>
+        ) : (
+          <Side {...right} sign="+" />
         )}
       </span>
-      <span className="flex items-center justify-end gap-1">
+      <span className="flex flex-wrap items-center justify-end gap-1">
+        {t.txHash &&
+          (link ? (
+            <a
+              href={link}
+              target="_blank"
+              rel="noreferrer noopener"
+              title="Open in a block explorer"
+              className="rounded border border-slate-200 px-1.5 py-0.5 font-mono text-xs text-slate-500 hover:border-brand-500 hover:text-brand-600 dark:border-slate-700"
+            >
+              ↗ {shortHash(t.txHash)}
+            </a>
+          ) : (
+            <span className="rounded border border-slate-200 px-1.5 py-0.5 font-mono text-xs text-slate-500 dark:border-slate-700">
+              {shortHash(t.txHash)}
+            </span>
+          ))}
+        {pct && (
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500 dark:bg-slate-800">
+            {pct}
+          </span>
+        )}
         {editing ? (
           <select
             // biome-ignore lint/a11y/noAutofocus: opened by the label button

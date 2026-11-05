@@ -66,9 +66,18 @@ export function Field({
   );
 }
 
-export function Card({ children, className }: { children: ReactNode; className?: string }) {
+export function Card({
+  children,
+  className,
+  id,
+}: {
+  children: ReactNode;
+  className?: string;
+  id?: string;
+}) {
   return (
     <div
+      id={id}
       className={cx(
         "rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900",
         // A padding passed in replaces the default (Tailwind can't tell which class wins otherwise).

@@ -48,6 +48,24 @@ export interface CryptoWallet {
   syncing: boolean;
   /** Waiting its turn in a sync-all run. */
   queued: boolean;
+  createdAt: number;
+  notes: string | null;
+}
+
+/** One sync attempt (the wallet page's history). */
+export interface CryptoSyncRun {
+  id: string;
+  startedAt: number;
+  finishedAt: number;
+  status: "ok" | "error";
+  added: number;
+  duplicates: number;
+  message: string | null;
+}
+
+/** A wallet with its transaction counts by type (the wallet page). */
+export interface CryptoWalletDetail extends CryptoWallet {
+  counts: { total: number } & Record<CryptoTxnType, number>;
 }
 
 export interface CryptoTxn {
@@ -71,6 +89,17 @@ export interface CryptoTxn {
   /** The other side of a transfer between your own wallets. */
   transferPairId: string | null;
   transferWalletName: string | null;
+  walletChain: string | null;
+  walletKind: CryptoWalletKind;
+  /** The other side of a transfer: its wallet and what it sent/received. */
+  transfer: {
+    walletId: string;
+    walletName: string;
+    walletChain: string | null;
+    walletKind: CryptoWalletKind;
+    asset: string | null;
+    amount: string | null;
+  } | null;
 }
 
 export interface CryptoTxnPage {

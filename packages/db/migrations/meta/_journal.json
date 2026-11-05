@@ -85,6 +85,13 @@
       "when": 1793860559341,
       "tag": "0011_crypto",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1793903258378,
+      "tag": "0012_crypto_wallet_page",
+      "breakpoints": true
     }
   ]
 }

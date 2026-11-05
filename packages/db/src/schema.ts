@@ -596,9 +596,30 @@ export const cryptoWallets = sqliteTable("crypto_wallets", {
   lastError: text(),
   /** Provider cursor/checkpoint (not secret). */
   syncCursor: text(),
+  /** The user's own notes about this wallet. */
+  notes: text(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
+
+/** One row per wallet sync attempt (the wallet page's "View history"). */
+export const cryptoSyncRuns = sqliteTable(
+  "crypto_sync_runs",
+  {
+    id: text().primaryKey(),
+    walletId: text()
+      .notNull()
+      .references(() => cryptoWallets.id, { onDelete: "cascade" }),
+    startedAt: integer().notNull(),
+    finishedAt: integer().notNull(),
+    status: text({ enum: ["ok", "error"] }).notNull(),
+    added: integer().notNull().default(0),
+    duplicates: integer().notNull().default(0),
+    /** Error or notice text (safe to show; never addresses or payloads). */
+    message: text(),
+  },
+  (tbl) => [index("crypto_sync_runs_wallet").on(tbl.walletId, tbl.startedAt)],
+);
 
 export const cryptoTxns = sqliteTable(
   "crypto_txns",

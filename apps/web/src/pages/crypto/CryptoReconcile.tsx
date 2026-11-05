@@ -1,6 +1,6 @@
 import type { CryptoReconcile as Report } from "@muny/shared";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SelectField } from "../../components/forms.js";
 import { Alert, Button, Card } from "../../components/ui.js";
 import { api } from "../../lib/api.js";
@@ -86,7 +86,7 @@ function WalletIssues({ w }: { w: Report["wallets"][number] }) {
         ? "This wallet syncs its full history from the blockchain, so the gap is usually an imported row that doesn't match the chain (for example a swap recorded in the wrong wallet, see above)."
         : "This wallet isn't synced: connect its address (🔗 on the Wallets tab) and Muny pulls its whole history from the blockchain. Otherwise add the deposit by hand or an opening balance.";
   return (
-    <Card className="space-y-4">
+    <Card id={`wallet-${w.walletId}`} className="scroll-mt-4 space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="font-semibold">{w.walletName}</h3>
         <Link
@@ -559,6 +559,11 @@ function Unpriced() {
 export function CryptoReconcile() {
   const r = useCryptoReconcile();
   const d = r.data;
+  // Opened from a wallet's Troubleshoot button: bring its card into view once loaded.
+  useEffect(() => {
+    const id = window.location.hash.slice(1);
+    if (d && id) document.getElementById(id)?.scrollIntoView({ block: "start" });
+  }, [d]);
   const clean = d && d.sameAddress.length === 0 && d.wallets.length === 0;
   return (
     <>

@@ -1,0 +1,323 @@
+import { type CryptoTxnType, formatMoney } from "@muny/shared";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { CoinIcon, WalletIcon } from "../../components/coins.js";
+import { Modal } from "../../components/forms.js";
+import { Alert, Button, Card, cx } from "../../components/ui.js";
+import { api } from "../../lib/api.js";
+import {
+  useCryptoMutation,
+  useCryptoSettings,
+  useCryptoSyncRuns,
+  useCryptoWallet,
+} from "../../lib/queries.js";
+import { ConnectWallet, ImportKoinly, mismatches, SyncChip } from "./CryptoWallets.js";
+import { agoTime, CryptoHeader, fmtAmount, when } from "./common.js";
+
+/**
+ * One wallet, Koinly-style: sync and import, sync history, what's in it, links
+ * to its transactions by type, notes, and a way into Reconcile.
+ */
+
+const CHIPS: [CryptoTxnType | undefined, string, string][] = [
+  [undefined, "transaction", "transactions"],
+  ["deposit", "deposit", "deposits"],
+  ["withdrawal", "withdrawal", "withdrawals"],
+  ["trade", "trade", "trades"],
+  ["transfer", "transfer", "transfers"],
+];
+
+function Notes({ id, notes }: { id: string; notes: string | null }) {
+  const [v, setV] = useState(notes ?? "");
+  useEffect(() => setV(notes ?? ""), [notes]);
+  const save = useCryptoMutation((n: string) =>
+    api.patch(`/api/crypto/wallets/${id}`, { notes: n || null }),
+  );
+  return (
+    <label className="block">
+      <span className="sr-only">Notes</span>
+      <textarea
+        value={v}
+        onChange={(e) => setV(e.target.value)}
+        onBlur={() => v !== (notes ?? "") && save.mutate(v)}
+        rows={3}
+        placeholder="Add notes here…"
+        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+      />
+      {save.isPending && <span className="text-xs text-slate-500">Saving…</span>}
+    </label>
+  );
+}
+
+function History({ id }: { id: string }) {
+  const runs = useCryptoSyncRuns(id, true);
+  if (runs.isLoading) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (!runs.data?.length) return <p className="text-sm text-slate-500">No syncs yet.</p>;
+  return (
+    <ul className="max-h-[60vh] divide-y divide-slate-200 overflow-y-auto text-sm dark:divide-slate-700">
+      {runs.data.map((r) => (
+        <li key={r.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2">
+          <span>
+            <span
+              className={cx(
+                "mr-2 rounded-full px-2 py-0.5 text-xs",
+                r.status === "ok"
+                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200"
+                  : "bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-200",
+              )}
+            >
+              {r.status === "ok" ? "Synced" : "Failed"}
+            </span>
+            {when(r.startedAt)}
+          </span>
+          <span className="text-xs text-slate-500">
+            {r.status === "ok"
+              ? `${r.added} new${r.duplicates ? `, ${r.duplicates} already there` : ""} · ${Math.max(1, Math.round((r.finishedAt - r.startedAt) / 1000))}s`
+              : ""}
+          </span>
+          {r.message && <span className="block w-full text-xs text-slate-500">{r.message}</span>}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function CryptoWalletPage() {
+  const { walletId } = useParams({ strict: false }) as { walletId: string };
+  const q = useCryptoWallet(walletId);
+  const settings = useCryptoSettings();
+  const navigate = useNavigate();
+  const [modal, setModal] = useState<"import" | "connect" | "history" | null>(null);
+  const sync = useCryptoMutation(() => api.post(`/api/crypto/wallets/${walletId}/sync`));
+  const hide = useCryptoMutation((hiddenAssets: string[]) =>
+    api.put("/api/crypto/settings", { hiddenAssets }),
+  );
+  const w = q.data;
+  const hidden = settings.data?.hiddenAssets ?? [];
+  const diff = w ? mismatches(w) : [];
+  return (
+    <>
+      <CryptoHeader />
+      {q.isError && <Alert>{q.error.message}</Alert>}
+      {w && (
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center gap-3">
+            <Link
+              to="/crypto/wallets"
+              aria-label="Back to wallets"
+              className="text-2xl text-slate-400 hover:text-slate-600"
+            >
+              ‹
+            </Link>
+            <WalletIcon name={w.name} chain={w.chain} kind={w.kind} />
+            <div>
+              <h2 className="text-xl font-semibold">{w.name}</h2>
+              <p className="text-xs text-slate-500">Added {agoTime(w.createdAt)}</p>
+            </div>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                {w.sourceHint && (
+                  <Button
+                    disabled={w.syncing || w.queued || sync.isPending}
+                    onClick={() => sync.mutate(undefined)}
+                  >
+                    <span
+                      className={cx(
+                        "inline-block",
+                        (w.syncing || sync.isPending) && "animate-spin",
+                      )}
+                    >
+                      ↻
+                    </span>{" "}
+                    Sync now
+                  </Button>
+                )}
+                {!w.sourceHint && w.kind !== "exchange" && (
+                  <Button onClick={() => setModal("connect")}>🔗 Sync from the blockchain</Button>
+                )}
+                <Button variant="secondary" onClick={() => setModal("import")}>
+                  ⤒ Import file
+                </Button>
+                {w.sourceHint && (
+                  <Button variant="secondary" onClick={() => setModal("history")}>
+                    View history
+                  </Button>
+                )}
+                <Button
+                  variant="secondary"
+                  className={
+                    diff.length || w.status === "error" ? "text-amber-700 dark:text-amber-400" : ""
+                  }
+                  onClick={() => navigate({ to: "/crypto/reconcile", hash: `wallet-${w.id}` })}
+                >
+                  ⚠ Troubleshoot
+                </Button>
+              </div>
+
+              <Card className="space-y-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium">
+                    {w.sourceHint
+                      ? w.syncEnabled
+                        ? "Syncs once a day when you open Crypto"
+                        : "Sync turned off"
+                      : w.kind === "exchange"
+                        ? "Exchange: history from imports"
+                        : "Not synced: history from imports and transactions added by hand"}
+                  </span>
+                  <SyncChip w={w} />
+                </div>
+                {w.sourceHint && (
+                  <p className="text-xs text-slate-500">
+                    <span className="font-mono">{w.sourceHint}</span>
+                    {w.lastSyncAt && ` · synced ${agoTime(w.lastSyncAt)}`}
+                    {w.sourceHint && (
+                      <>
+                        {" · "}
+                        <button
+                          type="button"
+                          className="underline"
+                          onClick={() => setModal("connect")}
+                        >
+                          change
+                        </button>
+                      </>
+                    )}
+                  </p>
+                )}
+                {w.lastError && !w.syncing && (
+                  <p
+                    className={cx(
+                      "text-xs",
+                      w.status === "error" ? "text-red-600 dark:text-red-400" : "text-slate-500",
+                    )}
+                  >
+                    {w.lastError}
+                  </p>
+                )}
+                {diff.length > 0 && (
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    The blockchain shows {diff.join(", ")}.{" "}
+                    <Link to="/crypto/reconcile" hash={`wallet-${w.id}`} className="underline">
+                      Find out why
+                    </Link>
+                  </p>
+                )}
+              </Card>
+
+              <div className="flex flex-wrap gap-2">
+                {CHIPS.map(([type, one, many]) => {
+                  const n = type ? w.counts[type] : w.counts.total;
+                  if (type && !n) return null;
+                  return (
+                    <Link
+                      key={many}
+                      to="/crypto/transactions"
+                      search={{ walletId: w.id, ...(type ? { type } : {}) }}
+                      className={cx(
+                        "rounded-md px-2 py-1 text-xs font-medium",
+                        type
+                          ? "bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200"
+                          : "bg-brand-600 text-white hover:bg-brand-700",
+                      )}
+                    >
+                      {n} {n === 1 ? one : many}
+                    </Link>
+                  );
+                })}
+              </div>
+
+              <Notes id={w.id} notes={w.notes} />
+            </div>
+
+            <Card className="p-0">
+              <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+                <h3 className="font-semibold">Holdings</h3>
+                <span className="text-lg font-semibold tabular-nums">
+                  {formatMoney(w.valueCents)}
+                </span>
+              </div>
+              {w.balances.length === 0 ? (
+                <p className="px-4 py-6 text-center text-sm text-slate-500">
+                  Nothing held right now.
+                </p>
+              ) : (
+                <table className="w-full text-sm">
+                  <caption className="sr-only">Coins in {w.name}</caption>
+                  <thead className="text-xs text-slate-500">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-medium">Coin</th>
+                      <th className="px-2 py-2 text-right font-medium">Balance</th>
+                      <th className="px-2 py-2 text-right font-medium">Value (USD)</th>
+                      <th className="w-10" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {w.balances.map((b) => (
+                      <tr key={b.asset}>
+                        <td className="px-4 py-2">
+                          <Link
+                            to="/crypto/transactions"
+                            search={{ walletId: w.id, asset: b.asset }}
+                            className="flex items-center gap-2 hover:underline"
+                          >
+                            <CoinIcon asset={b.asset} size="sm" />
+                            <span className="font-medium">{b.asset}</span>
+                          </Link>
+                        </td>
+                        <td className="px-2 py-2 text-right font-mono tabular-nums">
+                          {fmtAmount(b.amount)}
+                        </td>
+                        <td className="px-2 py-2 text-right tabular-nums">
+                          {b.valueCents !== null ? (
+                            formatMoney(b.valueCents)
+                          ) : (
+                            <span className="text-slate-400">no price</span>
+                          )}
+                        </td>
+                        <td className="pr-3 text-right">
+                          <button
+                            type="button"
+                            title={`Hide ${b.asset} everywhere (e.g. a spam token)`}
+                            aria-label={`Hide ${b.asset}`}
+                            onClick={() => hide.mutate([...hidden, b.asset])}
+                            className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                          >
+                            👁
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {hidden.length > 0 && (
+                <p className="border-t border-slate-200 px-4 py-2 text-xs text-slate-500 dark:border-slate-800">
+                  Hidden coins: {hidden.join(", ")} (show them again under Reconcile).
+                </p>
+              )}
+            </Card>
+          </div>
+        </div>
+      )}
+      <Modal
+        open={modal !== null}
+        onClose={() => setModal(null)}
+        title={
+          modal === "import"
+            ? "Import Koinly history"
+            : modal === "history"
+              ? `Sync history: ${w?.name ?? ""}`
+              : `Sync ${w?.name ?? ""} from the blockchain`
+        }
+      >
+        {modal === "import" && <ImportKoinly onDone={() => setModal(null)} />}
+        {modal === "connect" && w && <ConnectWallet w={w} onDone={() => setModal(null)} />}
+        {modal === "history" && <History id={walletId} />}
+      </Modal>
+    </>
+  );
+}

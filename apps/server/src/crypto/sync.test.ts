@@ -150,6 +150,15 @@ describe("crypto wallet sync", () => {
     const lists = bs.calls.filter((c) => c.url.searchParams.has("startblock"));
     expect(lists.every((c) => c.url.searchParams.get("startblock") === "11")).toBe(true);
 
+    // Each attempt is in the wallet's sync history, newest first.
+    const runs = (await client.get(`/api/crypto/wallets/${w.id}/syncs`)).json<
+      { status: string; added: number }[]
+    >();
+    expect(runs.map((r) => [r.status, r.added])).toEqual([
+      ["ok", 0],
+      ["ok", 3],
+    ]);
+
     // Visiting again the same day doesn't sync again.
     const n = bs.calls.length;
     await client.get("/api/crypto/wallets");

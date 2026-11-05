@@ -66,11 +66,30 @@ describe("crypto", () => {
     expect(ex.txnCount).toBe(4);
 
     const page = (await client.get(`/api/crypto/txns?walletId=${cold.id}`)).json<CryptoTxnPage>();
-    expect(page.items[0]).toMatchObject({ type: "transfer", transferWalletName: "Demo Exchange" });
+    // The receiving side shows both sides of the transfer.
+    expect(page.items[0]).toMatchObject({
+      type: "transfer",
+      transferWalletName: "Demo Exchange",
+      transfer: { walletName: "Demo Exchange", asset: "ETH", amount: "0.3" },
+    });
     const rewards = (await client.get("/api/crypto/txns?label=reward")).json<CryptoTxnPage>();
     expect(rewards.total).toBe(1);
+    // Across all wallets a transfer shows once (from its sending side).
     const eth = (await client.get("/api/crypto/txns?asset=ETH")).json<CryptoTxnPage>();
-    expect(eth.total).toBe(4);
+    expect(eth.total).toBe(3);
+    expect(eth.items.find((x) => x.type === "transfer")).toMatchObject({
+      walletName: "Demo Exchange",
+      transfer: { walletName: "Cold ETH", amount: "0.299" },
+    });
+
+    // The wallet page: counts by type and an (empty) sync history.
+    const d = (await client.get(`/api/crypto/wallets/${ex.id}`)).json<{
+      counts: Record<string, number>;
+    }>();
+    expect(d.counts).toEqual({ total: 4, deposit: 1, withdrawal: 0, trade: 2, transfer: 1 });
+    expect((await client.get(`/api/crypto/wallets/${ex.id}/syncs`)).json()).toEqual([]);
+    await client.patch(`/api/crypto/wallets/${ex.id}`, { notes: "Old exchange account" });
+    expect((await wallets()).find((x) => x.id === ex.id)?.notes).toBe("Old exchange account");
   });
 
   it("adds manual transactions and validates them", async () => {

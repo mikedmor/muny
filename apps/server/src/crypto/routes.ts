@@ -39,6 +39,8 @@ import {
   listTxns,
   listWallets,
   previewKoinly,
+  syncHistory,
+  walletDetail,
 } from "./service.js";
 import {
   isSyncing,
@@ -124,6 +126,18 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
   });
 
   // --- Wallets ---------------------------------------------------------------
+
+  app.get("/api/crypto/wallets/:id", async (req) => {
+    const { id } = parse(IdParams, req.params);
+    const d = walletDetail(db, id);
+    if (!d) throw notFound("Wallet not found");
+    return d;
+  });
+
+  app.get("/api/crypto/wallets/:id/syncs", async (req) => {
+    const { id } = parse(IdParams, req.params);
+    return syncHistory(db, id);
+  });
 
   app.get("/api/crypto/wallets", async () => {
     daily();
@@ -223,6 +237,7 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
       z.object({
         name: z.string().trim().min(1).max(80).optional(),
         syncEnabled: z.boolean().optional(),
+        notes: z.string().max(5000).nullable().optional(),
       }),
       req.body,
     );

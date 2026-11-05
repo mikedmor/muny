@@ -19,6 +19,7 @@ import type {
   CryptoTxn,
   CryptoTxnPage,
   CryptoTxnQuery,
+  CryptoTxnType,
   CryptoWallet,
   CryptoWalletKind,
 } from "@muny/shared";
@@ -130,6 +131,8 @@ export function listWallets(db: Db): CryptoWallet[] {
         onChain: r.sourceEnc ? (readCursor(r.syncCursor)?.balances ?? null) : null,
         syncing: isSyncing(r.id),
         queued: isQueued(r.id),
+        createdAt: r.createdAt.getTime(),
+        notes: r.notes,
       };
     });
 }
@@ -149,8 +152,31 @@ export function createWallet(
 // Transactions
 // ---------------------------------------------------------------------------
 
-export function toTxn(r: Row, walletName: string, pairWallet: string | null): CryptoTxn {
+type WalletInfo = { name: string; chain: string | null; kind: CryptoWalletKind };
+
+export function toTxn(
+  r: Row,
+  walletName: string,
+  pairWallet: string | null,
+  extra?: {
+    wallet?: WalletInfo;
+    pair?: { row: Row; wallet: WalletInfo } | null;
+  },
+): CryptoTxn {
+  const p = extra?.pair;
   return {
+    walletChain: extra?.wallet?.chain ?? null,
+    walletKind: extra?.wallet?.kind ?? "manual",
+    transfer: p
+      ? {
+          walletId: p.row.walletId,
+          walletName: p.wallet.name,
+          walletChain: p.wallet.chain,
+          walletKind: p.wallet.kind,
+          asset: p.row.receivedAsset ?? p.row.sentAsset,
+          amount: p.row.receivedAmount ?? p.row.sentAmount,
+        }
+      : null,
     id: r.id,
     walletId: r.walletId,
     walletName,
@@ -182,6 +208,11 @@ export function listTxns(db: Db, q: CryptoTxnQuery): CryptoTxnPage {
     conds.push(or(eq(t.sentAsset, q.asset), eq(t.receivedAsset, q.asset), eq(t.feeAsset, q.asset)));
   if (q.from) conds.push(gte(t.at, Date.parse(`${q.from}T00:00:00Z`)));
   if (q.to) conds.push(lte(t.at, Date.parse(`${q.to}T23:59:59.999Z`)));
+  // Across all wallets a transfer shows once (from its sending side), as Koinly does.
+  if (!q.walletId)
+    conds.push(
+      sql`not (${t.type} = 'transfer' and ${t.transferPairId} is not null and ${t.sentAsset} is null)`,
+    );
   const where = and(...conds);
   const total = db.select({ n: sql<number>`count(*)` }).from(t).where(where).get()?.n ?? 0;
   const limit = Math.min(q.limit ?? 50, 500);
@@ -194,32 +225,33 @@ export function listTxns(db: Db, q: CryptoTxnQuery): CryptoTxnPage {
     .limit(limit)
     .offset(offset)
     .all();
-  const names = new Map(
+  const wallets = new Map(
     db
-      .select({ id: w.id, name: w.name })
+      .select({ id: w.id, name: w.name, chain: w.chain, kind: w.kind })
       .from(w)
       .all()
-      .map((x) => [x.id, x.name]),
+      .map((x) => [x.id, x]),
   );
   const pairIds = rows.map((r) => r.transferPairId).filter((x): x is string => !!x);
-  const pairWallet = new Map(
+  const pairs = new Map(
     pairIds.length
       ? db
-          .select({ id: t.id, walletId: t.walletId })
+          .select()
           .from(t)
           .where(inArray(t.id, pairIds))
           .all()
-          .map((p) => [p.id, names.get(p.walletId) ?? null])
+          .map((p) => [p.id, p])
       : [],
   );
   return {
-    items: rows.map((r) =>
-      toTxn(
-        r,
-        names.get(r.walletId) ?? "",
-        r.transferPairId ? (pairWallet.get(r.transferPairId) ?? null) : null,
-      ),
-    ),
+    items: rows.map((r) => {
+      const pr = r.transferPairId ? pairs.get(r.transferPairId) : undefined;
+      const pw = pr ? wallets.get(pr.walletId) : undefined;
+      return toTxn(r, wallets.get(r.walletId)?.name ?? "", pw?.name ?? null, {
+        wallet: wallets.get(r.walletId),
+        pair: pr && pw ? { row: pr, wallet: pw } : null,
+      });
+    }),
     total: Number(total),
     offset,
     limit,
@@ -700,4 +732,38 @@ export function cryptoOverview(
     walletCount: names.size,
     txnCount: Number(db.select({ n: sql<number>`count(*)` }).from(t).get()?.n ?? 0),
   };
+}
+
+/** A wallet with its transaction counts by type. */
+export function walletDetail(db: Db, id: string): import("@muny/shared").CryptoWalletDetail | null {
+  const wallet = listWallets(db).find((x) => x.id === id);
+  if (!wallet) return null;
+  const counts = { total: 0, deposit: 0, withdrawal: 0, trade: 0, transfer: 0 };
+  for (const r of db.all<{ type: CryptoTxnType; n: number }>(
+    sql`select type, count(*) as n from crypto_txns where wallet_id = ${id} group by type`,
+  )) {
+    counts[r.type] = Number(r.n);
+    counts.total += Number(r.n);
+  }
+  return { ...wallet, counts };
+}
+
+/** The wallet's sync attempts, newest first. */
+export function syncHistory(db: Db, walletId: string): import("@muny/shared").CryptoSyncRun[] {
+  return db
+    .select()
+    .from(schema.cryptoSyncRuns)
+    .where(eq(schema.cryptoSyncRuns.walletId, walletId))
+    .orderBy(desc(schema.cryptoSyncRuns.startedAt))
+    .limit(100)
+    .all()
+    .map((r) => ({
+      id: r.id,
+      startedAt: r.startedAt,
+      finishedAt: r.finishedAt,
+      status: r.status,
+      added: r.added,
+      duplicates: r.duplicates,
+      message: r.message,
+    }));
 }
