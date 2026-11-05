@@ -142,7 +142,12 @@ describe("recurring", () => {
     const acc = (await client.get("/api/accounts")).json<Account[]>()[0] as Account;
     const history: [string, string, string][] = [];
     for (let i = 5; i >= 1; i--)
-      history.push([addInterval(today, "monthly", -i), "MORTGAGE BANK MTG", "-2740.90"]);
+      // The payment went up (escrow) a month ago: more than 10% above the older ones.
+      history.push([
+        addInterval(today, "monthly", -i),
+        "MORTGAGE BANK MTG",
+        i === 1 ? "-2740.90" : "-2456.19",
+      ]);
     await client.post("/api/import/commit", {
       filename: "history.csv",
       content: csv(history),

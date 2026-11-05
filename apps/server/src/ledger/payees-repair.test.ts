@@ -8,7 +8,7 @@ import { repairRawAchPayees } from "./payees.js";
 // Synthetic data only.
 
 describe("repairRawAchPayees", () => {
-  it("renames merchants saved as raw ACH text, keeping user edits", async () => {
+  it("renames merchants saved as raw ACH text, even on edited transactions", async () => {
     const { client, db } = await makeSignedInApp();
     const acc = (
       await client.post("/api/accounts", { name: "Checking", type: "checking" })
@@ -33,13 +33,17 @@ describe("repairRawAchPayees", () => {
       .where(eq(schema.transactions.id, first?.id ?? ""))
       .run();
 
-    expect(repairRawAchPayees(db)).toBe(1);
+    expect(repairRawAchPayees(db)).toBe(2);
     const items = (await client.get("/api/transactions?limit=10")).json<TransactionPage>().items;
-    expect(items.map((t) => t.payeeName).sort()).toEqual([
-      "Lender",
-      "Orig Co Name:lender Co Entry Descr:web Pay Sec:web Ind",
-    ]);
-    // Still in use by the edited transaction, so it stays; a second run changes nothing.
+    expect(items.map((t) => t.payeeName)).toEqual(["Lender", "Lender"]);
+    expect(
+      db
+        .select()
+        .from(schema.payees)
+        .all()
+        .some((p) => p.id === bad),
+    ).toBe(false);
+    // A second run changes nothing.
     expect(repairRawAchPayees(db)).toBe(0);
   });
 });

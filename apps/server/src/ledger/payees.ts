@@ -38,8 +38,8 @@ function planCleanup(db: MunyDb) {
 /**
  * Earlier versions saved raw ACH text ("Orig Co Name:lender Co Entry Descr:...")
  * as the merchant for synced transactions. Re-derive those names with the
- * current cleanup, skip transactions the user edited, and drop the old
- * merchants once nothing uses them. Idempotent; runs at startup.
+ * current cleanup (even on edited transactions: nobody typed that name), drop the old
+ * merchants. Idempotent; runs at startup.
  */
 export function repairRawAchPayees(db: MunyDb): number {
   return db.transaction((tx) => {
@@ -54,7 +54,7 @@ export function repairRawAchPayees(db: MunyDb): number {
     const rows = tx
       .select({ id: t.id, raw: t.rawDescription })
       .from(t)
-      .where(and(inArray(t.payeeId, bad), eq(t.userModified, false)))
+      .where(inArray(t.payeeId, bad))
       .all();
     for (const r of rows) {
       const name = cleanPayeeName(r.raw);

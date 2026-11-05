@@ -253,7 +253,8 @@ export function rescanRecurring(tx: Tx, today = localToday()): RecurringScanResu
         return (
           r.accountId === e.accountId &&
           dayNum(r.postedDate) - dayNum(e.lastDate) >= minGap &&
-          near(Math.abs(r.amountCents), e.anchorCents, 0.1) &&
+          (near(Math.abs(r.amountCents), e.anchorCents, 0.1) ||
+            near(Math.abs(r.amountCents), Math.abs(e.lastAmountCents), 0.1)) &&
           [...keyWords(key)].some((w) => words.has(w))
         );
       })
