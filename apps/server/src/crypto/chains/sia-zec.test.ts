@@ -114,8 +114,7 @@ describe("a Sia wallet with many addresses", () => {
       if (u.pathname.endsWith("/balance")) balanceCalls.push(u.pathname.split("/")[2] as string);
       return siascan(url, init);
     }) as unknown as typeof fetch;
-    const { w, settle } = await wallet(counting, "sc", many.join("
-"));
+    const { w, settle } = await wallet(counting, "sc", many.join("\n"));
     const done = await settle();
     expect(done).toMatchObject({ status: "ok", sourceHint: "100 addresses" });
     expect(done.onChain).toEqual([{ asset: "SC", amount: "7.9" }]);
