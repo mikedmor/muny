@@ -19,6 +19,7 @@ import { listSeries, merchantKey, upcoming } from "../recurring/service.js";
 import {
   addMonths,
   categoryMeta,
+  dailyCategoryTotals,
   monthEnd,
   monthlyCategoryTotals,
   monthsBetween,
@@ -229,6 +230,28 @@ export function netWorthDates(months: number, today = localToday()): string[] {
 // Overview
 // ---------------------------------------------------------------------------
 
+/**
+ * Running spending total for each day from `from` to `to` (inclusive), using
+ * the same rules as spendingReport (expense categories + uncategorized, refunds
+ * reduce it, transfers and hidden items left out).
+ */
+export function cumulativeDailySpending(db: Db, from: string, to: string): number[] {
+  const cats = categoryMeta(db);
+  const perDay = new Map<string, number>();
+  for (const t of dailyCategoryTotals(db, from, to)) {
+    if (t.categoryId === TRANSFER_KEY) continue;
+    if (t.categoryId && cats.get(t.categoryId)?.kind !== "expense") continue;
+    perDay.set(t.month, (perDay.get(t.month) ?? 0) - t.cents);
+  }
+  const out: number[] = [];
+  let run = 0;
+  for (let d = from; d <= to && out.length < 400; d = addDays(d, 1)) {
+    run += perDay.get(d) ?? 0;
+    out.push(run);
+  }
+  return out;
+}
+
 export function overview(db: Db, today = localToday()): Overview {
   const month = today.slice(0, 7);
   const lastMonth = addMonths(month, -1);
@@ -278,6 +301,9 @@ export function overview(db: Db, today = localToday()): Overview {
       monthToDateCents: mtd.totalCents,
       lastMonthSameDayCents: lastSpan.totalCents,
       lastMonthTotalCents: lastFull.totalCents,
+      thisMonthDaily: cumulativeDailySpending(db, `${month}-01`, today),
+      lastMonthDaily: cumulativeDailySpending(db, `${lastMonth}-01`, lastMonthEnd),
+      daysInMonth: Number(monthEnd(month).slice(8)),
     },
     incomeMonthToDateCents: monthly?.incomeCents ?? 0,
     budget: anyBudget

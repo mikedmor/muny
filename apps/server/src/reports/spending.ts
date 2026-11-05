@@ -26,8 +26,26 @@ export function monthlyCategoryTotals(
   fromDate: string,
   toDate: string,
 ): MonthCategoryTotal[] {
+  return categoryTotals(db, fromDate, toDate, 7);
+}
+
+/** Same as monthlyCategoryTotals, but `month` holds the day (YYYY-MM-DD). */
+export function dailyCategoryTotals(
+  db: Db,
+  fromDate: string,
+  toDate: string,
+): MonthCategoryTotal[] {
+  return categoryTotals(db, fromDate, toDate, 10);
+}
+
+function categoryTotals(
+  db: Db,
+  fromDate: string,
+  toDate: string,
+  keyLength: 7 | 10,
+): MonthCategoryTotal[] {
   const rows = db.all<{ m: string; c: string | null; s: number }>(sql`
-    select substr(t.posted_date, 1, 7) as m,
+    select substr(t.posted_date, 1, ${keyLength}) as m,
            case when t.category_id is null and t.transfer_pair_id is not null then ${TRANSFER_KEY}
                 else t.category_id end as c,
            sum(t.amount_cents) as s
@@ -38,7 +56,7 @@ export function monthlyCategoryTotals(
        and not exists (select 1 from transaction_splits x where x.transaction_id = t.id)
      group by m, c
     union all
-    select substr(t.posted_date, 1, 7) as m, sp.category_id as c, sum(sp.amount_cents) as s
+    select substr(t.posted_date, 1, ${keyLength}) as m, sp.category_id as c, sum(sp.amount_cents) as s
       from transaction_splits sp
       join transactions t on t.id = sp.transaction_id
       join accounts a on a.id = t.account_id

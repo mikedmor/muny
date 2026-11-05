@@ -9,7 +9,7 @@ import type {
 import { describe, expect, it } from "vitest";
 import { localToday } from "../lib/dates.js";
 import { makeSignedInApp } from "../test-utils.js";
-import { netWorthDates } from "./service.js";
+import { cumulativeDailySpending, netWorthDates } from "./service.js";
 
 // Synthetic data only.
 
@@ -128,6 +128,23 @@ describe("reports", () => {
     });
     expect(o.netWorth.nowCents).toBe(100000 - 4200);
     expect(o.topCategories[0]).toMatchObject({ name: "Uncategorized", cents: 4200 });
+    const day = Number(today.slice(8));
+    expect(o.spending.thisMonthDaily).toHaveLength(day);
+    expect(o.spending.thisMonthDaily[day - 1]).toBe(4200);
+    expect(o.spending.lastMonthDaily.length).toBeGreaterThanOrEqual(28);
+    expect(o.spending.daysInMonth).toBeGreaterThanOrEqual(day);
+  });
+
+  it("daily spending runs up through the month, skipping income and transfers", async () => {
+    const { db, card, chk, add } = await setup();
+    await add(card.id, "2026-04-02", -6000, "KROGER", "Groceries");
+    await add(card.id, "2026-04-02", -1000, "CAFE", "Coffee");
+    await add(chk.id, "2026-04-03", 300000, "PAYROLL", "Paycheck");
+    await add(card.id, "2026-04-04", 1500, "KROGER REFUND", "Groceries");
+    await add(chk.id, "2026-04-04", -50000, "CARD PAYMENT", "Credit Card Payment");
+    expect(cumulativeDailySpending(db, "2026-04-01", "2026-04-05")).toEqual([
+      0, 7000, 7000, 5500, 5500,
+    ]);
   });
 
   it("builds month-end dates", () => {

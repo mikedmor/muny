@@ -494,6 +494,224 @@ export function LineChart({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Month pace: running total this month vs. last month, by day of month
+// ---------------------------------------------------------------------------
+
+/**
+ * Two cumulative series on one axis: this month (emphasized, area) through
+ * today, last month (de-emphasized, dashed) for the whole month. Legend and
+ * crosshair tooltip name both, so identity never rests on color alone.
+ */
+export function PaceChart({
+  current,
+  previous,
+  days,
+  currentLabel,
+  previousLabel,
+  dayLabel,
+  ariaLabel,
+  height = 180,
+}: {
+  /** Running totals, index 0 = day 1, through today. */
+  current: number[];
+  /** Running totals for the whole comparison month. */
+  previous: number[];
+  /** Days in the current month. */
+  days: number;
+  currentLabel: string;
+  previousLabel: string;
+  /** Tooltip heading for a day number (1-based). */
+  dayLabel: (day: number) => string;
+  ariaLabel: string;
+  height?: number;
+}) {
+  const { ref, width } = useWidth();
+  const [hover, setHover] = useState<number | null>(null);
+  const gradId = useId();
+  const n = Math.max(days, previous.length, current.length, 2);
+  const hi = Math.max(1, ...current, ...previous);
+  const ticks = niceTicks(hi, 0);
+  const top = ticks[ticks.length - 1] ?? hi;
+  const plotW = width - PAD.left - PAD.right;
+  const plotH = height - PAD.top - PAD.bottom;
+  const x = (i: number) => PAD.left + (i / (n - 1)) * plotW;
+  const y = (v: number) => PAD.top + plotH - (Math.max(0, v) / Math.max(1, top)) * plotH;
+  const path = (vals: number[]) => vals.map((v, i) => `${i ? "L" : "M"}${x(i)},${y(v)}`).join(" ");
+  const cur = path(current);
+  const area = current.length ? `${cur} L${x(current.length - 1)},${y(0)} L${x(0)},${y(0)} Z` : "";
+  const lastI = current.length - 1;
+  const dayTicks = [1, 8, 15, 22, n].filter((d, i, a) => d <= n && a.indexOf(d) === i);
+
+  const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const i = Math.round(((e.clientX - rect.left - PAD.left) / Math.max(1, plotW)) * (n - 1));
+    setHover(Math.max(0, Math.min(n - 1, i)));
+  };
+  const hv = hover !== null ? current[hover] : undefined;
+  const hp = hover !== null ? previous[hover] : undefined;
+
+  return (
+    <div>
+      <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600 dark:text-slate-400">
+        <span className="inline-flex items-center gap-1.5">
+          <svg width="18" height="6" aria-hidden="true">
+            <line
+              x1="1"
+              x2="17"
+              y1="3"
+              y2="3"
+              stroke="var(--viz-series-1)"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+          </svg>
+          {currentLabel}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <svg width="18" height="6" aria-hidden="true">
+            <line
+              x1="1"
+              x2="17"
+              y1="3"
+              y2="3"
+              stroke="var(--viz-muted)"
+              strokeWidth="2"
+              strokeDasharray="4 3"
+            />
+          </svg>
+          {previousLabel}
+        </span>
+      </div>
+      <div ref={ref} className="relative w-full min-w-0 select-none overflow-visible">
+        <svg
+          width={width}
+          height={height}
+          role="img"
+          aria-label={ariaLabel}
+          onMouseMove={onMove}
+          onMouseLeave={() => setHover(null)}
+        >
+          <defs>
+            <linearGradient id={gradId} x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="var(--viz-series-1)" stopOpacity={0.18} />
+              <stop offset="100%" stopColor="var(--viz-series-1)" stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          {ticks.map((t) => (
+            <g key={t}>
+              <line
+                x1={PAD.left}
+                x2={width - PAD.right}
+                y1={y(t)}
+                y2={y(t)}
+                stroke={t === 0 ? "var(--viz-axis)" : "var(--viz-grid)"}
+                strokeWidth={1}
+              />
+              <text
+                x={PAD.left - 6}
+                y={y(t)}
+                dy="0.32em"
+                textAnchor="end"
+                fontSize={11}
+                fill="var(--viz-muted)"
+              >
+                {compactMoney(t)}
+              </text>
+            </g>
+          ))}
+          {dayTicks.map((d) => (
+            <text
+              key={d}
+              x={x(d - 1)}
+              y={height - 6}
+              textAnchor={d === 1 ? "start" : d === n ? "end" : "middle"}
+              fontSize={11}
+              fill="var(--viz-muted)"
+            >
+              {d}
+            </text>
+          ))}
+          <path
+            d={path(previous)}
+            fill="none"
+            stroke="var(--viz-muted)"
+            strokeWidth={2}
+            strokeDasharray="4 3"
+            strokeLinejoin="round"
+          />
+          <path d={area} fill={`url(#${gradId})`} />
+          <path
+            d={cur}
+            fill="none"
+            stroke="var(--viz-series-1)"
+            strokeWidth={2}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+          {lastI >= 0 && hover === null && (
+            <circle
+              cx={x(lastI)}
+              cy={y(current[lastI] ?? 0)}
+              r={4}
+              fill="var(--viz-series-1)"
+              stroke="var(--viz-surface)"
+              strokeWidth={2}
+            />
+          )}
+          {hover !== null && (
+            <g>
+              <line
+                x1={x(hover)}
+                x2={x(hover)}
+                y1={PAD.top}
+                y2={PAD.top + plotH}
+                stroke="var(--viz-axis)"
+                strokeWidth={1}
+              />
+              {hp !== undefined && (
+                <circle
+                  cx={x(hover)}
+                  cy={y(hp)}
+                  r={4}
+                  fill="var(--viz-muted)"
+                  stroke="var(--viz-surface)"
+                  strokeWidth={2}
+                />
+              )}
+              {hv !== undefined && (
+                <circle
+                  cx={x(hover)}
+                  cy={y(hv)}
+                  r={4}
+                  fill="var(--viz-series-1)"
+                  stroke="var(--viz-surface)"
+                  strokeWidth={2}
+                />
+              )}
+            </g>
+          )}
+        </svg>
+        {hover !== null && (
+          <Tooltip x={x(hover)} y={y(Math.max(hv ?? 0, hp ?? 0))} width={width}>
+            <p className="font-medium">{dayLabel(hover + 1)}</p>
+            {hv !== undefined && (
+              <p className="tabular-nums">
+                {currentLabel}: {formatMoney(hv)}
+              </p>
+            )}
+            {hp !== undefined && (
+              <p className="tabular-nums text-slate-500">
+                {previousLabel}: {formatMoney(hp)}
+              </p>
+            )}
+          </Tooltip>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** Collapsible table view for a chart (accessibility + exact numbers). */
 export function TableToggle({
   children,

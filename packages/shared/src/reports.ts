@@ -55,6 +55,11 @@ export interface Overview {
     /** Same span of days last month. */
     lastMonthSameDayCents: number;
     lastMonthTotalCents: number;
+    /** Running total spent, one entry per day from the 1st through today. */
+    thisMonthDaily: number[];
+    /** Running total spent, one entry per day of last month. */
+    lastMonthDaily: number[];
+    daysInMonth: number;
   };
   incomeMonthToDateCents: number;
   budget: { budgetCents: number | null; spentCents: number } | null;
