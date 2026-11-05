@@ -1,6 +1,8 @@
 import type { MunyDb } from "@muny/db";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { requireUser } from "../auth/plugin.js";
+import { audit } from "../lib/audit.js";
 import { localToday } from "../lib/dates.js";
 import { badRequest, notFound, parse } from "../lib/http.js";
 import { categoryActivity } from "./category.js";
@@ -13,12 +15,27 @@ import {
 } from "./service.js";
 import { addMonths } from "./spending.js";
 import { spendingOverview } from "./spending-page.js";
+import { taxYear, taxYearCsv } from "./tax.js";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 const month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Use YYYY-MM");
 
 export function registerReportRoutes(app: FastifyInstance, db: MunyDb) {
   app.get("/api/overview", async () => overview(db));
+
+  /** Tax year summary (and a CSV of every item, for an accountant). */
+  const Year = z.object({ year: z.coerce.number().int().min(1990).max(2100) });
+  app.get("/api/tax/:year", async (req) => taxYear(db, parse(Year, req.params).year));
+  app.get("/api/tax/:year/export.csv", async (req, reply) => {
+    const user = requireUser(req);
+    const { year } = parse(Year, req.params);
+    audit(db, { actorType: "user", actorId: user.id, action: "export.tax_csv", details: { year } });
+    return reply
+      .header("content-type", "text/csv; charset=utf-8")
+      .header("content-disposition", `attachment; filename="muny-tax-${year}.csv"`)
+      .header("cache-control", "no-store")
+      .send(taxYearCsv(taxYear(db, year)));
+  });
 
   /** Spending page: category breakdown, monthly chart, summary, largest purchases. */
   app.get("/api/spending", async (req) => {

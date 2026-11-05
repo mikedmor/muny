@@ -13,6 +13,7 @@ const NAV = [
   { to: "/spending", label: "Spending", icon: "◑" },
   { to: "/budgets", label: "Budgets", icon: "◔" },
   { to: "/reports", label: "Reports", icon: "▤" },
+  { to: "/taxes", label: "Taxes", icon: "🧾" },
   { to: "/accounts", label: "Accounts", icon: "▣" },
   { to: "/savings", label: "Savings", icon: "💰" },
   { to: "/import", label: "Import", icon: "⇪" },

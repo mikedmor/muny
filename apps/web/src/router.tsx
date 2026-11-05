@@ -16,6 +16,7 @@ import { ReportsPage } from "./pages/ReportsPage.js";
 import { SavingsPage } from "./pages/SavingsPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 import { SpendingPage } from "./pages/SpendingPage.js";
+import { TaxesPage } from "./pages/TaxesPage.js";
 import { TransactionsPage } from "./pages/TransactionsPage.js";
 
 /** Root: decides between first-run setup, sign-in, and the app. */
@@ -68,6 +69,7 @@ const routeTree = rootRoute.addChildren([
   page("/savings", SavingsPage),
   page("/budgets", BudgetsPage),
   page("/reports", ReportsPage),
+  page("/taxes", TaxesPage),
   page("/accounts", AccountsPage),
   page("/import", ImportPage),
   page("/settings", SettingsPage),
