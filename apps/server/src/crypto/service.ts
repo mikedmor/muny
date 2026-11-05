@@ -426,7 +426,26 @@ export function importKoinly(
   // Link the two sides of each transfer.
   for (const [a, b] of byTransfer.values()) {
     if (!a || !b) {
-      if (a)
+      if (!a) continue;
+      // The other side's wallet was skipped: link to that side if it's already
+      // in Muny (the full export gives both sides stable ids: …:out / …:in).
+      const mine = tx.select({ ext: t.externalId }).from(t).where(eq(t.id, a)).get();
+      const otherExt = mine?.ext.endsWith(":out")
+        ? mine.ext.replace(/:out$/, ":in")
+        : mine?.ext.endsWith(":in")
+          ? mine.ext.replace(/:in$/, ":out")
+          : null;
+      const other = otherExt
+        ? tx
+            .select({ id: t.id })
+            .from(t)
+            .where(and(eq(t.externalId, otherExt), sql`${t.transferPairId} is null`))
+            .get()
+        : undefined;
+      if (other) {
+        tx.update(t).set({ transferPairId: other.id }).where(eq(t.id, a)).run();
+        tx.update(t).set({ type: "transfer", transferPairId: a }).where(eq(t.id, other.id)).run();
+      } else
         tx.update(t)
           .set({ type: sql`case when ${t.sentAsset} is null then 'deposit' else 'withdrawal' end` })
           .where(eq(t.id, a))

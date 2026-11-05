@@ -144,4 +144,22 @@ describe("Koinly full export", () => {
     ).json<CryptoTxnPage>();
     expect(page.items.map((x) => x.type).sort()).toEqual(["deposit", "deposit"]);
   });
+
+  it("re-importing one wallet re-links its transfers to the other side already in Muny", async () => {
+    const { client } = await makeSignedInApp();
+    await client.post("/api/crypto/import/commit", { format: "koinly", content: CSV });
+    const wallets = (await client.get("/api/crypto/wallets")).json<CryptoWallet[]>();
+    const exodus = wallets.find((x) => x.name === "ETH Exodus") as CryptoWallet;
+    // Re-import only ETH Exodus (replacing its rows); Coinbase is skipped.
+    await client.post("/api/crypto/import/commit", {
+      format: "koinly",
+      content: CSV,
+      replace: true,
+      mapping: { Coinbase: "skip", "ETH Exodus": exodus.id },
+    });
+    const page = (await client.get(`/api/crypto/txns?walletId=${exodus.id}`)).json<CryptoTxnPage>();
+    expect(page.items.find((x) => x.type === "transfer")).toMatchObject({
+      transferWalletName: "Coinbase",
+    });
+  });
 });
