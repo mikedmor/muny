@@ -28,7 +28,7 @@ import {
 export interface CryptoTxnSearch {
   /** One wallet id, or several separated by commas. */
   walletId?: string;
-  warnings?: "missing";
+  warnings?: "missing" | "duplicates";
   asset?: string;
   type?: CryptoTxnType;
   label?: string;
@@ -491,15 +491,20 @@ function Details({
             className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
           />
         </label>
-        {t.source === "manual" && (
+        {t.deletable && (
           <Button
             variant="ghost"
             className="text-red-600"
-            onClick={() => window.confirm("Delete this transaction?") && del.mutate(undefined)}
+            onClick={() =>
+              window.confirm(
+                t.transfer ? "Delete this transfer (both sides)?" : "Delete this transaction?",
+              ) && del.mutate(undefined)
+            }
           >
-            Delete transaction
+            Delete {t.transfer ? "transfer" : "transaction"}
           </Button>
         )}
+        {del.error && <p className="text-xs text-red-600">{del.error.message}</p>}
       </div>
       <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
         {line(s.out, "-", mineIsOut)}
@@ -540,6 +545,52 @@ function Details({
   );
 }
 
+/** "Looks like the same transaction as …": keep one. */
+function DuplicateWarning({ t }: { t: CryptoTxn }) {
+  const d = t.possibleDuplicate;
+  const del = useCryptoMutation(() => api.delete(`/api/crypto/txns/${t.id}`));
+  const keep = useCryptoMutation(() =>
+    api.post(`/api/crypto/txns/${t.id}/not-duplicate`, { otherId: d?.id }),
+  );
+  if (!d) return null;
+  const sameDay = new Date(d.at).toDateString() === new Date(t.at).toDateString();
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 pb-2 text-xs text-amber-700 dark:text-amber-400">
+      <span>
+        ⚠ Possibly recorded twice: looks like the {sameDay ? "" : `${dayLabel(d.at)} `}
+        {when(d.at)} transaction in {d.walletName}
+        {d.otherWallet ? ` (with ${d.otherWallet})` : ""}. Keep one.
+      </span>
+      {t.deletable && (
+        <button
+          type="button"
+          disabled={del.isPending}
+          onClick={() =>
+            window.confirm(
+              t.transfer ? "Delete this transfer (both sides)?" : "Delete this transaction?",
+            ) && del.mutate(undefined)
+          }
+          className="text-red-600 hover:underline"
+        >
+          Delete this one
+        </button>
+      )}
+      <span className="text-slate-400">·</span>
+      <button
+        type="button"
+        disabled={keep.isPending}
+        onClick={() => keep.mutate(undefined)}
+        className="text-brand-600 hover:underline"
+      >
+        Not a duplicate
+      </button>
+      {(del.error ?? keep.error) && (
+        <span className="text-red-600">{(del.error ?? keep.error)?.message}</span>
+      )}
+    </div>
+  );
+}
+
 function TxnRow({ t }: { t: CryptoTxn }) {
   const [open, setOpen] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -555,13 +606,20 @@ function TxnRow({ t }: { t: CryptoTxn }) {
     t.sentAmount || t.feeAmount ? t.walletId : (t.transfer?.walletId ?? t.walletId);
   return (
     <li>
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: the Details button does the same from the keyboard */}
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: see above */}
+      {/* biome-ignore lint/a11y/useSemanticElements: the row holds buttons and links, which a <button> cannot */}
       <div
-        className="grid cursor-pointer grid-cols-1 items-center gap-3 px-4 py-3 hover:bg-slate-50 md:grid-cols-[12rem_minmax(0,1fr)_1.5rem_minmax(0,1fr)_11rem] dark:hover:bg-slate-900/40"
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        className="grid cursor-pointer grid-cols-1 items-center gap-3 px-4 py-3 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-brand-500 md:grid-cols-[12rem_minmax(0,1fr)_1.5rem_minmax(0,1fr)_11rem] dark:hover:bg-slate-900/40"
         onClick={(e) => {
           if (!(e.target as HTMLElement).closest("button,a,select,input,textarea,[role=menu]"))
             setOpen((o) => !o);
+        }}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
+          e.preventDefault();
+          setOpen((o) => !o);
         }}
       >
         <span className="flex items-center gap-3">
@@ -652,15 +710,6 @@ function TxnRow({ t }: { t: CryptoTxn }) {
               {s.fee.pct ?? `${fmtAmount(s.fee.amount)} ${s.fee.asset} fee`}
             </span>
           )}
-          <button
-            type="button"
-            aria-expanded={open}
-            aria-label={open ? "Hide details" : "Show details"}
-            onClick={() => setOpen((o) => !o)}
-            className="rounded px-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-          >
-            {open ? "▴" : "▾"}
-          </button>
         </span>
       </div>
       {t.missingHistory.length > 0 && (
@@ -691,6 +740,7 @@ function TxnRow({ t }: { t: CryptoTxn }) {
           </Link>
         </p>
       )}
+      {t.possibleDuplicate && <DuplicateWarning t={t} />}
       {marking && (
         <div className="px-4 pb-3">
           <MarkTransfer t={t} onDone={() => setMarking(false)} />
@@ -1000,11 +1050,14 @@ export function CryptoTransactions() {
         <select
           aria-label="Warnings"
           value={search.warnings ?? ""}
-          onChange={(e) => set({ warnings: (e.target.value || undefined) as "missing" })}
+          onChange={(e) =>
+            set({ warnings: (e.target.value || undefined) as CryptoTxnSearch["warnings"] })
+          }
           className={sel}
         >
           <option value="">All warnings</option>
           <option value="missing">Missing purchase history</option>
+          <option value="duplicates">Possible duplicates</option>
         </select>
         <input
           type="date"

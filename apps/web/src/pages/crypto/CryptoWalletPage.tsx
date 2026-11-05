@@ -88,6 +88,7 @@ export function CryptoWalletPage() {
   const settings = useCryptoSettings();
   const navigate = useNavigate();
   const [modal, setModal] = useState<"import" | "connect" | "history" | null>(null);
+  const [showHidden, setShowHidden] = useState(false);
   const sync = useCryptoMutation(() => api.post(`/api/crypto/wallets/${walletId}/sync`));
   const hide = useCryptoMutation((hiddenAssets: string[]) =>
     api.put("/api/crypto/settings", { hiddenAssets }),
@@ -294,10 +295,39 @@ export function CryptoWalletPage() {
                   </tbody>
                 </table>
               )}
-              {hidden.length > 0 && (
-                <p className="border-t border-slate-200 px-4 py-2 text-xs text-slate-500 dark:border-slate-800">
-                  Hidden coins: {hidden.join(", ")} (show them again under Reconcile).
-                </p>
+              {w.hiddenBalances.length > 0 && (
+                <div className="border-t border-slate-200 px-4 py-2 text-xs text-slate-500 dark:border-slate-800">
+                  <button
+                    type="button"
+                    aria-expanded={showHidden}
+                    onClick={() => setShowHidden((v) => !v)}
+                    className="hover:underline"
+                  >
+                    {w.hiddenBalances.length} hidden{" "}
+                    {w.hiddenBalances.length === 1 ? "coin" : "coins"} ·{" "}
+                    <span className="text-brand-600">{showHidden ? "Hide" : "Show"}</span>
+                  </button>
+                  {showHidden && (
+                    <ul className="mt-2 divide-y divide-slate-100 dark:divide-slate-800">
+                      {w.hiddenBalances.map((b) => (
+                        <li key={b.asset} className="flex items-center gap-2 py-1.5 opacity-70">
+                          <CoinIcon asset={b.asset} size="sm" />
+                          <span className="font-medium">{b.asset}</span>
+                          <span className="ml-auto font-mono tabular-nums">
+                            {fmtAmount(b.amount)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => hide.mutate(hidden.filter((a) => a !== b.asset))}
+                            className="rounded border border-slate-200 px-1.5 py-0.5 hover:border-brand-500 hover:text-brand-600 dark:border-slate-700"
+                          >
+                            Unhide
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               )}
             </Card>
           </div>

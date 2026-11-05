@@ -130,7 +130,19 @@ export function listWallets(db: Db): CryptoWallet[] {
         lastTxnAt: counts.get(r.id)?.last ?? null,
         balances: bal,
         valueCents: bal.reduce((s, b) => s + Math.max(0, b.valueCents ?? 0), 0),
-        onChain: r.sourceEnc ? (readCursor(r.syncCursor)?.balances ?? null) : null,
+        onChain: r.sourceEnc
+          ? (readCursor(r.syncCursor)?.balances.filter((b) => !hidden.has(b.asset)) ?? null)
+          : null,
+        hiddenBalances: (() => {
+          const mine = balances.get(r.id) ?? new Map<string, string>();
+          const chain = r.sourceEnc ? (readCursor(r.syncCursor)?.balances ?? []) : [];
+          return [...hidden]
+            .map((asset) => ({
+              asset,
+              amount: chain.find((b) => b.asset === asset)?.amount ?? mine.get(asset) ?? "0",
+            }))
+            .filter((b) => !isZeroDec(b.amount) && !b.amount.startsWith("-"));
+        })(),
         syncing: isSyncing(r.id),
         queued: isQueued(r.id),
         createdAt: r.createdAt.getTime(),
@@ -200,6 +212,8 @@ export function toTxn(
     description: r.description,
     counterparty: r.counterparty,
     missingHistory: [],
+    possibleDuplicate: null,
+    deletable: r.source !== "sync",
     importedCostBasisCents: r.importedCostBasisCents,
     importedGainCents: r.importedGainCents,
     source: r.source,
@@ -214,6 +228,8 @@ export function listTxns(db: Db, q: CryptoTxnQuery): CryptoTxnPage {
   if (walletIds.length) conds.push(inArray(t.walletId, walletIds));
   const missing = missingHistory(db);
   if (q.warnings === "missing") conds.push(inArray(t.id, [...missing.keys()]));
+  const dupes = possibleDuplicates(db);
+  if (q.warnings === "duplicates") conds.push(inArray(t.id, [...dupes.keys()]));
   if (q.type) conds.push(eq(t.type, q.type));
   if (q.label) conds.push(q.label === "none" ? sql`${t.label} is null` : eq(t.label, q.label));
   if (q.asset)
@@ -290,6 +306,17 @@ export function listTxns(db: Db, q: CryptoTxnQuery): CryptoTxnPage {
           pair: pr && pw ? { row: pr, wallet: pw } : null,
         }),
         missingHistory: missing.get(r.id) ?? (pr ? (missing.get(pr.id) ?? []) : []),
+        possibleDuplicate: (() => {
+          const d = dupes.get(r.id) ?? (pr ? dupes.get(pr.id) : undefined);
+          return d
+            ? {
+                id: d.id,
+                at: d.at,
+                walletName: wallets.get(d.walletId)?.name ?? "",
+                otherWallet: d.otherWalletId ? (wallets.get(d.otherWalletId)?.name ?? null) : null,
+              }
+            : null;
+        })(),
       };
     }),
     total: Number(total),
@@ -1030,5 +1057,124 @@ export function unlinkTransfer(db: Db, id: string) {
         .where(eq(t.id, x))
         .run();
     return { ok: true };
+  });
+}
+
+/** Pairs you said aren't duplicates ("a|b", ids sorted). */
+const NOT_DUPLICATES = "crypto.not_duplicates";
+function notDuplicates(db: Db): Set<string> {
+  const v = db
+    .select()
+    .from(schema.appSettings)
+    .where(eq(schema.appSettings.key, NOT_DUPLICATES))
+    .get()?.value as string[] | undefined;
+  return new Set(v ?? []);
+}
+export function markNotDuplicate(db: Db, a: string, b: string) {
+  const value = [...notDuplicates(db).add([a, b].sort().join("|"))];
+  db.insert(schema.appSettings)
+    .values({ key: NOT_DUPLICATES, value })
+    .onConflictDoUpdate({ target: schema.appSettings.key, set: { value } })
+    .run();
+}
+
+type DupeOf = { id: string; at: number; walletId: string; otherWalletId: string | null };
+
+/**
+ * Rows that look recorded twice: the same coin and the same total (within
+ * 0.1%) leaving, or arriving in, the same wallet within 10 minutes, unless
+ * both have different transaction hashes or both came from the chain.
+ * Exports sometimes hold one transfer twice, once with the fee split out.
+ * Row id → the row it may repeat (and that row's transfer partner wallet).
+ */
+export function possibleDuplicates(db: Db): Map<string, DupeOf> {
+  const rows = db
+    .select({
+      id: t.id,
+      walletId: t.walletId,
+      at: t.at,
+      source: t.source,
+      txHash: t.txHash,
+      sentAsset: t.sentAsset,
+      sentAmount: t.sentAmount,
+      receivedAsset: t.receivedAsset,
+      receivedAmount: t.receivedAmount,
+      feeAsset: t.feeAsset,
+      feeAmount: t.feeAmount,
+      pair: t.transferPairId,
+    })
+    .from(t)
+    .orderBy(t.at)
+    .all();
+  type R = (typeof rows)[number];
+  const walletOf = new Map(rows.map((r) => [r.id, r.walletId]));
+  const groups = new Map<string, { r: R; total: bigint }[]>();
+  for (const r of rows) {
+    const out = !!r.sentAsset && !r.receivedAsset;
+    const inn = !!r.receivedAsset && !r.sentAsset;
+    if (!out && !inn) continue;
+    const asset = (out ? r.sentAsset : r.receivedAsset) as string;
+    if (FIAT.has(asset)) continue;
+    let total = toFixed((out ? r.sentAmount : r.receivedAmount) ?? "0");
+    if (out && r.feeAsset === asset && r.feeAmount) total += toFixed(r.feeAmount);
+    if (total <= 0n) continue;
+    const k = `${r.walletId}|${out ? "out" : "in"}|${asset}`;
+    const list = groups.get(k) ?? [];
+    list.push({ r, total });
+    groups.set(k, list);
+  }
+  const dismissed = notDuplicates(db);
+  const found = new Map<string, DupeOf>();
+  const WINDOW = 10 * 60_000;
+  const note = (x: R, y: R) => {
+    if (!found.has(x.id))
+      found.set(x.id, {
+        id: y.id,
+        at: y.at,
+        walletId: y.walletId,
+        otherWalletId: y.pair ? (walletOf.get(y.pair) ?? null) : null,
+      });
+  };
+  for (const list of groups.values())
+    for (let i = 0; i < list.length; i++)
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i] as { r: R; total: bigint };
+        const b = list[j] as { r: R; total: bigint };
+        if (b.r.at - a.r.at > WINDOW) break;
+        if (a.r.source === "sync" && b.r.source === "sync") continue;
+        if (a.r.txHash && b.r.txHash && normHash(a.r.txHash) !== normHash(b.r.txHash)) continue;
+        const big = a.total > b.total ? a.total : b.total;
+        const diff = a.total > b.total ? a.total - b.total : b.total - a.total;
+        if (diff * 1000n > big) continue;
+        if (dismissed.has([a.r.id, b.r.id].sort().join("|"))) continue;
+        note(a.r, b.r);
+        note(b.r, a.r);
+      }
+  return found;
+}
+
+/**
+ * Delete an imported or hand-added row (a synced one would come back). A
+ * transfer goes with its other side when that side isn't synced; otherwise
+ * the other side becomes a plain deposit or withdrawal.
+ */
+export function deleteTxn(db: Db, id: string) {
+  return db.transaction((tx) => {
+    const r = tx.select().from(t).where(eq(t.id, id)).get();
+    if (!r) throw new Error("Transaction not found");
+    if (r.source === "sync")
+      throw new Error("Synced transactions come back from the blockchain; tag or link it instead");
+    const pair = r.transferPairId
+      ? tx.select().from(t).where(eq(t.id, r.transferPairId)).get()
+      : undefined;
+    const ids = pair && pair.source !== "sync" ? [r.id, pair.id] : [r.id];
+    if (pair && pair.source === "sync")
+      tx.update(t)
+        .set({ transferPairId: null, type: pair.sentAsset ? "withdrawal" : "deposit" })
+        .where(eq(t.id, pair.id))
+        .run();
+    tx.update(t).set({ transferPairId: null }).where(inArray(t.id, ids)).run();
+    tx.delete(t).where(inArray(t.id, ids)).run();
+    return { deleted: ids.length };
   });
 }

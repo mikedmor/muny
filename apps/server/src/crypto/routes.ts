@@ -1,7 +1,7 @@
 import { CHAINS, type ChainKey, normDec } from "@muny/core";
 import { type MunyDb, newId, schema } from "@muny/db";
 import type { CryptoTxnType } from "@muny/shared";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
@@ -36,10 +36,12 @@ import {
 import {
   createWallet,
   cryptoOverview,
+  deleteTxn,
   importKoinly,
   linkAsTransfer,
   listTxns,
   listWallets,
+  markNotDuplicate,
   previewKoinly,
   syncHistory,
   transferMatches,
@@ -271,7 +273,7 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
     const q = parse(
       z.object({
         walletId: z.string().max(4000).optional(),
-        warnings: z.enum(["missing"]).optional(),
+        warnings: z.enum(["missing", "duplicates"]).optional(),
         asset: z.string().max(20).optional(),
         type: z.enum(["deposit", "withdrawal", "trade", "transfer"]).optional(),
         label: z.string().max(30).optional(),
@@ -368,6 +370,16 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
     return { ok: true };
   });
 
+  /** "These two aren't the same transaction": stop flagging them. */
+  app.post("/api/crypto/txns/:id/not-duplicate", async (req) => {
+    const user = requireUser(req);
+    const { id } = parse(IdParams, req.params);
+    const body = parse(z.object({ otherId: z.string().min(1).max(64) }), req.body);
+    markNotDuplicate(db, id, body.otherId);
+    log(user.id, "crypto.txn_not_duplicate", id);
+    return { ok: true };
+  });
+
   /** Possible other sides of a transfer, for "Mark as transfer". */
   app.get("/api/crypto/txns/:id/matches", async (req) => {
     const { id } = parse(IdParams, req.params);
@@ -402,13 +414,14 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
   app.delete("/api/crypto/txns/:id", async (req) => {
     const user = requireUser(req);
     const { id } = parse(IdParams, req.params);
-    const n = db
-      .delete(schema.cryptoTxns)
-      .where(and(eq(schema.cryptoTxns.id, id), eq(schema.cryptoTxns.source, "manual")))
-      .run().changes;
-    if (!n) throw badRequest("Only transactions you added by hand can be deleted");
-    log(user.id, "crypto.txn_delete", id);
-    return { ok: true };
+    let res: { deleted: number };
+    try {
+      res = deleteTxn(db, id);
+    } catch (err) {
+      throw badRequest(err instanceof Error ? err.message : "Couldn't delete it");
+    }
+    log(user.id, "crypto.txn_delete", id, res);
+    return { ok: true, ...res };
   });
 
   // --- Reconcile ---------------------------------------------------------------

@@ -73,7 +73,7 @@ const cryptoTxnSearch = (s: Record<string, unknown>) => {
   if (typeof s.page === "number" && s.page > 0) out.page = Math.floor(s.page);
   return out as {
     walletId?: string;
-    warnings?: "missing";
+    warnings?: "missing" | "duplicates";
     asset?: string;
     type?: "deposit" | "withdrawal" | "trade" | "transfer";
     label?: string;

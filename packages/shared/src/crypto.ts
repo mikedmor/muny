@@ -44,6 +44,8 @@ export interface CryptoWallet {
   valueCents: number;
   /** Balances the blockchain reported at the last sync (null if never synced). */
   onChain: { asset: string; amount: string }[] | null;
+  /** Coins you hid (e.g. spam tokens) that this wallet holds. */
+  hiddenBalances: { asset: string; amount: string }[];
   /** A sync is running right now. */
   syncing: boolean;
   /** Waiting its turn in a sync-all run. */
@@ -110,6 +112,18 @@ export interface CryptoTxn {
    * tax reports need): per coin, how much.
    */
   missingHistory: { asset: string; amount: string }[];
+  /**
+   * Looks like another row recorded twice: the same coin and total leaving
+   * (or arriving in) the same wallet within minutes, with no conflicting hashes.
+   */
+  possibleDuplicate: {
+    id: string;
+    at: number;
+    walletName: string;
+    otherWallet: string | null;
+  } | null;
+  /** Whether it can be deleted (imported or added by hand; synced rows come back). */
+  deletable: boolean;
   /** Imported cost basis / gain (Koinly), when known. */
   importedCostBasisCents: number | null;
   importedGainCents: number | null;
@@ -125,8 +139,8 @@ export interface CryptoTxnPage {
 export interface CryptoTxnQuery {
   /** One wallet id, or several separated by commas. */
   walletId?: string;
-  /** "missing": only transactions with missing purchase history. */
-  warnings?: "missing";
+  /** Only transactions with this warning. */
+  warnings?: "missing" | "duplicates";
   asset?: string;
   type?: CryptoTxnType;
   label?: string;

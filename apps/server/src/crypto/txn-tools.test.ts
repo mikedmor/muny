@@ -85,4 +85,105 @@ describe("transaction tools", () => {
     const res = await client.post("/api/crypto/txns/got/link", { otherId: "buy" });
     expect(res.statusCode).toBe(400);
   });
+
+  it("flags a transfer recorded twice (once with the fee split out), and deletes one", async () => {
+    const { client, db, exodus, trezor, list } = await setup();
+    const row = (id: string, walletId: string, v: Record<string, unknown>) =>
+      db
+        .insert(schema.cryptoTxns)
+        .values({
+          id,
+          walletId,
+          at: T,
+          externalId: `koinly:${id}`,
+          source: "import",
+          type: "transfer",
+          ...v,
+        })
+        .run();
+    const pair = async (a: string, b: string) => {
+      await client.post(`/api/crypto/txns/${b}/link`, { otherId: a });
+    };
+    // The same send, 5 minutes apart: 265.5535684 once, 246 + 19.5535684 fee once.
+    row("x1", exodus.id, {
+      type: "withdrawal",
+      sentAsset: "XLM",
+      sentAmount: "265.5535684",
+      at: T + 3_600_000,
+    });
+    row("x1in", trezor.id, {
+      type: "deposit",
+      receivedAsset: "XLM",
+      receivedAmount: "265.5535684",
+      at: T + 3_600_000,
+    });
+    row("x2", exodus.id, {
+      type: "withdrawal",
+      sentAsset: "XLM",
+      sentAmount: "246",
+      feeAsset: "XLM",
+      feeAmount: "19.5535684",
+      at: T + 3_900_000,
+    });
+    row("x2in", trezor.id, {
+      type: "deposit",
+      receivedAsset: "XLM",
+      receivedAmount: "246",
+      at: T + 3_900_000,
+    });
+    await pair("x1", "x1in");
+    await pair("x2", "x2in");
+
+    const flagged = await list("warnings=duplicates");
+    expect(flagged.items.map((x) => x.id).sort()).toEqual(["x1", "x2"]);
+    expect(flagged.items.find((x) => x.id === "x2")?.possibleDuplicate).toMatchObject({
+      id: "x1",
+      walletName: "Exodus XLM",
+      otherWallet: "Trezor XLM",
+    });
+
+    // Deleting a transfer takes both sides.
+    expect((await client.delete("/api/crypto/txns/x1")).json()).toMatchObject({ deleted: 2 });
+    const left = (await list("")).items.map((x) => x.id);
+    expect(left).not.toContain("x1");
+    expect(left).toContain("x2");
+    expect((await list("warnings=duplicates")).total).toBe(0);
+  });
+
+  it("stops flagging a pair you say isn't a duplicate", async () => {
+    const { client, db, exodus, list } = await setup();
+    for (const id of ["m1", "m2"])
+      db.insert(schema.cryptoTxns)
+        .values({
+          id,
+          walletId: exodus.id,
+          at: T + (id === "m1" ? 0 : 60_000) + 7 * 86_400_000,
+          externalId: `koinly:${id}`,
+          source: "import",
+          type: "deposit",
+          receivedAsset: "XLM",
+          receivedAmount: "5",
+        })
+        .run();
+    expect((await list("warnings=duplicates")).total).toBe(2);
+    await client.post("/api/crypto/txns/m1/not-duplicate", { otherId: "m2" });
+    expect((await list("warnings=duplicates")).total).toBe(0);
+  });
+
+  it("won't delete a synced row", async () => {
+    const { client, db, exodus } = await setup();
+    db.insert(schema.cryptoTxns)
+      .values({
+        id: "s1",
+        walletId: exodus.id,
+        at: T,
+        externalId: "xlm:op:1",
+        source: "sync",
+        type: "deposit",
+        receivedAsset: "XLM",
+        receivedAmount: "1",
+      })
+      .run();
+    expect((await client.delete("/api/crypto/txns/s1")).statusCode).toBe(400);
+  });
 });
