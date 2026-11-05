@@ -3,6 +3,7 @@ import { type MunyDb, schema } from "@muny/db";
 import type { CryptoPriceProvider, CryptoSettings } from "@muny/shared";
 import { and, eq, gte, sql } from "drizzle-orm";
 import { decryptJson, encryptJson } from "../lib/crypto.js";
+import { BudgetError, budgeted } from "./budget.js";
 
 /**
  * Crypto prices. Opt-in (off by default). When on, Muny sends only coin ids
@@ -33,6 +34,8 @@ export interface PriceDeps {
 
 interface PriceState {
   updatedAt: number | null;
+  /** Last attempt (success or not), so a failing provider isn't retried on every visit. */
+  attemptedAt?: number | null;
   change24h: Record<string, number>;
   lastError: string | null;
 }
@@ -55,6 +58,7 @@ export function getCryptoSettings(db: MunyDb): CryptoSettings {
     provider: s.provider ?? "defillama",
     hasApiKey: !!getSetting<string>(db, KEY_KEY),
     assetIds: s.assetIds ?? {},
+    servers: s.servers ?? {},
   };
 }
 
@@ -64,6 +68,7 @@ export function saveCryptoSettings(
     pricesEnabled?: boolean;
     provider?: CryptoPriceProvider;
     assetIds?: Record<string, string>;
+    servers?: Record<string, string>;
     apiKey?: string | null;
   },
   secretKey: Buffer | undefined,
@@ -73,6 +78,7 @@ export function saveCryptoSettings(
     pricesEnabled: input.pricesEnabled ?? cur.pricesEnabled,
     provider: input.provider ?? cur.provider,
     assetIds: input.assetIds ?? cur.assetIds,
+    servers: input.servers ?? cur.servers,
   });
   if (input.apiKey !== undefined) {
     if (!input.apiKey)
@@ -126,7 +132,8 @@ async function getJson(
       headers: { accept: "application/json", ...headers },
       signal: AbortSignal.timeout(30_000),
     });
-  } catch {
+  } catch (err) {
+    if (err instanceof BudgetError) throw new PriceError(err.message);
     throw new PriceError(`Couldn't reach ${host}`);
   }
   if (res.status === 429) throw new PriceError(`${host} rate limit hit; try again later`);
@@ -144,6 +151,8 @@ interface Provider {
   current(ids: string[]): Promise<Map<string, { usd: number; change24h: number | null }>>;
   /** Daily closes per coin id from `fromMs` to now. */
   history(id: string, fromMs: number): Promise<{ ms: number; usd: number }[]>;
+  /** Optional: one day's price for many coins in one call (cheap small gaps). */
+  onDay?(ids: string[], dayMs: number): Promise<Map<string, number>>;
 }
 
 function defillama(deps: PriceDeps): Provider {
@@ -191,6 +200,22 @@ function defillama(deps: PriceDeps): Provider {
       }
       return out;
     },
+    async onDay(ids, dayMs) {
+      const out = new Map<string, number>();
+      for (let i = 0; i < ids.length; i += 50) {
+        const keys = ids
+          .slice(i, i + 50)
+          .map((id) => `coingecko:${id}`)
+          .join(",");
+        const data = (await getJson(
+          `${LLAMA}/prices/historical/${Math.floor(dayMs / 1000)}/${encodeURIComponent(keys)}`,
+          deps,
+        )) as { coins?: Record<string, { price?: number }> };
+        for (const [k, v] of Object.entries(data.coins ?? {}))
+          if (typeof v.price === "number") out.set(k.replace(/^coingecko:/, ""), v.price);
+      }
+      return out;
+    },
   };
 }
 
@@ -227,6 +252,9 @@ function coingecko(deps: PriceDeps, key: string | null): Provider {
 }
 
 let running = false;
+export const pricesRefreshing = () => running;
+/** Gaps up to this many days are filled with one call per day for all coins. */
+const SMALL_GAP_DAYS = 3;
 
 /**
  * Fetch today's prices (and 24h change) for every held asset, then fill daily
@@ -240,7 +268,10 @@ export async function refreshPrices(
   if (!settings.pricesEnabled || running) return { assets: 0, days: 0 };
   running = true;
   const state = priceState(db);
+  putSetting(db, STATE_KEY, { ...state, attemptedAt: Date.now() });
   try {
+    // Every call counts against the provider's request budget.
+    deps = { ...deps, fetch: budgeted(db, settings.provider, deps.fetch) };
     let provider: Provider;
     if (settings.provider === "coingecko") {
       let key: string | null = null;
@@ -278,6 +309,8 @@ export async function refreshPrices(
     // History: from the day after the newest stored price (excluding today),
     // or from the asset's first transaction.
     let days = 0;
+    const small = new Map<string, string[]>(); // day → coin ids
+    const todayMs = Date.parse(`${today}T00:00:00Z`);
     for (const [id, a] of assets) {
       const newest = db
         .select({ d: sql<string | null>`max(${schema.cryptoPrices.date})` })
@@ -297,7 +330,12 @@ export async function refreshPrices(
         !oldest || oldest > firstDay
           ? Date.parse(`${firstDay}T00:00:00Z`)
           : Date.parse(`${newest ?? today}T00:00:00Z`) + 86_400_000;
-      if (from >= Date.parse(`${today}T00:00:00Z`)) continue;
+      if (from >= todayMs) continue;
+      if (provider.onDay && todayMs - from <= SMALL_GAP_DAYS * 86_400_000) {
+        for (let d = from; d < todayMs; d += 86_400_000)
+          small.set(day(d), [...(small.get(day(d)) ?? []), id]);
+        continue;
+      }
       await sleep(deps.delayMs);
       for (const p of await provider.history(id, from)) {
         const d = day(p.ms);
@@ -306,11 +344,24 @@ export async function refreshPrices(
         days++;
       }
     }
-    putSetting(db, STATE_KEY, { updatedAt: Date.now(), change24h, lastError: null });
+    for (const [d, ids] of small) {
+      await sleep(deps.delayMs);
+      const got = await provider.onDay?.(ids, Date.parse(`${d}T00:00:00Z`));
+      for (const [id, usd] of got ?? []) {
+        const a = assets.get(id);
+        if (a) {
+          put(a.asset, d, num(usd));
+          days++;
+        }
+      }
+    }
+    const now = Date.now();
+    putSetting(db, STATE_KEY, { updatedAt: now, attemptedAt: now, change24h, lastError: null });
     return { assets: assets.size, days };
   } catch (err) {
     putSetting(db, STATE_KEY, {
       ...state,
+      attemptedAt: Date.now(),
       lastError: err instanceof PriceError ? err.message : "Price update failed",
     });
     throw err;
@@ -326,23 +377,11 @@ export function clearPrices(db: MunyDb, since?: string) {
     .run();
 }
 
-export function startPriceScheduler(
-  db: MunyDb,
-  deps: PriceDeps,
-  log: { warn: (o: object, msg: string) => void },
-) {
-  const tick = () => {
-    const st = priceState(db);
-    if (st.updatedAt && Date.now() - st.updatedAt < 6 * 3_600_000) return;
-    void refreshPrices(db, { ...deps, delayMs: deps.delayMs ?? 1500 }).catch((err) =>
-      log.warn(
-        { err: err instanceof Error ? err.message : "unknown" },
-        "Crypto price update failed",
-      ),
-    );
-  };
-  const first = setTimeout(tick, 60_000);
-  const timer = setInterval(tick, 30 * 60_000);
-  first.unref();
-  timer.unref();
+/** Prices are due once per local day (checked when someone opens crypto pages). */
+export function pricesDue(db: MunyDb, now = new Date()): boolean {
+  if (!getCryptoSettings(db).pricesEnabled || running) return false;
+  const st = priceState(db);
+  const last = st.attemptedAt ?? st.updatedAt;
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return !last || last < start;
 }

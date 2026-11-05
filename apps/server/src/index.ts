@@ -2,7 +2,6 @@ import { openDb } from "@muny/db";
 import { ensureAlertRules, startAlertScheduler } from "./alerts/service.js";
 import { buildApp } from "./app.js";
 import { loadConfig } from "./config.js";
-import { startPriceScheduler } from "./crypto/prices.js";
 import { startBackupScheduler } from "./data/backups.js";
 import { repairRawAchPayees } from "./ledger/payees.js";
 import { seedDefaultCategories } from "./ledger/seed.js";
@@ -41,7 +40,6 @@ async function main() {
   startBackupScheduler(db, config, app.log);
   startSyncScheduler(db, app.syncDeps, app.log);
   startAlertScheduler(db, app.alertDeps, app.log);
-  startPriceScheduler(db, { secretKey: config.secretKey }, app.log);
   if (config.plaid) app.log.info({ env: config.plaid.env }, "Plaid sync enabled");
   if (config.teller) app.log.info({ env: config.teller.env }, "Teller sync enabled");
 }

@@ -85,3 +85,13 @@ export function fmtPrice(usd: string): string {
   const f = frac.slice(0, decimals).padEnd(2, "0");
   return `$${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}.${f}`;
 }
+
+/** "just now", "12 min ago", "3 h ago", then days. */
+export function agoTime(ms: number | null) {
+  if (!ms) return "never";
+  const m = Math.round((Date.now() - ms) / 60_000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m} min ago`;
+  if (m < 48 * 60) return `${Math.round(m / 60)} h ago`;
+  return ago(ms);
+}

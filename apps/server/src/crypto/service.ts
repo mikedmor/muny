@@ -20,6 +20,7 @@ import type {
   CryptoWalletKind,
 } from "@muny/shared";
 import { and, desc, eq, gte, inArray, lte, or, type SQL, sql } from "drizzle-orm";
+import { isSyncing, readCursor } from "./sync.js";
 
 type Tx = Parameters<Parameters<MunyDb["transaction"]>[0]>[0];
 type Db = MunyDb | Tx;
@@ -115,6 +116,8 @@ export function listWallets(db: Db): CryptoWallet[] {
         lastTxnAt: counts.get(r.id)?.last ?? null,
         balances: bal,
         valueCents: bal.reduce((s, b) => s + Math.max(0, b.valueCents ?? 0), 0),
+        onChain: r.sourceEnc ? (readCursor(r.syncCursor)?.balances ?? null) : null,
+        syncing: isSyncing(r.id),
       };
     });
 }
@@ -346,7 +349,7 @@ export function cryptoOverview(
     pricesUpdatedAt: number | null;
     change24h: Record<string, number>;
   },
-): import("@muny/shared").CryptoOverview {
+): Omit<import("@muny/shared").CryptoOverview, "pricesRefreshing" | "syncing" | "walletsSyncedAt"> {
   const balances = balancesByWallet(db);
   const prices = latestPrices(db);
   const names = new Map(

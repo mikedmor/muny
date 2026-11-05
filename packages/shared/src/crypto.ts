@@ -42,6 +42,10 @@ export interface CryptoWallet {
   lastTxnAt: number | null;
   balances: CryptoBalance[];
   valueCents: number;
+  /** Balances the blockchain reported at the last sync (null if never synced). */
+  onChain: { asset: string; amount: string }[] | null;
+  /** A sync is running right now. */
+  syncing: boolean;
 }
 
 export interface CryptoTxn {
@@ -113,6 +117,12 @@ export interface CryptoOverview {
   history: { date: string; valueCents: number }[];
   pricesEnabled: boolean;
   pricesUpdatedAt: number | null;
+  /** A price update is running right now. */
+  pricesRefreshing: boolean;
+  /** A wallet sync is running right now. */
+  syncing: boolean;
+  /** Newest successful wallet sync (null if no wallet syncs). */
+  walletsSyncedAt: number | null;
   walletCount: number;
   txnCount: number;
 }
@@ -145,4 +155,30 @@ export interface CryptoSettings {
   hasApiKey: boolean;
   /** Overrides: asset symbol → CoinGecko id. */
   assetIds: Record<string, string>;
+  /** Blockbook server overrides per chain key (e.g. a self-hosted one). */
+  servers: Record<string, string>;
 }
+
+/** Requests used against a free provider budget. */
+export interface CryptoUsage {
+  provider: string;
+  label: string;
+  today: number;
+  dayLimit: number;
+  month: number;
+  monthLimit: number;
+}
+
+export interface CryptoSyncResult {
+  added: number;
+  duplicates: number;
+}
+
+/** Chains Muny can sync (server validates; see @muny/core CHAINS). */
+export const CRYPTO_SYNC_CHAINS = [
+  { key: "btc", name: "Bitcoin", placeholder: "zpub… / xpub… / bc1…" },
+  { key: "eth", name: "Ethereum (and ERC-20 tokens)", placeholder: "0x…" },
+  { key: "ltc", name: "Litecoin", placeholder: "Ltub… / ltc1… / L…" },
+  { key: "doge", name: "Dogecoin", placeholder: "dgub… / D…" },
+  { key: "zec", name: "Zcash (transparent)", placeholder: "t1… / xpub…" },
+] as const;

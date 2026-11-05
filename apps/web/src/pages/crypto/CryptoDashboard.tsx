@@ -4,8 +4,9 @@ import { Fragment, useMemo, useState } from "react";
 import { Donut, type DonutSlice, LineChart } from "../../components/charts.js";
 import { Alert, Button, Card, cx } from "../../components/ui.js";
 import { MerchantAvatar } from "../../components/visuals.js";
-import { useCryptoOverview } from "../../lib/queries.js";
-import { CryptoHeader, fmtAmount, fmtPrice } from "./common.js";
+import { api } from "../../lib/api.js";
+import { useCryptoMutation, useCryptoOverview } from "../../lib/queries.js";
+import { agoTime, CryptoHeader, fmtAmount, fmtPrice } from "./common.js";
 
 /** Crypto dashboard: total value over time, movers, allocation and holdings (Koinly-style). */
 
@@ -87,6 +88,42 @@ function HoldingRow({ h }: { h: CryptoHolding }) {
   );
 }
 
+/**
+ * Prices and wallets refresh on their own once a day when Crypto is opened;
+ * this button updates prices now (each update is counted against the
+ * provider's free request budget).
+ */
+function RefreshStatus() {
+  const o = useCryptoOverview();
+  const refresh = useCryptoMutation(() => api.post("/api/crypto/prices/refresh"));
+  const d = o.data;
+  if (!d || d.walletCount === 0) return null;
+  const busy = d.pricesRefreshing || refresh.isPending;
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-xs text-slate-500">
+      <span aria-live="polite">
+        {d.syncing
+          ? "Syncing wallets…"
+          : d.walletsSyncedAt
+            ? `Wallets synced ${agoTime(d.walletsSyncedAt)}`
+            : null}
+        {d.pricesEnabled && (
+          <>
+            {(d.syncing || d.walletsSyncedAt) && " · "}
+            {busy ? "Updating prices…" : `Prices ${agoTime(d.pricesUpdatedAt)}`}
+          </>
+        )}
+      </span>
+      {d.pricesEnabled && (
+        <Button variant="secondary" disabled={busy} onClick={() => refresh.mutate(undefined)}>
+          <span className={cx("inline-block", busy && "animate-spin")}>↻</span> Refresh prices
+        </Button>
+      )}
+      {refresh.error && <span className="text-red-600">{refresh.error.message}</span>}
+    </div>
+  );
+}
+
 export function CryptoDashboard() {
   const o = useCryptoOverview();
   const [range, setRange] = useState<(typeof RANGES)[number][0]>("YTD");
@@ -125,13 +162,13 @@ export function CryptoDashboard() {
 
   return (
     <>
-      <CryptoHeader />
+      <CryptoHeader actions={<RefreshStatus />} />
       {o.isError && <Alert>{o.error.message}</Alert>}
       {d && d.walletCount === 0 && (
         <Card className="text-center">
           <p className="font-medium">No crypto yet</p>
           <p className="mt-1 text-sm text-slate-500">
-            Add a wallet or import your Koinly transaction history on the{" "}
+            Add a wallet address to sync from the blockchain, or import your Koinly history, on the{" "}
             <Link to="/crypto/wallets" className="text-brand-600 underline">
               Wallets
             </Link>{" "}
@@ -155,7 +192,7 @@ export function CryptoDashboard() {
               </Link>
             </div>
           )}
-          {(d.missingHistory.length > 0 || d.unpricedAssets.length > 0) && (
+          {(d.missingHistory.length > 0 || (d.pricesEnabled && d.unpricedAssets.length > 0)) && (
             <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
               {d.missingHistory.length > 0 && (
                 <p>

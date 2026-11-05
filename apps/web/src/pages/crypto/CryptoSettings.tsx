@@ -1,3 +1,4 @@
+import { CRYPTO_SYNC_CHAINS } from "@muny/shared";
 import { useState } from "react";
 import { Checkbox } from "../../components/forms.js";
 import { Alert, Button, Card, Field } from "../../components/ui.js";
@@ -28,7 +29,7 @@ export function CryptoSettings() {
             <h2 className="font-semibold">Prices</h2>
             <Checkbox
               label="Get crypto prices"
-              description="Off by default. When on, Muny asks the price provider below for the price of each coin you hold about every 6 hours, and fills in daily price history back to your first transaction. It sends only coin ids like “bitcoin”, never balances, addresses or wallet names."
+              description="Off by default. When on, Muny asks the price provider below for the price of each coin you hold once a day when you open Crypto (or when you press Refresh), and fills in daily price history back to your first transaction. It sends only coin ids like “bitcoin”, never balances, addresses or wallet names."
               checked={d.pricesEnabled}
               onChange={(pricesEnabled) => save.mutate({ pricesEnabled })}
             />
@@ -124,6 +125,58 @@ export function CryptoSettings() {
           )}
 
           <Card className="space-y-3">
+            <h2 className="font-semibold">Wallet sync servers</h2>
+            <p className="text-sm text-slate-500">
+              Synced wallets use Trezor&apos;s free public Blockbook servers, which see the
+              addresses you sync. To keep that private, run your own Blockbook and enter its URL.
+              Leave blank for the default.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {CRYPTO_SYNC_CHAINS.map((c) => (
+                <ServerField
+                  key={c.key}
+                  chain={c.key}
+                  label={c.name}
+                  value={d.servers[c.key] ?? ""}
+                  onSave={(url) => save.mutate({ servers: { ...d.servers, [c.key]: url } })}
+                />
+              ))}
+            </div>
+          </Card>
+
+          <Card className="space-y-3">
+            <h2 className="font-semibold">Request limits</h2>
+            <p className="text-sm text-slate-500">
+              Muny counts every request to these free services and stops before their limits, so
+              refreshing often can&apos;t get you blocked. Prices and wallets refresh on their own
+              at most once a day, only when someone opens Crypto.
+            </p>
+            <ul className="space-y-2 text-sm">
+              {d.usage.map((u) => (
+                <li key={u.provider}>
+                  <span className="flex justify-between gap-3">
+                    <span>{u.label}</span>
+                    <span className="tabular-nums text-slate-500">
+                      {u.today} / {u.dayLimit} today · {u.month} / {u.monthLimit} this month
+                    </span>
+                  </span>
+                  <span
+                    className="mt-1 block h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"
+                    aria-hidden
+                  >
+                    <span
+                      className="block h-full rounded-full bg-brand-600"
+                      style={{
+                        width: `${Math.min(100, (Math.max(u.today / u.dayLimit, u.month / u.monthLimit) || 0) * 100)}%`,
+                      }}
+                    />
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+
+          <Card className="space-y-3">
             <h2 className="font-semibold">Coin mapping</h2>
             <p className="text-sm text-slate-500">
               Muny knows common coins. For anything else (or a symbol that means a different coin),
@@ -177,7 +230,12 @@ export function CryptoSettings() {
                 onClick={() =>
                   save.mutate(
                     { assetIds: { ...d.assetIds, [mapAsset]: mapId } },
-                    { onSuccess: () => (setMapAsset(""), setMapId("")) },
+                    {
+                      onSuccess: () => {
+                        setMapAsset("");
+                        setMapId("");
+                      },
+                    },
                   )
                 }
               >
@@ -189,5 +247,30 @@ export function CryptoSettings() {
         </div>
       )}
     </>
+  );
+}
+
+function ServerField({
+  chain,
+  label,
+  value,
+  onSave,
+}: {
+  chain: string;
+  label: string;
+  value: string;
+  onSave: (url: string) => void;
+}) {
+  const [v, setV] = useState(value);
+  return (
+    <Field
+      label={label}
+      name={`server-${chain}`}
+      placeholder="Default (Trezor)"
+      inputMode="url"
+      value={v}
+      onChange={(e) => setV(e.target.value.trim())}
+      onBlur={() => v !== value && onSave(v)}
+    />
   );
 }

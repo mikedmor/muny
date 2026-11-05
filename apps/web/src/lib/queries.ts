@@ -17,6 +17,7 @@ import type {
   CryptoSettings,
   CryptoTxnPage,
   CryptoTxnQuery,
+  CryptoUsage,
   CryptoWallet,
   DiyInput,
   DiyProject,
@@ -58,6 +59,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import { api } from "./api.js";
 
 export const keys = {
@@ -624,16 +626,40 @@ export const cryptoKeys = {
   settings: ["crypto", "settings"] as const,
 };
 
-export const useCryptoOverview = () =>
-  useQuery({
+/**
+ * While the server is syncing wallets or updating prices (started by a visit
+ * or a button), poll every few seconds; when it finishes, reload all crypto
+ * data once.
+ */
+function useCryptoBusy(busy: boolean) {
+  const qc = useQueryClient();
+  const was = useRef(false);
+  useEffect(() => {
+    if (was.current && !busy) void qc.invalidateQueries({ queryKey: cryptoKeys.all });
+    was.current = busy;
+  }, [busy, qc]);
+}
+const BUSY_POLL_MS = 3000;
+
+export function useCryptoOverview() {
+  const q = useQuery({
     queryKey: cryptoKeys.overview,
     queryFn: () => api.get<CryptoOverview>("/api/crypto/overview"),
+    refetchInterval: (query) =>
+      query.state.data?.syncing || query.state.data?.pricesRefreshing ? BUSY_POLL_MS : false,
   });
-export const useCryptoWallets = () =>
-  useQuery({
+  useCryptoBusy(!!(q.data?.syncing || q.data?.pricesRefreshing));
+  return q;
+}
+export function useCryptoWallets() {
+  const q = useQuery({
     queryKey: cryptoKeys.wallets,
     queryFn: () => api.get<CryptoWallet[]>("/api/crypto/wallets"),
+    refetchInterval: (query) => (query.state.data?.some((w) => w.syncing) ? BUSY_POLL_MS : false),
   });
+  useCryptoBusy(!!q.data?.some((w) => w.syncing));
+  return q;
+}
 export function useCryptoTxns(q: CryptoTxnQuery) {
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== "") p.set(k, String(v));
@@ -647,9 +673,13 @@ export const useCryptoSettings = () =>
   useQuery({
     queryKey: cryptoKeys.settings,
     queryFn: () =>
-      api.get<CryptoSettings & { updatedAt: number | null; lastError: string | null }>(
-        "/api/crypto/settings",
-      ),
+      api.get<
+        CryptoSettings & {
+          updatedAt: number | null;
+          lastError: string | null;
+          usage: CryptoUsage[];
+        }
+      >("/api/crypto/settings"),
   });
 export const useCryptoMutation = <TIn, TOut>(fn: (input: TIn) => Promise<TOut>) =>
   useInvalidatingMutation(fn, [cryptoKeys.all]);

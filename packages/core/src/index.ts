@@ -1,5 +1,7 @@
 export * from "./alternatives/catalog.js";
 export * from "./crypto/assets.js";
+export * from "./crypto/blockbook.js";
+export * from "./crypto/chains.js";
 export * from "./crypto/decimal.js";
 export * from "./crypto/koinly.js";
 export * from "./import/bank-csv.js";

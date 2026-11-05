@@ -1,16 +1,19 @@
-import { normDec } from "@muny/core";
+import { CHAINS, type ChainKey, normDec } from "@muny/core";
 import { type MunyDb, newId, schema } from "@muny/db";
 import type { CryptoTxnType } from "@muny/shared";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, notFound, parse } from "../lib/http.js";
+import { usage } from "./budget.js";
 import {
   getCryptoSettings,
   type PriceDeps,
   priceState,
+  pricesDue,
+  pricesRefreshing,
   refreshPrices,
   saveCryptoSettings,
 } from "./prices.js";
@@ -22,6 +25,15 @@ import {
   listWallets,
   previewKoinly,
 } from "./service.js";
+import {
+  isSyncing,
+  removeWalletSource,
+  SyncError,
+  setWalletSource,
+  syncAll,
+  syncWallet,
+  walletsDue,
+} from "./sync.js";
 
 const IdParams = z.object({ id: z.string().min(1).max(64) });
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -41,6 +53,8 @@ const amount = z
     }
   }, "Enter a positive amount");
 const CSV_MAX = 20 * 1024 * 1024;
+const chainKey = z.enum(Object.keys(CHAINS) as [ChainKey, ...ChainKey[]]);
+const SourceBody = z.object({ chain: chainKey, source: z.string().trim().min(10).max(200) });
 
 export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps: PriceDeps) {
   const log = (userId: string, action: string, entityId?: string, details?: unknown) =>
@@ -53,18 +67,101 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
       details,
     });
 
+  const bg = { ...priceDeps, delayMs: priceDeps.delayMs ?? 1500 };
+  const quiet = (p: Promise<unknown>) => void p.catch(() => {});
+  /**
+   * No timers: when someone opens the crypto pages, refresh what is due today
+   * (prices once per day, each synced wallet once per day) in the background.
+   */
+  const daily = () => {
+    const due = walletsDue(db);
+    if (due.length && !isSyncing())
+      quiet(
+        (async () => {
+          for (const id of due) await syncWallet(db, id, bg).catch(() => {});
+          // After syncing (new coins may need prices); a same-day repeat only fills gaps.
+          if (pricesDue(db)) await refreshPrices(db, bg);
+        })(),
+      );
+    else if (pricesDue(db)) quiet(refreshPrices(db, bg));
+  };
+
   app.get("/api/crypto/overview", async () => {
+    daily();
     const st = priceState(db);
-    return cryptoOverview(db, {
-      pricesEnabled: getCryptoSettings(db).pricesEnabled,
-      pricesUpdatedAt: st.updatedAt,
-      change24h: st.change24h,
-    });
+    const synced = db
+      .select({ at: sql<number | null>`max(${schema.cryptoWallets.lastSyncAt})` })
+      .from(schema.cryptoWallets)
+      .where(eq(schema.cryptoWallets.status, "ok"))
+      .get();
+    return {
+      ...cryptoOverview(db, {
+        pricesEnabled: getCryptoSettings(db).pricesEnabled,
+        pricesUpdatedAt: st.updatedAt,
+        change24h: st.change24h,
+      }),
+      pricesRefreshing: pricesRefreshing(),
+      syncing: isSyncing(),
+      walletsSyncedAt: synced?.at ?? null,
+    };
   });
 
   // --- Wallets ---------------------------------------------------------------
 
-  app.get("/api/crypto/wallets", async () => listWallets(db));
+  app.get("/api/crypto/wallets", async () => {
+    daily();
+    return listWallets(db);
+  });
+
+  const syncErr = (fn: () => void) => {
+    try {
+      fn();
+    } catch (err) {
+      throw badRequest(err instanceof SyncError ? err.message : "Couldn't save the address");
+    }
+  };
+
+  /** Sync this wallet from a public address / xpub (opt-in; stored encrypted). */
+  app.put("/api/crypto/wallets/:id/source", async (req) => {
+    const user = requireUser(req);
+    const { id } = parse(IdParams, req.params);
+    const body = parse(SourceBody, req.body);
+    syncErr(() => setWalletSource(db, id, body, priceDeps.secretKey));
+    log(user.id, "crypto.wallet_source", id, { chain: body.chain });
+    quiet(syncWallet(db, id, bg).then(() => refreshPrices(db, bg)));
+    return listWallets(db).find((x) => x.id === id);
+  });
+
+  app.delete("/api/crypto/wallets/:id/source", async (req) => {
+    const user = requireUser(req);
+    const { id } = parse(IdParams, req.params);
+    removeWalletSource(db, id);
+    log(user.id, "crypto.wallet_source_remove", id);
+    return listWallets(db).find((x) => x.id === id);
+  });
+
+  app.post("/api/crypto/wallets/:id/sync", async (req) => {
+    const user = requireUser(req);
+    const { id } = parse(IdParams, req.params);
+    try {
+      const res = await syncWallet(db, id, priceDeps);
+      log(user.id, "crypto.wallet_sync", id, res);
+      if (res.added) quiet(refreshPrices(db, bg));
+      return res;
+    } catch (err) {
+      throw badRequest(err instanceof SyncError ? err.message : "Sync failed");
+    }
+  });
+
+  /** Sync every wallet (runs in the background; poll the wallets list). */
+  app.post("/api/crypto/sync", async (req, reply) => {
+    const user = requireUser(req);
+    log(user.id, "crypto.sync_all");
+    if (!isSyncing())
+      quiet(syncAll(db, bg).then((r) => (r.added ? refreshPrices(db, bg) : undefined)));
+    reply.code(202);
+    return { started: true };
+  });
 
   app.post("/api/crypto/wallets", async (req, reply) => {
     const user = requireUser(req);
@@ -73,11 +170,30 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
         name: z.string().trim().min(1, "Name the wallet").max(80),
         kind: z.enum(["blockchain", "exchange", "manual"]),
         chain: z.string().trim().max(20).nullable().optional(),
+        /** Optional address / xpub to sync from (needs a chain). */
+        source: z.string().trim().min(10).max(200).optional(),
       }),
       req.body,
     );
-    const id = createWallet(db, body);
-    log(user.id, "crypto.wallet_add", id, { kind: body.kind });
+    let src: z.infer<typeof SourceBody> | null = null;
+    if (body.source) {
+      const c = chainKey.safeParse(body.chain);
+      if (!c.success) throw badRequest("Pick the blockchain for this address");
+      const info = CHAINS[c.data];
+      // Validate before creating anything.
+      if (!info.validate(body.source))
+        throw badRequest(`That doesn't look like a ${info.name} address (${info.accepts})`);
+      if (!priceDeps.secretKey)
+        throw badRequest("Set MUNY_SECRET_KEY first: the address is stored encrypted.");
+      src = { chain: c.data, source: body.source };
+    }
+    const id = createWallet(db, { name: body.name, kind: body.kind, chain: body.chain });
+    if (src) {
+      const source = src;
+      syncErr(() => setWalletSource(db, id, source, priceDeps.secretKey));
+      quiet(syncWallet(db, id, bg).then(() => refreshPrices(db, bg)));
+    }
+    log(user.id, "crypto.wallet_add", id, { kind: body.kind, synced: !!src });
     reply.code(201);
     return listWallets(db).find((x) => x.id === id);
   });
@@ -85,7 +201,13 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
   app.patch("/api/crypto/wallets/:id", async (req) => {
     const user = requireUser(req);
     const { id } = parse(IdParams, req.params);
-    const body = parse(z.object({ name: z.string().trim().min(1).max(80).optional() }), req.body);
+    const body = parse(
+      z.object({
+        name: z.string().trim().min(1).max(80).optional(),
+        syncEnabled: z.boolean().optional(),
+      }),
+      req.body,
+    );
     const n = db
       .update(schema.cryptoWallets)
       .set(body)
@@ -254,7 +376,8 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
 
   // --- Settings & prices --------------------------------------------------------
 
-  app.get("/api/crypto/settings", async () => ({ ...getCryptoSettings(db), ...priceState(db) }));
+  const settingsView = () => ({ ...getCryptoSettings(db), ...priceState(db), usage: usage(db) });
+  app.get("/api/crypto/settings", async () => settingsView());
 
   app.put("/api/crypto/settings", async (req) => {
     const user = requireUser(req);
@@ -272,9 +395,26 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
           )
           .optional(),
         apiKey: z.string().trim().max(200).nullable().optional(),
+        servers: z
+          .partialRecord(
+            chainKey,
+            z
+              .string()
+              .trim()
+              .max(200)
+              .regex(
+                /^(https?:\/\/[^\s/]+(\/\S*)?)?$/,
+                "Enter a URL like https://blockbook.example",
+              ),
+          )
+          .optional(),
       }),
       req.body,
     );
+    if (body.servers)
+      body.servers = Object.fromEntries(
+        Object.entries(body.servers).filter(([, v]) => v),
+      ) as typeof body.servers;
     try {
       saveCryptoSettings(db, body, priceDeps.secretKey);
     } catch (err) {
@@ -284,9 +424,8 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
       pricesEnabled: body.pricesEnabled,
       provider: body.provider,
     });
-    if (body.pricesEnabled || body.provider)
-      void refreshPrices(db, { ...priceDeps, delayMs: priceDeps.delayMs ?? 1500 }).catch(() => {});
-    return { ...getCryptoSettings(db), ...priceState(db) };
+    if (body.pricesEnabled || body.provider) quiet(refreshPrices(db, bg));
+    return settingsView();
   });
 
   app.post("/api/crypto/prices/refresh", async (req) => {
