@@ -5,7 +5,7 @@ import {
   FIAT,
   isZeroDec,
   type ParsedCryptoTxn,
-  parseKoinlyCsv,
+  parseAnyKoinlyCsv,
   subDec,
   valueCents,
 } from "@muny/core";
@@ -22,6 +22,7 @@ import type {
 } from "@muny/shared";
 import { and, desc, eq, gte, inArray, lte, or, type SQL, sql } from "drizzle-orm";
 import { getCryptoSettings } from "./prices.js";
+import { removeDuplicates } from "./reconcile.js";
 import { isQueued, isSyncing, readCursor } from "./sync.js";
 
 /** Assets the user hid (spam tokens): left out of holdings and warnings. */
@@ -246,28 +247,53 @@ function externalId(p: ParsedCryptoTxn) {
   return `koinly:${createHash("sha256").update(JSON.stringify(parts)).digest("hex").slice(0, 32)}`;
 }
 
-function walletByName(db: Db) {
-  return new Map(
-    db
-      .select({ id: w.id, name: w.name })
-      .from(w)
-      .all()
-      .map((r) => [r.name.toLowerCase(), r.id]),
-  );
+/** Wallet name → comparable key: word order, case and "[Pool]" don't matter. */
+const nameKey = (name: string) =>
+  name
+    .toLowerCase()
+    .replace(/\[pool\]/g, "")
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+    .sort()
+    .join(" ");
+
+/** Koinly wallet name → the Muny wallet it most likely is. */
+function suggestWallets(db: Db, names: string[]): Map<string, string | null> {
+  const byKey = new Map<string, string>();
+  for (const x of db.select({ id: w.id, name: w.name }).from(w).all())
+    byKey.set(nameKey(x.name), x.id);
+  return new Map(names.map((n) => [n, byKey.get(nameKey(n)) ?? null]));
+}
+
+export interface KoinlyImportOptions {
+  /** Koinly wallet name → Muny wallet id, or "new" to create one. */
+  mapping?: Record<string, string>;
+  /** Replace Koinly rows already imported into the target wallets. */
+  replace?: boolean;
 }
 
 export function previewKoinly(db: Db, csv: string): CryptoImportPreview {
-  const parsed = parseKoinlyCsv(csv);
-  const existing = walletByName(db);
+  const parsed = parseAnyKoinlyCsv(csv);
+  const suggested = suggestWallets(
+    db,
+    parsed.wallets.map((x) => x.name),
+  );
+  const imported = new Map(
+    db
+      .all<{ id: string; n: number }>(
+        sql`select wallet_id as id, count(*) as n from crypto_txns where source = 'import' group by wallet_id`,
+      )
+      .map((r) => [r.id, Number(r.n)]),
+  );
   let duplicates = 0;
   for (const p of parsed.txns) {
-    const walletId = existing.get(p.wallet.toLowerCase());
+    const walletId = suggested.get(p.wallet);
     if (
       walletId &&
       db
         .select({ id: t.id })
         .from(t)
-        .where(and(eq(t.walletId, walletId), eq(t.externalId, externalId(p))))
+        .where(and(eq(t.walletId, walletId), eq(t.externalId, p.externalId ?? externalId(p))))
         .get()
     )
       duplicates++;
@@ -279,31 +305,86 @@ export function previewKoinly(db: Db, csv: string): CryptoImportPreview {
     txns: parsed.txns.length - duplicates,
     duplicates,
     errors: parsed.errors,
-    wallets: parsed.wallets.map((x) => ({
-      name: x.name,
-      kind: x.kind,
-      exists: existing.has(x.name.toLowerCase()),
-      txns: perWallet.get(x.name) ?? 0,
-    })),
+    wallets: parsed.wallets.map((x) => {
+      const id = suggested.get(x.name) ?? null;
+      return {
+        name: x.name,
+        kind: x.kind,
+        exists: !!id,
+        txns: perWallet.get(x.name) ?? 0,
+        suggestedWalletId: id,
+        alreadyImported: id ? (imported.get(id) ?? 0) : 0,
+      };
+    }),
     from: times.length ? Math.min(...times) : null,
     to: times.length ? Math.max(...times) : null,
+    full: parsed.full,
   };
 }
 
-export function importKoinly(tx: Tx, csv: string): CryptoImportResult {
-  const parsed = parseKoinlyCsv(csv);
-  const ids = walletByName(tx);
+/**
+ * Clear a wallet's earlier Koinly rows (and fixes Reconcile added on top of
+ * them) before a fresh import. Synced rows stay; anything they were linked to
+ * is unlinked and turned back into a plain deposit or withdrawal.
+ */
+function clearImported(tx: Tx, walletIds: string[]) {
+  if (!walletIds.length) return 0;
+  const n = tx
+    .delete(t)
+    .where(
+      and(
+        inArray(t.walletId, walletIds),
+        or(
+          eq(t.source, "import"),
+          and(
+            eq(t.source, "manual"),
+            sql`(${t.description} like 'Added in Reconcile%' or ${t.description} like 'Opening balance (added in Reconcile%')`,
+          ),
+        ),
+      ),
+    )
+    .run().changes;
+  // Rows whose transfer partner just went away (the FK unlinks them).
+  tx.run(sql`
+    update crypto_txns set type = case when sent_asset is null then 'deposit' else 'withdrawal' end
+     where type = 'transfer' and transfer_pair_id is null`);
+  return n;
+}
+
+export function importKoinly(
+  tx: Tx,
+  csv: string,
+  opts: KoinlyImportOptions = {},
+): CryptoImportResult & { replaced: number; duplicatesRemoved: number } {
+  const parsed = parseAnyKoinlyCsv(csv);
+  const suggested = suggestWallets(
+    tx,
+    parsed.wallets.map((x) => x.name),
+  );
+  const ids = new Map<string, string>();
   let walletsCreated = 0;
   for (const x of parsed.wallets) {
-    if (ids.has(x.name.toLowerCase())) continue;
-    ids.set(x.name.toLowerCase(), createWallet(tx, { name: x.name, kind: x.kind }));
+    const chosen = opts.mapping?.[x.name] ?? suggested.get(x.name) ?? "new";
+    if (chosen !== "new" && tx.select({ id: w.id }).from(w).where(eq(w.id, chosen)).get()) {
+      ids.set(x.name, chosen);
+      continue;
+    }
+    // Pool wallets with no match of their own go with their main wallet.
+    const created = createWallet(tx, {
+      name: x.name.replace(/\s*\[pool\]\s*$/i, ""),
+      kind: x.kind,
+    });
+    ids.set(x.name, created);
     walletsCreated++;
   }
+  const targets = [...new Set(ids.values())];
+  const replaced = opts.replace ? clearImported(tx, targets) : 0;
+
   let imported = 0;
   let duplicates = 0;
   const byTransfer = new Map<string, string[]>();
   for (const p of parsed.txns) {
-    const walletId = ids.get(p.wallet.toLowerCase()) as string;
+    const walletId = ids.get(p.wallet) as string;
     const id = newId();
     const res = tx
       .insert(t)
@@ -325,7 +406,7 @@ export function importKoinly(tx: Tx, csv: string): CryptoImportResult {
         importedGainCents: p.importedGainCents,
         txHash: p.txHash,
         description: p.description,
-        externalId: externalId(p),
+        externalId: p.externalId ?? externalId(p),
         source: "import",
       })
       .onConflictDoNothing({ target: [t.walletId, t.externalId] })
@@ -344,7 +425,20 @@ export function importKoinly(tx: Tx, csv: string): CryptoImportResult {
     tx.update(t).set({ transferPairId: b }).where(eq(t.id, a)).run();
     tx.update(t).set({ transferPairId: a }).where(eq(t.id, b)).run();
   }
-  return { imported, duplicates, walletsCreated, errors: parsed.errors };
+  // Synced rows that repeat what was just imported go (imports keep prices and labels).
+  let duplicatesRemoved = 0;
+  for (const walletId of targets) {
+    const synced = tx.select({ s: w.sourceEnc }).from(w).where(eq(w.id, walletId)).get()?.s;
+    if (synced) duplicatesRemoved += removeDuplicates(tx as unknown as MunyDb, walletId).removed;
+  }
+  return {
+    imported,
+    duplicates,
+    walletsCreated,
+    errors: parsed.errors,
+    replaced,
+    duplicatesRemoved,
+  };
 }
 
 // ---------------------------------------------------------------------------

@@ -134,9 +134,20 @@ export interface CryptoImportPreview {
   duplicates: number;
   errors: { line: number; message: string }[];
   /** Wallets in the file and whether they already exist in Muny. */
-  wallets: { name: string; kind: CryptoWalletKind; exists: boolean; txns: number }[];
+  wallets: {
+    name: string;
+    kind: CryptoWalletKind;
+    exists: boolean;
+    txns: number;
+    /** The Muny wallet this most likely is ("ETH Exodus" ↔ "Exodus ETH"), if any. */
+    suggestedWalletId: string | null;
+    /** Koinly rows already imported into that wallet (replaced when replacing). */
+    alreadyImported: number;
+  }[];
   from: number | null;
   to: number | null;
+  /** Koinly's full export (every year, stable IDs). */
+  full: boolean;
 }
 
 export interface CryptoImportResult {

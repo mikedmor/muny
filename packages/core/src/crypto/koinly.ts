@@ -35,6 +35,8 @@ export interface ParsedCryptoTxn {
   transferKey: string | null;
   /** Source row (1-based), for error messages and stable ids. */
   line: number;
+  /** Stable id from the export (full Koinly export: Koinly's transaction ID). */
+  externalId?: string;
 }
 
 export interface KoinlyParseResult {
@@ -44,7 +46,7 @@ export interface KoinlyParseResult {
 }
 
 const EXCHANGES =
-  /coinbase|uphold|bittrex|binance|kraken|gemini|kucoin|tradeogre|bitstamp|bitfinex|crypto\.com|okx|bybit|poloniex|robinhood|cash app|paypal|gate\.io|huobi|htx|bitmart|mexc/i;
+  /coinbase|uphold|bittrex|binance|kraken|changelly|changenow|gemini|kucoin|tradeogre|bitstamp|bitfinex|crypto\.com|okx|bybit|poloniex|robinhood|cash app|paypal|gate\.io|huobi|htx|bitmart|mexc/i;
 
 const REQUIRED = ["Date", "Type", "Sending Wallet", "Receiving Wallet"];
 
@@ -177,4 +179,140 @@ export function parseKoinlyCsv(text: string): KoinlyParseResult {
     })),
     errors,
   };
+}
+
+/**
+ * Koinly's full "Transactions" export (all years, from the transactions page):
+ * one row per transaction with Koinly's own stable ID, wallets as
+ * "Name;provider" plus a wallet ID, and currencies as "SYMBOL;id". Deleted rows
+ * are skipped. Rows get externalIds from Koinly's ID, so re-importing is safe.
+ */
+export function isKoinlyFullCsv(text: string): boolean {
+  const first = text.replace(/^﻿/, "").split(/\r?\n/, 1)[0] ?? "";
+  return /^"?ID \(read-only\)"?,/.test(first) && /From Wallet/.test(first);
+}
+
+const before = (s: string | undefined) => (s ?? "").split(";")[0]?.trim() ?? "";
+const TAGS: Record<string, string> = { other_income: "income" };
+
+export function parseKoinlyFullCsv(text: string): KoinlyParseResult {
+  const rows = parseCsv(text.replace(/^﻿/, ""));
+  const header = (rows[0] ?? []).map((h) => h.trim());
+  const col = (name: string) => header.indexOf(name);
+  for (const r of [
+    "ID (read-only)",
+    "Date (UTC)",
+    "Type",
+    "From Wallet (read-only)",
+    "To Wallet (read-only)",
+  ])
+    if (col(r) < 0) throw new Error(`The Koinly file is missing the "${r}" column.`);
+  const get = (row: string[], name: string) => {
+    const i = col(name);
+    return i >= 0 ? row[i] : undefined;
+  };
+  const money = (row: string[], amount: string) => {
+    // Values are in the export's value currency; only USD is used.
+    const c = before(get(row, "Value Currency (read-only)") || get(row, "Net Worth Currency"));
+    return c && c.toUpperCase() !== "USD" ? null : usd(get(row, amount));
+  };
+
+  const txns: ParsedCryptoTxn[] = [];
+  const errors: KoinlyParseResult["errors"] = [];
+  const walletNames = new Set<string>();
+  rows.slice(1).forEach((row, idx) => {
+    const line = idx + 2;
+    if (row.every((c) => !c.trim())) return;
+    try {
+      if ((get(row, "Deleted") ?? "").trim().toLowerCase() === "true") return;
+      const id = (get(row, "ID (read-only)") ?? "").trim();
+      if (!id) throw new Error("No Koinly ID on this row");
+      const kType = (get(row, "Type") ?? "").trim().toLowerCase();
+      const from = before(get(row, "From Wallet (read-only)"));
+      const to = before(get(row, "To Wallet (read-only)"));
+      const tag = (get(row, "Tag") ?? "").trim().toLowerCase();
+      const base = {
+        at: parseKoinlyDate(get(row, "Date (UTC)") ?? ""),
+        label: TAGS[tag] ?? label(tag),
+        sentAsset: cur(before(get(row, "From Currency"))),
+        sentAmount: dec(get(row, "From Amount")),
+        receivedAsset: cur(before(get(row, "To Currency"))),
+        receivedAmount: dec(get(row, "To Amount")),
+        feeAsset: cur(before(get(row, "Fee Currency"))),
+        feeAmount: dec(get(row, "Fee Amount")),
+        valueCents: money(row, "Net Value (read-only)") ?? money(row, "Net Worth Amount"),
+        feeValueCents: money(row, "Fee Value (read-only)") ?? money(row, "Fee Worth Amount"),
+        importedCostBasisCents: null,
+        importedGainCents: null,
+        txHash: (get(row, "TxHash") ?? "").trim() || null,
+        description: (get(row, "Description") ?? "").trim() || null,
+        transferKey: null as string | null,
+        line,
+      };
+      // A zero fee is no fee.
+      if (base.feeAmount && /^0(\.0*)?$/.test(base.feeAmount)) {
+        base.feeAmount = null;
+        base.feeAsset = null;
+      }
+      if (from) walletNames.add(from);
+      if (to) walletNames.add(to);
+      if (kType === "transfer" && from && to && from !== to) {
+        const key = `k${id}`;
+        txns.push({
+          ...base,
+          wallet: from,
+          type: "transfer",
+          receivedAsset: null,
+          receivedAmount: null,
+          transferKey: key,
+          externalId: `koinly:${id}:out`,
+        });
+        txns.push({
+          ...base,
+          wallet: to,
+          type: "transfer",
+          sentAsset: null,
+          sentAmount: null,
+          feeAsset: null,
+          feeAmount: null,
+          feeValueCents: null,
+          transferKey: key,
+          externalId: `koinly:${id}:in`,
+        });
+        return;
+      }
+      const hasSent = !!base.sentAmount && base.sentAmount !== "0";
+      const hasReceived = !!base.receivedAmount && base.receivedAmount !== "0";
+      const type: CryptoTxnType =
+        hasSent && hasReceived ? "trade" : hasReceived ? "deposit" : "withdrawal";
+      const wallet = type === "deposit" ? to || from : from || to;
+      if (!wallet) throw new Error("No wallet on this row");
+      if (!hasSent && !hasReceived && !base.feeAmount) throw new Error("No amounts on this row");
+      txns.push({
+        ...base,
+        ...(hasSent ? {} : { sentAsset: null, sentAmount: null }),
+        ...(hasReceived ? {} : { receivedAsset: null, receivedAmount: null }),
+        wallet,
+        type,
+        externalId: `koinly:${id}`,
+      });
+    } catch (err) {
+      errors.push({ line, message: err instanceof Error ? err.message : String(err) });
+    }
+  });
+  return {
+    txns,
+    wallets: [...walletNames].map((name) => ({
+      name,
+      kind: EXCHANGES.test(name) ? "exchange" : "manual",
+    })),
+    errors,
+  };
+}
+
+/** Either Koinly export. */
+export function parseAnyKoinlyCsv(text: string): KoinlyParseResult & { full: boolean } {
+  return isKoinlyFullCsv(text)
+    ? { ...parseKoinlyFullCsv(text), full: true }
+    : { ...parseKoinlyCsv(text), full: false };
 }

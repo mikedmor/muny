@@ -472,6 +472,9 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
   const ImportBody = z.object({
     format: z.literal("koinly"),
     content: z.string().min(1).max(CSV_MAX),
+    /** Koinly wallet name → Muny wallet id, or "new". */
+    mapping: z.record(z.string().max(120), z.string().min(1).max(64)).optional(),
+    replace: z.boolean().optional(),
   });
   const parseOr400 = <T>(fn: () => T) => {
     try {
@@ -490,11 +493,16 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
   app.post("/api/crypto/import/commit", async (req) => {
     const user = requireUser(req);
     const body = parse(ImportBody, req.body);
-    const res = parseOr400(() => db.transaction((tx) => importKoinly(tx, body.content)));
+    const res = parseOr400(() =>
+      db.transaction((tx) =>
+        importKoinly(tx, body.content, { mapping: body.mapping, replace: body.replace }),
+      ),
+    );
     log(user.id, "crypto.import", undefined, {
       format: body.format,
       imported: res.imported,
       duplicates: res.duplicates,
+      replaced: res.replaced,
     });
     return res;
   });

@@ -33,9 +33,28 @@ function ImportKoinly({ onDone }: { onDone: () => void }) {
   const [result, setResult] = useState<CryptoImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Koinly wallet name → Muny wallet id, or "new". */
+  const [mapping, setMapping] = useState<Record<string, string>>({});
+  const [replace, setReplace] = useState(false);
+  const wallets = useCryptoWallets();
   const commit = useCryptoMutation(() =>
-    api.post<CryptoImportResult>("/api/crypto/import/commit", { format: "koinly", content }),
+    api.post<CryptoImportResult & { replaced?: number; duplicatesRemoved?: number }>(
+      "/api/crypto/import/commit",
+      { format: "koinly", content, mapping, replace },
+    ),
   );
+  const showPreview = (p: CryptoImportPreview) => {
+    setPreview(p);
+    setMapping(Object.fromEntries(p.wallets.map((x) => [x.name, x.suggestedWalletId ?? "new"])));
+    // The full export covers every year: replacing earlier Koinly rows is the clean way.
+    setReplace(p.full);
+  };
+  const replacing = preview
+    ? preview.wallets.reduce(
+        (n, x) => n + (mapping[x.name] === x.suggestedWalletId ? x.alreadyImported : 0),
+        0,
+      )
+    : 0;
 
   const pick = async (file: File | undefined) => {
     if (!file) return;
@@ -47,7 +66,7 @@ function ImportKoinly({ onDone }: { onDone: () => void }) {
     try {
       const text = await file.text();
       setContent(text);
-      setPreview(
+      showPreview(
         await api.post<CryptoImportPreview>("/api/crypto/import/preview", {
           format: "koinly",
           content: text,
@@ -67,6 +86,9 @@ function ImportKoinly({ onDone }: { onDone: () => void }) {
           Imported <span className="font-semibold">{result.imported}</span> transactions
           {result.walletsCreated > 0 && ` into ${result.walletsCreated} new wallets`}
           {result.duplicates > 0 && ` (${result.duplicates} were already in Muny)`}.
+          {(result as { replaced?: number }).replaced
+            ? ` Replaced ${(result as { replaced?: number }).replaced} earlier rows.`
+            : ""}
         </p>
         <div className="flex justify-end gap-2">
           <Link to="/crypto/transactions">
@@ -80,10 +102,10 @@ function ImportKoinly({ onDone }: { onDone: () => void }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-600 dark:text-slate-300">
-        In Koinly, open <span className="font-medium">Tax reports</span> and download the{" "}
-        <span className="font-medium">Transaction History</span> CSV. Koinly only lets you download
-        years you&apos;ve paid for; import each year you have. Re-importing a file never creates
-        duplicates.
+        Best: in Koinly, open <span className="font-medium">Transactions</span> and export them all
+        (every year, any plan). Koinly&apos;s yearly{" "}
+        <span className="font-medium">Transaction History</span> report from Tax reports works too.
+        Re-importing a file never creates duplicates.
       </p>
       <label className="block">
         <span className="sr-only">Koinly CSV file</span>
@@ -105,19 +127,62 @@ function ImportKoinly({ onDone }: { onDone: () => void }) {
               ` from ${dayLabel(preview.from)} to ${dayLabel(preview.to)}`}
             {preview.duplicates > 0 && `; ${preview.duplicates} already imported`}.
           </p>
-          <ul className="space-y-1">
-            {preview.wallets.map((w) => (
-              <li key={w.name} className="flex justify-between gap-3">
-                <span>
-                  {w.name}{" "}
-                  <span className="text-xs text-slate-500">
-                    {KIND_LABEL[w.kind]} · {w.exists ? "existing" : "new"}
+          <div className="space-y-1">
+            <p className="font-medium">Where each Koinly wallet goes</p>
+            <p className="text-xs text-slate-500">
+              Matched by name (word order doesn&apos;t matter). Pick another wallet if Muny guessed
+              wrong, or create a new one.
+            </p>
+            <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+              {preview.wallets.map((w) => (
+                <li
+                  key={w.name}
+                  className="flex flex-wrap items-center justify-between gap-2 py-1.5"
+                >
+                  <span className="min-w-0">
+                    <span className="font-medium">{w.name}</span>{" "}
+                    <span className="text-xs text-slate-500">{w.txns} transactions</span>
                   </span>
-                </span>
-                <span className="tabular-nums text-slate-500">{w.txns}</span>
-              </li>
-            ))}
-          </ul>
+                  <select
+                    aria-label={`Muny wallet for ${w.name}`}
+                    value={mapping[w.name] ?? "new"}
+                    onChange={(e) => setMapping((m) => ({ ...m, [w.name]: e.target.value }))}
+                    className="max-w-[16rem] rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+                  >
+                    <option value="new">
+                      New {w.kind === "exchange" ? "exchange" : "wallet"}:{" "}
+                      {w.name.replace(/\s*\[Pool\]$/i, "")}
+                    </option>
+                    {(wallets.data ?? []).map((x) => (
+                      <option key={x.id} value={x.id}>
+                        {x.name}
+                      </option>
+                    ))}
+                  </select>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <label className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              checked={replace}
+              onChange={(e) => setReplace(e.target.checked)}
+              className="mt-1 accent-brand-600"
+            />
+            <span>
+              Replace what I imported from Koinly before in these wallets
+              <span className="block text-xs text-slate-500">
+                {preview.full
+                  ? "Recommended: this export has every year, so it supersedes earlier Koinly files. "
+                  : ""}
+                {replacing > 0 &&
+                  `${replacing} earlier Koinly rows and any Reconcile fixes made on top of them are replaced. `}
+                Synced blockchain transactions and ones you added by hand stay; synced copies of
+                imported rows are removed afterwards.
+              </span>
+            </span>
+          </label>
           {preview.errors.length > 0 && (
             <Alert>
               {preview.errors.length} rows couldn&apos;t be read (first: line{" "}
