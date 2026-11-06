@@ -5,6 +5,7 @@ import { loadConfig } from "./config.js";
 import { startBackupScheduler } from "./data/backups.js";
 import { repairRawAchPayees } from "./ledger/payees.js";
 import { seedDefaultCategories } from "./ledger/seed.js";
+import { pairLoanPayments } from "./ledger/transfers.js";
 import { rescanRecurring } from "./recurring/service.js";
 import { startSyncScheduler } from "./sync/engine.js";
 import { VERSION } from "./version.js";
@@ -16,7 +17,10 @@ async function main() {
   ensureAlertRules(db);
   repairRawAchPayees(db);
   // Cheap (well under a second for years of history); picks up detection improvements after upgrades.
-  db.transaction((tx) => rescanRecurring(tx));
+  db.transaction((tx) => {
+    pairLoanPayments(tx);
+    rescanRecurring(tx);
+  });
   const app = await buildApp({ config, db });
 
   app.log.info({ version: VERSION, dataDir: config.dataDir }, "Muny starting");

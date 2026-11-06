@@ -116,10 +116,18 @@ export function findTransferPairs(db: Db, ids?: string[]): TransferPair[] {
 
   // Index by absolute amount. A transaction you deliberately filed under a
   // spending/income category (e.g. a transfer to a kid's account you count as
-  // "Kids & Family") isn't a transfer candidate.
+  // "Kids & Family") isn't a transfer candidate, with one exception: a payment
+  // you filed as spending (e.g. "Loan Payment") still pairs with the money
+  // arriving in that loan, so the loan side isn't counted as income. The
+  // payment keeps your category, so it still counts as spending.
+  const reserved = (r: Row) =>
+    r.userModified && r.categoryKind !== null && r.categoryKind !== "transfer";
+  const typeOf = (r: Row) => accounts.get(r.accountId)?.type;
+  const allowed = (out: Row, inRow: Row) =>
+    !reserved(inRow) && (!reserved(out) || typeOf(inRow) === "loan");
   const byAmount = new Map<number, Row[]>();
   for (const r of all) {
-    if (r.userModified && r.categoryKind !== null && r.categoryKind !== "transfer") continue;
+    if (reserved(r) && r.amountCents > 0) continue;
     const k = Math.abs(r.amountCents);
     byAmount.set(k, [...(byAmount.get(k) ?? []), r]);
   }
@@ -144,6 +152,7 @@ export function findTransferPairs(db: Db, ids?: string[]): TransferPair[] {
       if (gap > MAX_DAYS) continue;
       const accO = accounts.get(o.accountId);
       if (!accO || !looksLikeTransfer(r, o, accR, accO)) continue;
+      if (!(r.amountCents < 0 ? allowed(r, o) : allowed(o, r))) continue;
       if (!best || gap < best.gap) best = { row: o, gap };
     }
     if (!best) continue;
@@ -228,4 +237,22 @@ export function dismissTransfer(tx: Tx, txnId: string) {
   const row = tx.select({ pair: t.transferPairId }).from(t).where(eq(t.id, txnId)).get();
   const ids = [txnId, ...(row?.pair ? [row.pair] : [])];
   tx.update(t).set({ transferPairId: null, notTransfer: true }).where(inArray(t.id, ids)).run();
+}
+
+/** Pair payments arriving in loan accounts with the payments that sent them (runs at startup). */
+export function pairLoanPayments(tx: Tx): number {
+  const ids = tx
+    .select({ id: schema.transactions.id })
+    .from(schema.transactions)
+    .innerJoin(schema.accounts, eq(schema.accounts.id, schema.transactions.accountId))
+    .where(
+      and(
+        eq(schema.accounts.type, "loan"),
+        isNull(schema.transactions.transferPairId),
+        sql`${schema.transactions.amountCents} > 0`,
+      ),
+    )
+    .all()
+    .map((r) => r.id);
+  return ids.length ? applyTransferPairs(tx, findTransferPairs(tx, ids)) : 0;
 }

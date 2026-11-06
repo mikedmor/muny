@@ -99,13 +99,30 @@ export function registerSyncRoutes(app: FastifyInstance, db: MunyDb, deps: SyncD
     return id;
   };
 
+  /** The Plaid login limit of your plan (Plaid's API doesn't report it); null clears it. */
+  app.put("/api/sync/plaid-limit", async (req) => {
+    const user = requireUser(req);
+    const { limit } = parse(
+      z.object({ limit: z.number().int().min(1).max(10000).nullable() }),
+      req.body,
+    );
+    setSetting(db, PLAID_LIMIT_KEY, limit);
+    log(user.id, "plaid.limit", undefined, { limit });
+    return { limit };
+  });
+
   app.get("/api/sync/config", async (): Promise<SyncConfigStatus> => {
     const { plaid, teller } = deps.config;
     return {
       secretKey: !!deps.config.secretKey,
       intervalHours: deps.config.syncIntervalHours,
       plaid: plaid
-        ? { configured: true, env: plaid.env, oauth: !!plaid.redirectUri }
+        ? {
+            configured: true,
+            env: plaid.env,
+            oauth: !!plaid.redirectUri,
+            logins: plaidLogins(db, plaid.env),
+          }
         : { configured: false },
       teller: teller
         ? {
@@ -167,6 +184,7 @@ export function registerSyncRoutes(app: FastifyInstance, db: MunyDb, deps: SyncD
     if (!plaid) throw badRequest("Plaid isn't configured.");
     try {
       const creds = await plaid.exchangePublicToken(publicToken, kind);
+      if (deps.config.plaid?.env === "production") countPlaidLogin(db);
       const info = await plaid.getAccounts(creds);
       const id = createConnection("plaid", creds, info);
       log(user.id, "connection.create", id, {
@@ -412,4 +430,47 @@ export function registerSyncRoutes(app: FastifyInstance, db: MunyDb, deps: SyncD
     log(user.id, "connection.delete", conn.id, { provider: conn.provider });
     return { ok: true };
   });
+}
+
+const PLAID_LIMIT_KEY = "plaid.loginLimit";
+const PLAID_CREATED_KEY = "plaid.loginsCreated";
+
+function getSetting<T>(db: MunyDb, key: string): T | undefined {
+  return db
+    .select({ value: schema.appSettings.value })
+    .from(schema.appSettings)
+    .where(eq(schema.appSettings.key, key))
+    .get()?.value as T | undefined;
+}
+
+function setSetting(db: MunyDb, key: string, value: unknown) {
+  db.insert(schema.appSettings)
+    .values({ key, value })
+    .onConflictDoUpdate({ target: schema.appSettings.key, set: { value } })
+    .run();
+}
+
+/** Logins created so far: the counter, but never fewer than the Plaid connections there are now. */
+function plaidLogins(db: MunyDb, env: string): { used: number; limit: number | null } {
+  const now = db
+    .select({ id: schema.connections.id })
+    .from(schema.connections)
+    .where(eq(schema.connections.provider, "plaid"))
+    .all().length;
+  const counted = env === "production" ? (getSetting<number>(db, PLAID_CREATED_KEY) ?? 0) : 0;
+  return {
+    used: Math.max(now, counted),
+    limit: getSetting<number | null>(db, PLAID_LIMIT_KEY) ?? null,
+  };
+}
+
+function countPlaidLogin(db: MunyDb) {
+  const now = db
+    .select({ id: schema.connections.id })
+    .from(schema.connections)
+    .where(eq(schema.connections.provider, "plaid"))
+    .all().length;
+  const counted = getSetting<number>(db, PLAID_CREATED_KEY) ?? 0;
+  // The first time, start from the logins that already exist.
+  setSetting(db, PLAID_CREATED_KEY, Math.max(counted, now) + 1);
 }

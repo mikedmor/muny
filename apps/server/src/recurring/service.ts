@@ -78,6 +78,7 @@ function loadRows(db: Db): Row[] {
       recurringSeriesId: t.recurringSeriesId,
     })
     .from(t)
+    .innerJoin(schema.accounts, eq(schema.accounts.id, t.accountId))
     .leftJoin(schema.payees, eq(schema.payees.id, t.payeeId))
     .leftJoin(schema.categories, eq(schema.categories.id, t.categoryId))
     .leftJoin(schema.categoryGroups, eq(schema.categoryGroups.id, schema.categories.groupId))
@@ -85,11 +86,46 @@ function loadRows(db: Db): Row[] {
       and(
         eq(t.pending, false),
         eq(t.hidden, false),
-        isNull(t.transferPairId),
+        sql`${schema.accounts.type} <> 'loan'`,
+        or(
+          isNull(t.transferPairId),
+          and(
+            sql`${schema.categoryGroups.kind} is not null`,
+            sql`${schema.categoryGroups.kind} <> 'transfer'`,
+          ),
+        ),
         or(isNull(schema.categoryGroups.kind), sql`${schema.categoryGroups.kind} <> 'transfer'`),
       ),
     )
     .all();
+}
+
+/**
+ * Loan accounts' own entries (interest charged, payments received) aren't
+ * bills or income: the payment from checking is the bill. Series detected
+ * there (not ones you confirmed) are removed.
+ */
+function dropLoanSeries(tx: Tx) {
+  const s = schema.recurringSeries;
+  const loanIds = tx
+    .select({ id: schema.accounts.id })
+    .from(schema.accounts)
+    .where(eq(schema.accounts.type, "loan"))
+    .all()
+    .map((a) => a.id);
+  if (!loanIds.length) return;
+  const stale = tx
+    .select({ id: s.id })
+    .from(s)
+    .where(and(inArray(s.accountId, loanIds), eq(s.status, "detected"), eq(s.userModified, false)))
+    .all()
+    .map((x) => x.id);
+  if (!stale.length) return;
+  tx.update(schema.transactions)
+    .set({ recurringSeriesId: null })
+    .where(inArray(schema.transactions.recurringSeriesId, stale))
+    .run();
+  tx.delete(s).where(inArray(s.id, stale)).run();
 }
 
 const near = (a: number, b: number, pct: number) => Math.abs(a - b) <= Math.max(a, b) * pct;
@@ -117,6 +153,7 @@ function keyWords(key: string): Set<string> {
  * Ignored series stay ignored; user-edited fields are kept.
  */
 export function rescanRecurring(tx: Tx, today = localToday()): RecurringScanResult {
+  dropLoanSeries(tx);
   const rows = loadRows(tx);
   const byId = new Map(rows.map((r) => [r.id, r]));
   const input: RecurringInput[] = rows.map((r) => ({

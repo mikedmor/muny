@@ -51,7 +51,7 @@ function categoryTotals(
            sum(t.amount_cents) as s
       from transactions t
       join accounts a on a.id = t.account_id
-     where t.hidden = 0 and a.exclude_from_reports = 0
+     where t.hidden = 0 and a.exclude_from_reports = 0 and a.type <> 'loan'
        and t.posted_date >= ${fromDate} and t.posted_date <= ${toDate}
        and not exists (select 1 from transaction_splits x where x.transaction_id = t.id)
      group by m, c
@@ -60,7 +60,7 @@ function categoryTotals(
       from transaction_splits sp
       join transactions t on t.id = sp.transaction_id
       join accounts a on a.id = t.account_id
-     where t.hidden = 0 and a.exclude_from_reports = 0
+     where t.hidden = 0 and a.exclude_from_reports = 0 and a.type <> 'loan'
        and t.posted_date >= ${fromDate} and t.posted_date <= ${toDate}
      group by m, c
   `);

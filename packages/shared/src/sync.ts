@@ -15,7 +15,16 @@ export interface SyncConfigStatus {
   intervalHours: number;
   plaid:
     | { configured: false }
-    | { configured: true; env: "sandbox" | "production"; oauth: boolean };
+    | {
+        configured: true;
+        env: "sandbox" | "production";
+        oauth: boolean;
+        /**
+         * Plaid logins Muny has created (removed ones still count on Plaid's
+         * Trial plan), and the limit you set for your plan (Plaid doesn't say).
+         */
+        logins: { used: number; limit: number | null };
+      };
   teller:
     | { configured: false }
     | {
