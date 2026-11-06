@@ -21,9 +21,10 @@ export interface SyncConfigStatus {
         oauth: boolean;
         /**
          * Plaid logins Muny has created (removed ones still count on Plaid's
-         * Trial plan), and the limit you set for your plan (Plaid doesn't say).
+         * Trial plan), and the plan's limit: 20 on the Trial plan, or what you
+         * set for a paid plan (custom).
          */
-        logins: { used: number; limit: number | null };
+        logins: { used: number; limit: number; custom: boolean };
       };
   teller:
     | { configured: false }

@@ -451,7 +451,10 @@ function setSetting(db: MunyDb, key: string, value: unknown) {
 }
 
 /** Logins created so far: the counter, but never fewer than the Plaid connections there are now. */
-function plaidLogins(db: MunyDb, env: string): { used: number; limit: number | null } {
+/** Plaid's Trial plan allows 20 logins; a paid plan can set its own limit. */
+const DEFAULT_PLAID_LIMIT = 20;
+
+function plaidLogins(db: MunyDb, env: string): { used: number; limit: number; custom: boolean } {
   const now = db
     .select({ id: schema.connections.id })
     .from(schema.connections)
@@ -460,7 +463,8 @@ function plaidLogins(db: MunyDb, env: string): { used: number; limit: number | n
   const counted = env === "production" ? (getSetting<number>(db, PLAID_CREATED_KEY) ?? 0) : 0;
   return {
     used: Math.max(now, counted),
-    limit: getSetting<number | null>(db, PLAID_LIMIT_KEY) ?? null,
+    limit: getSetting<number | null>(db, PLAID_LIMIT_KEY) ?? DEFAULT_PLAID_LIMIT,
+    custom: (getSetting<number | null>(db, PLAID_LIMIT_KEY) ?? null) !== null,
   };
 }
 

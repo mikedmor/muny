@@ -68,7 +68,8 @@ export function savingsAccountsReport(db: MunyDb, today = localToday()): Savings
     })
     .from(t)
     .leftJoin(schema.categories, eq(schema.categories.id, t.categoryId))
-    .where(and(inArray(t.accountId, ids), eq(t.pending, false), eq(t.hidden, false)))
+    // Hidden ones too: hiding keeps them out of spending, but the money still moved.
+    .where(and(inArray(t.accountId, ids), eq(t.pending, false)))
     .all();
   const { balanceAt } = balanceHistory(db, true);
 

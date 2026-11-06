@@ -400,6 +400,17 @@ function AccountCard({ a, onSaved }: { a: SavingsAccountInfo; onSaved: () => voi
     },
   ];
   const last12 = a.months.slice(-12);
+  // The next 12 months on your plan, or at the current pace and rate.
+  const planRate = a.plan?.rateBps ?? a.apyBps ?? a.earnedApyBps ?? 0;
+  const planMonthly = a.plan?.monthlyCents ?? Math.max(0, a.avgMonthlyContributionCents);
+  const lastMonth = a.months.at(-1)?.month ?? new Date().toISOString().slice(0, 7);
+  const [ly, lm] = lastMonth.split("-").map(Number) as [number, number];
+  const ahead = growth(a.balanceCents, planRate, planMonthly, 12)
+    .slice(1)
+    .map((g) => ({
+      month: new Date(Date.UTC(ly, lm - 1 + g.m, 1)).toISOString().slice(0, 7),
+      balanceCents: Math.round(g.balance),
+    }));
   return (
     <Card>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -442,16 +453,30 @@ function AccountCard({ a, onSaved }: { a: SavingsAccountInfo; onSaved: () => voi
         <div>
           <p className="mb-2 text-xs font-medium text-slate-500">Balance</p>
           {months.length >= 2 ? (
-            <LineChart
-              ariaLabel={`${a.name} balance by month`}
-              height={180}
-              stack={stack}
-              points={months.map((m) => ({
-                date: m.month,
-                label: monthLabel(m.month, true),
-                value: m.balanceCents,
-              }))}
-            />
+            <>
+              <LineChart
+                ariaLabel={`${a.name} balance by month, with the next 12 months projected`}
+                height={180}
+                stack={stack}
+                projectedFrom={months.length}
+                points={[
+                  ...months.map((m) => ({
+                    date: m.month,
+                    label: monthLabel(m.month, true),
+                    value: m.balanceCents,
+                  })),
+                  ...ahead.map((p) => ({
+                    date: p.month,
+                    label: monthLabel(p.month, true),
+                    value: p.balanceCents,
+                  })),
+                ]}
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                Dashed: the next 12 months at {formatMoney(planMonthly)} a month and{" "}
+                {(planRate / 100).toFixed(2)}%{a.plan ? " (your plan)" : ""}.
+              </p>
+            </>
           ) : (
             <p className="py-8 text-center text-sm text-slate-500">Not enough history yet.</p>
           )}

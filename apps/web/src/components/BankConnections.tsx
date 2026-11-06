@@ -392,75 +392,98 @@ export function BankConnections() {
  * How many Plaid logins this Muny has used, against your plan's limit (which
  * Plaid's API doesn't report, so you set it once).
  */
-function PlaidLogins({ logins }: { logins: { used: number; limit: number | null } }) {
+function PlaidLogins({ logins }: { logins: { used: number; limit: number; custom: boolean } }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
-  const [text, setText] = useState(logins.limit ? String(logins.limit) : "");
+  const [paid, setPaid] = useState(logins.custom);
+  const [text, setText] = useState(String(logins.limit));
   const save = async (limit: number | null) => {
     await api.put("/api/sync/plaid-limit", { limit });
     setEditing(false);
     void qc.invalidateQueries({ queryKey: keys.syncConfig });
   };
-  const left = logins.limit === null ? null : logins.limit - logins.used;
-  const pct = logins.limit ? Math.min(100, (logins.used / logins.limit) * 100) : 0;
+  const left = logins.limit - logins.used;
+  const pct = Math.min(100, (logins.used / Math.max(1, logins.limit)) * 100);
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-800">
       <span>
-        <span className="font-medium">Plaid logins:</span> {logins.used} used
-        {logins.limit !== null && ` of ${logins.limit}`}
+        <span className="font-medium">Plaid logins:</span> {logins.used} used of {logins.limit}
+        <span className="text-slate-500">{logins.custom ? " (your plan)" : " (Trial plan)"}</span>
       </span>
-      {logins.limit !== null && (
+      <span
+        className="h-1.5 w-32 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"
+        aria-hidden="true"
+      >
         <span
-          className="h-1.5 w-32 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"
-          aria-hidden="true"
-        >
-          <span
-            className={cx(
-              "block h-full",
-              (left ?? 1) <= 1 ? "bg-red-500" : (left ?? 3) <= 3 ? "bg-amber-500" : "bg-brand-600",
-            )}
-            style={{ width: `${pct}%` }}
-          />
-        </span>
-      )}
-      {left !== null && (
-        <span className={cx("text-xs", left <= 1 ? "text-red-600" : "text-slate-500")}>
-          {left > 0 ? `${left} left` : "None left"}
-        </span>
-      )}
+          className={cx(
+            "block h-full",
+            left <= 1 ? "bg-red-500" : left <= 3 ? "bg-amber-500" : "bg-brand-600",
+          )}
+          style={{ width: `${pct}%` }}
+        />
+      </span>
+      <span className={cx("text-xs", left <= 1 ? "text-red-600" : "text-slate-500")}>
+        {left > 0 ? `${left} left` : "None left"}
+      </span>
       {editing ? (
-        <form
-          className="inline-flex items-center gap-1"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const n = Number(text);
-            void save(text.trim() === "" ? null : Number.isInteger(n) && n > 0 ? n : null);
-          }}
-        >
-          <input
-            aria-label="Your Plaid plan's login limit"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            inputMode="numeric"
-            placeholder="e.g. 20"
-            className="w-16 rounded border border-slate-300 bg-white px-1.5 py-0.5 dark:border-slate-700 dark:bg-slate-950"
-          />
-          <Button type="submit" className="px-2 py-0.5 text-xs">
-            Save
-          </Button>
-        </form>
+        <span className="inline-flex flex-wrap items-center gap-2 text-xs">
+          <label className="inline-flex items-center gap-1">
+            <input
+              type="checkbox"
+              checked={paid}
+              onChange={(e) => setPaid(e.target.checked)}
+              className="accent-brand-600"
+            />
+            I have a paid Plaid plan
+          </label>
+          {paid ? (
+            <form
+              className="inline-flex items-center gap-1"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const n = Number(text);
+                if (Number.isInteger(n) && n > 0) void save(n);
+              }}
+            >
+              <input
+                aria-label="Your Plaid plan's login limit"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                inputMode="numeric"
+                className="w-16 rounded border border-slate-300 bg-white px-1.5 py-0.5 dark:border-slate-700 dark:bg-slate-950"
+              />
+              <Button type="submit" className="px-2 py-0.5 text-xs">
+                Save
+              </Button>
+            </form>
+          ) : (
+            logins.custom && (
+              <Button className="px-2 py-0.5 text-xs" onClick={() => void save(null)}>
+                Back to the Trial plan (20)
+              </Button>
+            )
+          )}
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            className="text-slate-500 hover:underline"
+          >
+            Cancel
+          </button>
+        </span>
       ) : (
         <button
           type="button"
           onClick={() => setEditing(true)}
           className="text-xs text-brand-600 hover:underline dark:text-brand-500"
         >
-          {logins.limit === null ? "Set your plan's limit" : "Change limit"}
+          Change plan
         </button>
       )}
       <span className="w-full text-xs text-slate-500">
-        Each bank or brokerage login uses one, and on Plaid's Trial plan removing a login doesn't
-        give it back. Plaid doesn't report your plan's limit; check your Plaid dashboard.
+        Each bank or brokerage login uses one, and on the Trial plan removing a login doesn't give
+        it back. Plaid doesn't report which plan you're on, so Muny assumes the Trial plan's 20
+        unless you say otherwise.
       </span>
     </div>
   );

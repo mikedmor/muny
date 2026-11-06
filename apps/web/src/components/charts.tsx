@@ -507,12 +507,15 @@ export function LineChart({
   height = H,
   compareLabel,
   stack: stackIn,
+  projectedFrom,
 }: {
   points: LinePoint[];
   ariaLabel: string;
   height?: number;
   /** Name of the dashed line (shown in the tooltip and legend). */
   compareLabel?: string;
+  /** Points from this index on are a projection: drawn dashed, without fill. */
+  projectedFrom?: number;
   /** Split the area under the line into colored parts (they should add up to the line). */
   stack?: StackBand[];
 }) {
@@ -537,12 +540,27 @@ export function LineChart({
   const x = (i: number) =>
     PAD.left + (points.length <= 1 ? plotW / 2 : (i / (points.length - 1)) * plotW);
   const y = (v: number) => PAD.top + plotH - ((v - bottom) / Math.max(1, top - bottom)) * plotH;
-  const line = points.map((p, i) => `${i ? "L" : "M"}${x(i)},${y(p.value)}`).join(" ");
+  // Actual points end where the projection starts (the projection continues from the last one).
+  const actualN =
+    projectedFrom !== undefined
+      ? Math.max(1, Math.min(points.length, projectedFrom))
+      : points.length;
+  const line = points
+    .slice(0, actualN)
+    .map((p, i) => `${i ? "L" : "M"}${x(i)},${y(p.value)}`)
+    .join(" ");
+  const projectedLine =
+    actualN < points.length
+      ? points
+          .slice(actualN - 1)
+          .map((p, j) => `${j ? "L" : "M"}${x(actualN - 1 + j)},${y(p.value)}`)
+          .join(" ")
+      : "";
   const compareLine = hasCompare
     ? points.map((p, i) => `${i ? "L" : "M"}${x(i)},${y(p.compare ?? 0)}`).join(" ")
     : "";
   const area = points.length
-    ? `${line} L${x(points.length - 1)},${y(Math.max(bottom, 0))} L${x(0)},${y(Math.max(bottom, 0))} Z`
+    ? `${line} L${x(actualN - 1)},${y(Math.max(bottom, 0))} L${x(0)},${y(Math.max(bottom, 0))} Z`
     : "";
   // Room for the longest label (about 6.5px a character at the axis font size), so they never overlap.
   const labelW = Math.max(56, Math.max(0, ...points.map((p) => p.label.length)) * 6.5 + 16);
@@ -610,14 +628,7 @@ export function LineChart({
           ) : null,
         )}
         {stack?.length ? (
-          <StackBands
-            stack={stack}
-            x={x}
-            y={y}
-            count={points.length}
-            focus={focus}
-            onFocus={setFocus}
-          />
+          <StackBands stack={stack} x={x} y={y} count={actualN} focus={focus} onFocus={setFocus} />
         ) : (
           <path d={area} fill={`url(#${gradId})`} />
         )}
@@ -638,6 +649,18 @@ export function LineChart({
             strokeWidth={2}
             strokeLinejoin="round"
             strokeLinecap="round"
+          />
+        )}
+        {projectedLine && (
+          <path
+            d={projectedLine}
+            fill="none"
+            stroke="var(--viz-series-1)"
+            strokeWidth={2}
+            strokeDasharray="5 4"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            opacity={0.8}
           />
         )}
         {hp && hover !== null && (
@@ -663,12 +686,17 @@ export function LineChart({
       </svg>
       {hp && hover !== null && (
         <Tooltip x={x(hover)} y={y(hp.value)} width={width}>
-          <p className="font-medium">{hp.label}</p>
+          <p className="font-medium">
+            {hp.label}
+            {hover >= actualN && (
+              <span className="ml-1 font-normal text-slate-500">(projected)</span>
+            )}
+          </p>
           <p className="tabular-nums">
             {hasCompare || stack?.length ? "Value: " : ""}
             {formatMoney(hp.value)}
           </p>
-          {stack?.length ? <StackTooltipRows stack={stack} i={hover} /> : null}
+          {stack?.length && hover < actualN ? <StackTooltipRows stack={stack} i={hover} /> : null}
           {hasCompare && hp.compare !== undefined && (
             <>
               <p className="tabular-nums">

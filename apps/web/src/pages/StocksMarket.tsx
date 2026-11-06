@@ -9,10 +9,13 @@ import { investKeys, useInvestSettings, useMarket, useSetInvestSettings } from "
 
 /** A company logo (when logos are on), else the letter badge. */
 /**
- * How to show a logo: "fill" when it has its own background (its corners are
- * painted), else "dark" or "light" backing depending on how bright the mark is.
+ * How to show a logo: on its own background color when it has one (its
+ * corners are painted), else on a dark or white circle depending on how
+ * bright the mark is. Always the whole logo, fitted inside the circle.
  */
-type LogoLook = "fill" | "dark" | "light";
+interface LogoLook {
+  bg: string;
+}
 const looks = new Map<string, LogoLook>();
 
 function lookOf(img: HTMLImageElement): LogoLook {
@@ -21,12 +24,18 @@ function lookOf(img: HTMLImageElement): LogoLook {
   c.width = n;
   c.height = n;
   const ctx = c.getContext("2d", { willReadFrequently: true });
-  if (!ctx) return "light";
+  if (!ctx) return { bg: "#ffffff" };
   ctx.drawImage(img, 0, 0, n, n);
   const px = ctx.getImageData(0, 0, n, n).data;
-  const alpha = (x: number, y: number) => px[(y * n + x) * 4 + 3] ?? 0;
-  const corners = [alpha(1, 1), alpha(n - 2, 1), alpha(1, n - 2), alpha(n - 2, n - 2)];
-  if (corners.every((a) => a > 200)) return "fill";
+  const at = (x: number, y: number) => {
+    const i = (y * n + x) * 4;
+    return [px[i] ?? 0, px[i + 1] ?? 0, px[i + 2] ?? 0, px[i + 3] ?? 0] as const;
+  };
+  const corners = [at(1, 1), at(n - 2, 1), at(1, n - 2), at(n - 2, n - 2)];
+  if (corners.every((p) => p[3] > 200)) {
+    const [r, g, b] = corners[0] ?? [255, 255, 255];
+    return { bg: `rgb(${r}, ${g}, ${b})` };
+  }
   let lum = 0;
   let count = 0;
   for (let i = 0; i < px.length; i += 4) {
@@ -34,7 +43,7 @@ function lookOf(img: HTMLImageElement): LogoLook {
     lum += 0.2126 * (px[i] ?? 0) + 0.7152 * (px[i + 1] ?? 0) + 0.0722 * (px[i + 2] ?? 0);
     count++;
   }
-  return count && lum / count > 180 ? "dark" : "light";
+  return { bg: count && lum / count > 170 ? "#0f172a" : "#ffffff" };
 }
 
 export function StockLogo({ symbol, size = "md" }: { symbol: string; size?: "sm" | "md" }) {
@@ -45,32 +54,32 @@ export function StockLogo({ symbol, size = "md" }: { symbol: string; size?: "sm"
   if (!logos || failed || !/^[A-Z][A-Z0-9.-]{0,9}$/.test(symbol))
     return <MerchantAvatar name={symbol} size={size} />;
   return (
-    <img
-      src={`/api/invest/logo/${encodeURIComponent(symbol)}`}
-      alt=""
-      aria-hidden="true"
-      loading="lazy"
-      onError={() => setFailed(true)}
-      onLoad={(e) => {
-        if (looks.has(symbol)) return;
-        try {
-          const l = lookOf(e.currentTarget);
-          looks.set(symbol, l);
-          setLook(l);
-        } catch {
-          setLook("light");
-        }
-      }}
+    <span
       className={cx(
-        "shrink-0 rounded-full ring-1 ring-slate-200 dark:ring-slate-700",
-        size === "sm" ? "size-7" : "size-9",
-        look === "fill"
-          ? "object-cover"
-          : look === "dark"
-            ? "bg-slate-900 object-contain p-1.5"
-            : "bg-white object-contain p-1.5",
+        "flex shrink-0 items-center justify-center overflow-hidden rounded-full ring-1 ring-slate-200 dark:ring-slate-700",
+        size === "sm" ? "size-7 p-1" : "size-9 p-1.5",
       )}
-    />
+      style={{ background: look?.bg ?? "#ffffff" }}
+    >
+      <img
+        src={`/api/invest/logo/${encodeURIComponent(symbol)}`}
+        alt=""
+        aria-hidden="true"
+        loading="lazy"
+        onError={() => setFailed(true)}
+        onLoad={(e) => {
+          if (looks.has(symbol)) return;
+          try {
+            const l = lookOf(e.currentTarget);
+            looks.set(symbol, l);
+            setLook(l);
+          } catch {
+            setLook({ bg: "#ffffff" });
+          }
+        }}
+        className="max-h-full max-w-full object-contain"
+      />
+    </span>
   );
 }
 
@@ -121,7 +130,7 @@ const shortDay = (d: string) =>
 
 /** All indexes on one percent axis, compared from the start of the range. */
 function MarketChart({ indexes }: { indexes: MarketQuote[] }) {
-  const [range, setRange] = useState<Range>("1M");
+  const [range, setRange] = useState<Range>("1D");
   const [focus, setFocus] = useState<string | null>(null);
   const [hover, setHover] = useState<number | null>(null);
   const intraday = useQueries({
