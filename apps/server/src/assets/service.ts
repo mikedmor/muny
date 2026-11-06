@@ -62,7 +62,11 @@ export function listAssets(db: MunyDb): Asset[] {
         .filter((s) => s.accountId === a.id)
         .map((s) => ({ date: s.date, valueCents: s.balanceCents })),
       loans: mine,
-      equityCents: a.balanceCents - mine.reduce((s, l) => s + l.balanceCents, 0),
+      owedCents: d?.owedCents ?? null,
+      // Linked loans say what's owed; otherwise what you entered (e.g. $0, paid off).
+      equityCents:
+        a.balanceCents -
+        (mine.length ? mine.reduce((s, l) => s + l.balanceCents, 0) : (d?.owedCents ?? 0)),
     };
   });
 }
@@ -133,6 +137,7 @@ export function updateAsset(
       purchasePriceCents: input.purchasePriceCents,
       purchaseDate: input.purchaseDate,
       address: input.address,
+      owedCents: input.owedCents,
     }).filter(([, v]) => v !== undefined),
   );
   db.insert(schema.assetDetails)

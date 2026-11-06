@@ -52,3 +52,18 @@ describe("assets", () => {
     expect(nw.byType.find((b) => b.type === "asset")?.cents).toBe(41_000_000);
   });
 });
+
+describe("assets without a loan", () => {
+  it("takes what's owed by hand, and paid off means full equity", async () => {
+    const { client } = await makeSignedInApp();
+    const car = (
+      await client.post("/api/assets", { name: "Car", kind: "vehicle", valueCents: 1_500_000 })
+    ).json<{ accountId: string }>();
+    await client.patch(`/api/assets/${car.accountId}`, { owedCents: 400_000 });
+    let a = (await client.get("/api/assets")).json<Asset[]>()[0];
+    expect(a).toMatchObject({ owedCents: 400_000, equityCents: 1_100_000 });
+    await client.patch(`/api/assets/${car.accountId}`, { owedCents: 0 });
+    a = (await client.get("/api/assets")).json<Asset[]>()[0];
+    expect(a).toMatchObject({ owedCents: 0, equityCents: 1_500_000 });
+  });
+});

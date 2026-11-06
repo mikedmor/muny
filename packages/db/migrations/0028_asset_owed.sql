@@ -1,0 +1,1 @@
+ALTER TABLE `asset_details` ADD `owed_cents` integer;

@@ -149,6 +149,75 @@ function UpdateValue({ asset }: { asset: Asset }) {
   );
 }
 
+/** What's owed on an asset with no linked loan: enter it, or mark it paid off. */
+function OwedEditor({ asset }: { asset: Asset }) {
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(fromCents(asset.owedCents));
+  const save = async (owedCents: number | null) => {
+    await api.patch(`/api/assets/${asset.accountId}`, { owedCents });
+    await qc.invalidateQueries({ queryKey: keys.accounts });
+    setEditing(false);
+  };
+  if (editing)
+    return (
+      <dd>
+        <form
+          className="inline-flex items-center gap-1"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const v = toCents(text);
+            if (Number.isNaN(v)) return;
+            void save(v);
+          }}
+        >
+          <span className="text-xs text-slate-500">$</span>
+          <input
+            aria-label="Owed on it"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            inputMode="decimal"
+            className="w-24 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-sm dark:border-slate-700 dark:bg-slate-950"
+          />
+          <Button type="submit" className="px-2 py-0.5 text-xs">
+            Save
+          </Button>
+        </form>
+      </dd>
+    );
+  return (
+    <>
+      <dd className="font-medium tabular-nums">
+        {asset.owedCents === 0 ? (
+          <span className="text-emerald-700 dark:text-emerald-400">Paid off</span>
+        ) : asset.owedCents === null ? (
+          "—"
+        ) : (
+          formatMoney(asset.owedCents)
+        )}
+      </dd>
+      <dd className="flex gap-2 text-xs">
+        {asset.owedCents !== 0 && (
+          <button
+            type="button"
+            onClick={() => void save(0)}
+            className="text-brand-600 hover:underline dark:text-brand-500"
+          >
+            Paid off
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="text-brand-600 hover:underline dark:text-brand-500"
+        >
+          {asset.owedCents === null ? "Enter" : "Change"}
+        </button>
+      </dd>
+    </>
+  );
+}
+
 function AssetCard({ asset }: { asset: Asset }) {
   const [editing, setEditing] = useState(false);
   const gain =
@@ -200,11 +269,13 @@ function AssetCard({ asset }: { asset: Asset }) {
         </div>
         <div>
           <dt className="text-xs text-slate-500">Owed on it</dt>
-          <dd className="font-medium tabular-nums">
-            {asset.loans.length
-              ? formatMoney(asset.loans.reduce((s, l) => s + l.balanceCents, 0))
-              : "—"}
-          </dd>
+          {asset.loans.length ? (
+            <dd className="font-medium tabular-nums">
+              {formatMoney(asset.loans.reduce((s, l) => s + l.balanceCents, 0))}
+            </dd>
+          ) : (
+            <OwedEditor asset={asset} />
+          )}
           {asset.loans.map((l) => (
             <dd key={l.accountId} className="text-xs">
               <Link to="/loans" className="text-brand-600 hover:underline dark:text-brand-500">
@@ -271,10 +342,7 @@ export function AssetsPage() {
             {(
               [
                 ["Worth", list.reduce((s, a) => s + a.valueCents, 0)],
-                [
-                  "Owed on them",
-                  list.reduce((s, a) => s + a.loans.reduce((t, l) => t + l.balanceCents, 0), 0),
-                ],
+                ["Owed on them", list.reduce((s, a) => s + (a.valueCents - a.equityCents), 0)],
                 ["Your equity", list.reduce((s, a) => s + a.equityCents, 0)],
               ] as const
             ).map(([k, v]) => (

@@ -84,6 +84,7 @@ function paymentsFor(
     amountCents: number;
     description: string;
     from: string;
+    mask: string | null;
   }) => {
     if (r.date < since || r.amountCents >= 0) return;
     const amount = -r.amountCents;
@@ -93,7 +94,8 @@ function paymentsFor(
       date: r.date,
       amountCents: amount,
       description: r.description,
-      fromAccountName: r.from,
+      // The paying account, with its last 4 when known.
+      fromAccountName: r.mask ? `${r.from} ••${r.mask}` : r.from,
     });
   };
   const cols = {
@@ -102,6 +104,7 @@ function paymentsFor(
     amountCents: t.amountCents,
     description: t.rawDescription,
     from: a.name,
+    mask: a.mask,
   };
   if (loanSide.length)
     for (const r of db

@@ -159,6 +159,8 @@ export interface Asset {
   history: { date: string; valueCents: number }[];
   /** Loans that pay for it, and what you own after them. */
   loans: { accountId: string; name: string; balanceCents: number }[];
+  /** What you entered as owed when no loan is linked (0 = paid off; null = not set). */
+  owedCents: number | null;
   equityCents: number;
 }
 
@@ -169,4 +171,6 @@ export interface AssetInput {
   purchasePriceCents?: number | null;
   purchaseDate?: string | null;
   address?: string | null;
+  /** Owed on it when no loan is linked (0 = paid off; null clears). */
+  owedCents?: number | null;
 }

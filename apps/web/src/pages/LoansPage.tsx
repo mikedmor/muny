@@ -11,7 +11,7 @@ import {
 } from "@muny/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Download, Pencil, Plus } from "lucide-react";
+import { ChevronDown, Download, Pencil, Plus } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { LineChart } from "../components/charts.js";
 import { Modal } from "../components/forms.js";
@@ -700,9 +700,12 @@ function LoanCard({ loan }: { loan: Loan }) {
     },
   ];
   const side = loan.property || loan.pmi;
+  // Mortgages (and loans tied to a home) get the full layout; others stay compact until opened.
+  const full = loan.kind === "mortgage" || !!side;
+  const [open, setOpen] = useState(full);
 
   return (
-    <Card className="space-y-5">
+    <Card className={full ? "space-y-5" : "space-y-3"}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="flex flex-wrap items-center gap-2 text-lg font-semibold">
@@ -768,9 +771,15 @@ function LoanCard({ loan }: { loan: Loan }) {
         </div>
       )}
 
-      <dl className="grid grid-cols-2 divide-slate-200 overflow-hidden rounded-xl border border-slate-200 sm:grid-cols-3 lg:grid-cols-5 lg:divide-x dark:divide-slate-800 dark:border-slate-800">
+      <dl
+        className={
+          full
+            ? "grid grid-cols-2 divide-slate-200 overflow-hidden rounded-xl border border-slate-200 sm:grid-cols-3 lg:grid-cols-5 lg:divide-x dark:divide-slate-800 dark:border-slate-800"
+            : "flex flex-wrap gap-x-8 gap-y-2"
+        }
+      >
         {facts.map((f) => (
-          <div key={f.label} className="px-4 py-3">
+          <div key={f.label} className={full ? "px-4 py-3" : ""}>
             <dt className="text-xs text-slate-500">{f.label}</dt>
             <dd className="mt-0.5 font-semibold tabular-nums">{f.value}</dd>
             {f.sub && <dd className="text-xs text-slate-500">{f.sub}</dd>}
@@ -797,17 +806,35 @@ function LoanCard({ loan }: { loan: Loan }) {
         </p>
       )}
 
-      <div className={cx("grid gap-4", side && "lg:grid-cols-2")}>
-        <PayoffPlanner loan={loan} />
-        {side && (
-          <div className="space-y-4">
-            <HomeEquity loan={loan} />
-            <MortgageInsurance loan={loan} />
-          </div>
-        )}
-      </div>
+      {!full && (
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((o) => !o)}
+          className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline dark:text-brand-500"
+        >
+          <ChevronDown
+            aria-hidden="true"
+            className={cx("size-3.5 transition-transform", open && "rotate-180")}
+          />
+          {open ? "Hide payoff and payments" : `Payoff and payments (${loan.payments.length})`}
+        </button>
+      )}
 
-      <Payments loan={loan} />
+      {open && (
+        <>
+          <div className={cx("grid gap-4", side && "lg:grid-cols-2")}>
+            <PayoffPlanner loan={loan} />
+            {side && (
+              <div className="space-y-4">
+                <HomeEquity loan={loan} />
+                <MortgageInsurance loan={loan} />
+              </div>
+            )}
+          </div>
+          <Payments loan={loan} />
+        </>
+      )}
 
       <Modal open={editing} onClose={() => setEditing(false)} title={`Edit ${loan.name}`}>
         {editing && <LoanForm loan={loan} onDone={() => setEditing(false)} />}

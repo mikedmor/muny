@@ -174,7 +174,7 @@ function useWidth() {
     const el = ref.current;
     if (!el) return;
     const ro = new ResizeObserver(([e]) => {
-      if (e) setW(Math.max(280, Math.round(e.contentRect.width)));
+      if (e) setW(Math.max(200, Math.round(e.contentRect.width)));
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -240,6 +240,7 @@ export function ColumnChart({
       )}
       <svg
         width={width}
+        className="block max-w-full"
         height={H}
         role="img"
         aria-label={ariaLabel}
@@ -578,6 +579,7 @@ export function LineChart({
     <div ref={ref} className="relative w-full min-w-0 select-none overflow-visible">
       <svg
         width={width}
+        className="block max-w-full"
         height={height}
         role="img"
         aria-label={ariaLabel}
@@ -818,6 +820,7 @@ export function PaceChart({
       <div ref={ref} className="relative w-full min-w-0 select-none overflow-visible">
         <svg
           width={width}
+          className="block max-w-full"
           height={height}
           role="img"
           aria-label={ariaLabel}
@@ -1168,6 +1171,7 @@ export function PercentLinesChart({
     <div ref={ref} className="relative w-full min-w-0 select-none">
       <svg
         width={width}
+        className="block max-w-full"
         height={height}
         role="img"
         aria-label={ariaLabel}

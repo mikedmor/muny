@@ -920,5 +920,7 @@ export const assetDetails = sqliteTable("asset_details", {
   /** YYYY-MM-DD */
   purchaseDate: text(),
   address: text(),
+  /** What you still owe on it when no loan account is linked (0 = paid off). */
+  owedCents: integer(),
   updatedAt: updatedAt(),
 });

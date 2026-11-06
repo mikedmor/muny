@@ -16,6 +16,7 @@ const Fields = z.object({
   purchasePriceCents: cents.nullable().optional(),
   purchaseDate: isoDate.nullable().optional(),
   address: z.string().trim().max(200).nullable().optional(),
+  owedCents: cents.nullable().optional(),
 });
 
 export function registerAssetRoutes(app: FastifyInstance, db: MunyDb) {
