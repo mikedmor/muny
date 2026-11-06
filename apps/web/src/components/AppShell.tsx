@@ -4,6 +4,7 @@ import {
   ArrowLeftRight,
   Bell,
   Bitcoin,
+  ChartCandlestick,
   ChartColumn,
   ChartPie,
   ChevronsUpDown,
@@ -47,6 +48,7 @@ const NAV: { label?: string; items: { to: string; label: string; icon: LucideIco
   {
     label: "Wealth",
     items: [
+      { to: "/stocks", label: "Stocks", icon: ChartCandlestick },
       { to: "/crypto", label: "Crypto", icon: Bitcoin },
       { to: "/savings", label: "Savings", icon: PiggyBank },
     ],

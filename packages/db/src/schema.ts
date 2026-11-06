@@ -708,3 +708,110 @@ export const cryptoPrices = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.asset, t.date] })],
 );
+
+// ---------------------------------------------------------------------------
+// Investments (stocks, ETFs, funds). Brokerage accounts are `accounts` rows of
+// type "investment"; these tables hold what's in them. Quantities and prices
+// are exact decimal strings; money is integer cents. See docs/DECISIONS.md D-034.
+// ---------------------------------------------------------------------------
+
+export const securities = sqliteTable(
+  "securities",
+  {
+    id: text().primaryKey(),
+    /** Ticker (VTI, AAPL); "CASH" for an account's uninvested cash. */
+    symbol: text().notNull(),
+    name: text().notNull(),
+    type: text({
+      enum: ["equity", "etf", "mutual_fund", "bond", "option", "cash", "other"],
+    }).notNull(),
+    currency: text().notNull().default("USD"),
+    /** Plaid's security_id, when synced. */
+    plaidSecurityId: text(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("securities_symbol_uq").on(t.symbol)],
+);
+
+/** What each account holds now, as the broker last reported it. */
+export const investmentHoldings = sqliteTable(
+  "investment_holdings",
+  {
+    accountId: text()
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    securityId: text()
+      .notNull()
+      .references(() => securities.id, { onDelete: "cascade" }),
+    quantity: text().notNull(),
+    /** Price per share (decimal string). */
+    price: text(),
+    valueCents: integer().notNull(),
+    /** Total cost basis the broker reports, when it does. */
+    costBasisCents: integer(),
+    /** YYYY-MM-DD the broker reported this. */
+    asOf: text().notNull(),
+    source: text({ enum: ["plaid", "import", "manual"] }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.accountId, t.securityId] })],
+);
+
+export const investmentTxns = sqliteTable(
+  "investment_txns",
+  {
+    id: text().primaryKey(),
+    accountId: text()
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    securityId: text().references(() => securities.id, { onDelete: "set null" }),
+    /** YYYY-MM-DD */
+    date: text().notNull(),
+    type: text({
+      enum: [
+        "buy",
+        "sell",
+        "dividend",
+        "interest",
+        "split",
+        "transfer_in",
+        "transfer_out",
+        "deposit",
+        "withdrawal",
+        "fee",
+        "tax",
+        "other",
+      ],
+    }).notNull(),
+    /** Shares, positive (the type says which way). */
+    quantity: text(),
+    price: text(),
+    /** Cash effect: negative for a buy, positive for a sale or dividend. */
+    amountCents: integer().notNull(),
+    feesCents: integer().notNull().default(0),
+    description: text(),
+    /** Stable id for dedupe (provider id, or a hash of the imported row). */
+    externalId: text().notNull(),
+    source: text({ enum: ["plaid", "import", "manual"] }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("investment_txns_external_uq").on(t.accountId, t.externalId),
+    index("investment_txns_date_idx").on(t.date),
+  ],
+);
+
+/** Daily close per security (decimal string), from what brokers report. */
+export const securityPrices = sqliteTable(
+  "security_prices",
+  {
+    securityId: text()
+      .notNull()
+      .references(() => securities.id, { onDelete: "cascade" }),
+    /** YYYY-MM-DD */
+    date: text().notNull(),
+    close: text().notNull(),
+    source: text().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.securityId, t.date] })],
+);

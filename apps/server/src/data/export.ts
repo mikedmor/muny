@@ -183,6 +183,13 @@ export function fullExport(db: MunyDb) {
     transactionSplits: db.select().from(schema.transactionSplits).all(),
     transactionTags: db.select().from(schema.transactionTags).all(),
     rules: listRules(db),
+    securities: db.select().from(schema.securities).all(),
+    investmentHoldings: db.select().from(schema.investmentHoldings).all(),
+    investmentTxns: db
+      .select()
+      .from(schema.investmentTxns)
+      .orderBy(asc(schema.investmentTxns.date))
+      .all(),
     // Deliberately excluded: users, sessions, audit log, provider credentials.
   };
 }

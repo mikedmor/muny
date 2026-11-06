@@ -63,7 +63,7 @@ describe("NFT images through the server", () => {
       throw new Error("must not be fetched");
     }) as unknown as typeof fetch;
     await expect(
-      fetchNftImage(db, q, { fetch: never, resolve: dns({ "evil.example": "192.168.1.200" }) }),
+      fetchNftImage(db, q, { fetch: never, resolve: dns({ "evil.example": "10.0.0.5" }) }),
     ).rejects.toBeInstanceOf(NftImageError);
     const redirect = (async () =>
       new Response(null, {

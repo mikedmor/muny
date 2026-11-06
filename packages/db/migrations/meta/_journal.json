@@ -134,6 +134,13 @@
       "when": 1793934909548,
       "tag": "0018_crypto_tax_docs",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1793941419250,
+      "tag": "0019_investments",
+      "breakpoints": true
     }
   ]
 }

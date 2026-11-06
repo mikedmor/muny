@@ -16,6 +16,7 @@ import { registerCryptoRoutes } from "./crypto/routes.js";
 import { registerBackupRoutes } from "./data/backups.js";
 import { registerExportRoutes } from "./data/export.js";
 import { registerImportRoutes } from "./import/routes.js";
+import { registerInvestRoutes } from "./invest/routes.js";
 import { registerAccountRoutes } from "./ledger/accounts.js";
 import { registerCategoryRoutes } from "./ledger/categories.js";
 import { registerPayeeRoutes } from "./ledger/payees.js";
@@ -122,6 +123,7 @@ export async function buildApp({
   registerCategoryRoutes(app, db);
   registerTransactionRoutes(app, db);
   registerImportRoutes(app, db);
+  registerInvestRoutes(app, db);
   registerPayeeRoutes(app, db);
   registerRuleRoutes(app, db);
   registerExportRoutes(app, db);

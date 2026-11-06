@@ -29,6 +29,9 @@ import type {
   InfraCost,
   InfraInput,
   Interval,
+  InvestImportResult,
+  InvestSummary,
+  InvestTxn,
   LinkResult,
   LinkStart,
   NotificationChannel,
@@ -747,3 +750,31 @@ export const useCryptoNfts = () =>
     queryKey: [...cryptoKeys.all, "nfts"],
     queryFn: () => api.get<CryptoNft[]>("/api/crypto/nfts"),
   });
+
+// ---------------------------------------------------------------------------
+// Investments (stocks, ETFs, funds)
+// ---------------------------------------------------------------------------
+
+export const investKeys = { all: ["invest"] as const };
+
+export const useInvestSummary = () =>
+  useQuery({
+    queryKey: [...investKeys.all, "summary"],
+    queryFn: () => api.get<InvestSummary>("/api/invest/summary"),
+  });
+
+export const useInvestTxns = (accountId?: string) =>
+  useQuery({
+    queryKey: [...investKeys.all, "txns", accountId ?? "all"],
+    queryFn: () =>
+      api.get<InvestTxn[]>(
+        `/api/invest/transactions${accountId ? `?accountId=${encodeURIComponent(accountId)}` : ""}`,
+      ),
+  });
+
+export const useInvestImport = () =>
+  useInvalidatingMutation(
+    (b: { content: string; targets: Record<string, string> }) =>
+      api.post<InvestImportResult>("/api/invest/import/commit", b),
+    [investKeys.all, keys.accounts, keys.overview, keys.reports],
+  );
