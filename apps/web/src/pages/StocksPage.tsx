@@ -5,7 +5,6 @@ import {
   type InvestImportResult,
   type InvestPosition,
   SECURITY_TYPE_LABELS,
-  type SecurityKind,
 } from "@muny/shared";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight, FileUp, Link2 } from "lucide-react";
@@ -13,6 +12,7 @@ import { type ChangeEvent, useMemo, useState } from "react";
 import { Donut, LineChart } from "../components/charts.js";
 import { Modal } from "../components/forms.js";
 import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
+import { MerchantAvatar } from "../components/visuals.js";
 import { api } from "../lib/api.js";
 import {
   useInvestBackfill,
@@ -21,6 +21,7 @@ import {
   useInvestTxns,
   useSecurityPrices,
 } from "../lib/queries.js";
+import { assignColors, OTHER_COLOR, seriesColor } from "../lib/series.js";
 import { fmtAmount } from "./crypto/common.js";
 
 const RANGES = [
@@ -180,17 +181,6 @@ function PriceChart({ securityId, symbol }: { securityId: string; symbol: string
   );
 }
 
-/** Each kind keeps its color whatever else is held. */
-const KIND_COLOR: Record<SecurityKind, string> = {
-  equity: "var(--viz-series-1)",
-  etf: "var(--viz-series-2)",
-  mutual_fund: "var(--viz-series-3)",
-  bond: "var(--viz-series-4)",
-  option: "var(--viz-series-5)",
-  cash: "var(--viz-series-6)",
-  other: "var(--viz-other)",
-};
-
 const pct = (part: number, whole: number) =>
   whole ? `${((part / whole) * 100).toFixed(Math.abs(part / whole) < 0.1 ? 1 : 0)}%` : "–";
 
@@ -230,7 +220,15 @@ function Tile({
 
 type Sort = { key: "symbol" | "value" | "gain" | "weight"; dir: 1 | -1 };
 
-function HoldingsTable({ positions, total }: { positions: InvestPosition[]; total: number }) {
+function HoldingsTable({
+  positions,
+  total,
+  colors,
+}: {
+  positions: InvestPosition[];
+  total: number;
+  colors: Map<string, string>;
+}) {
   const [sort, setSort] = useState<Sort>({ key: "value", dir: -1 });
   const [open, setOpen] = useState<string | null>(null);
   const rows = useMemo(() => {
@@ -265,14 +263,16 @@ function HoldingsTable({ positions, total }: { positions: InvestPosition[]; tota
   );
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[44rem] text-sm">
+      <table className="w-full min-w-[36rem] text-sm">
         <thead className="text-left text-xs text-slate-500">
           <tr>
+            <th className="w-8 pl-4">
+              <span className="sr-only">Details</span>
+            </th>
             {th("symbol", "Holding", false)}
-            <th className="px-3 py-2 text-right font-medium">Shares</th>
-            <th className="px-3 py-2 text-right font-medium">Price</th>
+            <th className="px-2 py-2 text-right font-medium">Shares</th>
+            <th className="hidden px-2 py-2 text-right font-medium md:table-cell">Cost</th>
             {th("value", "Value")}
-            <th className="px-3 py-2 text-right font-medium">Cost</th>
             {th("gain", "Gain")}
             {th("weight", "Weight")}
           </tr>
@@ -283,6 +283,7 @@ function HoldingsTable({ positions, total }: { positions: InvestPosition[]; tota
               key={p.securityId}
               p={p}
               total={total}
+              color={colors.get(p.securityId) ?? OTHER_COLOR}
               open={open === p.securityId}
               onToggle={() => setOpen(open === p.securityId ? null : p.securityId)}
             />
@@ -296,81 +297,189 @@ function HoldingsTable({ positions, total }: { positions: InvestPosition[]; tota
 function HoldingRow({
   p,
   total,
+  color,
   open,
   onToggle,
 }: {
   p: InvestPosition;
   total: number;
+  color: string;
   open: boolean;
   onToggle: () => void;
 }) {
   const cash = p.type === "cash";
+  const shares = Number(p.quantity);
+  const perShareCost =
+    !cash && p.costBasisCents !== null && shares > 0 ? p.costBasisCents / 100 / shares : null;
+  const usd = (n: number) =>
+    `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: n < 1 ? 4 : 2 })}`;
+  const accountTotal = p.accounts.reduce((t, a) => t + a.valueCents, 0);
+  const share = (cents: number) => (accountTotal > 0 ? (cents / accountTotal) * 100 : 0);
+  const pctLabel = (v: number) => (v === 0 ? "0%" : v < 1 ? "<1%" : `${Math.round(v)}%`);
+  const name = cash ? "Cash" : p.symbol;
   return (
     <>
       <tr
         onClick={onToggle}
         className="cursor-pointer border-t border-slate-100 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40"
       >
-        <td className="px-3 py-2.5">
-          <span className="flex items-center gap-2">
-            <ChevronRight
-              aria-hidden="true"
-              className={cx(
-                "size-3.5 shrink-0 text-slate-400 transition-transform",
-                open && "rotate-90",
-              )}
-            />
-            <span
-              aria-hidden="true"
-              className="size-2.5 shrink-0 rounded-full"
-              style={{ background: KIND_COLOR[p.type] }}
-            />
+        <td className="w-8 py-3 pl-4">
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-label={`${open ? "Hide" : "Show"} ${name} details`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggle();
+            }}
+            className={cx("text-slate-400 transition-transform", open && "rotate-90")}
+          >
+            <ChevronRight aria-hidden="true" className="size-3.5" />
+          </button>
+        </td>
+        <td className="py-3 pr-2">
+          <span className="flex items-center gap-3">
+            <span className="relative">
+              <MerchantAvatar name={name} />
+              <span
+                aria-hidden="true"
+                className="absolute -right-0.5 -bottom-0.5 size-3 rounded-full ring-2 ring-white dark:ring-slate-900"
+                style={{ background: color }}
+              />
+            </span>
             <span className="min-w-0">
-              <button type="button" aria-expanded={open} className="block font-semibold">
-                {cash ? "Cash" : p.symbol}
-              </button>
+              <span className="block font-semibold">{name}</span>
               <span className="block max-w-64 truncate text-xs text-slate-500">{p.name}</span>
             </span>
           </span>
         </td>
-        <td className="px-3 py-2.5 text-right tabular-nums">
+        <td className="px-2 text-right font-mono text-sm tabular-nums">
           {cash ? "" : fmtAmount(p.quantity, 4)}
         </td>
-        <td className="px-3 py-2.5 text-right tabular-nums">
-          {cash || !p.price ? "" : `$${fmtAmount(p.price, 2)}`}
+        <td className="hidden px-2 text-right tabular-nums md:table-cell">
+          {cash ? (
+            ""
+          ) : p.costBasisCents === null ? (
+            <span className="text-slate-400">—</span>
+          ) : (
+            <>
+              <span className="block">{formatMoney(p.costBasisCents)}</span>
+              {perShareCost !== null && (
+                <span className="text-xs text-slate-500">{usd(perShareCost)} / share</span>
+              )}
+            </>
+          )}
         </td>
-        <td className="px-3 py-2.5 text-right font-medium tabular-nums">
-          {formatMoney(p.valueCents)}
+        <td className="px-2 text-right tabular-nums">
+          <span className="block font-medium">{formatMoney(p.valueCents)}</span>
+          {!cash && p.price && (
+            <span className="text-xs text-slate-500">{usd(Number(p.price))} / share</span>
+          )}
         </td>
-        <td className="px-3 py-2.5 text-right tabular-nums text-slate-500">
-          {cash ? "" : p.costBasisCents === null ? "–" : formatMoney(p.costBasisCents)}
-        </td>
-        <td className="px-3 py-2.5 text-right tabular-nums">
+        <td className="hidden px-2 text-right text-sm tabular-nums sm:table-cell">
           {cash ? "" : <Gain cents={p.gainCents} base={p.costBasisCents} />}
         </td>
-        <td className="px-3 py-2.5 text-right tabular-nums text-slate-500">
+        <td className="py-3 pr-4 text-right text-sm tabular-nums text-slate-500">
           {pct(p.valueCents, total)}
         </td>
       </tr>
-      {open &&
-        p.accounts.map((a) => (
-          <tr
-            key={a.accountId}
-            className="bg-slate-50/60 text-xs text-slate-500 dark:bg-slate-800/30"
-          >
-            <td className="py-1.5 pr-3 pl-14">{a.accountName}</td>
-            <td className="px-3 py-1.5 text-right tabular-nums">
-              {cash ? "" : fmtAmount(a.quantity, 4)}
-            </td>
-            <td />
-            <td className="px-3 py-1.5 text-right tabular-nums">{formatMoney(a.valueCents)}</td>
-            <td colSpan={3} />
-          </tr>
-        ))}
-      {open && !cash && (
+      {open && (
         <tr className="bg-slate-50/60 dark:bg-slate-800/30">
-          <td colSpan={7} className="px-4 pb-3">
-            <PriceChart securityId={p.securityId} symbol={p.symbol} />
+          <td colSpan={7} className="px-4 pt-3 pb-4">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <dl className="grid flex-1 grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
+                {(
+                  [
+                    ["Price", !cash && p.price ? usd(Number(p.price)) : "—"],
+                    ["Shares", cash ? "—" : fmtAmount(p.quantity, 4)],
+                    ["Kind", SECURITY_TYPE_LABELS[p.type]],
+                    ["Share of portfolio", pct(p.valueCents, total)],
+                    ["Total cost", p.costBasisCents !== null ? formatMoney(p.costBasisCents) : "—"],
+                    ["Cost / share", perShareCost !== null ? usd(perShareCost) : "—"],
+                    ["Total value", formatMoney(p.valueCents)],
+                    [
+                      "Gains",
+                      p.gainCents !== null && !cash
+                        ? `${p.gainCents >= 0 ? "+" : "−"}${formatMoney(Math.abs(p.gainCents))}`
+                        : "—",
+                    ],
+                  ] as const
+                ).map(([k, v]) => (
+                  <div key={k}>
+                    <dt className="text-xs text-slate-500">{k}</dt>
+                    <dd
+                      className={cx(
+                        "font-medium tabular-nums",
+                        k === "Gains" &&
+                          p.gainCents !== null &&
+                          !cash &&
+                          (p.gainCents >= 0
+                            ? "text-emerald-700 dark:text-emerald-400"
+                            : "text-red-600 dark:text-red-400"),
+                      )}
+                    >
+                      {v}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              {!cash && (
+                <div className="w-full sm:w-72">
+                  <PriceChart securityId={p.securityId} symbol={p.symbol} />
+                </div>
+              )}
+            </div>
+            {p.costBasisCents === null && !cash && (
+              <p className="mt-2 text-xs text-slate-500">
+                Your broker doesn't report what you paid for this holding, so it's left out of the
+                gain.
+              </p>
+            )}
+            {p.accounts.length > 0 && (
+              <div
+                className="mt-4 flex h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"
+                aria-hidden="true"
+              >
+                {p.accounts.map((a, i) => (
+                  <span
+                    key={a.accountId}
+                    style={{ width: `${share(a.valueCents)}%`, background: seriesColor(i) }}
+                  />
+                ))}
+              </div>
+            )}
+            <table className="mt-3 w-full text-sm">
+              <caption className="sr-only">{name} by account</caption>
+              <thead className="text-xs text-slate-500">
+                <tr>
+                  <th className="py-1 text-left font-medium">Account</th>
+                  <th className="py-1 text-right font-medium">{cash ? "" : "Shares"}</th>
+                  <th className="py-1 text-right font-medium">Value</th>
+                  <th className="py-1 text-right font-medium">Allocation</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200/70 dark:divide-slate-700/60">
+                {p.accounts.map((a, i) => (
+                  <tr key={a.accountId}>
+                    <td className="py-1.5">{a.accountName}</td>
+                    <td className="py-1.5 text-right font-mono tabular-nums">
+                      {cash ? "" : fmtAmount(a.quantity, 4)}
+                    </td>
+                    <td className="py-1.5 text-right tabular-nums">{formatMoney(a.valueCents)}</td>
+                    <td className="py-1.5 text-right tabular-nums">
+                      <span className="inline-flex items-center gap-2">
+                        {pctLabel(share(a.valueCents))}
+                        <span
+                          aria-hidden="true"
+                          className="inline-block size-2.5 rounded-sm"
+                          style={{ background: seriesColor(i) }}
+                        />
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </td>
         </tr>
       )}
@@ -577,6 +686,37 @@ export function StocksPage() {
   const [importing, setImporting] = useState(false);
   const s = summary.data;
   const empty = s && s.accounts.length === 0;
+  // One color per holding, shared by the table and the allocation chart.
+  const colors = useMemo(
+    () =>
+      assignColors(
+        (s?.positions ?? []).map((p) => ({
+          key: p.securityId,
+          value: p.valueCents,
+          order: p.type === "cash" ? "~" : p.symbol,
+        })),
+      ),
+    [s],
+  );
+  const slices = useMemo(() => {
+    const list: { key: string; label: string; cents: number; color: string }[] = [];
+    let other = 0;
+    for (const p of s?.positions ?? []) {
+      if (p.valueCents <= 0) continue;
+      const color = colors.get(p.securityId) ?? OTHER_COLOR;
+      if (color === OTHER_COLOR) other += p.valueCents;
+      else
+        list.push({
+          key: p.securityId,
+          label: p.type === "cash" ? `Cash (${p.symbol})` : p.symbol,
+          cents: p.valueCents,
+          color,
+        });
+    }
+    list.sort((a, b) => b.cents - a.cents);
+    if (other) list.push({ key: "other", label: "Other", cents: other, color: OTHER_COLOR });
+    return list;
+  }, [s, colors]);
 
   return (
     <>
@@ -643,34 +783,34 @@ export function StocksPage() {
               <h2 className="mb-3 font-semibold">Allocation</h2>
               <div className="flex flex-col items-center gap-4">
                 <Donut
-                  ariaLabel="Allocation by kind"
+                  ariaLabel="Allocation by holding"
                   size={180}
                   thickness={30}
-                  slices={s.allocation.map((a) => ({
-                    key: a.type,
-                    label: SECURITY_TYPE_LABELS[a.type],
-                    cents: a.valueCents,
-                    color: KIND_COLOR[a.type],
-                  }))}
+                  slices={slices}
                 />
                 <ul className="w-full space-y-1 text-sm">
-                  {s.allocation.map((a) => (
-                    <li key={a.type} className="flex items-center gap-2">
+                  {slices.map((a) => (
+                    <li key={a.key} className="flex items-center gap-2">
                       <span
                         aria-hidden="true"
                         className="size-2.5 rounded-full"
-                        style={{ background: KIND_COLOR[a.type] }}
+                        style={{ background: a.color }}
                       />
-                      <span className="flex-1">{SECURITY_TYPE_LABELS[a.type]}</span>
+                      <span className="flex-1 truncate">{a.label}</span>
                       <span className="tabular-nums text-slate-500">
-                        {pct(a.valueCents, s.valueCents)}
+                        {pct(a.cents, s.valueCents)}
                       </span>
-                      <span className="w-24 text-right tabular-nums">
-                        {formatMoney(a.valueCents)}
-                      </span>
+                      <span className="w-24 text-right tabular-nums">{formatMoney(a.cents)}</span>
                     </li>
                   ))}
                 </ul>
+                <p className="w-full text-xs text-slate-500">
+                  {s.allocation
+                    .map(
+                      (a) => `${SECURITY_TYPE_LABELS[a.type]} ${pct(a.valueCents, s.valueCents)}`,
+                    )
+                    .join(" · ")}
+                </p>
               </div>
             </Card>
           </div>
@@ -680,7 +820,7 @@ export function StocksPage() {
               Holdings
             </h2>
             {s.positions.length ? (
-              <HoldingsTable positions={s.positions} total={s.valueCents} />
+              <HoldingsTable positions={s.positions} total={s.valueCents} colors={colors} />
             ) : (
               <p className="px-4 py-6 text-sm text-slate-500">
                 No holdings yet. Import a positions export to see what each account holds.
