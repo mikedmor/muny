@@ -190,6 +190,8 @@ export interface SavingsBucket {
 }
 
 export interface SavingsBuckets {
+  /** moves: follows the transfers the bank reports between categories; split: the plan applied to the total. */
+  mode: "moves" | "split";
   accountBalanceCents: number;
   buckets: SavingsBucket[];
   /** The account's balance not in any category. */

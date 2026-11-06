@@ -39,6 +39,12 @@ export interface CreditCard {
   source: "plaid" | "statement" | "manual" | null;
   /** Words your payments to it use in your other accounts. */
   paymentMatch: string | null;
+  /** Only payments of about this much (null: any, e.g. paying the statement balance). */
+  paymentAmountCents: number | null;
+  /** Paid around this day of the month. */
+  paymentDay: number | null;
+  /** Only payments from this account. */
+  paymentFromAccountId: string | null;
   /** From the statement's minimum payment warning (null when not read). */
   minimumOnly: { months: number; totalCents: number } | null;
 }
@@ -62,6 +68,9 @@ export interface CardDetailsInput {
   minimumPaymentCents?: number | null;
   dueDate?: string | null;
   paymentMatch?: string | null;
+  paymentAmountCents?: number | null;
+  paymentDay?: number | null;
+  paymentFromAccountId?: string | null;
 }
 
 /** What Muny read from a card statement PDF. */

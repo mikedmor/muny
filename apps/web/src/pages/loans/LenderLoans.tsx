@@ -14,7 +14,7 @@ import { type FormEvent, useState } from "react";
 import { Modal } from "../../components/forms.js";
 import { Alert, Button, Field } from "../../components/ui.js";
 import { api } from "../../lib/api.js";
-import { keys } from "../../lib/queries.js";
+import { keys, useAccounts } from "../../lib/queries.js";
 
 /**
  * Several loans from one lender, paid together: e.g. student loans in groups
@@ -53,6 +53,8 @@ interface PaymentDraft {
   /** YYYY-MM-DD or "": only payments from / until these dates. */
   from: string;
   until: string;
+  /** Only payments from this account ("" = any). */
+  account: string;
   /** Loan key → dollars typed. */
   parts: Record<string, string>;
 }
@@ -62,6 +64,7 @@ const emptyPayment = (): PaymentDraft => ({
   words: "",
   from: "",
   until: "",
+  account: "",
   parts: {},
 });
 const shortDate = (iso: string) =>
@@ -101,6 +104,7 @@ function parsePayments(
       paymentMatch: d.words.trim() || null,
       startDate: d.from || null,
       endDate: d.until || null,
+      fromAccountId: d.account || null,
       parts,
     });
   }
@@ -119,6 +123,7 @@ function PaymentsEditor({
   onChange: (v: PaymentDraft[]) => void;
   words: string | null;
 }) {
+  const accounts = useAccounts();
   const set = (key: string, patch: Partial<PaymentDraft>) =>
     onChange(value.map((p) => (p.key === key ? { ...p, ...patch } : p)));
   return (
@@ -199,6 +204,24 @@ function PaymentsEditor({
                 onChange={(e) => set(p.key, { until: e.target.value })}
               />
             </div>
+            <label className="block max-w-72 text-xs">
+              <span className="text-slate-500">Paid from</span>
+              <select
+                value={p.account}
+                onChange={(e) => set(p.key, { account: e.target.value })}
+                className="mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
+              >
+                <option value="">Any account</option>
+                {(accounts.data ?? [])
+                  .filter((a) => a.type !== "credit" && a.type !== "loan" && !a.hidden)
+                  .map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                      {a.mask ? ` ••${a.mask}` : ""}
+                    </option>
+                  ))}
+              </select>
+            </label>
             <div>
               <p className="text-xs text-slate-500">
                 What it puts toward each loan (leave empty for loans it doesn't cover):
@@ -444,6 +467,7 @@ function LenderPaymentsForm({
           dueDay: p.dueDay ? String(p.dueDay) : "",
           from: p.startDate ?? "",
           until: p.endDate ?? "",
+          account: p.fromAccountId ?? "",
           words: p.paymentMatch ?? "",
           parts: Object.fromEntries(Object.entries(p.parts).map(([id, c]) => [id, fromCents(c)])),
         }))

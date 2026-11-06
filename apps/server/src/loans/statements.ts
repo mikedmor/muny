@@ -23,20 +23,27 @@ export async function pdfLines(bytes: Uint8Array): Promise<string[][]> {
         x: (i.transform as number[])[4] ?? 0,
         y: (i.transform as number[])[5] ?? 0,
         w: i.width ?? 0,
+        // Font size, from the text matrix.
+        size:
+          Math.hypot((i.transform as number[])[0] ?? 0, (i.transform as number[])[1] ?? 0) || 10,
       }));
-    // Rows: items on (nearly) the same baseline.
+    // Rows: items on (nearly) the same baseline; a value set in bigger or bold
+    // type can sit a little lower than its label, so allow about half a line.
     const rows: { y: number; items: typeof items }[] = [];
     for (const it of items.sort((a, b) => b.y - a.y)) {
-      const row = rows.find((r) => Math.abs(r.y - it.y) <= 2.5);
+      const row = rows.find((r) => Math.abs(r.y - it.y) <= Math.max(2.5, it.size * 0.45));
       if (row) row.items.push(it);
       else rows.push({ y: it.y, items: [it] });
     }
     for (const r of rows.sort((a, b) => b.y - a.y)) {
-      // Cells: items close together are one cell (a label split into words).
+      // Cells: items close together are one cell (a label split into words). Pieces
+      // that nearly touch are one word: some PDFs store "$3,083.68" as "$3,08" + "3.68".
       const cells: string[] = [];
       let end = Number.NEGATIVE_INFINITY;
       for (const it of r.items.sort((a, b) => a.x - b.x)) {
-        if (cells.length && it.x - end < 6) cells[cells.length - 1] += ` ${it.s}`;
+        const gap = it.x - end;
+        if (cells.length && gap < it.size * 0.2) cells[cells.length - 1] += it.s;
+        else if (cells.length && gap < 6) cells[cells.length - 1] += ` ${it.s}`;
         else cells.push(it.s);
         end = it.x + it.w;
       }

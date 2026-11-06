@@ -171,4 +171,38 @@ describe("credit card statements", () => {
       300_000,
     );
   });
+
+  it("tells two cards' payments apart by amount, day and paying account", async () => {
+    const { client } = await makeSignedInApp();
+    const acct = async (name: string, type: string) =>
+      (await client.post("/api/accounts", { name, type })).json<{ id: string }>().id;
+    const a = await acct("Card A", "credit");
+    const b = await acct("Card B", "credit");
+    const x = await acct("Checking X", "checking");
+    const y = await acct("Checking Y", "checking");
+    const pay = (accountId: string, postedDate: string, amountCents: number) =>
+      client.post("/api/transactions", {
+        accountId,
+        postedDate,
+        amountCents,
+        description: "SAMEBANK CARD PYMT",
+      });
+    const m = localToday().slice(0, 8);
+    await pay(x, `${m}05`, -25_000);
+    await pay(y, `${m}20`, -31_245);
+    await client.patch(`/api/cards/${a}`, {
+      paymentMatch: "SAMEBANK CARD",
+      paymentAmountCents: 25_000,
+      paymentFromAccountId: x,
+    });
+    await client.patch(`/api/cards/${b}`, {
+      paymentMatch: "SAMEBANK CARD",
+      paymentDay: 20,
+    });
+    const r = (await client.get("/api/cards")).json<CardsReport>();
+    const paid = (id: string) =>
+      r.cards.find((c) => c.accountId === id)?.payments.map((p) => p.amountCents);
+    expect(paid(a)).toEqual([25_000]);
+    expect(paid(b)).toEqual([31_245]);
+  });
 });

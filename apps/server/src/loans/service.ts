@@ -94,6 +94,7 @@ function byWords(db: Db, words: string | null | undefined) {
       date: t.postedDate,
       amountCents: t.amountCents,
       description: t.rawDescription,
+      accountId: t.accountId,
       from: a.name,
       mask: a.mask,
     })
@@ -160,10 +161,13 @@ function paymentsFor(
     date: string;
     amountCents: number;
     description: string;
+    accountId: string;
     from: string;
     mask: string | null;
   }) => {
     if (r.date < since || r.amountCents >= 0) return;
+    // Paid from one account only, when set.
+    if (d?.paymentFromAccountId && r.accountId !== d.paymentFromAccountId) return;
     const amount = -r.amountCents;
     // The yearly fee isn't a loan payment.
     if (feeMin && amount >= feeMin) return;
@@ -183,6 +187,7 @@ function paymentsFor(
     date: t.postedDate,
     amountCents: t.amountCents,
     description: t.rawDescription,
+    accountId: t.accountId,
     from: a.name,
     mask: a.mask,
   };
@@ -320,6 +325,7 @@ function lenderPaymentParts(
         if (t.date < since || (feeMin && amount >= feeMin) || !near(amount, total)) continue;
         if ((row.startDate && t.date < row.startDate) || (row.endDate && t.date > row.endDate))
           continue;
+        if (row.fromAccountId && t.accountId !== row.fromAccountId) continue;
         if (row.dueDay && dayGap(day, row.dueDay) > DUE_WINDOW) continue;
         list.set(t.id, {
           id: t.id,
@@ -362,6 +368,7 @@ function lenderPaymentParts(
       paymentMatch: row.paymentMatch,
       dueDay: row.dueDay,
       startDate: row.startDate,
+      fromAccountId: row.fromAccountId,
       endDate: row.endDate,
       parts: Object.fromEntries(parts),
       totalCents: total,
@@ -812,6 +819,7 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
       termMonths: d?.termMonths ?? null,
       paymentMatch: d?.paymentMatch ?? null,
       paymentAmountCents: d?.paymentAmountCents ?? null,
+      paymentFromAccountId: d?.paymentFromAccountId ?? null,
       pastPaymentAmounts: d?.pastPaymentAmounts ?? [],
       startBalanceCents: manual ? (d?.startBalanceCents ?? null) : null,
       startDate,
@@ -1094,6 +1102,7 @@ export function setLenderPayments(db: Db, lender: string, payments: LenderPaymen
         paymentMatch: p.paymentMatch?.trim() || null,
         dueDay: p.dueDay ?? null,
         startDate: p.startDate ?? null,
+        fromAccountId: p.fromAccountId ?? null,
         endDate: p.endDate ?? null,
         parts,
       })

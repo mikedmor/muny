@@ -74,6 +74,8 @@ export interface Loan {
   termMonths: number | null;
   paymentMatch: string | null;
   paymentAmountCents: number | null;
+  /** Only payments from this account (null: any). */
+  paymentFromAccountId: string | null;
   /** Earlier payment amounts still matched (the payment changed). */
   pastPaymentAmounts: number[];
   startBalanceCents: number | null;
@@ -144,6 +146,8 @@ export interface LenderPayment {
   /** Only payments from / until these dates (YYYY-MM-DD; null: open), when the split changed. */
   startDate: string | null;
   endDate: string | null;
+  /** Only payments from this account (null: any). */
+  fromAccountId: string | null;
   /** Each loan's part (loan account id → cents); the payment is about their total. */
   parts: Record<string, number>;
   totalCents: number;
@@ -157,6 +161,7 @@ export interface LenderPaymentInput {
   dueDay?: number | null;
   startDate?: string | null;
   endDate?: string | null;
+  fromAccountId?: string | null;
   parts: Record<string, number>;
 }
 
@@ -212,6 +217,7 @@ export interface LoanDetailsInput {
   termMonths?: number | null;
   paymentMatch?: string | null;
   paymentAmountCents?: number | null;
+  paymentFromAccountId?: string | null;
   pastPaymentAmounts?: number[] | null;
   /** Manual loans: what you owed on startDate. */
   startBalanceCents?: number | null;

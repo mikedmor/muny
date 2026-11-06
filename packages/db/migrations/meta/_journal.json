@@ -295,6 +295,13 @@
       "when": 1794001116934,
       "tag": "0041_card_more",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "6",
+      "when": 1794002649665,
+      "tag": "0042_payment_from",
+      "breakpoints": true
     }
   ]
 }

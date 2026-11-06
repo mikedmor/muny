@@ -27,6 +27,14 @@ const addMonths = (iso: string, n: number) => {
   return d.toISOString().slice(0, 10);
 };
 
+/** Near an amount: within a dollar or 1%. */
+const near = (a: number, b: number) => Math.abs(a - b) <= Math.max(100, Math.round(b * 0.01));
+/** Days apart within a month, going around the month end. */
+const dayGap = (a: number, b: number) => {
+  const d = Math.abs(a - b);
+  return Math.min(d, 31 - d);
+};
+
 /** Payments to a card: money in that's a transfer, or says it's a payment. */
 const PAYMENT = /payment|pymt|autopay|auto pay|thank you|epay|online pmt/i;
 /** Interest charged on a card. */
@@ -83,17 +91,19 @@ export function cardsReport(db: Db, today = localToday()): CardsReport {
   );
 
   // Payments found by their words in your other accounts (when you linked them).
-  const linkedPayments = (
-    d: (typeof details extends Map<string, infer V> ? V : never) | undefined,
-  ) => {
+  // Each card's candidates: its words, then its amount, day and paying account when set.
+  type Cand = { id: string; date: string; amount: number; name: string; mask: string | null };
+  const candidates = new Map<string, { list: Cand[]; fit: (c: Cand) => number }>();
+  for (const a of cards) {
+    const d = details.get(a.id);
     const words = d?.paymentMatch?.trim();
-    if (!words) return [];
-    return db
+    if (!words) continue;
+    const list = db
       .select({
         id: t.id,
         date: t.postedDate,
         amount: t.amountCents,
-        pair: t.transferPairId,
+        accountId: t.accountId,
         name: schema.accounts.name,
         mask: schema.accounts.mask,
       })
@@ -108,8 +118,30 @@ export function cardsReport(db: Db, today = localToday()): CardsReport {
           sql`instr(lower(${t.rawDescription}), lower(${words})) > 0`,
         ),
       )
-      .all();
-  };
+      .all()
+      .filter(
+        (c) =>
+          (!d?.paymentFromAccountId || c.accountId === d.paymentFromAccountId) &&
+          (!d?.paymentAmountCents || near(-c.amount, d.paymentAmountCents)) &&
+          (!d?.paymentDay || dayGap(Number(c.date.slice(8, 10)), d.paymentDay) <= 6),
+      );
+    // How well a payment fits: a set amount counts most, then the paying account and the day.
+    const fit = (c: Cand) =>
+      (d?.paymentAmountCents ? 4 : 0) +
+      (d?.paymentFromAccountId ? 2 : 0) +
+      (d?.paymentDay ? 1 - dayGap(Number(c.date.slice(8, 10)), d.paymentDay) / 31 : 0);
+    candidates.set(a.id, { list, fit });
+  }
+  // A payment two cards could claim goes to the better fit.
+  const owner = new Map<string, { card: string; fit: number }>();
+  for (const [card, { list, fit }] of candidates)
+    for (const c of list) {
+      const f = fit(c);
+      const cur = owner.get(c.id);
+      if (!cur || f > cur.fit) owner.set(c.id, { card, fit: f });
+    }
+  const linkedPayments = (cardId: string) =>
+    (candidates.get(cardId)?.list ?? []).filter((c) => owner.get(c.id)?.card === cardId);
   const out: CreditCard[] = cards.map((a) => {
     const d = details.get(a.id);
     const mine = txns.filter((x) => x.accountId === a.id && !x.pending);
@@ -123,7 +155,7 @@ export function cardsReport(db: Db, today = localToday()): CardsReport {
       }));
     // From your other accounts, unless the same payment already shows on the card.
     const day = (iso: string) => Date.parse(`${iso}T00:00:00Z`) / 86_400_000;
-    const fromOthers: CardPayment[] = linkedPayments(d)
+    const fromOthers: CardPayment[] = linkedPayments(a.id)
       .filter(
         (p) =>
           !onCard.some(
@@ -186,6 +218,9 @@ export function cardsReport(db: Db, today = localToday()): CardsReport {
       payments: payments.slice(0, 12),
       source: d?.source ?? null,
       paymentMatch: d?.paymentMatch ?? null,
+      paymentAmountCents: d?.paymentAmountCents ?? null,
+      paymentDay: d?.paymentDay ?? null,
+      paymentFromAccountId: d?.paymentFromAccountId ?? null,
       minimumOnly:
         d?.minOnlyMonths && d.minOnlyTotalCents
           ? { months: d.minOnlyMonths, totalCents: d.minOnlyTotalCents }
@@ -350,7 +385,7 @@ function statementTransactions(text: string, closing: string | null) {
     )
       section = "charge";
     const m = line.match(
-      /^(\d{1,2})\/(\d{1,2})(?:\/\d{2,4})? (?:\d{1,2}\/\d{1,2}(?:\/\d{2,4})? )?(.+?) (-)?\$?([\d,]+\.\d{2})(-|CR)?$/i,
+      /^(\d{1,2})\/(\d{1,2})(?:\/\d{2,4})? (?:\d{1,2}\/\d{1,2}(?:\/\d{2,4})? )?(.+?) (-)?\$?([\d,]+\.\d{2}) ?(-|CR)?$/i,
     );
     if (!m) continue;
     const desc = (m[3] ?? "").replace(/ [A-Z0-9]{10,}$/, "").trim();
@@ -369,7 +404,9 @@ function statementTransactions(text: string, closing: string | null) {
   return out;
 }
 
-export function parseCardStatement(text: string): CardStatement | null {
+export function parseCardStatement(raw: string): CardStatement | null {
+  // A number split by a stray space ("3,08 3.68") is one number.
+  const text = raw.replace(/(\d,\d{1,2}) (\d{1,2}\.\d{2})\b/g, "$1$2");
   const t = text.replace(/\s+/g, " ");
   const find = (re: RegExp) => t.match(re)?.[1];
   const newBalance = centsOf(find(new RegExp(`New Balance(?: Total)?:? ${MONEY}`, "i")));

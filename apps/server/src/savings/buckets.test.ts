@@ -78,6 +78,7 @@ describe("savings categories", () => {
           { name: "Rig", balanceCents: 313_201, goalCents: 700_000, monthlyCapCents: 25_000 },
           { name: "Car", balanceCents: 1_466, fillRemaining: true },
         ],
+        mode: "moves",
       })
     ).json<SavingsBuckets>();
     expect(b.buckets.map((x) => [x.name, x.balanceCents, x.isMain, x.fillRemaining])).toEqual([
@@ -93,5 +94,31 @@ describe("savings categories", () => {
     };
     const rig = b.buckets.find((x) => x.name === "Rig");
     expect(months(rig?.goalMonth ?? "0-0") - months(localToday().slice(0, 7))).toBe(16);
+  });
+
+  it("splits the total by the plan for banks that don't report category moves", async () => {
+    const { client } = await makeSignedInApp();
+    const acc = (
+      await client.post("/api/accounts", {
+        name: "Savings",
+        type: "savings",
+        balanceCents: 450_000,
+      })
+    ).json<Account>();
+    const b = (
+      await client.put(`/api/savings/accounts/${acc.id}/buckets`, {
+        buckets: [
+          { name: "Savings", isMain: true, balanceCents: 0, goalCents: 100_000 },
+          { name: "Trip", balanceCents: 0, goalCents: 200_000 },
+          { name: "Car", balanceCents: 0, fillRemaining: true },
+        ],
+      })
+    ).json<SavingsBuckets>();
+    expect(b.mode).toBe("split");
+    expect(b.buckets.map((x) => [x.name, x.balanceCents])).toEqual([
+      ["Savings", 100_000],
+      ["Trip", 200_000],
+      ["Car", 150_000],
+    ]);
   });
 });

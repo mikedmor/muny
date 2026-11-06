@@ -30,6 +30,8 @@ Federal student loan servicers send PDF statements with a table for each loan gr
 - **Split like your servicer:** once a lender has statements, Muny splits its later payments the way federal servicers do: first what's currently due on each loan (in proportion to its regular payment), then the rest to the loans with the highest rate, by balance. A loan paid ahead (its due date months away, marked **Paid ahead**) gets nothing until it's due again. You can switch back to **set amounts** on the lender's card.
 - **Statements** on the lender's card shows the newest statement for each billing cycle and when the next is due, and says when one is missing.
 
+Any loan's **Edit details**, and each payment in a lender's **Payments**, can also be limited to payments **paid from** one account, for when the same words show up from more than one account.
+
 ## Reading a loan
 
 - **Payment** shows your usual payment; **Minimum** is the lowest payment due (from the lender, or entered).

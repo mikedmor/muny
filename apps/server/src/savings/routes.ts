@@ -7,7 +7,7 @@ import { requireUser } from "../auth/plugin.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, notFound, parse } from "../lib/http.js";
 import { savingsAccountsReport, setAccountApy, setSavingsPlan } from "./accounts.js";
-import { bucketsFor, setBuckets } from "./buckets.js";
+import { bucketsFor, setBuckets, setPlanMode } from "./buckets.js";
 import {
   alternativeSuggestions,
   createSaving,
@@ -119,10 +119,12 @@ export function registerSavingsRoutes(app: FastifyInstance, db: MunyDb) {
           )
           .refine((l) => l.filter((b) => b.isMain).length <= 1, "Only one main cash")
           .max(30),
+        mode: z.enum(["moves", "split"]).optional(),
       }),
       req.body,
     );
     if (!setBuckets(db, id, body.buckets)) throw notFound("Savings account not found");
+    if (body.mode) setPlanMode(db, id, body.mode);
     log(user.id, "savings.buckets", id, { count: body.buckets.length });
     return bucketsFor(db, id);
   });

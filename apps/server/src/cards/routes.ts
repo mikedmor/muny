@@ -35,6 +35,9 @@ const Details = z.object({
   minimumPaymentCents: cents.nullable().optional(),
   dueDate: isoDate.nullable().optional(),
   paymentMatch: z.string().trim().max(80).nullable().optional(),
+  paymentAmountCents: cents.nullable().optional(),
+  paymentDay: z.number().int().min(1).max(31).nullable().optional(),
+  paymentFromAccountId: z.string().max(64).nullable().optional(),
 });
 const Statement = z.object({
   closingDate: isoDate.nullable(),

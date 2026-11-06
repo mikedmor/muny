@@ -48,11 +48,33 @@ export function bucketsFor(db: MunyDb, accountId: string): SavingsBuckets | null
     return { b, current: b.balanceCents + moved };
   });
   const inCategories = tracked.reduce((s, x) => s + x.current, 0);
+  const mode = planMode(db, accountId, moves.length > 0);
+  // "Split the total": the plan applied to what the account holds now.
+  const split = new Map<string, number>();
+  if (mode === "split") {
+    let left = Math.max(0, balance);
+    const main = rows.find((b) => b.isMain);
+    if (main?.goalCents) {
+      const x = Math.min(left, main.goalCents);
+      split.set(main.id, x);
+      left -= x;
+    }
+    for (const b of others) {
+      const x = b.fillRemaining || !b.goalCents ? left : Math.min(left, b.goalCents);
+      split.set(b.id, x);
+      left -= x;
+    }
+    // Anything left (no take-the-rest category) stays in the main cash.
+    if (main) split.set(main.id, (split.get(main.id) ?? 0) + left + Math.min(0, balance));
+  }
   const buckets = rows.map((b) => {
-    // The main cash is whatever the categories don't hold.
-    const current = b.isMain
-      ? balance - inCategories
-      : (tracked.find((x) => x.b.id === b.id)?.current ?? b.balanceCents);
+    // Following moves: the main cash is whatever the categories don't hold.
+    const current =
+      mode === "split"
+        ? (split.get(b.id) ?? 0)
+        : b.isMain
+          ? balance - inCategories
+          : (tracked.find((x) => x.b.id === b.id)?.current ?? b.balanceCents);
     return {
       id: b.id,
       name: b.name,
@@ -73,6 +95,7 @@ export function bucketsFor(db: MunyDb, accountId: string): SavingsBuckets | null
     ),
   ];
   return {
+    mode,
     accountBalanceCents: balance,
     buckets,
     unassignedCents: balance - buckets.reduce((s, b) => s + b.balanceCents, 0),
@@ -142,4 +165,29 @@ export function markCategoryMoves(db: MunyDb): number {
   if (first)
     db.insert(schema.appSettings).values({ key: FLAG, value: true }).onConflictDoNothing().run();
   return n;
+}
+
+const MODE_KEY = "savings.planModes";
+
+/**
+ * How a plan gets each category's amount: "moves" follows the transfers the
+ * bank reports between categories; "split" applies the plan to
+ * the account's total (banks that don't report them). Default: moves when the
+ * account has category moves, else split.
+ */
+export function planMode(db: MunyDb, accountId: string, hasMoves: boolean): "moves" | "split" {
+  const v = db.select().from(schema.appSettings).where(eq(schema.appSettings.key, MODE_KEY)).get()
+    ?.value as Record<string, "moves" | "split"> | undefined;
+  return v?.[accountId] ?? (hasMoves ? "moves" : "split");
+}
+
+export function setPlanMode(db: MunyDb, accountId: string, mode: "moves" | "split") {
+  const cur =
+    (db.select().from(schema.appSettings).where(eq(schema.appSettings.key, MODE_KEY)).get()
+      ?.value as Record<string, string> | undefined) ?? {};
+  const value = { ...cur, [accountId]: mode };
+  db.insert(schema.appSettings)
+    .values({ key: MODE_KEY, value })
+    .onConflictDoUpdate({ target: schema.appSettings.key, set: { value } })
+    .run();
 }

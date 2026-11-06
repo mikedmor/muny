@@ -13,7 +13,7 @@ import { type FormEvent, useState } from "react";
 import { Modal } from "../components/forms.js";
 import { Alert, Button, Card, cx, Field, PageHeader } from "../components/ui.js";
 import { api } from "../lib/api.js";
-import { keys } from "../lib/queries.js";
+import { keys, useAccounts } from "../lib/queries.js";
 
 /**
  * Credit cards: what you owe against each limit, the statement (balance,
@@ -435,12 +435,26 @@ function PayDown({ card }: { card: CreditCard }) {
 
 function LinkPayments({ card, onDone }: { card: CreditCard; onDone: () => void }) {
   const qc = useQueryClient();
+  const accounts = useAccounts();
   const [words, setWords] = useState(card.paymentMatch ?? "");
+  const [amount, setAmount] = useState(fromCents(card.paymentAmountCents));
+  const [dayOf, setDayOf] = useState(card.paymentDay ? String(card.paymentDay) : "");
+  const [from, setFrom] = useState(card.paymentFromAccountId ?? "");
   const [error, setError] = useState<string | null>(null);
   const save = async (e: FormEvent) => {
     e.preventDefault();
+    const cents = toCents(amount);
+    const d = dayOf.trim() ? Number(dayOf) : null;
+    if (Number.isNaN(cents)) return setError("Check the amount, like 250.00.");
+    if (d !== null && !(Number.isInteger(d) && d >= 1 && d <= 31))
+      return setError("The day is a number from 1 to 31.");
     try {
-      await api.patch(`/api/cards/${card.accountId}`, { paymentMatch: words.trim() || null });
+      await api.patch(`/api/cards/${card.accountId}`, {
+        paymentMatch: words.trim() || null,
+        paymentAmountCents: cents,
+        paymentDay: d,
+        paymentFromAccountId: from || null,
+      });
       await qc.invalidateQueries({ queryKey: keys.accounts });
       onDone();
     } catch (err) {
@@ -462,6 +476,45 @@ function LinkPayments({ card, onDone }: { card: CreditCard; onDone: () => void }
         onChange={(e) => setWords(e.target.value)}
         placeholder={card.mask ? `e.g. ${card.mask}` : "e.g. CARD PAYMENT"}
       />
+      <p className="text-xs text-slate-500">
+        Two cards from the same bank often use the same words. Narrow it down with any of these; a
+        payment that fits two cards goes to the closer match.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Field
+          label="About this much"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          inputMode="decimal"
+          placeholder="Any amount"
+          hint="Leave empty if it varies (e.g. you pay the statement balance)."
+        />
+        <Field
+          label="Around this day"
+          value={dayOf}
+          onChange={(e) => setDayOf(e.target.value)}
+          inputMode="numeric"
+          placeholder="Any day"
+        />
+        <label className="block text-sm">
+          <span className="font-medium text-slate-700 dark:text-slate-300">Paid from</span>
+          <select
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
+          >
+            <option value="">Any account</option>
+            {(accounts.data ?? [])
+              .filter((a) => a.type !== "credit" && a.type !== "loan" && !a.hidden)
+              .map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                  {a.mask ? ` ••${a.mask}` : ""}
+                </option>
+              ))}
+          </select>
+        </label>
+      </div>
       <div className="flex justify-end gap-2">
         <Button variant="secondary" onClick={onDone}>
           Cancel

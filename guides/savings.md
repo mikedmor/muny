@@ -22,7 +22,12 @@ Some banks split a cash account into categories but report one balance. Muny fil
 - Then each category in order, with what it holds now, a goal, and how much it saves at most a month; Muny shows when it reaches the goal at that rate.
 - The last can **save all remaining cash** instead of a goal.
 
-Muny follows each category's moves from when you enter its balance. Deposits your bank's automations put straight into a category from outside may not say which category they went to: update that category's balance now and then.
+How each category's amount is worked out:
+
+- **Split the account's total by the plan** (any savings account, nothing to keep up): the main cash gets its target, then each category up to its goal in order, and the last takes the rest (or what's left stays in the main cash).
+- **Follow the transfers my bank reports** (banks that post a transfer for each move): enter what each category holds now; Muny follows its moves from then on. Deposits your bank's automations put straight into a category may not say which one they went to: update that category's balance now and then.
+
+Any savings account can have a plan: **Plan this account** under it on Savings.
 
 ## Money saved
 

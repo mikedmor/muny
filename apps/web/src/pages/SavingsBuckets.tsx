@@ -91,6 +91,8 @@ function BucketsForm({
         }))),
   ]);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState(data.mode);
+  const split = mode === "split";
   const set = (key: string, patch: Partial<Row>) =>
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   const move = (key: string, by: number) =>
@@ -107,7 +109,7 @@ function BucketsForm({
     const out: SavingsBucketInput[] = [];
     for (const r of rows) {
       if (!r.name.trim()) continue;
-      const balance = r.isMain ? 0 : toCents(r.balance);
+      const balance = r.isMain || split ? 0 : toCents(r.balance);
       const goal = toCents(r.goal);
       const cap = toCents(r.cap);
       if (balance === null || Number.isNaN(balance))
@@ -125,7 +127,7 @@ function BucketsForm({
       });
     }
     try {
-      await api.put(`/api/savings/accounts/${accountId}/buckets`, { buckets: out });
+      await api.put(`/api/savings/accounts/${accountId}/buckets`, { buckets: out, mode });
       await qc.invalidateQueries({ queryKey: ["savings-buckets", accountId] });
       onDone();
     } catch (err) {
@@ -149,9 +151,39 @@ function BucketsForm({
       {error && <Alert>{error}</Alert>}
       <p className="text-sm text-slate-600 dark:text-slate-400">
         Set it up like your bank's plan: the account's own cash keeps a target, extra cash goes to
-        the categories in order. Enter what each category holds now (from your bank's app); the main
-        cash is the rest of the account. Muny follows each category's moves from today.
+        the categories in order, the last can take the rest.
       </p>
+      <fieldset className="space-y-2 text-sm">
+        <legend className="sr-only">How each category's amount is worked out</legend>
+        {(
+          [
+            [
+              "split",
+              "Split the account's total by the plan",
+              "For any savings account: the main cash gets its target, then each category up to its goal, in order. Nothing to enter or keep up.",
+            ],
+            [
+              "moves",
+              "Follow the transfers my bank reports between categories",
+              "For banks that post a transfer for each move: enter what each category holds now; Muny follows its moves from today.",
+            ],
+          ] as const
+        ).map(([k, label, help]) => (
+          <label key={k} className="flex items-start gap-2">
+            <input
+              type="radio"
+              name="plan-mode"
+              checked={mode === k}
+              onChange={() => setMode(k)}
+              className="mt-1 accent-brand-600"
+            />
+            <span>
+              {label}
+              <span className="block text-xs text-slate-500">{help}</span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
       <div className="space-y-3">
         {rows.map((r, i) => (
           <div
@@ -216,16 +248,18 @@ function BucketsForm({
               </label>
             ) : (
               <div className="grid gap-2 pl-7 sm:grid-cols-3">
-                <label className="block text-xs">
-                  <span className="text-slate-500">Holds now</span>
-                  <input
-                    inputMode="decimal"
-                    value={r.balance}
-                    onChange={(e) => set(r.key, { balance: e.target.value })}
-                    placeholder="0.00"
-                    className={input}
-                  />
-                </label>
+                {!split && (
+                  <label className="block text-xs">
+                    <span className="text-slate-500">Holds now</span>
+                    <input
+                      inputMode="decimal"
+                      value={r.balance}
+                      onChange={(e) => set(r.key, { balance: e.target.value })}
+                      placeholder="0.00"
+                      className={input}
+                    />
+                  </label>
+                )}
                 {!r.rest && (
                   <label className="block text-xs">
                     <span className="text-slate-500">Goal</span>
@@ -329,11 +363,27 @@ export function SavingsBucketsSection({
         </button>
         {modal}
       </div>
-    ) : null;
+    ) : (
+      <div className="mt-4 text-sm">
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="text-brand-600 hover:underline dark:text-brand-500"
+        >
+          Plan this account: split it into goals
+        </button>
+        {modal}
+      </div>
+    );
   return (
     <div className="mt-4 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
       <div className="mb-3 flex items-baseline justify-between">
-        <p className="text-sm font-semibold">Savings plan</p>
+        <p className="text-sm font-semibold">
+          Savings plan
+          <span className="ml-2 text-xs font-normal text-slate-500">
+            {d.mode === "split" ? "split from the total" : "following your bank's transfers"}
+          </span>
+        </p>
         <button
           type="button"
           onClick={() => setEditing(true)}

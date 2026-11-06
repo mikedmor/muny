@@ -21,7 +21,7 @@ import { Modal } from "../components/forms.js";
 import { Alert, Button, Card, cx, Field, PageHeader } from "../components/ui.js";
 import { api } from "../lib/api.js";
 import { openPlaidLink } from "../lib/bankWidgets.js";
-import { keys, linkApi } from "../lib/queries.js";
+import { keys, linkApi, useAccounts } from "../lib/queries.js";
 import { LenderLoansForm, LenderPaymentsStrip } from "./loans/LenderLoans.js";
 import { PayoffPlan } from "./loans/PayoffPlan.js";
 import { StatementImportButton, StatementStatus } from "./loans/StatementImport.js";
@@ -119,6 +119,7 @@ function Select({
 function LoanForm({ loan, onDone }: { loan?: Loan; onDone: () => void }) {
   const qc = useQueryClient();
   const assets = useQuery({ queryKey: assetsKey, queryFn: () => api.get<Asset[]>("/api/assets") });
+  const payFrom = useAccounts();
   const manual = !loan?.connected;
   const [f, setF] = useState({
     name: loan?.name ?? "",
@@ -134,6 +135,7 @@ function LoanForm({ loan, onDone }: { loan?: Loan; onDone: () => void }) {
     termYears: loan?.termMonths ? String(Math.round(loan.termMonths / 12)) : "",
     match: loan?.paymentMatch ?? "",
     matchAmount: fromCents(loan?.paymentAmountCents),
+    paidFrom: loan?.paymentFromAccountId ?? "",
     homeValue: fromCents(loan?.originalValueCents),
     pmi: fromCents(loan?.pmiMonthlyCents),
     property: loan?.propertyAccountId ?? "",
@@ -152,6 +154,7 @@ function LoanForm({ loan, onDone }: { loan?: Loan; onDone: () => void }) {
       minimumPaymentCents: toCents(f.minimum),
       originalPrincipalCents: toCents(f.original),
       paymentAmountCents: toCents(f.matchAmount),
+      paymentFromAccountId: f.paidFrom || null,
       originalValueCents: mortgage ? toCents(f.homeValue) : null,
       pmiMonthlyCents: mortgage ? toCents(f.pmi) : null,
     };
@@ -328,6 +331,21 @@ function LoanForm({ loan, onDone }: { loan?: Loan; onDone: () => void }) {
           placeholder="e.g. 245.00"
           hint="For a lender with several loans (or dues) paid separately under one name. If your payment changes, enter the new amount: earlier payments of the old amount still count."
         />
+        <Select
+          label="Paid from"
+          value={f.paidFrom}
+          onChange={(v) => setF((x) => ({ ...x, paidFrom: v }))}
+        >
+          <option value="">Any account</option>
+          {(payFrom.data ?? [])
+            .filter((a) => a.type !== "credit" && a.type !== "loan" && !a.hidden)
+            .map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+                {a.mask ? ` ••${a.mask}` : ""}
+              </option>
+            ))}
+        </Select>
         {past.length > 0 && (
           <div className="text-xs text-slate-500 sm:col-span-2">
             Earlier payment amounts still counted:{" "}

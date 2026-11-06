@@ -1,5 +1,6 @@
 import type { LoanStatementPreview, LoansReport } from "@muny/shared";
 import { describe, expect, it } from "vitest";
+import { parseCardStatement } from "../cards/service.js";
 import { makeSignedInApp } from "../test-utils.js";
 import { parseLoanStatement, pdfLines } from "./statements.js";
 
@@ -227,5 +228,25 @@ describe("loan statements", () => {
     const xa = report.loans.find((l) => l.name === "Group XA");
     expect(xa?.statementDate).toBe("2026-10-06");
     expect(xa?.history.at(-1)?.balanceCents).toBe(xa?.balanceCents);
+  });
+
+  it("joins numbers stored in pieces and values set a little lower than their labels", async () => {
+    // "$3,08" + "3.68" (Helvetica 9pt: "$3,08" is about 22.5 wide), the value 3pt lower.
+    const pdf = makePdf([
+      { x: 40, y: 700, t: "New Balance" },
+      { x: 300, y: 697, t: "$3,08" },
+      { x: 322.6, y: 697, t: "3.68" },
+      { x: 40, y: 680, t: "Payment Due Date" },
+      { x: 300, y: 680, t: "11/05/2026" },
+      { x: 40, y: 660, t: "Minimum Payment Due" },
+      { x: 300, y: 657, t: "$93.00" },
+    ]);
+    const text = (await pdfLines(pdf)).map((l) => l.join(" ")).join("\n");
+    const s = parseCardStatement(text);
+    expect(s).toMatchObject({
+      newBalanceCents: 308_368,
+      minimumPaymentCents: 9_300,
+      dueDate: "2026-11-05",
+    });
   });
 });

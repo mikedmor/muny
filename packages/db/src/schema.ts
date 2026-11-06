@@ -892,6 +892,8 @@ export const lenderPayments = sqliteTable("lender_payments", {
   /** YYYY-MM-DD: only payments from / until these dates (the servicer changed the split). */
   startDate: text(),
   endDate: text(),
+  /** Only payments from this account (null: any). */
+  fromAccountId: text(),
   /** Each loan's part of the payment, in cents (loan account id → cents). */
   parts: text({ mode: "json" }).$type<Record<string, number>>().notNull(),
   updatedAt: updatedAt(),
@@ -975,6 +977,12 @@ export const cardDetails = sqliteTable("card_details", {
   lastPaymentDate: text(),
   /** Words your payments to it use in your other accounts (e.g. "CARD PAYMENT"). */
   paymentMatch: text(),
+  /** Only payments of about this much (null: any amount, e.g. the statement balance). */
+  paymentAmountCents: integer(),
+  /** Paid around this day of the month (null: any day). */
+  paymentDay: integer(),
+  /** Only payments from this account (null: any). */
+  paymentFromAccountId: text(),
   /** From the newest statement: interest charged so far that year. */
   interestYtdCents: integer(),
   interestYtdYear: integer(),
@@ -1064,6 +1072,8 @@ export const loanDetails = sqliteTable("loan_details", {
   paymentMatch: text(),
   /** Only payments of about this amount (one lender, several loans or dues under the same name). */
   paymentAmountCents: integer(),
+  /** Only payments from this account (null: any). */
+  paymentFromAccountId: text(),
   /** Earlier "payments of about" amounts (the payment changed): still matched, so history stays put. */
   pastPaymentAmounts: text({ mode: "json" }).$type<number[]>(),
   /** The lowest payment due (Plaid Liabilities or entered). */
