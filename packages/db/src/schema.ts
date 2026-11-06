@@ -125,6 +125,9 @@ export const accounts = sqliteTable(
     hidden: integer({ mode: "boolean" }).notNull().default(false),
     /** Advertised interest rate you entered (APY in hundredths of a percent: 435 = 4.35%). */
     apyBps: integer(),
+    /** Savings plan (Savings → Plan & project): monthly deposit in cents and the rate to project with. */
+    planMonthlyCents: integer(),
+    planRateBps: integer(),
     /** Excluded from budgets/reports (e.g. a business account). */
     excludeFromReports: integer({ mode: "boolean" }).notNull().default(false),
     sortOrder: integer().notNull().default(0),

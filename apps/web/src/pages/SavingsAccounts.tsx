@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil } from "lucide-react";
 import { useState } from "react";
 import { ColumnChart, LineChart, type StackBand } from "../components/charts.js";
+import { Modal } from "../components/forms.js";
 import { Alert, Button, Card, cx } from "../components/ui.js";
 import { api } from "../lib/api.js";
 import { keys } from "../lib/queries.js";
@@ -143,57 +144,234 @@ function ApyEditor({ a, onSaved }: { a: SavingsAccountInfo; onSaved: () => void 
   );
 }
 
-function Projection({ a }: { a: SavingsAccountInfo }) {
-  const defaultRate = a.apyBps ?? a.earnedApyBps ?? 0;
-  const [rate, setRate] = useState((defaultRate / 100).toFixed(2));
-  const [monthly, setMonthly] = useState(
-    String(Math.max(0, Math.round(a.avgMonthlyContributionCents / 100))),
-  );
-  const bps = Math.max(0, Math.round((Number(rate) || 0) * 100));
-  const perMonth = Math.round((Number(monthly) || 0) * 100);
-  const rows = [12, 60, 120].map((m) => ({ m, ...project(a.balanceCents, bps, perMonth, m) }));
+/** Month by month: what's there to start, what you add, and the interest it earns. */
+function growth(startCents: number, rateBps: number, monthlyCents: number, months: number) {
+  const r = (1 + rateBps / 10000) ** (1 / 12) - 1;
+  let b = startCents;
+  let added = 0;
+  let interest = 0;
+  const out = [{ m: 0, balance: b, added, interest }];
+  for (let i = 1; i <= months; i++) {
+    const earned = b * r;
+    interest += earned;
+    added += monthlyCents;
+    b += earned + monthlyCents;
+    out.push({ m: i, balance: b, added, interest });
+  }
+  return out;
+}
+
+function Slider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+  show,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (v: number) => void;
+  show: string;
+}) {
   return (
-    <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-800/40">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-        <span className="font-medium">Where it's heading</span>
-        <label className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-400">
-          Rate
-          <input
-            value={rate}
-            onChange={(e) => setRate(e.target.value)}
-            inputMode="decimal"
-            className="w-16 rounded border border-slate-300 bg-white px-1.5 py-0.5 dark:border-slate-700 dark:bg-slate-950"
-          />
-          %
-        </label>
-        <label className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-400">
-          Adding $
-          <input
-            value={monthly}
-            onChange={(e) => setMonthly(e.target.value)}
-            inputMode="decimal"
-            className="w-20 rounded border border-slate-300 bg-white px-1.5 py-0.5 dark:border-slate-700 dark:bg-slate-950"
-          />
-          a month
-        </label>
-      </div>
-      <dl className="mt-3 grid grid-cols-3 gap-3 text-sm">
-        {rows.map((r) => (
-          <div key={r.m}>
-            <dt className="text-xs text-slate-500">
-              In {r.m / 12} year{r.m === 12 ? "" : "s"}
-            </dt>
-            <dd className="font-semibold tabular-nums">{formatMoney(r.balanceCents)}</dd>
-            <dd className="text-xs text-emerald-700 tabular-nums dark:text-emerald-400">
-              +{formatMoney(Math.max(0, r.interestCents))} interest
-            </dd>
+    <label className="block">
+      <span className="flex items-baseline justify-between text-sm">
+        <span className="text-slate-600 dark:text-slate-400">{label}</span>
+        <span className="font-semibold tabular-nums">{show}</span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="mt-1 w-full accent-brand-600"
+      />
+    </label>
+  );
+}
+
+/** Plan & project: sliders for the rate, monthly deposit and years, with the growth charted. */
+function PlanDialog({
+  a,
+  onClose,
+  onSaved,
+}: {
+  a: SavingsAccountInfo;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const defaultRate = a.plan?.rateBps ?? a.apyBps ?? a.earnedApyBps ?? 0;
+  const defaultMonthly = a.plan?.monthlyCents ?? Math.max(0, a.avgMonthlyContributionCents);
+  const [rate, setRate] = useState(defaultRate / 100);
+  const [monthly, setMonthly] = useState(Math.round(defaultMonthly / 100));
+  const [years, setYears] = useState(10);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const months = years * 12;
+  const rows = growth(a.balanceCents, Math.round(rate * 100), monthly * 100, months);
+  const end = rows.at(-1) ?? { balance: a.balanceCents, added: 0, interest: 0 };
+  const now = new Date();
+  const label = (m: number) =>
+    new Date(now.getFullYear(), now.getMonth() + m, 1).toLocaleDateString(undefined, {
+      month: "short",
+      year: "2-digit",
+    });
+  const step = months > 120 ? 3 : 1;
+  const shown = rows.filter((r) => r.m % step === 0 || r.m === months);
+  const stack: StackBand[] = [
+    {
+      key: "start",
+      label: "Today's balance",
+      color: "var(--viz-series-1)",
+      values: shown.map(() => Math.max(0, a.balanceCents)),
+    },
+    {
+      key: "added",
+      label: "Your deposits",
+      color: "var(--viz-series-2)",
+      values: shown.map((r) => Math.round(r.added)),
+    },
+    {
+      key: "interest",
+      label: "Interest",
+      color: "var(--viz-series-3)",
+      values: shown.map((r) => Math.max(0, Math.round(r.interest))),
+    },
+  ];
+  const maxMonthly = Math.max(
+    2000,
+    Math.ceil(((Math.max(0, defaultMonthly) / 100) * 3) / 100) * 100,
+  );
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.put(`/api/savings/accounts/${a.id}/plan`, {
+        monthlyCents: monthly * 100,
+        rateBps: Math.round(rate * 100),
+      });
+      onSaved();
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't save");
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-3 gap-3 text-center">
+        {(
+          [
+            [`In ${years} year${years === 1 ? "" : "s"}`, end.balance, ""],
+            ["You'd add", end.added, ""],
+            ["Interest earned", end.interest, "text-emerald-700 dark:text-emerald-400"],
+          ] as const
+        ).map(([k, v, c]) => (
+          <div key={k} className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800/50">
+            <p className="text-xs text-slate-500">{k}</p>
+            <p className={cx("text-lg font-semibold tabular-nums", c)}>
+              {formatMoney(Math.round(v))}
+            </p>
           </div>
         ))}
-      </dl>
-      <p className="mt-2 text-xs text-slate-500">
-        An estimate: interest compounds monthly at this rate, and the same amount is added every
-        month. Rates on savings accounts change.
+      </div>
+      <LineChart
+        ariaLabel={`Projected balance of ${a.name}`}
+        height={220}
+        stack={stack}
+        points={shown.map((r) => ({
+          date: String(r.m),
+          label: label(r.m),
+          value: Math.round(r.balance),
+        }))}
+      />
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Slider
+          label="Interest rate"
+          value={rate}
+          min={0}
+          max={10}
+          step={0.05}
+          onChange={setRate}
+          show={`${rate.toFixed(2)}%`}
+        />
+        <Slider
+          label="Monthly deposit"
+          value={monthly}
+          min={0}
+          max={maxMonthly}
+          step={25}
+          onChange={setMonthly}
+          show={formatMoney(monthly * 100)}
+        />
+        <Slider
+          label="Years"
+          value={years}
+          min={1}
+          max={30}
+          step={1}
+          onChange={setYears}
+          show={String(years)}
+        />
+      </div>
+      <p className="text-xs text-slate-500">
+        An estimate: interest compounds monthly at this rate and the same amount is added every
+        month. Savings rates change over time.
       </p>
+      {error && <Alert>{error}</Alert>}
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" onClick={onClose}>
+          Close
+        </Button>
+        <Button disabled={saving} onClick={() => void save()}>
+          {saving ? "Saving…" : "Save as my plan"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** The saved plan's projections, with the button that opens the planner. */
+function PlanSummary({ a, onSaved }: { a: SavingsAccountInfo; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const rate = a.plan?.rateBps ?? a.apyBps ?? a.earnedApyBps ?? 0;
+  const monthly = a.plan?.monthlyCents ?? Math.max(0, a.avgMonthlyContributionCents);
+  const at = (years: number) => growth(a.balanceCents, rate, monthly, years * 12).at(-1);
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-slate-50 p-4 dark:bg-slate-800/40">
+      <div>
+        <p className="text-sm font-medium">
+          {a.plan ? "Your plan" : "If you keep going"}:{" "}
+          <span className="font-normal text-slate-600 dark:text-slate-400">
+            {formatMoney(monthly)} a month at {(rate / 100).toFixed(2)}%
+          </span>
+        </p>
+        <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+          {[1, 5, 10].map((y) => (
+            <div key={y}>
+              <dt className="inline text-slate-500">
+                In {y} year{y === 1 ? "" : "s"}:{" "}
+              </dt>
+              <dd className="inline font-semibold tabular-nums">
+                {formatMoney(Math.round(at(y)?.balance ?? 0))}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+      <Button variant="secondary" onClick={() => setOpen(true)}>
+        Plan &amp; project
+      </Button>
+      <Modal open={open} onClose={() => setOpen(false)} title={`Plan for ${a.name}`}>
+        {open && <PlanDialog a={a} onClose={() => setOpen(false)} onSaved={onSaved} />}
+      </Modal>
     </div>
   );
 }
@@ -293,7 +471,7 @@ function AccountCard({ a, onSaved }: { a: SavingsAccountInfo; onSaved: () => voi
         </div>
       </div>
       <div className="mt-5">
-        <Projection a={a} />
+        <PlanSummary a={a} onSaved={onSaved} />
       </div>
     </Card>
   );

@@ -68,6 +68,16 @@ describe("savings accounts", () => {
     const r2 = (await client.get("/api/savings/accounts")).json<SavingsAccountsReport>();
     expect(r2.accounts[0]?.apyBps).toBe(435);
     expect(r2.blendedApyBps).toBe(435);
+    // A saved plan comes back with the account; null clears it.
+    await client.put(`/api/savings/accounts/${acc.id}/plan`, {
+      monthlyCents: 50_000,
+      rateBps: 400,
+    });
+    let r3 = (await client.get("/api/savings/accounts")).json<SavingsAccountsReport>();
+    expect(r3.accounts[0]?.plan).toEqual({ monthlyCents: 50_000, rateBps: 400 });
+    await client.put(`/api/savings/accounts/${acc.id}/plan`, { monthlyCents: null });
+    r3 = (await client.get("/api/savings/accounts")).json<SavingsAccountsReport>();
+    expect(r3.accounts[0]?.plan).toBeNull();
     // Only savings accounts take an APY.
     expect(
       (await client.put(`/api/savings/accounts/${chk.id}/apy`, { apyBps: 100 })).statusCode,

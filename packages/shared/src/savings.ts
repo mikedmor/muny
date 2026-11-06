@@ -148,6 +148,8 @@ export interface SavingsAccountInfo {
   balanceCents: number;
   /** The APY you entered (hundredths of a percent: 435 = 4.35%). */
   apyBps: number | null;
+  /** Your saved plan (Plan & project): monthly deposit, and the rate to project with (null: the APY). */
+  plan: { monthlyCents: number; rateBps: number | null } | null;
   /** The rate actually earned over the last year (interest over the average balance). */
   earnedApyBps: number | null;
   interest: { last30Cents: number; ytdCents: number; last12Cents: number; allTimeCents: number };

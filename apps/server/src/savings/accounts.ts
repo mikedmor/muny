@@ -46,11 +46,16 @@ export function savingsAccountsReport(db: MunyDb, today = localToday()): Savings
   const ids = accounts.map((a) => a.id);
   const apyOf = new Map(
     db
-      .select({ id: schema.accounts.id, apyBps: schema.accounts.apyBps })
+      .select({
+        id: schema.accounts.id,
+        apyBps: schema.accounts.apyBps,
+        planMonthlyCents: schema.accounts.planMonthlyCents,
+        planRateBps: schema.accounts.planRateBps,
+      })
       .from(schema.accounts)
       .where(inArray(schema.accounts.id, ids))
       .all()
-      .map((r) => [r.id, r.apyBps]),
+      .map((r) => [r.id, r]),
   );
   const t = schema.transactions;
   const txns = db
@@ -116,7 +121,14 @@ export function savingsAccountsReport(db: MunyDb, today = localToday()): Savings
       institutionName: a.institutionName,
       mask: a.mask,
       balanceCents: a.balanceCents,
-      apyBps: apyOf.get(a.id) ?? null,
+      apyBps: apyOf.get(a.id)?.apyBps ?? null,
+      plan:
+        apyOf.get(a.id)?.planMonthlyCents != null
+          ? {
+              monthlyCents: apyOf.get(a.id)?.planMonthlyCents as number,
+              rateBps: apyOf.get(a.id)?.planRateBps ?? null,
+            }
+          : null,
       earnedApyBps,
       interest: {
         last30Cents: sumSince((d) => d > monthAgo),
@@ -154,6 +166,20 @@ export function setAccountApy(db: MunyDb, id: string, apyBps: number | null): bo
   const r = db
     .update(schema.accounts)
     .set({ apyBps })
+    .where(and(eq(schema.accounts.id, id), eq(schema.accounts.type, "savings")))
+    .run();
+  return r.changes > 0;
+}
+
+/** Save (or clear, with null) a savings plan: monthly deposit and the rate to project with. */
+export function setSavingsPlan(
+  db: MunyDb,
+  id: string,
+  plan: { monthlyCents: number; rateBps: number | null } | null,
+): boolean {
+  const r = db
+    .update(schema.accounts)
+    .set({ planMonthlyCents: plan?.monthlyCents ?? null, planRateBps: plan?.rateBps ?? null })
     .where(and(eq(schema.accounts.id, id), eq(schema.accounts.type, "savings")))
     .run();
   return r.changes > 0;
