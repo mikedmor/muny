@@ -4,6 +4,8 @@ import type {
   Account,
   CategoryGroup,
   ConnectionSummary,
+  InvestSummary,
+  InvestTxn,
   LinkResult,
   LinkStart,
   SyncConfigStatus,
@@ -46,6 +48,8 @@ function fakePlaid() {
     pages: [] as { added: unknown[]; modified: unknown[]; removed: { transaction_id: string }[] }[],
     error: null as null | { status: number; body: Record<string, unknown> },
     cardOwed: 120.5,
+    linkBodies: [] as Record<string, unknown>[],
+    investNotReady: false,
   };
   const fetchFn: FetchLike = async (url, init) => {
     const path = new URL(url).pathname;
@@ -56,6 +60,7 @@ function fakePlaid() {
     if (state.error && path !== "/item/remove") return json(state.error.status, state.error.body);
     switch (path) {
       case "/link/token/create":
+        state.linkBodies.push(body);
         return json(200, { link_token: body.access_token ? "link-update" : "link-new" });
       case "/item/public_token/exchange":
         return json(200, { access_token: "access-sandbox-SECRET", item_id: "item-1" });
@@ -95,6 +100,96 @@ function fakePlaid() {
         const page = state.pages.shift() ?? { added: [], modified: [], removed: [] };
         return json(200, { ...page, next_cursor: `cursor-${state.calls.length}`, has_more: false });
       }
+      case "/investments/holdings/get":
+        return json(200, {
+          holdings: [
+            {
+              account_id: "acc-ira",
+              security_id: "s-vti",
+              quantity: 10,
+              institution_price: 250.1,
+              institution_value: 2501,
+              cost_basis: 2000,
+            },
+            {
+              account_id: "acc-ira",
+              security_id: "s-xyz",
+              quantity: 1.5,
+              institution_price: 10,
+              institution_value: 15,
+              cost_basis: null,
+            },
+            {
+              account_id: "acc-ira",
+              security_id: "s-mm",
+              quantity: 1000,
+              institution_price: 1,
+              institution_value: 1000,
+              cost_basis: 1000,
+            },
+          ],
+          securities: [
+            {
+              security_id: "s-vti",
+              ticker_symbol: "VTI",
+              name: "Vanguard Total Stock Market ETF",
+              type: "etf",
+            },
+            {
+              security_id: "s-xyz",
+              ticker_symbol: null,
+              cusip: "123456789",
+              name: "XYZ Private Fund",
+              type: "mutual fund",
+            },
+            {
+              security_id: "s-mm",
+              ticker_symbol: "SPAXX",
+              name: "Money Market",
+              type: "cash",
+              is_cash_equivalent: true,
+            },
+          ],
+        });
+      case "/investments/transactions/get":
+        if (state.investNotReady)
+          return json(400, {
+            error_type: "ITEM_ERROR",
+            error_code: "PRODUCT_NOT_READY",
+            error_message: "not ready",
+          });
+        return json(200, {
+          total_investment_transactions: 2,
+          securities: [],
+          investment_transactions: [
+            {
+              investment_transaction_id: "it-1",
+              account_id: "acc-ira",
+              security_id: "s-vti",
+              date: "2026-10-01",
+              name: "BUY VTI",
+              quantity: 2,
+              amount: 500.2,
+              price: 250.1,
+              fees: 0,
+              type: "buy",
+              subtype: "buy",
+            },
+            {
+              investment_transaction_id: "it-2",
+              account_id: "acc-ira",
+              security_id: "s-vti",
+              date: "2026-10-15",
+              name: "DIVIDEND VTI",
+              quantity: 0,
+              amount: -12.34,
+              price: 0,
+              fees: 0,
+              type: "cash",
+              subtype: "dividend",
+            },
+          ],
+        });
       case "/item/remove":
         return json(200, {});
       default:
@@ -422,6 +517,67 @@ describe("Plaid sync", () => {
     const r = await client.post("/api/connections/plaid/exchange", { publicToken: "p" });
     expect(r.statusCode).toBe(400);
     expect(r.json().error).toMatch(/MUNY_SECRET_KEY/);
+  });
+});
+
+describe("Plaid Investments (brokerage logins)", () => {
+  const linkBrokerage = async (client: TestClient) => {
+    const start = (
+      await client.post("/api/connections/plaid/exchange", {
+        publicToken: "public-x",
+        kind: "brokerage",
+      })
+    ).json<LinkStart>();
+    await client.post(`/api/connections/${start.connectionId}/link`, {
+      accounts: { "acc-chk": "skip", "acc-card": "skip", "acc-ira": "new" },
+    });
+    return start;
+  };
+
+  it("links for Investments only and syncs holdings and history, not transactions", async () => {
+    const { client, plaid } = await setup();
+    await client.post("/api/connections/plaid/link-token", { kind: "brokerage" });
+    expect(plaid.linkBodies.at(-1)).toMatchObject({ products: ["investments"] });
+    expect(plaid.linkBodies.at(-1)).not.toHaveProperty("transactions");
+    // Banks keep asking for Transactions.
+    await client.post("/api/connections/plaid/link-token");
+    expect(plaid.linkBodies.at(-1)).toMatchObject({ products: ["transactions"] });
+
+    const start = await linkBrokerage(client);
+    expect(plaid.calls).not.toContain("/transactions/sync");
+    expect(plaid.calls).toContain("/investments/holdings/get");
+
+    const s = (await client.get("/api/invest/summary")).json<InvestSummary>();
+    expect(s.accounts).toHaveLength(1);
+    // The reported balance ($5,000) is the value: the $1,484 not in a holding is cash.
+    expect(s.valueCents).toBe(500000);
+    expect(
+      s.positions.map((p) => [p.symbol, p.type, p.quantity, p.valueCents, p.costBasisCents]),
+    ).toEqual([
+      ["VTI", "etf", "10", 250100, 200000],
+      ["CASH", "cash", "1484", 148400, 148400],
+      ["SPAXX", "cash", "1000", 100000, 100000],
+      ["123456789", "mutual_fund", "1.5", 1500, null],
+    ]);
+    const tx = (await client.get("/api/invest/transactions")).json<InvestTxn[]>();
+    expect(tx.map((t) => [t.date, t.type, t.symbol, t.quantity, t.amountCents])).toEqual([
+      ["2026-10-15", "dividend", "VTI", null, 1234],
+      ["2026-10-01", "buy", "VTI", "2", -50020],
+    ]);
+
+    // Syncing again adds nothing twice.
+    await client.post(`/api/connections/${start.connectionId}/sync`);
+    expect((await client.get("/api/invest/transactions")).json<InvestTxn[]>()).toHaveLength(2);
+  });
+
+  it("keeps holdings when history isn't ready yet", async () => {
+    const { client, plaid } = await setup();
+    plaid.investNotReady = true;
+    await linkBrokerage(client);
+    const s = (await client.get("/api/invest/summary")).json<InvestSummary>();
+    expect(s.positions.length).toBeGreaterThan(0);
+    const conns = (await client.get("/api/connections")).json<ConnectionSummary[]>();
+    expect(conns[0]?.status).toBe("active");
   });
 });
 

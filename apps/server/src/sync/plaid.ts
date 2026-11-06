@@ -2,6 +2,7 @@ import type { AccountType } from "@muny/shared";
 import type { PlaidConfig } from "../config.js";
 import {
   type ConnectionInfo,
+  type InvestmentSync,
   type Provider,
   type ProviderAccount,
   ProviderError,
@@ -11,13 +12,24 @@ import {
 
 /**
  * Plaid provider (https://plaid.com/docs/api/). Uses the JSON API directly
- * with the instance owner's own keys; no SDK. Only the Transactions product.
+ * with the instance owner's own keys; no SDK. Banks use the Transactions
+ * product; brokerage logins use Investments (holdings and history) instead.
  */
+
+export type PlaidProduct = "transactions" | "investments";
+export type PlaidLinkKind = "bank" | "brokerage";
 
 export interface PlaidCreds {
   accessToken: string;
   itemId: string;
+  /** What this login was linked for; older logins: transactions. */
+  products?: PlaidProduct[];
 }
+
+const productsFor = (kind: PlaidLinkKind): PlaidProduct[] =>
+  kind === "brokerage" ? ["investments"] : ["transactions"];
+const has = (creds: PlaidCreds, p: PlaidProduct) =>
+  (creds.products ?? ["transactions"]).includes(p);
 
 export type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
@@ -51,6 +63,92 @@ interface PlaidAccount {
   type: string;
   subtype?: string | null;
   balances: { current: number | null; available: number | null; iso_currency_code?: string | null };
+}
+
+interface PlaidSecurity {
+  security_id: string;
+  ticker_symbol?: string | null;
+  cusip?: string | null;
+  name?: string | null;
+  type?: string | null;
+  is_cash_equivalent?: boolean | null;
+}
+
+interface PlaidHolding {
+  account_id: string;
+  security_id: string;
+  quantity: number;
+  institution_price?: number | null;
+  institution_value?: number | null;
+  cost_basis?: number | null;
+}
+
+interface PlaidInvestTxn {
+  investment_transaction_id: string;
+  account_id: string;
+  security_id?: string | null;
+  date: string;
+  name?: string | null;
+  quantity?: number | null;
+  amount: number;
+  price?: number | null;
+  fees?: number | null;
+  type: string;
+  subtype?: string | null;
+}
+
+/** A float from Plaid as an exact decimal string (JSON numbers are already rounded). */
+function plaidDec(n: number | null | undefined): string | null {
+  if (n === null || n === undefined || !Number.isFinite(n)) return null;
+  const s = Math.abs(n) < 1e-6 && n !== 0 ? n.toFixed(12) : String(n);
+  return s.includes("e") ? n.toFixed(12).replace(/\.?0+$/, "") : s;
+}
+
+const absDec = (s: string | null) => (s?.startsWith("-") ? s.slice(1) : s);
+
+/** Plaid's security type → Muny's. */
+export function plaidSecurityType(
+  s: PlaidSecurity | undefined,
+): InvestmentSync["holdings"][number]["type"] {
+  if (!s) return "other";
+  if (s.is_cash_equivalent || s.type === "cash") return "cash";
+  switch (s.type) {
+    case "equity":
+      return "equity";
+    case "etf":
+      return "etf";
+    case "mutual fund":
+      return "mutual_fund";
+    case "fixed income":
+      return "bond";
+    case "derivative":
+      return "option";
+    default:
+      return "other";
+  }
+}
+
+/** Plaid's investment transaction type/subtype → Muny's. */
+export function plaidInvestTxnType(
+  type: string,
+  subtype: string | null | undefined,
+  quantity: number | null | undefined,
+): InvestmentSync["txns"][number]["type"] {
+  const sub = (subtype ?? "").toLowerCase();
+  if (/split|stock distribution/.test(sub)) return "split";
+  if (/dividend|distribution|capital gain/.test(sub) && !/reinvest/.test(sub) && type !== "buy")
+    return "dividend";
+  if (/interest/.test(sub)) return "interest";
+  if (/tax/.test(sub)) return "tax";
+  if (type === "buy") return "buy";
+  if (type === "sell") return "sell";
+  if (type === "fee" || /fee/.test(sub)) return "fee";
+  if (/deposit|contribution/.test(sub)) return "deposit";
+  if (/withdrawal/.test(sub)) return "withdrawal";
+  if (type === "transfer")
+    return (quantity ?? 0) < 0 ? "transfer_out" : (quantity ?? 0) > 0 ? "transfer_in" : "other";
+  if (type === "cash") return "other";
+  return "other";
 }
 
 interface PlaidTxn {
@@ -199,7 +297,11 @@ export class PlaidProvider implements Provider<PlaidCreds> {
   }
 
   /** Link token for Plaid Link. With an access token it opens update mode (re-login). */
-  async createLinkToken(userId: string, accessToken?: string): Promise<string> {
+  async createLinkToken(
+    userId: string,
+    accessToken?: string,
+    kind: PlaidLinkKind = "bank",
+  ): Promise<string> {
     const body: Record<string, unknown> = {
       client_name: "Muny",
       language: "en",
@@ -208,20 +310,24 @@ export class PlaidProvider implements Provider<PlaidCreds> {
       ...(this.cfg.redirectUri && { redirect_uri: this.cfg.redirectUri }),
     };
     if (accessToken) body.access_token = accessToken;
+    else if (kind === "brokerage") body.products = productsFor(kind);
     else {
-      body.products = ["transactions"];
+      body.products = productsFor(kind);
       body.transactions = { days_requested: 730 };
     }
     const r = await this.call<{ link_token: string }>("/link/token/create", body);
     return r.link_token;
   }
 
-  async exchangePublicToken(publicToken: string): Promise<PlaidCreds> {
+  async exchangePublicToken(
+    publicToken: string,
+    kind: PlaidLinkKind = "bank",
+  ): Promise<PlaidCreds> {
     const r = await this.call<{ access_token: string; item_id: string }>(
       "/item/public_token/exchange",
       { public_token: publicToken },
     );
-    return { accessToken: r.access_token, itemId: r.item_id };
+    return { accessToken: r.access_token, itemId: r.item_id, products: productsFor(kind) };
   }
 
   async getAccounts(creds: PlaidCreds): Promise<ConnectionInfo> {
@@ -284,6 +390,8 @@ export class PlaidProvider implements Provider<PlaidCreds> {
   }
 
   async syncTransactions(creds: PlaidCreds, cursor: string | null): Promise<SyncResult> {
+    // Brokerage logins aren't linked for Transactions: their history comes from Investments.
+    if (!has(creds, "transactions")) return { added: [], modified: [], removed: [], cursor };
     // https://plaid.com/docs/api/products/transactions/#transactionssync
     for (let attempt = 0; attempt < 3; attempt++) {
       const added: ProviderTransaction[] = [];
@@ -325,6 +433,97 @@ export class PlaidProvider implements Provider<PlaidCreds> {
       "provider_error",
       "Plaid kept changing data during sync; try again later",
     );
+  }
+
+  async syncInvestments(creds: PlaidCreds, since: string | null): Promise<InvestmentSync | null> {
+    if (!has(creds, "investments")) return null;
+    // https://plaid.com/docs/api/products/investments/
+    const h = await this.call<{
+      holdings: PlaidHolding[];
+      securities: PlaidSecurity[];
+    }>("/investments/holdings/get", { access_token: creds.accessToken });
+    const secs = new Map<string, PlaidSecurity>();
+    const remember = (list: PlaidSecurity[]) => {
+      for (const s of list) secs.set(s.security_id, s);
+    };
+    remember(h.securities);
+    const symbolOf = (s: PlaidSecurity | undefined) => {
+      if (!s) return null;
+      if (plaidSecurityType(s) === "cash") return s.ticker_symbol?.trim().toUpperCase() || "CASH";
+      return (s.ticker_symbol || s.cusip || s.name || "").trim().toUpperCase().slice(0, 40) || null;
+    };
+    const holdings: InvestmentSync["holdings"] = [];
+    for (const x of h.holdings) {
+      const s = secs.get(x.security_id);
+      const symbol = symbolOf(s);
+      if (!symbol) continue;
+      const type = plaidSecurityType(s);
+      const quantity = plaidDec(x.quantity) ?? "0";
+      const value =
+        x.institution_value !== null && x.institution_value !== undefined
+          ? plaidCents(x.institution_value)
+          : 0;
+      holdings.push({
+        accountRef: x.account_id,
+        symbol,
+        name: (s?.name ?? symbol).slice(0, 200),
+        type,
+        quantity,
+        price: type === "cash" ? "1" : plaidDec(x.institution_price),
+        valueCents: value,
+        costBasisCents:
+          type === "cash"
+            ? value
+            : x.cost_basis === null || x.cost_basis === undefined
+              ? null
+              : plaidCents(x.cost_basis),
+      });
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const from = new Date();
+    from.setUTCDate(from.getUTCDate() - 730);
+    const txns: InvestmentSync["txns"] = [];
+    try {
+      for (let offset = 0, page = 0; page < 100; page++) {
+        const r = await this.call<{
+          investment_transactions: PlaidInvestTxn[];
+          securities: PlaidSecurity[];
+          total_investment_transactions: number;
+        }>("/investments/transactions/get", {
+          access_token: creds.accessToken,
+          start_date: since ?? from.toISOString().slice(0, 10),
+          end_date: today,
+          options: { offset, count: 500 },
+        });
+        remember(r.securities);
+        for (const t of r.investment_transactions) {
+          const s = t.security_id ? secs.get(t.security_id) : undefined;
+          const symbol = symbolOf(s);
+          const qty = absDec(plaidDec(t.quantity));
+          txns.push({
+            ref: t.investment_transaction_id,
+            accountRef: t.account_id,
+            date: t.date,
+            type: plaidInvestTxnType(t.type, t.subtype, t.quantity),
+            symbol: symbol === "CASH" ? null : symbol,
+            name: s?.name?.slice(0, 200) ?? null,
+            quantity: qty && qty !== "0" ? qty : null,
+            price: absDec(plaidDec(t.price)),
+            // Plaid: positive = cash out of the account. Muny: negative = out.
+            amountCents: -plaidCents(t.amount),
+            feesCents: Math.abs(plaidCents(t.fees ?? 0)),
+            description: [t.subtype, t.name].filter(Boolean).join(" · ").slice(0, 300),
+          });
+        }
+        offset += r.investment_transactions.length;
+        if (!r.investment_transactions.length || offset >= r.total_investment_transactions) break;
+      }
+    } catch (e) {
+      // History takes a little while after linking; holdings are enough for now.
+      if (!(e instanceof ProviderError && e.code === "not_ready")) throw e;
+    }
+    return { holdings, txns };
   }
 
   async remove(creds: PlaidCreds): Promise<void> {

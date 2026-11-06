@@ -17,6 +17,7 @@ import type {
 } from "@muny/shared";
 import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { localToday } from "../lib/dates.js";
+import type { ConnectionInfo, InvestmentSync } from "../sync/types.js";
 
 type Db = Pick<MunyDb, "select" | "insert" | "update" | "delete">;
 
@@ -450,4 +451,94 @@ export function importInvestFile(
     }
   }
   return { accountsCreated, holdingsUpdated, added, duplicates };
+}
+
+// ---------------------------------------------------------------------------
+// Bank-sync providers (Plaid Investments)
+// ---------------------------------------------------------------------------
+
+/** The date to fetch history from: a month before the newest synced row (null: everything). */
+export function investSyncSince(db: Db, connectionId: string): string | null {
+  const t = schema.investmentTxns;
+  const row = db
+    .select({ last: sql<string | null>`max(${t.date})` })
+    .from(t)
+    .innerJoin(schema.accounts, eq(schema.accounts.id, t.accountId))
+    .where(and(eq(schema.accounts.connectionId, connectionId), eq(t.source, "plaid")))
+    .get();
+  if (!row?.last) return null;
+  const d = new Date(`${row.last}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 30);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Store a provider's holdings and history for a connection's linked accounts.
+ * The account's reported balance is the truth for its value: any part of it
+ * not in a holding is cash.
+ */
+export function applyInvestmentSync(
+  db: Db,
+  connectionId: string,
+  info: ConnectionInfo,
+  inv: InvestmentSync,
+  today = localToday(),
+): { accounts: number; added: number } {
+  const linked = db
+    .select({ id: schema.accounts.id, ref: schema.accounts.providerAccountRef })
+    .from(schema.accounts)
+    .where(eq(schema.accounts.connectionId, connectionId))
+    .all();
+  const idOf = new Map(linked.filter((a) => a.ref).map((a) => [a.ref as string, a.id]));
+  let accounts = 0;
+  for (const pa of info.accounts) {
+    const accountId = idOf.get(pa.ref);
+    if (!accountId || pa.type !== "investment") continue;
+    const list: Omit<BrokeragePosition, "accountRef">[] = inv.holdings
+      .filter((h) => h.accountRef === pa.ref)
+      .map(({ accountRef: _, ...h }) => h);
+    const held = list.reduce((t, h) => t + h.valueCents, 0);
+    const cash = pa.balanceCents === null ? 0 : pa.balanceCents - held;
+    if (cash > 0)
+      list.push({
+        symbol: "CASH",
+        name: "Cash",
+        type: "cash",
+        quantity: `${Math.floor(cash / 100)}.${String(cash % 100).padStart(2, "0")}`,
+        price: "1",
+        valueCents: cash,
+        costBasisCents: cash,
+      });
+    if (!list.length) continue;
+    setHoldings(db, accountId, list, "plaid", today);
+    accounts++;
+  }
+  let added = 0;
+  for (const t of inv.txns) {
+    const accountId = idOf.get(t.accountRef);
+    if (!accountId) continue;
+    const securityId = t.symbol
+      ? securityFor(db, { symbol: t.symbol, name: t.name ?? t.symbol, type: "equity" })
+      : null;
+    const r = db
+      .insert(schema.investmentTxns)
+      .values({
+        id: newId(),
+        accountId,
+        securityId,
+        date: t.date,
+        type: t.type,
+        quantity: t.quantity,
+        price: t.price,
+        amountCents: t.amountCents,
+        feesCents: t.feesCents,
+        description: t.description,
+        externalId: `plaid:${t.ref}`,
+        source: "plaid",
+      })
+      .onConflictDoNothing()
+      .run();
+    if (r.changes) added++;
+  }
+  return { accounts, added };
 }

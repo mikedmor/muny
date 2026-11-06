@@ -7,7 +7,8 @@ import {
   SECURITY_TYPE_LABELS,
   type SecurityKind,
 } from "@muny/shared";
-import { ChevronRight, FileUp } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { ChevronRight, FileUp, Link2 } from "lucide-react";
 import { type ChangeEvent, useMemo, useState } from "react";
 import { Donut, LineChart } from "../components/charts.js";
 import { Modal } from "../components/forms.js";
@@ -412,10 +413,20 @@ export function StocksPage() {
       <PageHeader
         title="Stocks"
         actions={
-          <Button onClick={() => setImporting(true)}>
-            <FileUp aria-hidden="true" className="mr-1.5 inline size-4" />
-            Import
-          </Button>
+          <div className="flex gap-2">
+            <Link
+              to="/accounts"
+              title="Connect a brokerage through Plaid on the Accounts page"
+              className="inline-flex items-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+            >
+              <Link2 aria-hidden="true" className="mr-1.5 size-4" />
+              Connect a brokerage
+            </Link>
+            <Button onClick={() => setImporting(true)}>
+              <FileUp aria-hidden="true" className="mr-1.5 inline size-4" />
+              Import
+            </Button>
+          </div>
         }
       />
       {summary.error && <Alert>{summary.error.message}</Alert>}
@@ -424,8 +435,9 @@ export function StocksPage() {
         <Card className="text-center">
           <h2 className="text-lg font-semibold">Track your brokerage accounts</h2>
           <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600 dark:text-slate-400">
-            Import positions and history exported from Fidelity, Schwab, Vanguard, Robinhood, Webull
-            and others. Brokerage accounts connected through your bank connection show up here too.
+            Connect a brokerage through Plaid (Accounts → Connect a brokerage) to sync holdings and
+            history automatically, or import positions and history exported from Fidelity, Schwab,
+            Vanguard, Robinhood, Webull and others.
           </p>
           <Button className="mt-4" onClick={() => setImporting(true)}>
             Import a CSV

@@ -2,7 +2,16 @@
 
 **Stocks** (in the menu, under Wealth) tracks your brokerage accounts: what each one holds, its value, your gain over what you paid, cash, and dividends and interest. Brokerage accounts count toward net worth.
 
-Muny doesn't fetch stock quotes. Values and prices are the ones your broker reports, updated whenever you import (or, later, sync). Muny never places trades.
+Muny doesn't fetch stock quotes. Values and prices are the ones your broker reports, updated whenever you import or sync. Muny never places trades.
+
+## Connecting a brokerage through Plaid
+
+If you've set up [Plaid](bank-sync.md), click **Accounts → Connect a brokerage** (or **Connect a brokerage** on the Stocks page). Muny asks Plaid for the brokerage login's investments only, and your holdings, cost basis and up to two years of history then sync along with your banks.
+
+- Plaid's Trial plan includes Investments. Each brokerage login uses one of the plan's logins, like a bank does.
+- For brokerages, use **Connect a brokerage**, not **Connect a bank**. A bank connection asks for Transactions, which most brokerages don't offer, so they wouldn't appear in Plaid's list.
+- History can take a few minutes to become available after you connect. Holdings show up right away, and history fills in on a later sync.
+- Any part of an account's balance that isn't in a holding is shown as cash.
 
 ## Importing from your broker
 
@@ -33,5 +42,4 @@ Menu names change from time to time. If the path above doesn't match, look for "
 
 ## Coming next
 
-- Automatic sync through Plaid Investments (for example Public.com), using your own Plaid keys.
 - Tax lots worked out from your trades: realized gains, dividends on the Taxes page, and a check against your 1099-B.

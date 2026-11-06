@@ -21,6 +21,8 @@ import type { TellerCreds } from "./teller.js";
 import { type ConnectionInfo, ProviderError } from "./types.js";
 
 const IdParams = z.object({ id: z.string().min(1).max(64) });
+/** "brokerage": link for Plaid Investments (holdings and history) instead of Transactions. */
+const LinkKind = z.object({ kind: z.enum(["bank", "brokerage"]).default("bank") });
 const token = z.string().trim().min(1).max(500);
 const LinkBody = z.object({
   accounts: z.record(z.string().max(200), z.string().min(1).max(64)),
@@ -151,7 +153,8 @@ export function registerSyncRoutes(app: FastifyInstance, db: MunyDb, deps: SyncD
     if (!plaid)
       throw badRequest("Plaid isn't configured. Add PLAID_CLIENT_ID and PLAID_SECRET to .env.");
     try {
-      return { linkToken: await plaid.createLinkToken(user.id) };
+      const { kind } = parse(LinkKind, req.body ?? {});
+      return { linkToken: await plaid.createLinkToken(user.id, undefined, kind) };
     } catch (e) {
       asHttp(e);
     }
@@ -159,11 +162,11 @@ export function registerSyncRoutes(app: FastifyInstance, db: MunyDb, deps: SyncD
 
   app.post("/api/connections/plaid/exchange", async (req) => {
     const user = requireUser(req);
-    const { publicToken } = parse(z.object({ publicToken: token }), req.body);
+    const { publicToken, kind } = parse(z.object({ publicToken: token }).merge(LinkKind), req.body);
     const plaid = deps.providers.plaid;
     if (!plaid) throw badRequest("Plaid isn't configured.");
     try {
-      const creds = await plaid.exchangePublicToken(publicToken);
+      const creds = await plaid.exchangePublicToken(publicToken, kind);
       const info = await plaid.getAccounts(creds);
       const id = createConnection("plaid", creds, info);
       log(user.id, "connection.create", id, {

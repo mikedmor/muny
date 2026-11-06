@@ -378,11 +378,12 @@ export const useDisconnect = () =>
   useInvalidatingMutation((id: string) => api.delete(`/api/connections/${id}`), syncKeys);
 
 export const linkApi = {
-  plaidLinkToken: () => api.post<{ linkToken: string }>("/api/connections/plaid/link-token"),
+  plaidLinkToken: (kind: "bank" | "brokerage" = "bank") =>
+    api.post<{ linkToken: string }>("/api/connections/plaid/link-token", { kind }),
   plaidUpdateToken: (id: string) =>
     api.post<{ linkToken: string }>(`/api/connections/${id}/plaid/update-token`),
-  plaidExchange: (publicToken: string) =>
-    api.post<LinkStart>("/api/connections/plaid/exchange", { publicToken }),
+  plaidExchange: (publicToken: string, kind: "bank" | "brokerage" = "bank") =>
+    api.post<LinkStart>("/api/connections/plaid/exchange", { publicToken, kind }),
   plaidReauthed: (id: string) => api.post<SyncSummary>(`/api/connections/${id}/reauthed`),
   tellerEnroll: (body: { accessToken: string; enrollmentId: string; connectionId?: string }) =>
     api.post<LinkStart>("/api/connections/teller/enroll", body),

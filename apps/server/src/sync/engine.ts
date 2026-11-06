@@ -10,6 +10,7 @@ import { localToday } from "../lib/dates.js";
 
 export { localToday };
 
+import { applyInvestmentSync, investSyncSince } from "../invest/service.js";
 import { applyMerchantMemory } from "../ledger/memory.js";
 import { rescanRecurring } from "../recurring/service.js";
 import { runRulesOn } from "../rules/service.js";
@@ -350,6 +351,15 @@ export async function syncConnection(
       } else throw e;
     }
     const summary = db.transaction((tx) => applySync(tx, conn, info, result));
+    // Brokerage logins: holdings and investment history (after accounts exist).
+    if (provider.syncInvestments) {
+      try {
+        const inv = await provider.syncInvestments(creds, investSyncSince(db, connectionId));
+        if (inv) db.transaction((tx) => applyInvestmentSync(tx, connectionId, info, inv));
+      } catch (e) {
+        if (!(e instanceof ProviderError && e.code === "not_ready")) throw e;
+      }
+    }
     setStatus({
       status: "active",
       lastError: null,

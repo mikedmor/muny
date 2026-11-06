@@ -194,11 +194,11 @@ export function BankConnections() {
     }
   };
 
-  const connectPlaid = () =>
-    run("plaid", async () => {
-      const { linkToken } = await linkApi.plaidLinkToken();
+  const connectPlaid = (kind: "bank" | "brokerage" = "bank") =>
+    run(kind === "brokerage" ? "brokerage" : "plaid", async () => {
+      const { linkToken } = await linkApi.plaidLinkToken(kind);
       const publicToken = await openPlaidLink(linkToken);
-      if (publicToken) setLinking(await linkApi.plaidExchange(publicToken));
+      if (publicToken) setLinking(await linkApi.plaidExchange(publicToken, kind));
     });
 
   const connectTeller = (conn?: ConnectionSummary) =>
@@ -241,8 +241,18 @@ export function BankConnections() {
         </h2>
         <div className="flex gap-2">
           {plaid && (
-            <Button variant="secondary" disabled={busy !== null} onClick={connectPlaid}>
+            <Button variant="secondary" disabled={busy !== null} onClick={() => connectPlaid()}>
               {busy === "plaid" ? "Opening…" : teller ? "Connect with Plaid" : "Connect a bank"}
+            </Button>
+          )}
+          {plaid && (
+            <Button
+              variant="secondary"
+              disabled={busy !== null}
+              title="Stocks, ETFs and funds: holdings and history through Plaid Investments"
+              onClick={() => connectPlaid("brokerage")}
+            >
+              {busy === "brokerage" ? "Opening…" : "Connect a brokerage"}
             </Button>
           )}
           {teller && (
