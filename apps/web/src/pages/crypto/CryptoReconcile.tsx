@@ -460,6 +460,18 @@ function Mismatch({
       staking,
     }),
   );
+  const adjustOut = useCryptoMutation((out: "fee" | "sent") =>
+    api.post("/api/crypto/reconcile/adjust", {
+      walletId,
+      asset: m.asset,
+      amount: m.diff.replace(/^-/, ""),
+      staking: false,
+      out,
+    }),
+  );
+  // Small enough to be a network fee the history missed (well under 1% and under 0.01 of a coin).
+  const feeSized =
+    Number(m.diff) > 0 && Number(m.diff) < 0.01 && Number(m.diff) < Number(m.computed) * 0.01;
   const once = useCryptoMutation((keep: "imported" | "synced") =>
     api.post<{ removedRewards: number; adjusted: number }>("/api/crypto/reconcile/rewards", {
       walletId,
@@ -487,7 +499,8 @@ function Mismatch({
     chain.error ??
     compare.error ??
     correct.error ??
-    closeIt.error;
+    closeIt.error ??
+    adjustOut.error;
   return (
     <div className="space-y-2 text-sm">
       <p>
@@ -639,10 +652,34 @@ function Mismatch({
         </div>
       )}
       {more && !m.closed && chainKey !== "sc" && !m.rewardsTwice && m.extra.length === 0 && (
-        <p className="text-slate-500">
-          No set of deposits adds up to the difference. Look for a withdrawal that&apos;s missing,
-          or a deposit recorded twice with different amounts, in its transactions.
-        </p>
+        <div className="space-y-2">
+          <p className="text-slate-500">
+            No set of deposits adds up to the difference.{" "}
+            {feeSized
+              ? "A difference this small is usually a network fee the imported history doesn't have."
+              : "Look for a withdrawal that's missing, or a deposit recorded twice with different amounts, in its transactions."}{" "}
+            Or record the difference so the balance matches (one row marked &quot;Added in
+            Reconcile&quot;; delete it to undo).
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {feeSized && (
+              <Button
+                variant="secondary"
+                disabled={adjustOut.isPending}
+                onClick={() => adjustOut.mutate("fee")}
+              >
+                Record {gap} {m.asset} as a missing network fee
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              disabled={adjustOut.isPending}
+              onClick={() => adjustOut.mutate("sent")}
+            >
+              Record {gap} {m.asset} as sent out (balance adjustment)
+            </Button>
+          </div>
+        </div>
       )}
       {!more && (
         <div className="space-y-2">

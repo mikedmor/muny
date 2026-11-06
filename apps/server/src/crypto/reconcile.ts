@@ -1000,9 +1000,44 @@ export function recordClosing(
 /** Add what the chain has and Muny doesn't, as staking rewards or a plain adjustment. */
 export function addAdjustment(
   db: MunyDb,
-  input: { walletId: string; asset: string; amount: string; staking: boolean },
+  input: {
+    walletId: string;
+    asset: string;
+    amount: string;
+    staking: boolean;
+    /** Muny has more than the chain: "fee" (a network fee the history missed) or "out". */
+    out?: "fee" | "sent";
+  },
 ) {
   const id = newId();
+  if (input.out) {
+    // Dated just after the wallet's last transaction, so earlier balances stay as they were.
+    const last = db
+      .select({ at: t.at })
+      .from(t)
+      .where(eq(t.walletId, input.walletId))
+      .orderBy(sql`${t.at} desc`)
+      .limit(1)
+      .get()?.at;
+    db.insert(t)
+      .values({
+        id,
+        walletId: input.walletId,
+        at: last ? last + 1000 : Date.now(),
+        type: "withdrawal",
+        ...(input.out === "fee"
+          ? { feeAsset: input.asset, feeAmount: normDec(input.amount) }
+          : { sentAsset: input.asset, sentAmount: normDec(input.amount) }),
+        description:
+          input.out === "fee"
+            ? "Added in Reconcile: a network fee missing from history"
+            : "Added in Reconcile: balance adjustment to match the blockchain",
+        externalId: `manual:${id}`,
+        source: "manual",
+      })
+      .run();
+    return { id };
+  }
   db.insert(t)
     .values({
       id,

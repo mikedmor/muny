@@ -120,4 +120,39 @@ describe("a closed account", () => {
     expect(done).toMatchObject({ status: "ok", onChain: [{ asset: "XLM", amount: "1.0000001" }] });
     expect(done?.lastError).toMatch(/no longer keeps this account's history/);
   });
+
+  it("records a small surplus as a network fee the history missed", async () => {
+    const { client, db, xlm } = await setup();
+    const at = Date.UTC(2021, 5, 1);
+    db.insert((await import("@muny/db")).schema.cryptoTxns)
+      .values({
+        id: "x",
+        walletId: xlm.id,
+        at,
+        externalId: "koinly:x",
+        source: "import",
+        type: "deposit",
+        receivedAsset: "BTC",
+        receivedAmount: "1",
+      })
+      .run();
+    const res = await client.post("/api/crypto/reconcile/adjust", {
+      walletId: xlm.id,
+      asset: "XLM",
+      amount: "0.00001",
+      staking: false,
+      out: "fee",
+    });
+    expect(res.statusCode).toBe(200);
+    const page = (await client.get(`/api/crypto/txns?walletId=${xlm.id}`)).json<CryptoTxnPage>();
+    expect(page.items[0]).toMatchObject({
+      type: "withdrawal",
+      sentAmount: null,
+      feeAsset: "XLM",
+      feeAmount: "0.00001",
+      description: "Added in Reconcile: a network fee missing from history",
+    });
+    // Dated just after the wallet's last transaction (the deposit added above).
+    expect(page.items[0]?.at).toBe(at + 1000);
+  });
 });

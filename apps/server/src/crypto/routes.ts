@@ -565,7 +565,13 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
   app.post("/api/crypto/reconcile/adjust", async (req) => {
     const user = requireUser(req);
     const body = parse(
-      z.object({ walletId: z.string().min(1).max(64), asset, amount, staking: z.boolean() }),
+      z.object({
+        walletId: z.string().min(1).max(64),
+        asset,
+        amount,
+        staking: z.boolean(),
+        out: z.enum(["fee", "sent"]).optional(),
+      }),
       req.body,
     );
     const res = addAdjustment(db, body);
