@@ -892,6 +892,10 @@ export const loanDetails = sqliteTable("loan_details", {
   paymentMatch: text(),
   /** Only payments of about this amount (one lender, several loans or dues under the same name). */
   paymentAmountCents: integer(),
+  /** Earlier "payments of about" amounts (the payment changed): still matched, so history stays put. */
+  pastPaymentAmounts: text({ mode: "json" }).$type<number[]>(),
+  /** A yearly fee (e.g. timeshare dues): payments with the same words of at least this much. */
+  feeMinCents: integer(),
   /** The lowest payment due (Plaid Liabilities or entered). */
   minimumPaymentCents: integer(),
   /** Mortgages: the home's original value (the lower of price and appraisal), for mortgage insurance. */

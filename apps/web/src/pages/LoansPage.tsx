@@ -5,13 +5,14 @@ import {
   LOAN_KINDS,
   type Loan,
   type LoanDetailsInput,
+  type LoanFee,
   type LoanKind,
   type LoansReport,
   payoff,
 } from "@muny/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Download, Pencil, Plus } from "lucide-react";
+import { Download, Pencil, Plus, X } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { LineChart } from "../components/charts.js";
 import { Modal } from "../components/forms.js";
@@ -131,7 +132,9 @@ function LoanForm({ loan, onDone }: { loan?: Loan; onDone: () => void }) {
     homeValue: fromCents(loan?.originalValueCents),
     pmi: fromCents(loan?.pmiMonthlyCents),
     property: loan?.propertyAccountId ?? "",
+    feeMin: fromCents(loan?.feeMinCents),
   });
+  const [past, setPast] = useState<number[]>(loan?.pastPaymentAmounts ?? []);
   const [error, setError] = useState<string | null>(null);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) =>
     setF((x) => ({ ...x, [k]: e.target.value }));
@@ -147,6 +150,7 @@ function LoanForm({ loan, onDone }: { loan?: Loan; onDone: () => void }) {
       paymentAmountCents: toCents(f.matchAmount),
       originalValueCents: mortgage ? toCents(f.homeValue) : null,
       pmiMonthlyCents: mortgage ? toCents(f.pmi) : null,
+      feeMinCents: toCents(f.feeMin),
     };
     const years = toInt(f.termYears);
     const balance = toCents(f.balance);
@@ -162,6 +166,7 @@ function LoanForm({ loan, onDone }: { loan?: Loan; onDone: () => void }) {
       termMonths: years === null ? null : years * 12,
       paymentMatch: f.match.trim() || null,
       propertyAccountId: f.property || null,
+      pastPaymentAmounts: past,
       ...(manual ? { startBalanceCents: balance, startDate: f.startDate || null } : {}),
     };
     try {
@@ -318,7 +323,36 @@ function LoanForm({ loan, onDone }: { loan?: Loan; onDone: () => void }) {
           onChange={set("matchAmount")}
           inputMode="decimal"
           placeholder="e.g. 245.00"
-          hint="For a lender with several loans (or dues) paid separately under one name."
+          hint="For a lender with several loans (or dues) paid separately under one name. If your payment changes, enter the new amount: earlier payments of the old amount still count."
+        />
+        {past.length > 0 && (
+          <div className="text-xs text-slate-500 sm:col-span-2">
+            Earlier payment amounts still counted:{" "}
+            {past.map((c) => (
+              <span
+                key={c}
+                className="mr-1.5 inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 tabular-nums dark:bg-slate-800"
+              >
+                {formatMoney(c)}
+                <button
+                  type="button"
+                  aria-label={`Stop counting ${formatMoney(c)}`}
+                  onClick={() => setPast((x) => x.filter((y) => y !== c))}
+                  className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                >
+                  <X aria-hidden="true" className="size-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        <Field
+          label="Yearly fee of at least"
+          value={f.feeMin}
+          onChange={set("feeMin")}
+          inputMode="decimal"
+          placeholder="e.g. 2,200.00"
+          hint="Dues or a maintenance fee paid under the same words. Muny lists them and doesn't count them as loan payments."
         />
       </div>
       <div className="flex justify-end gap-2">
@@ -378,7 +412,7 @@ function PayoffPlanner({ loan }: { loan: Loan }) {
       {plan.balances.length > 2 && (
         <LineChart
           ariaLabel={`${loan.name} balance until paid off`}
-          height={150}
+          height={210}
           projectedFrom={1}
           points={shown.map((p) => ({
             date: String(p.m),
@@ -416,6 +450,48 @@ function PayoffPlanner({ loan }: { loan: Loan }) {
         ) : null}
       </p>
     </Section>
+  );
+}
+
+/** Yearly fee payments (dues, maintenance): the last one, when the next is likely, a month's worth. */
+function FeeStrip({ fees, feeMinCents }: { fees: LoanFee[]; feeMinCents: number | null }) {
+  if (!feeMinCents) return null;
+  const last = fees[0];
+  if (!last)
+    return (
+      <p className="text-xs text-slate-500">
+        Yearly fee: no payments of {formatMoney(feeMinCents)} or more found yet.
+      </p>
+    );
+  const next = new Date(`${last.date}T00:00:00`);
+  next.setFullYear(next.getFullYear() + 1);
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 rounded-xl bg-slate-50 px-4 py-3 text-sm dark:bg-slate-800/40">
+      <span className="font-medium">Yearly fee</span>
+      <span>
+        <span className="text-slate-500">Last </span>
+        <strong className="tabular-nums">{formatMoney(last.amountCents)}</strong>
+        <span className="text-slate-500"> on {day(last.date)}</span>
+      </span>
+      <span>
+        <span className="text-slate-500">Next around </span>
+        <strong>{monthYear(next)}</strong>
+      </span>
+      <span>
+        <span className="text-slate-500">Set aside </span>
+        <strong className="tabular-nums">{formatMoney(Math.round(last.amountCents / 12))}</strong>
+        <span className="text-slate-500"> a month</span>
+      </span>
+      {fees.length > 1 && (
+        <span className="text-xs text-slate-500">
+          Before:{" "}
+          {fees
+            .slice(1)
+            .map((x) => `${formatMoney(x.amountCents)} (${monthYear(x.date)})`)
+            .join(", ")}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -568,8 +644,6 @@ function LastPaymentSplit({ loan }: { loan: Loan }) {
 }
 
 function Payments({ loan }: { loan: Loan }) {
-  const [showAll, setShowAll] = useState(false);
-  const payments = showAll ? loan.payments : loan.payments.slice(0, 6);
   const split = loan.payments.some((p) => p.interestCents !== null);
   const escrow = loan.principalInterestCents !== null;
   const shared = loan.payments.some((p) => p.totalCents !== null);
@@ -589,9 +663,9 @@ function Payments({ loan }: { loan: Loan }) {
             : "No payments found. Add the words your payments use (Edit details) so Muny can find them."}
         </p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="max-h-72 overflow-auto">
           <table className="w-full min-w-[32rem] text-sm">
-            <thead className="text-xs text-slate-500">
+            <thead className="sticky top-0 bg-white text-xs text-slate-500 dark:bg-slate-900">
               <tr>
                 <th className="py-1.5 text-left font-medium">Date</th>
                 <th className="py-1.5 text-left font-medium">From</th>
@@ -602,7 +676,7 @@ function Payments({ loan }: { loan: Loan }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {payments.map((p) => (
+              {loan.payments.map((p) => (
                 <tr key={p.transactionId}>
                   <td className="py-2 whitespace-nowrap">{day(p.date)}</td>
                   <td className="max-w-48 truncate py-2 text-slate-500" title={p.description}>
@@ -634,15 +708,6 @@ function Payments({ loan }: { loan: Loan }) {
             </tbody>
           </table>
         </div>
-      )}
-      {loan.payments.length > 6 && (
-        <button
-          type="button"
-          onClick={() => setShowAll((v) => !v)}
-          className="mt-2 text-xs text-slate-500 underline"
-        >
-          {showAll ? "Show fewer" : `Show all ${loan.payments.length}`}
-        </button>
       )}
       {shared && (
         <p className="mt-2 text-xs text-slate-500">
@@ -799,6 +864,8 @@ function LoanCard({ loan, embedded = false }: { loan: Loan; embedded?: boolean }
         </div>
       )}
 
+      {!embedded && <FeeStrip fees={loan.fees} feeMinCents={loan.feeMinCents} />}
+
       {loan.sharedWith.length > 0 && (
         <p className="text-xs text-slate-500">
           Payments are shared with {loan.sharedWith.join(", ")}; this loan's part is in proportion
@@ -840,6 +907,10 @@ function LenderGroup({ lender, loans }: { lender: string; loans: Loan[] }) {
   if (!loan) return null;
   const owed = loans.reduce((s, l) => s + l.balanceCents, 0);
   const monthly = loans.reduce((s, l) => s + (l.monthlyPaymentCents ?? 0), 0);
+  const fees = [
+    ...new Map(loans.flatMap((l) => l.fees).map((x) => [x.transactionId, x])).values(),
+  ].sort((a, b) => b.date.localeCompare(a.date));
+  const feeMins = loans.map((l) => l.feeMinCents).filter((c): c is number => c !== null);
   return (
     <Card className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -854,6 +925,7 @@ function LenderGroup({ lender, loans }: { lender: string; loans: Loan[] }) {
           <p className="text-2xl font-semibold tabular-nums">{formatMoney(owed)}</p>
         </div>
       </div>
+      <FeeStrip fees={fees} feeMinCents={feeMins.length ? Math.min(...feeMins) : null} />
       <div
         role="tablist"
         className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800"

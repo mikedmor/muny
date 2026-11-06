@@ -5,6 +5,7 @@ import {
   type CreateLoanInput,
   type Loan,
   type LoanDetailsInput,
+  type LoanFee,
   type LoanKind,
   type LoanPaymentRow,
   type LoansReport,
@@ -70,6 +71,54 @@ const dayGap = (a: number, b: number) => {
 /** Payments within this many days of the due day count (banks post a few days either side). */
 const DUE_WINDOW = 6;
 
+/** The amounts a loan's payments are matched to: today's, then earlier ones (the payment changed). */
+const amountsOf = (d: Details | undefined): number[] =>
+  d?.paymentAmountCents ? [d.paymentAmountCents, ...(d.pastPaymentAmounts ?? [])] : [];
+
+/** Outgoing transactions (not from loan accounts) whose description or payee contains the words. */
+function byWords(db: Db, words: string | null | undefined) {
+  const w = words?.trim();
+  if (!w) return [];
+  const t = schema.transactions;
+  const a = schema.accounts;
+  return db
+    .select({
+      id: t.id,
+      date: t.postedDate,
+      amountCents: t.amountCents,
+      description: t.rawDescription,
+      from: a.name,
+      mask: a.mask,
+    })
+    .from(t)
+    .innerJoin(a, eq(a.id, t.accountId))
+    .leftJoin(schema.payees, eq(schema.payees.id, t.payeeId))
+    .where(
+      and(
+        ne(a.type, "loan"),
+        eq(t.pending, false),
+        lt(t.amountCents, 0),
+        sql`(instr(lower(${t.rawDescription}), lower(${w})) > 0 or instr(lower(coalesce(${schema.payees.displayName}, '')), lower(${w})) > 0)`,
+      ),
+    )
+    .all();
+}
+
+/** A loan's yearly fee payments (same words, at least the fee amount), newest first. */
+function feesFor(db: Db, d: Details | undefined, since: string): LoanFee[] {
+  if (!d?.feeMinCents) return [];
+  const min = d.feeMinCents;
+  return byWords(db, d.paymentMatch)
+    .filter((r) => r.date >= since && -r.amountCents >= min)
+    .map((r) => ({
+      transactionId: r.id,
+      date: r.date,
+      amountCents: -r.amountCents,
+      fromAccountName: r.mask ? `${r.from} ••${r.mask}` : r.from,
+    }))
+    .sort((x, y) => y.date.localeCompare(x.date));
+}
+
 /** Payments toward a loan, oldest first (whole payments; sharing happens later). */
 function paymentsFor(
   db: Db,
@@ -96,7 +145,10 @@ function paymentsFor(
   }) => {
     if (r.date < since || r.amountCents >= 0) return;
     const amount = -r.amountCents;
-    if (d?.paymentAmountCents && !near(amount, d.paymentAmountCents)) return;
+    // The yearly fee isn't a loan payment.
+    if (d?.feeMinCents && amount >= d.feeMinCents) return;
+    const amounts = amountsOf(d);
+    if (amounts.length && !amounts.some((x) => near(amount, x))) return;
     out.set(r.id, {
       id: r.id,
       date: r.date,
@@ -122,23 +174,7 @@ function paymentsFor(
       .where(and(inArray(t.id, loanSide), eq(t.pending, false)))
       .all())
       add(r);
-  const words = d?.paymentMatch?.trim();
-  if (words)
-    for (const r of db
-      .select(cols)
-      .from(t)
-      .innerJoin(a, eq(a.id, t.accountId))
-      .leftJoin(schema.payees, eq(schema.payees.id, t.payeeId))
-      .where(
-        and(
-          ne(a.type, "loan"),
-          eq(t.pending, false),
-          lt(t.amountCents, 0),
-          sql`(instr(lower(${t.rawDescription}), lower(${words})) > 0 or instr(lower(coalesce(${schema.payees.displayName}, '')), lower(${words})) > 0)`,
-        ),
-      )
-      .all())
-      add(r);
+  for (const r of byWords(db, d?.paymentMatch)) add(r);
   const list = [...out.values()].sort((x, y) => x.date.localeCompare(y.date));
   const due = d?.nextDueDate ? Number(d.nextDueDate.slice(8, 10)) : null;
   if (!due) return list;
@@ -218,8 +254,9 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
   }
   const fit = (accountId: string, p: RawPayment) => {
     const d = details.get(accountId);
-    const amount = d?.paymentAmountCents
-      ? Math.abs(p.amountCents - d.paymentAmountCents) / d.paymentAmountCents
+    const amounts = amountsOf(d);
+    const amount = amounts.length
+      ? Math.min(...amounts.map((x) => Math.abs(p.amountCents - x) / x))
       : 0;
     const day = d?.nextDueDate
       ? dayGap(Number(p.date.slice(8, 10)), Number(d.nextDueDate.slice(8, 10))) / 31
@@ -287,7 +324,32 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
         today,
       );
       balance = r.balanceCents;
-      const byIndex = new Map(counted.map(({ i }, k) => [i, r.payments[k]]));
+      const byIndex = new Map<number, { interestCents: number; principalCents: number }>();
+      counted.forEach(({ i }, k) => {
+        const x = r.payments[k];
+        if (x) byIndex.set(i, x);
+      });
+      // Payments before the "as of" date: work their split back from what you owed then (estimates).
+      const earlier = raw
+        .map((p, i) => ({ p, i }))
+        .filter(({ p }) => p.date < startDate)
+        .reverse();
+      if (apr !== null && earlier.length) {
+        const split = splitBackward(
+          d.startBalanceCents,
+          apr,
+          earlier.map(({ p }) => ({
+            date: p.date,
+            amountCents: p.amountCents - escrowOf(p.amountCents),
+          })),
+          d.kind === "mortgage",
+        );
+        earlier.forEach(({ i }, k) => {
+          const x = split[k];
+          if (x) byIndex.set(i, x);
+        });
+        splitEstimated = true;
+      }
       rows = rows.map((p, i) => {
         const x = byIndex.get(i);
         return x ? { ...p, interestCents: x.interestCents, principalCents: x.principalCents } : p;
@@ -357,6 +419,9 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
       termMonths: d?.termMonths ?? null,
       paymentMatch: d?.paymentMatch ?? null,
       paymentAmountCents: d?.paymentAmountCents ?? null,
+      pastPaymentAmounts: d?.pastPaymentAmounts ?? [],
+      feeMinCents: d?.feeMinCents ?? null,
+      fees: feesFor(db, d, twoYearsAgo),
       startBalanceCents: manual ? (d?.startBalanceCents ?? null) : null,
       startDate,
       originalValueCents: d?.originalValueCents ?? null,
@@ -499,6 +564,24 @@ export function updateLoan(db: Db, accountId: string, input: LoanDetailsInput): 
   if (synced) {
     delete patch.startBalanceCents;
     delete patch.startDate;
+  }
+  // A new payment amount: keep matching the old one, so earlier payments stay with this loan.
+  const before = db
+    .select({
+      amount: schema.loanDetails.paymentAmountCents,
+      past: schema.loanDetails.pastPaymentAmounts,
+    })
+    .from(schema.loanDetails)
+    .where(eq(schema.loanDetails.accountId, accountId))
+    .get();
+  const next = patch.paymentAmountCents as number | null | undefined;
+  if (next !== undefined || patch.pastPaymentAmounts !== undefined) {
+    const past = [
+      ...(before?.amount && next && before.amount !== next ? [before.amount] : []),
+      ...((patch.pastPaymentAmounts as number[] | null | undefined) ?? before?.past ?? []),
+    ];
+    const current = next === undefined ? before?.amount : next;
+    patch.pastPaymentAmounts = [...new Set(past)].filter((x) => x !== current).slice(0, 12);
   }
   const source = synced ? "plaid" : "manual";
   db.insert(schema.loanDetails)

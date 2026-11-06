@@ -35,6 +35,13 @@ export interface LoanPaymentRow {
   fromAccountName: string;
 }
 
+export interface LoanFee {
+  transactionId: string;
+  date: string;
+  amountCents: number;
+  fromAccountName: string;
+}
+
 export interface Loan {
   accountId: string;
   name: string;
@@ -65,6 +72,12 @@ export interface Loan {
   termMonths: number | null;
   paymentMatch: string | null;
   paymentAmountCents: number | null;
+  /** Earlier payment amounts still matched (the payment changed). */
+  pastPaymentAmounts: number[];
+  /** Yearly fee: payments with the same words of at least this much. */
+  feeMinCents: number | null;
+  /** Those fee payments, newest first (two years). */
+  fees: LoanFee[];
   startBalanceCents: number | null;
   startDate: string | null;
   originalValueCents: number | null;
@@ -120,6 +133,8 @@ export interface LoanDetailsInput {
   termMonths?: number | null;
   paymentMatch?: string | null;
   paymentAmountCents?: number | null;
+  pastPaymentAmounts?: number[] | null;
+  feeMinCents?: number | null;
   /** Manual loans: what you owed on startDate. */
   startBalanceCents?: number | null;
   startDate?: string | null;

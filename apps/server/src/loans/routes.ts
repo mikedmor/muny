@@ -22,6 +22,8 @@ const Details = z.object({
   startBalanceCents: cents.nullable().optional(),
   startDate: isoDate.nullable().optional(),
   paymentAmountCents: cents.nullable().optional(),
+  pastPaymentAmounts: z.array(cents).max(12).nullable().optional(),
+  feeMinCents: cents.nullable().optional(),
   minimumPaymentCents: cents.nullable().optional(),
   originalValueCents: cents.nullable().optional(),
   pmiMonthlyCents: cents.nullable().optional(),

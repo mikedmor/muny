@@ -12,13 +12,15 @@
 Loans with the same lender share one card on the Loans page, with a tab for each loan.
 
 - **Paid separately, each with its own amount** (for example three timeshare loans plus yearly dues, all under one name): give each loan the same payment words, its own **Only payments of about** amount and its **Next payment due** date. Muny counts payments made within about a week of each loan's due day, and when a payment could belong to two loans it goes to the closest match. Payments of other amounts, such as the dues, aren't counted toward any of them.
+- **A yearly fee** (timeshare maintenance, dues): set **Yearly fee of at least** (for example 2,200.00). Payments with the loan's words of at least that much are listed on the card as the yearly fee (the last one, when the next is likely, and how much to set aside each month) and aren't counted as loan payments. The amount can change from year to year.
+- **When a payment changes:** enter the new amount in **Only payments of about**. Muny keeps counting earlier payments of the old amount, so the history stays with the loan; the old amounts are listed under the field, where you can remove one.
 - **One payment covering several loans** (common with student loans): give each loan the same payment words and no amount, plus its own monthly payment. Each payment is shared between them in proportion to their monthly payments.
 
 ## Reading a loan
 
 - **Payment** shows your usual payment; **Minimum** is the lowest payment due (from the lender, or entered).
 - For a **mortgage** with its original amount, rate and term entered, Muny works out the principal and interest part of the payment; the rest is escrow (taxes and insurance). Payoff dates use the principal and interest part.
-- **Payments** lists each payment, the account it came from, and its split into interest and principal. For synced loans the split is worked back from today's balance, so it's an estimate.
+- **Payments** lists each payment, the account it came from, and its split into interest and principal. For synced loans the split is worked back from today's balance, so it's an estimate. For loans tracked from your payments, payments before the **As of** date are listed with an estimated split worked back from what you owed then; only later payments lower the balance.
 - **Payoff** charts the balance down to zero. Drag **Pay extra each month** to see how much sooner it ends and how much interest you'd save.
 
 ## Mortgage insurance

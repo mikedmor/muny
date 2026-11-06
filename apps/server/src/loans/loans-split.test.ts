@@ -180,4 +180,46 @@ describe("loans: telling similar payments apart by due day", () => {
     expect(one?.payments.map((p) => p.date.slice(8))).toEqual(["05", "05", "05"]);
     expect(two?.payments.map((p) => p.date.slice(8))).toEqual(["17", "17", "17"]);
   });
+
+  it("keeps earlier payments after the payment amount changes, and lists the yearly fee", async () => {
+    const { client, pay, loans } = await setup();
+    await pay(daysAgo(70), -20_000, "SEAVIEW RESORTS MTG");
+    await pay(daysAgo(40), -20_000, "SEAVIEW RESORTS MTG");
+    await pay(daysAgo(10), -21_000, "SEAVIEW RESORTS MTG"); // the payment went up
+    await pay(daysAgo(50), -230_000, "SEAVIEW RESORTS MTG"); // yearly maintenance fee
+    const { accountId } = (
+      await client.post("/api/loans", {
+        name: "Seaview",
+        startBalanceCents: 1_000_000,
+        startDate: daysAgo(90),
+        aprBps: 0,
+        paymentMatch: "SEAVIEW RESORTS",
+        paymentAmountCents: 20_000,
+        feeMinCents: 220_000,
+      })
+    ).json<{ accountId: string }>();
+    await client.patch(`/api/loans/${accountId}`, { paymentAmountCents: 21_000 });
+    const loan = (await loans()).find((l) => l.name === "Seaview");
+    expect(loan?.pastPaymentAmounts).toEqual([20_000]);
+    expect(loan?.payments.map((p) => p.amountCents)).toEqual([21_000, 20_000, 20_000]);
+    expect(loan?.balanceCents).toBe(1_000_000 - 61_000);
+    expect(loan?.fees.map((x) => x.amountCents)).toEqual([230_000]);
+  });
+
+  it("estimates interest on payments before the as-of date", async () => {
+    const { client, pay, loans } = await setup();
+    await pay(daysAgo(40), -24_305, "SEAVIEW RESORTS MTG");
+    await pay(daysAgo(10), -24_305, "SEAVIEW RESORTS MTG");
+    await client.post("/api/loans", {
+      name: "Seaview",
+      startBalanceCents: 1_125_873,
+      startDate: localToday(),
+      aprBps: 1399,
+      paymentMatch: "SEAVIEW RESORTS",
+    });
+    const loan = (await loans()).find((l) => l.name === "Seaview");
+    expect(loan?.balanceCents).toBe(1_125_873);
+    expect(loan?.payments.every((p) => (p.interestCents ?? 0) > 10_000)).toBe(true);
+    expect(loan?.splitEstimated).toBe(true);
+  });
 });
