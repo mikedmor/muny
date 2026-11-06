@@ -108,32 +108,46 @@ function ValueChart({
           Not enough history yet. Fill it in from your trades and past prices below.
         </p>
       )}
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-slate-800">
-        <span>
-          {estimatedUntil
-            ? `Up to ${shortDate(estimatedUntil, true)} the values are estimated from your trades and each day's closing prices; after that they're what your broker reported.`
-            : "Fill in history: Muny works out each day's value from your trades and closing prices. It sends only ticker symbols to Yahoo Finance, once."}
-        </span>
-        <Button
-          variant="secondary"
-          className="px-2.5 py-1 text-xs"
-          disabled={backfill.isPending}
-          onClick={() => backfill.mutate()}
-        >
-          {backfill.isPending
-            ? "Filling in…"
-            : estimatedUntil
-              ? "Update history"
-              : "Fill in history"}
-        </Button>
-      </div>
+      {estimatedUntil ? (
+        // Filled in: a quiet note, with a way to redo it after importing older trades.
+        <p className="mt-3 text-xs text-slate-500">
+          Values up to {shortDate(estimatedUntil, true)} are estimated from your trades and closing
+          prices.{" "}
+          <button
+            type="button"
+            disabled={backfill.isPending}
+            onClick={() => backfill.mutate()}
+            title="After importing older trades, work the estimates out again"
+            className="text-brand-600 hover:underline disabled:opacity-60 dark:text-brand-500"
+          >
+            {backfill.isPending ? "Recalculating…" : "Recalculate"}
+          </button>
+        </p>
+      ) : (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-slate-800">
+          <span>
+            See values from before you connected: Muny works them out from your trades and each
+            day's closing price. Only ticker symbols are sent to Yahoo Finance, once.
+          </span>
+          <Button
+            variant="secondary"
+            className="px-2.5 py-1 text-xs"
+            disabled={backfill.isPending}
+            onClick={() => backfill.mutate()}
+          >
+            {backfill.isPending ? "Filling in…" : "Fill in history"}
+          </Button>
+        </div>
+      )}
       {backfill.error && <Alert>{backfill.error.message}</Alert>}
-      {res && (
+      {res && res.missing.length > 0 && (
         <p role="status" className="mt-2 text-xs text-slate-500">
-          {res.accounts
-            ? `Filled in ${res.accounts} account${res.accounts === 1 ? "" : "s"} from ${res.from ? shortDate(res.from, true) : "the first trade"}.`
-            : "Nothing to fill in: no trades found. Import or sync your account history first."}
-          {res.missing.length > 0 && ` No past prices for ${res.missing.join(", ")}.`}
+          No past prices for {res.missing.join(", ")}, so they're left out of the estimates.
+        </p>
+      )}
+      {res && !res.accounts && (
+        <p role="status" className="mt-2 text-xs text-slate-500">
+          Nothing to fill in: no trades found. Import or sync your account history first.
         </p>
       )}
     </Card>

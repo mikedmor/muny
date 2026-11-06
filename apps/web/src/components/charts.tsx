@@ -406,7 +406,9 @@ export function LineChart({
   const area = points.length
     ? `${line} L${x(points.length - 1)},${y(Math.max(bottom, 0))} L${x(0)},${y(Math.max(bottom, 0))} Z`
     : "";
-  const labelEvery = Math.ceil(points.length / Math.max(1, Math.floor(plotW / 56)));
+  // Room for the longest label (about 6.5px a character at the axis font size), so they never overlap.
+  const labelW = Math.max(56, Math.max(0, ...points.map((p) => p.label.length)) * 6.5 + 16);
+  const labelEvery = Math.ceil(points.length / Math.max(1, Math.floor(plotW / labelW)));
   const hp = hover !== null ? points[hover] : undefined;
 
   const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
