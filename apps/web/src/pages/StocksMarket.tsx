@@ -1,14 +1,11 @@
-import type { MarketQuote } from "@muny/shared";
+import type { MarketIntraday, MarketQuote } from "@muny/shared";
+import { useQueries } from "@tanstack/react-query";
 import { useState } from "react";
-import { LineChart } from "../components/charts.js";
+import { PercentLinesChart, type PercentSeries } from "../components/charts.js";
 import { Card, cx } from "../components/ui.js";
 import { MerchantAvatar } from "../components/visuals.js";
-import {
-  useInvestSettings,
-  useMarket,
-  useMarketIntraday,
-  useSetInvestSettings,
-} from "../lib/queries.js";
+import { api } from "../lib/api.js";
+import { investKeys, useInvestSettings, useMarket, useSetInvestSettings } from "../lib/queries.js";
 
 /** A company logo (when logos are on), else the letter badge. */
 /**
@@ -110,141 +107,172 @@ function PctPill({ v }: { v: number | null }) {
 const fmt = (n: number) =>
   n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-function IndexChip({
-  q,
-  active,
-  onClick,
-}: {
-  q: MarketQuote;
-  active: boolean;
-  onClick?: () => void;
-}) {
-  const up = (q.change1dPct ?? 0) >= 0;
-  const isFund = !q.symbol.startsWith("^");
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={!onClick}
-      aria-pressed={onClick ? active : undefined}
-      className={cx(
-        "flex min-w-36 flex-col items-start rounded-xl border px-3 py-2 text-left text-sm transition-colors",
-        active
-          ? "border-brand-500 bg-brand-50 dark:bg-brand-700/15"
-          : "border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800/60",
-        !onClick && "cursor-default hover:bg-transparent",
-      )}
-    >
-      <span className="text-xs font-medium text-slate-500">
-        {q.name}
-        {isFund && <span className="ml-1 text-slate-400">{q.symbol}</span>}
-      </span>
-      <span className="flex items-baseline gap-2">
-        <span className="font-semibold tabular-nums">
-          {isFund ? "$" : ""}
-          {fmt(q.price)}
-        </span>
-        {q.change1dPct !== null && (
-          <span
-            className={cx(
-              "text-xs font-medium tabular-nums",
-              up ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400",
-            )}
-          >
-            {up ? "+" : ""}
-            {q.change1dPct.toFixed(2)}%
-          </span>
-        )}
-      </span>
-    </button>
-  );
-}
+/** Each index keeps a clearly different color. */
+const INDEX_COLORS = [
+  "var(--viz-series-1)",
+  "var(--viz-series-2)",
+  "var(--viz-series-3)",
+  "var(--viz-series-5)",
+  "var(--viz-series-7)",
+];
 
-function IndexChart({ q }: { q: MarketQuote }) {
+const shortDay = (d: string) =>
+  new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
+/** All indexes on one percent axis, compared from the start of the range. */
+function MarketChart({ indexes }: { indexes: MarketQuote[] }) {
   const [range, setRange] = useState<Range>("1M");
-  const intraday = useMarketIntraday(q.symbol, range === "1D");
-  const days = RANGES.find(([r]) => r === range)?.[1] ?? 31;
-  const last = q.series.at(-1)?.date ?? new Date().toISOString().slice(0, 10);
-  const from =
-    days === -1
-      ? `${last.slice(0, 4)}-01-01`
-      : new Date(Date.parse(`${last}T00:00:00Z`) - days * 86_400_000).toISOString().slice(0, 10);
-  const points =
-    range === "1D"
-      ? (intraday.data?.points ?? []).map((p) => ({
-          date: String(p.t),
-          label: new Date(p.t).toLocaleTimeString(undefined, {
-            hour: "numeric",
-            minute: "2-digit",
-          }),
-          value: Math.round(p.close * 100),
-        }))
-      : q.series
-          .filter((p) => p.date >= from)
-          .map((p) => ({
-            date: p.date,
-            label: new Date(`${p.date}T00:00:00`).toLocaleDateString(undefined, {
-              month: "short",
-              day: "numeric",
-            }),
-            value: Math.round(p.close * 100),
-          }));
-  const first = points[0]?.value;
-  const end = points.at(-1)?.value;
-  const change =
-    range === "1D" && intraday.data?.previousClose && end
-      ? ((end / 100 - intraday.data.previousClose) / intraday.data.previousClose) * 100
-      : first && end
-        ? ((end - first) / first) * 100
-        : null;
+  const [focus, setFocus] = useState<string | null>(null);
+  const [hover, setHover] = useState<number | null>(null);
+  const intraday = useQueries({
+    queries: indexes.map((q) => ({
+      queryKey: [...investKeys.all, "market", "intraday", q.symbol],
+      queryFn: () =>
+        api.get<MarketIntraday>(
+          `/api/invest/market/intraday?symbol=${encodeURIComponent(q.symbol)}`,
+        ),
+      enabled: range === "1D",
+      staleTime: 5 * 60_000,
+    })),
+  });
+
+  // Points shared by all lines: dates (or 5-minute times today), with each index's price.
+  let keysList: string[] = [];
+  let labels: string[] = [];
+  const priceAt: Map<string, number>[] = indexes.map(() => new Map());
+  const base: (number | null)[] = indexes.map(() => null);
+  if (range === "1D") {
+    const slot = (t: number) => String(Math.floor(t / 300_000) * 300_000);
+    intraday.forEach((r, i) => {
+      for (const p of r.data?.points ?? []) priceAt[i]?.set(slot(p.t), p.close);
+      base[i] = r.data?.previousClose ?? r.data?.points[0]?.close ?? null;
+    });
+    keysList = [...new Set(priceAt.flatMap((m) => [...m.keys()]))].sort();
+    labels = keysList.map((k) =>
+      new Date(Number(k)).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }),
+    );
+  } else {
+    const days = RANGES.find(([r]) => r === range)?.[1] ?? 31;
+    const last = indexes[0]?.series.at(-1)?.date ?? new Date().toISOString().slice(0, 10);
+    const from =
+      days === -1
+        ? `${Number(last.slice(0, 4)) - 1}-12-31`
+        : new Date(Date.parse(`${last}T00:00:00Z`) - days * 86_400_000).toISOString().slice(0, 10);
+    indexes.forEach((q, i) => {
+      // The close on or before the start is the base.
+      let b: number | null = null;
+      for (const p of q.series) {
+        if (p.date <= from) b = p.close;
+        else priceAt[i]?.set(p.date, p.close);
+      }
+      base[i] = b ?? q.series.find((p) => p.date > from)?.close ?? null;
+    });
+    keysList = [...new Set(priceAt.flatMap((m) => [...m.keys()]))].sort();
+    labels = keysList.map(shortDay);
+  }
+  // Fill gaps with the last price so every line is continuous.
+  const prices = indexes.map((_, i) => {
+    let lastSeen: number | null = null;
+    return keysList.map((k) => {
+      const v = priceAt[i]?.get(k);
+      if (v !== undefined) lastSeen = v;
+      return lastSeen;
+    });
+  });
+  const series: PercentSeries[] = indexes.map((q, i) => ({
+    key: q.symbol,
+    label: q.name,
+    color: INDEX_COLORS[i] ?? "var(--viz-other)",
+    values: (prices[i] ?? []).map((v) => {
+      const b0 = base[i];
+      return v === null || !b0 ? null : ((v - b0) / b0) * 100;
+    }),
+  }));
+  const at = hover ?? keysList.length - 1;
+  const loading = range === "1D" && intraday.some((r) => r.isLoading);
+
   return (
     <div>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm">
-          <span className="font-medium">{q.name}</span>{" "}
-          {change !== null && (
-            <span
-              className={cx(
-                "text-xs font-medium tabular-nums",
-                change >= 0
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : "text-red-600 dark:text-red-400",
-              )}
-            >
-              {change >= 0 ? "+" : ""}
-              {change.toFixed(2)}% {range === "1D" ? "today" : `over ${range}`}
-            </span>
-          )}
-        </p>
-        <fieldset className="m-0 flex gap-1 border-0 p-0">
-          <legend className="sr-only">Range</legend>
-          {RANGES.map(([r]) => (
+      <div className="mb-3 flex flex-wrap gap-2">
+        {indexes.map((q, i) => {
+          const price = prices[i]?.[at] ?? q.price;
+          const change = series[i]?.values[at] ?? null;
+          const up = (change ?? 0) >= 0;
+          const isFund = !q.symbol.startsWith("^");
+          return (
             <button
-              key={r}
+              key={q.symbol}
               type="button"
-              aria-pressed={range === r}
-              onClick={() => setRange(r)}
+              onMouseEnter={() => setFocus(q.symbol)}
+              onMouseLeave={() => setFocus(null)}
+              onFocus={() => setFocus(q.symbol)}
+              onBlur={() => setFocus(null)}
               className={cx(
-                "rounded-md px-2 py-1 text-xs font-medium",
-                range === r
-                  ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
-                  : "text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800",
+                "flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-opacity",
+                "border-slate-200 dark:border-slate-700",
+                focus !== null && focus !== q.symbol && "opacity-40",
               )}
             >
-              {r}
+              <span
+                aria-hidden="true"
+                className="size-2.5 rounded-full"
+                style={{ background: INDEX_COLORS[i] }}
+              />
+              <span className="font-medium">{q.name}</span>
+              <span className="tabular-nums text-slate-500">
+                {isFund ? "$" : ""}
+                {fmt(price)}
+              </span>
+              {change !== null && (
+                <span
+                  className={cx(
+                    "font-medium tabular-nums",
+                    up
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-red-600 dark:text-red-400",
+                  )}
+                >
+                  {up ? "+" : ""}
+                  {change.toFixed(2)}%
+                </span>
+              )}
             </button>
-          ))}
-        </fieldset>
+          );
+        })}
       </div>
-      {points.length >= 2 ? (
-        <LineChart ariaLabel={`${q.name} over ${range}`} height={200} points={points} />
+      {keysList.length >= 2 ? (
+        <PercentLinesChart
+          labels={labels}
+          series={series}
+          ariaLabel={`Major indexes compared over ${range}`}
+          focus={focus}
+          onFocus={setFocus}
+          onHover={setHover}
+        />
       ) : (
         <p className="py-10 text-center text-sm text-slate-500">
-          {range === "1D" && intraday.isLoading
-            ? "Loading today's prices…"
-            : "No prices for this range."}
+          {loading ? "Loading today's prices…" : "No prices for this range yet."}
         </p>
       )}
+      <fieldset className="m-0 mt-2 flex gap-1 border-0 p-0">
+        <legend className="sr-only">Range</legend>
+        {RANGES.map(([r]) => (
+          <button
+            key={r}
+            type="button"
+            aria-pressed={range === r}
+            onClick={() => setRange(r)}
+            className={cx(
+              "rounded-md px-2 py-1 text-xs font-medium",
+              range === r
+                ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                : "text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800",
+            )}
+          >
+            {r}
+          </button>
+        ))}
+      </fieldset>
     </div>
   );
 }
@@ -252,9 +280,7 @@ function IndexChart({ q }: { q: MarketQuote }) {
 /** Major indexes and sectors, like a brokerage's "Markets" page. */
 export function MarketCard() {
   const market = useMarket(true);
-  const [selected, setSelected] = useState("SPY");
   const m = market.data;
-  const q = m?.indexes.find((x) => x.symbol === selected) ?? m?.indexes[0];
   return (
     <Card>
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
@@ -274,21 +300,7 @@ export function MarketCard() {
       {market.error && <p className="py-6 text-sm text-red-600">{market.error.message}</p>}
       {m && (
         <>
-          <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
-            {m.indexes.map((x) => (
-              <IndexChip
-                key={x.symbol}
-                q={x}
-                active={x.symbol === q?.symbol}
-                onClick={
-                  x.series.length && !x.symbol.startsWith("^")
-                    ? () => setSelected(x.symbol)
-                    : undefined
-                }
-              />
-            ))}
-          </div>
-          {q && <IndexChart key={q.symbol} q={q} />}
+          {m.indexes.length > 0 && <MarketChart indexes={m.indexes} />}
           {m.sectors.length > 0 && (
             <div className="mt-6 overflow-x-auto">
               <h3 className="mb-2 text-sm font-semibold">Sectors</h3>

@@ -1052,3 +1052,187 @@ export function Donut({
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Percent change lines (several series compared from the same start)
+// ---------------------------------------------------------------------------
+
+export interface PercentSeries {
+  key: string;
+  label: string;
+  color: string;
+  /** Percent change from the start, one per point (null = no data). */
+  values: (number | null)[];
+}
+
+function pctTicks(lo: number, hi: number): number[] {
+  const span = Math.max(1, hi - lo);
+  const step = [0.5, 1, 2, 5, 10, 20, 25, 50, 100, 200].find((s) => span / s <= 5) ?? 500;
+  const out: number[] = [];
+  for (let v = Math.floor(lo / step) * step; v <= hi + 1e-9; v += step)
+    out.push(Number(v.toFixed(2)));
+  if (out[out.length - 1] !== undefined && (out[out.length - 1] as number) < hi)
+    out.push((out[out.length - 1] as number) + step);
+  return out;
+}
+
+/**
+ * Several lines on one percent axis (like a brokerage's market chart). Hover
+ * reports the point under the pointer (`onHover`), and `focus` brings one
+ * series forward while the others fade.
+ */
+export function PercentLinesChart({
+  labels,
+  series,
+  ariaLabel,
+  focus,
+  onFocus,
+  onHover,
+  height = 220,
+}: {
+  /** One label per point (for the axis). */
+  labels: string[];
+  series: PercentSeries[];
+  ariaLabel: string;
+  focus: string | null;
+  onFocus: (key: string | null) => void;
+  onHover: (i: number | null) => void;
+  height?: number;
+}) {
+  const { ref, width } = useWidth();
+  const [hover, setHover] = useState<number | null>(null);
+  const n = labels.length;
+  const all = series.flatMap((s) => s.values.filter((v): v is number => v !== null));
+  const ticks = pctTicks(Math.min(0, ...all), Math.max(0, ...all));
+  const lo = ticks[0] ?? 0;
+  const hi = ticks[ticks.length - 1] ?? 1;
+  const pad = { top: 12, right: 44, bottom: 24, left: 8 };
+  const plotW = width - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+  const x = (i: number) => pad.left + (n <= 1 ? plotW / 2 : (i / (n - 1)) * plotW);
+  const y = (v: number) => pad.top + plotH - ((v - lo) / Math.max(1e-9, hi - lo)) * plotH;
+  const labelW = Math.max(56, Math.max(0, ...labels.map((l) => l.length)) * 6.5 + 16);
+  const every = Math.ceil(n / Math.max(1, Math.floor(plotW / labelW)));
+  const path = (vals: (number | null)[]) => {
+    let d = "";
+    let pen = false;
+    vals.forEach((v, i) => {
+      if (v === null) {
+        pen = false;
+        return;
+      }
+      d += `${pen ? "L" : "M"}${x(i)},${y(v)} `;
+      pen = true;
+    });
+    return d;
+  };
+  const ordered = focus
+    ? [...series.filter((s) => s.key !== focus), ...series.filter((s) => s.key === focus)]
+    : series;
+  const move = (e: React.MouseEvent<SVGSVGElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const i = Math.round(((e.clientX - rect.left - pad.left) / Math.max(1, plotW)) * (n - 1));
+    const c = Math.max(0, Math.min(n - 1, i));
+    setHover(c);
+    onHover(c);
+  };
+  return (
+    <div ref={ref} className="relative w-full min-w-0 select-none">
+      <svg
+        width={width}
+        height={height}
+        role="img"
+        aria-label={ariaLabel}
+        onMouseMove={move}
+        onMouseLeave={() => {
+          setHover(null);
+          onHover(null);
+        }}
+      >
+        {ticks.map((t) => (
+          <g key={t}>
+            <line
+              x1={pad.left}
+              x2={width - pad.right}
+              y1={y(t)}
+              y2={y(t)}
+              stroke={t === 0 ? "var(--viz-axis)" : "var(--viz-grid)"}
+              strokeDasharray={t === 0 ? undefined : "3 4"}
+            />
+            <text
+              x={width - pad.right + 6}
+              y={y(t)}
+              dy="0.32em"
+              fontSize={11}
+              fill="var(--viz-muted)"
+            >
+              {t > 0 ? "+" : ""}
+              {t}%
+            </text>
+          </g>
+        ))}
+        {labels.map((l, i) =>
+          (i % every === 0 && x(n - 1) - x(i) >= labelW) || i === n - 1 ? (
+            <text
+              key={`${l}@${Math.round(x(i))}`}
+              x={x(i)}
+              y={height - 6}
+              textAnchor={i === n - 1 ? "end" : i === 0 ? "start" : "middle"}
+              fontSize={11}
+              fill="var(--viz-muted)"
+            >
+              {l}
+            </text>
+          ) : null,
+        )}
+        {ordered.map((s) => (
+          // biome-ignore lint/a11y/noStaticElementInteractions: hovering a line is a mouse shortcut; the chips do the same with the keyboard
+          <path
+            key={s.key}
+            d={path(s.values)}
+            fill="none"
+            stroke={s.color}
+            strokeWidth={focus === s.key ? 2.5 : 1.75}
+            strokeOpacity={focus === null || focus === s.key ? 1 : 0.2}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            onMouseEnter={() => onFocus(s.key)}
+            onMouseLeave={() => onFocus(null)}
+            style={{ transition: "stroke-opacity 120ms" }}
+          />
+        ))}
+        {hover !== null && (
+          <g>
+            <line
+              x1={x(hover)}
+              x2={x(hover)}
+              y1={pad.top}
+              y2={pad.top + plotH}
+              stroke="var(--viz-axis)"
+            />
+            {series.map((s) => {
+              const v = s.values[hover];
+              return v === null || v === undefined ? null : (
+                <circle
+                  key={s.key}
+                  cx={x(hover)}
+                  cy={y(v)}
+                  r={3.5}
+                  fill={s.color}
+                  stroke="var(--viz-surface)"
+                  strokeWidth={1.5}
+                  opacity={focus === null || focus === s.key ? 1 : 0.3}
+                />
+              );
+            })}
+          </g>
+        )}
+      </svg>
+      {hover !== null && (
+        <Tooltip x={x(hover)} y={pad.top + 8} width={width}>
+          <p className="font-medium">{labels[hover]}</p>
+        </Tooltip>
+      )}
+    </div>
+  );
+}
