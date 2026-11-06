@@ -25,7 +25,7 @@ import type {
   CryptoWallet,
   CryptoWalletKind,
 } from "@muny/shared";
-import { guessCryptoExchange, reconcileKey } from "@muny/shared";
+import { guessCryptoExchange, reconcileKey, US_PER_WALLET_FROM } from "@muny/shared";
 import { and, desc, eq, gte, inArray, lte, or, type SQL, sql } from "drizzle-orm";
 import { normHash, normHashSql, ROUNDING_TEXT } from "./match.js";
 import { getCryptoSettings } from "./prices.js";
@@ -638,9 +638,13 @@ export function cryptoOverview(
 
   // What held coins cost, by the chosen method (the same engine as gains and taxes).
   const costMethod = getCryptoSettings(db as MunyDb).costMethod;
+  const costScopeFrom =
+    getCryptoSettings(db as MunyDb).costScope === "us" ? US_PER_WALLET_FROM : undefined;
   const ledger = taxLedger(
     db
       .select({
+        id: t.id,
+        walletId: t.walletId,
         at: t.at,
         type: t.type,
         label: t.label,
@@ -656,10 +660,11 @@ export function cryptoOverview(
       })
       .from(t)
       .all()
-      .map((r) => ({ ...r, paired: !!r.pair })),
+      .map((r) => ({ ...r, paired: !!r.pair, pairId: r.pair })),
     {
       skip: FIAT,
       method: costMethod,
+      perWalletFrom: costScopeFrom,
       valueAt: (asset, amount, at) => {
         const usd = priceOn(asset, at);
         return usd ? valueCents(amount, usd) : null;
@@ -807,6 +812,8 @@ export function cryptoOverview(
   const { costAt } = taxLedger(
     db
       .select({
+        id: t.id,
+        walletId: t.walletId,
         at: t.at,
         type: t.type,
         label: t.label,
@@ -822,10 +829,11 @@ export function cryptoOverview(
       })
       .from(t)
       .all()
-      .map((r) => ({ ...r, paired: !!r.pair })),
+      .map((r) => ({ ...r, paired: !!r.pair, pairId: r.pair })),
     {
       skip: new Set([...FIAT, ...hidden]),
       method: costMethod,
+      perWalletFrom: costScopeFrom,
       valueAt: (asset, amount, at) => {
         const usd = priceOn(asset, at);
         return usd ? valueCents(amount, usd) : null;

@@ -532,7 +532,7 @@ function WalletRow({
   return (
     <li
       className={cx(
-        "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_9rem_8rem_19rem]",
+        "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_9rem_7rem_24rem]",
         dim && "opacity-60",
       )}
     >
@@ -627,7 +627,7 @@ function WalletRow({
         <span className="block tabular-nums">{w.txnCount}</span>
         <span className="text-xs text-slate-500">Last {ago(w.lastTxnAt)}</span>
       </span>
-      <span className="col-span-2 flex justify-end gap-1 sm:col-span-1">
+      <span className="col-span-2 flex flex-wrap items-center justify-end gap-1 sm:col-span-1">
         <SyncChip w={w} />
         {w.sourceHint ? (
           <Button
@@ -773,7 +773,7 @@ export function CryptoWallets() {
         {total > 0 && <span className="text-sm text-slate-500">Total {formatMoney(total)}</span>}
       </div>
       <Card className="p-0">
-        <div className="hidden grid-cols-[minmax(0,1fr)_9rem_8rem_19rem] gap-x-4 border-b border-slate-200 px-4 py-2.5 text-xs font-medium text-slate-500 sm:grid dark:border-slate-800">
+        <div className="hidden grid-cols-[minmax(0,1fr)_9rem_7rem_24rem] gap-x-4 border-b border-slate-200 px-4 py-2.5 text-xs font-medium text-slate-500 sm:grid dark:border-slate-800">
           <span>Wallet</span>
           <span className="text-right">Balance</span>
           <span className="text-right">Transactions</span>

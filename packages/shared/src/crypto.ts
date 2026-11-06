@@ -259,6 +259,11 @@ export interface CryptoSettings {
   hasBlockscoutKey: boolean;
   /** Which coins count as sold first (cost basis, gains): Koinly lets you pick too. */
   costMethod: "fifo" | "lifo" | "hifo";
+  /**
+   * "us": one pool across wallets until 2025, then per wallet (IRS Rev. Proc.
+   * 2024-28); "universal": one pool throughout.
+   */
+  costScope: "us" | "universal";
   /** Load NFT images (through this server, so their hosts don't see you). */
   nftImages: boolean;
   /** Reconcile items you chose to ignore (they also leave the dashboard). */
@@ -390,6 +395,9 @@ export interface CryptoTransferSuggestion {
 }
 
 /** Why balances are off, per wallet, with what Muny can do about it. */
+/** When US cost tracking turns per wallet (IRS Rev. Proc. 2024-28). */
+export const US_PER_WALLET_FROM = Date.UTC(2025, 0, 1);
+
 /** The key that ignores one Reconcile item, until its amount changes. */
 export const reconcileKey = (
   kind: "missing" | "mismatch",

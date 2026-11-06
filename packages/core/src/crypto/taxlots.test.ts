@@ -213,4 +213,84 @@ describe("tax ledger", () => {
     expect(left("lifo")).toEqual([10_000, 40_000]);
     expect(left("hifo")).toEqual([10_000, 30_000]);
   });
+
+  it("US rules: one pool until 2025, then each wallet keeps its own lots", () => {
+    const US = Date.UTC(2025, 0, 1);
+    const buyA = {
+      ...base,
+      at: D(2023, 1, 1),
+      type: "trade" as const,
+      walletId: "A",
+      sentAsset: "USD",
+      sentAmount: "1000",
+      receivedAsset: "ETH",
+      receivedAmount: "1",
+      valueCents: 100_000,
+    };
+    const buyB = {
+      ...base,
+      at: D(2024, 1, 1),
+      type: "trade" as const,
+      walletId: "B",
+      sentAsset: "USD",
+      sentAmount: "3000",
+      receivedAsset: "ETH",
+      receivedAmount: "1",
+      valueCents: 300_000,
+    };
+    const sellB = {
+      ...base,
+      at: D(2025, 6, 1),
+      type: "trade" as const,
+      walletId: "B",
+      sentAsset: "ETH",
+      sentAmount: "1",
+      receivedAsset: "USD",
+      receivedAmount: "2500",
+      valueCents: 250_000,
+    };
+    // One pool (FIFO): selling from B uses the 2023 coin.
+    expect(taxLedger([buyA, buyB, sellB], { skip, valueAt: noPrice }).gains[0]).toMatchObject({
+      costCents: 100_000,
+      gainCents: 150_000,
+    });
+    // Per wallet from 2025: B sells its own (2024) coin.
+    expect(
+      taxLedger([buyA, buyB, sellB], { skip, valueAt: noPrice, perWalletFrom: US }).gains[0],
+    ).toMatchObject({ costCents: 300_000, gainCents: -50_000, term: "long" });
+
+    // A transfer A → B carries A's lot; B then sells both coins.
+    const out = {
+      ...base,
+      id: "o",
+      pairId: "i",
+      at: D(2025, 3, 1),
+      type: "transfer" as const,
+      walletId: "A",
+      sentAsset: "ETH",
+      sentAmount: "1",
+      paired: true,
+    };
+    const inn = {
+      ...base,
+      id: "i",
+      pairId: "o",
+      at: D(2025, 3, 1),
+      type: "transfer" as const,
+      walletId: "B",
+      receivedAsset: "ETH",
+      receivedAmount: "1",
+      paired: true,
+    };
+    const sell2 = { ...sellB, sentAmount: "2", receivedAmount: "5000", valueCents: 500_000 };
+    const r = taxLedger([buyA, buyB, out, inn, sell2], {
+      skip,
+      valueAt: noPrice,
+      perWalletFrom: US,
+    });
+    const total = r.gains.reduce((s, g) => s + g.costCents, 0);
+    expect(total).toBe(400_000);
+    expect(r.gains.every((g) => g.term === "long")).toBe(true);
+    expect(r.lots.get("ETH") ?? []).toEqual([]);
+  });
 });

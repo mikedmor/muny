@@ -65,6 +65,7 @@ export function getCryptoSettings(db: MunyDb): CryptoSettings {
     hiddenAssets: s.hiddenAssets ?? [],
     hasBlockscoutKey: !!getSetting<string>(db, BLOCKSCOUT_KEY),
     costMethod: s.costMethod ?? "fifo",
+    costScope: s.costScope ?? "us",
     nftImages: s.nftImages ?? false,
     ignored: s.ignored ?? [],
   };
@@ -79,6 +80,7 @@ export function saveCryptoSettings(
     servers?: Record<string, string>;
     hiddenAssets?: string[];
     costMethod?: CryptoSettings["costMethod"];
+    costScope?: CryptoSettings["costScope"];
     nftImages?: boolean;
     ignored?: string[];
     apiKey?: string | null;
@@ -94,6 +96,7 @@ export function saveCryptoSettings(
     servers: input.servers ?? cur.servers,
     hiddenAssets: input.hiddenAssets ?? cur.hiddenAssets,
     costMethod: input.costMethod ?? cur.costMethod,
+    costScope: input.costScope ?? cur.costScope,
     nftImages: input.nftImages ?? cur.nftImages,
     ignored: input.ignored ?? cur.ignored,
   });

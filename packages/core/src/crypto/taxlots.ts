@@ -24,6 +24,8 @@ export interface TaxTxn {
   id?: string;
   /** The wallet it happened in (for per-wallet reports and Form 8949 boxes). */
   walletId?: string;
+  /** The other side of a transfer between your wallets (its id). */
+  pairId?: string | null;
   at: number;
   type: "deposit" | "withdrawal" | "trade" | "transfer";
   label: string | null;
@@ -129,9 +131,23 @@ export function taxLedger(
      * one that cost the most per coin (HIFO).
      */
     method?: "fifo" | "lifo" | "hifo";
+    /**
+     * US rules (Rev. Proc. 2024-28): one pool across wallets until this moment
+     * (Jan 1, 2025), then the pool's lots are assigned to the wallets holding
+     * the coins (oldest lots first, the biggest holder first) and each wallet
+     * keeps its own lots; transfers between your wallets carry them along.
+     * Unset: one pool throughout.
+     */
+    perWalletFrom?: number;
   },
 ): { lots: Map<string, TaxLot[]>; gains: Gain[]; flows: Flow[]; costAt: number[] } {
+  /** Pools: by coin, or by wallet and coin once tracking is per wallet. */
   const lots = new Map<string, TaxLot[]>();
+  let perWallet = false;
+  const pk = (asset: string, walletId: string | null | undefined) =>
+    perWallet ? `${walletId ?? ""}|${asset}` : asset;
+  /** Every wallet's balance of each coin as the history goes (for the allocation). */
+  const bal = new Map<string, bigint>();
   // Total cost of all lots held, kept as lots come and go.
   let held = 0n;
   const snaps = opts.snapshots ?? [];
@@ -154,15 +170,88 @@ export function taxLedger(
     amount: string | null,
     cents: number | null,
     at: number,
+    walletId: string | null | undefined,
   ) => {
     if (!asset || !amount || opts.skip.has(asset)) return;
     const a = toFixed(amount);
     if (a <= 0n) return;
-    const q = lots.get(asset) ?? [];
+    const key = pk(asset, walletId);
+    const q = lots.get(key) ?? [];
     const cost = BigInt(Math.max(0, Math.round(cents ?? 0)));
     held += cost;
     q.push({ amount: a, cost, acquiredAt: at, known: cents !== null });
-    lots.set(asset, q);
+    lots.set(key, q);
+  };
+
+  /**
+   * Jan 1, 2025 (US): assign the pool's lots to the wallets that hold the
+   * coins, oldest lots first, the biggest holder first. Lots beyond what the
+   * wallets hold (incomplete history) are dropped.
+   */
+  const allocate = () => {
+    const pooled = [...lots];
+    lots.clear();
+    perWallet = true;
+    for (const [asset, q] of pooled) {
+      const holders = [...bal]
+        .filter(([k, v]) => k.endsWith(`|${asset}`) && v > 0n)
+        .map(([k, v]) => ({ walletId: k.slice(0, k.length - asset.length - 1), need: v }))
+        .sort((a, b) =>
+          b.need > a.need ? 1 : b.need < a.need ? -1 : a.walletId.localeCompare(b.walletId),
+        );
+      const src = q.map((l) => ({ ...l }));
+      for (const h of holders) {
+        const mine: TaxLot[] = [];
+        while (h.need > 0n && src.length) {
+          const l = src[0] as TaxLot;
+          if (l.amount <= h.need) {
+            mine.push(l);
+            h.need -= l.amount;
+            src.shift();
+          } else {
+            const cost = (l.cost * h.need) / l.amount;
+            mine.push({ amount: h.need, cost, acquiredAt: l.acquiredAt, known: l.known });
+            l.cost -= cost;
+            l.amount -= h.need;
+            h.need = 0n;
+          }
+        }
+        if (mine.length) lots.set(`${h.walletId}|${asset}`, mine);
+      }
+    }
+    held = 0n;
+    for (const q of lots.values()) for (const l of q) held += l.cost;
+  };
+
+  /** Transfers between your wallets (per-wallet tracking): lots travel with the coins. */
+  type Piece = { amount: bigint; cost: bigint; acquiredAt: number; known: boolean };
+  const pendingOut = new Map<string, { pieces: Piece[]; sent: bigint }>();
+  const pendingIn = new Map<
+    string,
+    { walletId: string | undefined; asset: string; amount: bigint; at: number }
+  >();
+  const deliver = (
+    pieces: Piece[],
+    sent: bigint,
+    to: { walletId: string | undefined; asset: string; amount: bigint; at: number },
+  ) => {
+    const key = pk(to.asset, to.walletId);
+    const q = lots.get(key) ?? [];
+    for (const p of pieces) {
+      // What arrived (less any fee taken on the way), with the cost carried over.
+      const amount = sent > 0n ? (p.amount * to.amount) / sent : 0n;
+      if (amount <= 0n) continue;
+      const known = Number.isFinite(p.acquiredAt) && p.known;
+      q.push({
+        amount,
+        cost: p.cost,
+        acquiredAt: Number.isFinite(p.acquiredAt) ? p.acquiredAt : to.at,
+        known,
+      });
+      held += p.cost;
+    }
+    q.sort((a, b) => a.acquiredAt - b.acquiredAt);
+    lots.set(key, q);
   };
 
   /** The lot to take from next, by the chosen method. */
@@ -179,9 +268,9 @@ export function taxLedger(
     return best;
   };
 
-  /** Take `amount` out of the pool by the chosen method; returns the pieces taken. */
-  const take = (asset: string, amount: bigint) => {
-    const q = lots.get(asset) ?? [];
+  /** Take `amount` out of a pool by the chosen method; returns the pieces taken. */
+  const take = (key: string, amount: bigint) => {
+    const q = lots.get(key) ?? [];
     const pieces: { amount: bigint; cost: bigint; acquiredAt: number; known: boolean }[] = [];
     let left = amount;
     while (left > 0n && q.length) {
@@ -202,7 +291,7 @@ export function taxLedger(
     for (const x of pieces) held -= x.cost;
     // More left than the pool had: purchase history is missing (cost 0, short term).
     if (left > 0n) pieces.push({ amount: left, cost: 0n, acquiredAt: Number.NaN, known: false });
-    lots.set(asset, q);
+    lots.set(key, q);
     return pieces;
   };
 
@@ -218,7 +307,7 @@ export function taxLedger(
     if (!asset || !amount || opts.skip.has(asset)) return;
     const total = toFixed(amount);
     if (total <= 0n) return;
-    const pieces = take(asset, total);
+    const pieces = take(pk(asset, walletId), total);
     const p = BigInt(Math.max(0, Math.round(proceeds ?? 0)));
     const byTerm = new Map<
       Term,
@@ -270,25 +359,54 @@ export function taxLedger(
   };
 
   /** Leaves the pool without a gain (a withdrawal to outside, a gift). */
-  const remove = (asset: string | null, amount: string | null) => {
+  const remove = (
+    asset: string | null,
+    amount: string | null,
+    walletId: string | null | undefined,
+  ) => {
     if (!asset || !amount || opts.skip.has(asset)) return;
     const a = toFixed(amount);
-    if (a > 0n) take(asset, a);
+    if (a > 0n) take(pk(asset, walletId), a);
   };
 
   for (const t of [...txns].sort((a, b) => a.at - b.at)) {
     snapUntil(t.at);
+    if (!perWallet && opts.perWalletFrom !== undefined && t.at >= opts.perWalletFrom) allocate();
     if (t.type === "trade") {
       const cents =
         t.valueCents ??
         value(t.sentAsset, t.sentAmount, t.at) ??
         value(t.receivedAsset, t.receivedAmount, t.at);
       dispose(t.sentAsset, t.sentAmount, cents, t.at, "trade", t.walletId ?? null);
-      acquire(t.receivedAsset, t.receivedAmount, cents, t.at);
+      acquire(t.receivedAsset, t.receivedAmount, cents, t.at, t.walletId);
+    } else if (t.paired && perWallet) {
+      // A move between your wallets: the lots go along (no gain).
+      if (t.sentAsset && t.sentAmount && !opts.skip.has(t.sentAsset)) {
+        const sent = toFixed(t.sentAmount);
+        const pieces = take(pk(t.sentAsset, t.walletId), sent);
+        const waiting = t.id ? pendingIn.get(t.id) : undefined;
+        if (waiting && t.id) {
+          pendingIn.delete(t.id);
+          deliver(pieces, sent, waiting);
+        } else if (t.pairId) pendingOut.set(t.pairId, { pieces, sent });
+      }
+      if (t.receivedAsset && t.receivedAmount && !opts.skip.has(t.receivedAsset)) {
+        const to = {
+          walletId: t.walletId,
+          asset: t.receivedAsset,
+          amount: toFixed(t.receivedAmount),
+          at: t.at,
+        };
+        const out = t.id ? pendingOut.get(t.id) : undefined;
+        if (out && t.id) {
+          pendingOut.delete(t.id);
+          deliver(out.pieces, out.sent, to);
+        } else if (t.pairId) pendingIn.set(t.pairId, to);
+      }
     } else if (!t.paired) {
       if (t.receivedAsset && t.receivedAmount) {
         const cents = t.valueCents ?? value(t.receivedAsset, t.receivedAmount, t.at);
-        acquire(t.receivedAsset, t.receivedAmount, cents, t.at);
+        acquire(t.receivedAsset, t.receivedAmount, cents, t.at, t.walletId);
         if (!opts.skip.has(t.receivedAsset))
           flows.push({
             at: t.at,
@@ -306,7 +424,7 @@ export function taxLedger(
           dispose(t.sentAsset, t.sentAmount, cents, t.at, "cost", t.walletId ?? null);
         else if (t.label === "lost")
           dispose(t.sentAsset, t.sentAmount, 0, t.at, "lost", t.walletId ?? null);
-        else remove(t.sentAsset, t.sentAmount);
+        else remove(t.sentAsset, t.sentAmount, t.walletId);
         if (!opts.skip.has(t.sentAsset))
           flows.push({
             at: t.at,
@@ -337,7 +455,25 @@ export function taxLedger(
         walletId: t.walletId ?? null,
       });
     }
+    const move = (asset: string | null, amount: string | null, sign: 1n | -1n) => {
+      if (!asset || !amount || opts.skip.has(asset)) return;
+      const k = `${t.walletId ?? ""}|${asset}`;
+      bal.set(k, (bal.get(k) ?? 0n) + sign * toFixed(amount));
+    };
+    move(t.receivedAsset, t.receivedAmount, 1n);
+    move(t.sentAsset, t.sentAmount, -1n);
+    move(t.feeAsset, t.feeAmount, -1n);
   }
+  // History ends before the switch but today is after it: assign the lots now.
+  if (!perWallet && opts.perWalletFrom !== undefined && Date.now() >= opts.perWalletFrom)
+    allocate();
   snapUntil(Number.POSITIVE_INFINITY);
-  return { lots, gains, flows, costAt };
+  // Lots by coin (across wallets once tracking is per wallet), oldest first.
+  const byAsset = new Map<string, TaxLot[]>();
+  for (const [key, q] of lots) {
+    const asset = perWallet ? key.slice(key.indexOf("|") + 1) : key;
+    byAsset.set(asset, [...(byAsset.get(asset) ?? []), ...q]);
+  }
+  if (perWallet) for (const q of byAsset.values()) q.sort((a, b) => a.acquiredAt - b.acquiredAt);
+  return { lots: byAsset, gains, flows, costAt };
 }

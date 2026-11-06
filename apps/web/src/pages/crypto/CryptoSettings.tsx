@@ -29,6 +29,37 @@ export function CryptoSettings() {
           <Card className="space-y-3">
             <h2 className="font-semibold">Cost basis and taxes</h2>
             <fieldset className="space-y-2">
+              <legend className="text-sm font-medium">How cost is tracked</legend>
+              {(
+                [
+                  [
+                    "us",
+                    "US rules: per wallet from 2025 (recommended)",
+                    "One pool across your wallets through 2024. On January 1, 2025 what's left is assigned to the wallets holding it (oldest lots first, the biggest holder first), and from then on each wallet has its own lots: a sale uses that wallet's coins, and a transfer between your wallets carries the cost and dates along (IRS Rev. Proc. 2024-28).",
+                  ],
+                  [
+                    "universal",
+                    "One pool for all wallets",
+                    "Every wallet's coins in one pool, as before 2025.",
+                  ],
+                ] as const
+              ).map(([k, label, help]) => (
+                <label key={k} className="flex items-start gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="costScope"
+                    className="mt-1"
+                    checked={d.costScope === k}
+                    onChange={() => save.mutate({ costScope: k })}
+                  />
+                  <span>
+                    <span className="font-medium">{label}</span>
+                    <span className="block text-xs text-slate-500">{help}</span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+            <fieldset className="space-y-2">
               <legend className="text-sm font-medium">Which coins count as sold first</legend>
               {(
                 [

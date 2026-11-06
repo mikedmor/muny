@@ -8,7 +8,7 @@ import {
   valueCents,
 } from "@muny/core";
 import { type MunyDb, schema } from "@muny/db";
-import type { CryptoTaxReport } from "@muny/shared";
+import { type CryptoTaxReport, US_PER_WALLET_FROM } from "@muny/shared";
 import { getCryptoSettings } from "./prices.js";
 import { latestPrices, loadDaily, priceLookup } from "./service.js";
 
@@ -45,10 +45,11 @@ export function runLedger(db: MunyDb, until?: number) {
     .filter((r) => until === undefined || r.at < until);
   const priceOn = priceLookup(loadDaily(db));
   const ledger = taxLedger(
-    rows.map((r) => ({ ...r, paired: !!r.pair })),
+    rows.map((r) => ({ ...r, paired: !!r.pair, pairId: r.pair })),
     {
       skip: FIAT,
       method: getCryptoSettings(db).costMethod,
+      perWalletFrom: getCryptoSettings(db).costScope === "us" ? US_PER_WALLET_FROM : undefined,
       valueAt: (asset, amount, at) => {
         const usd = priceOn(asset, at);
         return usd ? valueCents(amount, usd) : null;

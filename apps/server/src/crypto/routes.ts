@@ -971,6 +971,7 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
         blockscoutKey: z.string().trim().max(200).nullable().optional(),
         hiddenAssets: z.array(asset).max(500).optional(),
         costMethod: z.enum(["fifo", "lifo", "hifo"]).optional(),
+        costScope: z.enum(["us", "universal"]).optional(),
         nftImages: z.boolean().optional(),
         ignored: z.array(z.string().max(200)).max(1000).optional(),
         servers: z

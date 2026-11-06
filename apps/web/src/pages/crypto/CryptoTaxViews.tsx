@@ -73,6 +73,13 @@ const EXPLORER: Record<string, string> = {
   polygon: "https://polygon.blockscout.com",
   gnosis: "https://gnosis.blockscout.com",
 };
+/** A short fingerprint of the image link: a new image gets a new address (no stale cache). */
+const imageVersion = (u: string) => {
+  let h = 0;
+  for (let i = 0; i < u.length; i++) h = (h * 31 + u.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+};
+
 export function NftsView() {
   const q = useCryptoNfts();
   const settings = useCryptoSettings();
@@ -113,7 +120,7 @@ export function NftsView() {
               <div className="flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800">
                 {images && n.image ? (
                   <img
-                    src={`/api/crypto/nft-image?${new URLSearchParams({ w: n.walletId, c: n.contract, t: n.tokenId })}`}
+                    src={`/api/crypto/nft-image?${new URLSearchParams({ w: n.walletId, c: n.contract, t: n.tokenId, v: imageVersion(n.image) })}`}
                     alt={n.name ?? "NFT"}
                     loading="lazy"
                     referrerPolicy="no-referrer"
