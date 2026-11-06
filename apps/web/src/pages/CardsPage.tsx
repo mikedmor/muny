@@ -7,6 +7,7 @@ import {
   payoff,
 } from "@muny/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { FileText, Pencil } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Modal } from "../components/forms.js";
@@ -523,11 +524,20 @@ export function CardsPage() {
       <PageHeader
         title="Credit cards"
         actions={
-          r?.cards.length ? (
-            <Button onClick={() => setImporting(true)}>
-              <FileText aria-hidden="true" className="mr-1 inline size-4" /> Import statements
-            </Button>
-          ) : undefined
+          <span className="flex flex-wrap gap-2">
+            <Link
+              to="/accounts"
+              title="Add it as a credit card account; connect it there too (Plaid, Teller or SimpleFIN)"
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+            >
+              Add a card
+            </Link>
+            {r?.cards.length ? (
+              <Button onClick={() => setImporting(true)}>
+                <FileText aria-hidden="true" className="mr-1 inline size-4" /> Import statements
+              </Button>
+            ) : null}
+          </span>
         }
       />
       {q.error && <Alert>{q.error.message}</Alert>}
@@ -535,9 +545,10 @@ export function CardsPage() {
         <Card className="text-center">
           <h2 className="text-lg font-semibold">No credit cards yet</h2>
           <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600 dark:text-slate-400">
-            Connect your card on the Accounts page, or add it there as a credit card account and
-            import its transactions. Then import its statement PDFs here for the limit, minimum
-            payment, due date and rate.
+            Connect your card on the Accounts page (Plaid, Teller, or SimpleFIN for issuers Plaid
+            can't reach), or add it there by hand as a credit card account and import its
+            transactions. Then import its statement PDFs here for the limit, minimum payment, due
+            date and rate.
           </p>
         </Card>
       )}

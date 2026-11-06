@@ -411,9 +411,18 @@ function ThisDevice({ channels }: { channels: NotificationChannel[] }) {
       const key = Uint8Array.from(atob(publicKey.replace(/-/g, "+").replace(/_/g, "/")), (c) =>
         c.charCodeAt(0),
       );
-      const sub =
-        (await reg.pushManager.getSubscription()) ??
-        (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }));
+      const subscribe = () =>
+        reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        try {
+          sub = await subscribe();
+        } catch {
+          // A leftover subscription (or a stale key) can block a new one: clear and try once more.
+          await (await reg.pushManager.getSubscription())?.unsubscribe();
+          sub = await subscribe();
+        }
+      }
       const json = sub.toJSON();
       await api.post("/api/alerts/push/subscribe", {
         endpoint: json.endpoint,
@@ -424,7 +433,14 @@ function ThisDevice({ channels }: { channels: NotificationChannel[] }) {
       setState("On. Use Send test on it below.");
       await qc.invalidateQueries();
     } catch (err) {
-      setState(err instanceof Error ? err.message : "Couldn't turn them on");
+      const msg = err instanceof Error ? err.message : "";
+      setState(
+        /push service/i.test(msg)
+          ? (navigator as { brave?: unknown }).brave
+            ? 'Brave blocks push by default: turn on "Use Google services for push messaging" in brave://settings/privacy, restart Brave, and try again.'
+            : "This browser couldn't reach its push service. An ad or DNS blocker (Pi-hole, AdGuard, NextDNS) blocking fcm.googleapis.com, android.googleapis.com or push services is the usual cause; allow those, or try Chrome or Edge, and try again."
+          : msg || "Couldn't turn them on",
+      );
     }
   };
   const isOn = !!mine && channels.some((c) => c.type === "push" && c.enabled);

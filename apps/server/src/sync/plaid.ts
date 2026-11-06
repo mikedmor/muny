@@ -403,7 +403,10 @@ export class PlaidProvider implements Provider<PlaidCreds> {
       merchantName: t.merchant_name ?? null,
       pending: t.pending,
       pendingRef: t.pending_transaction_id ?? null,
-      categoryHint: plaidCategoryHint(t.personal_finance_category),
+      // Moves between categories inside one account ("… CASH_CATEGORY") aren't spending.
+      categoryHint: /CASH_CATEGORY/.test(t.name ?? "")
+        ? "Internal Transfer"
+        : plaidCategoryHint(t.personal_finance_category),
     };
   }
 

@@ -981,6 +981,27 @@ export const cardDetails = sqliteTable("card_details", {
 });
 
 /**
+ * Categories inside one savings account (e.g. "Vacation", "Emergency fund"):
+ * the bank reports one balance; you enter each category's balance once and
+ * Muny follows the moves it reports for that name ("Vacation Deposit
+ * CASH_CATEGORY") from then on.
+ */
+export const savingsBuckets = sqliteTable("savings_buckets", {
+  id: text().primaryKey(),
+  accountId: text()
+    .notNull()
+    .references(() => accounts.id, { onDelete: "cascade" }),
+  name: text().notNull(),
+  /** What it held on asOf. */
+  balanceCents: integer().notNull(),
+  /** YYYY-MM-DD */
+  asOf: text().notNull(),
+  goalCents: integer(),
+  sortOrder: integer().notNull().default(0),
+  updatedAt: updatedAt(),
+});
+
+/**
  * A lender's yearly fee (e.g. timeshare maintenance dues), one per lender:
  * payments of at least minCents with the words (else the lender's loans'
  * words). Listed on the lender's card and never counted as loan payments.

@@ -8,6 +8,7 @@ import { seedDefaultCategories } from "./ledger/seed.js";
 import { pairLoanPayments, pairPayPalFunding } from "./ledger/transfers.js";
 import { refreshManualLoans } from "./loans/service.js";
 import { rescanRecurring } from "./recurring/service.js";
+import { markCategoryMoves } from "./savings/buckets.js";
 import { startSyncScheduler } from "./sync/engine.js";
 import { VERSION } from "./version.js";
 
@@ -21,6 +22,7 @@ async function main() {
   db.transaction((tx) => {
     pairLoanPayments(tx);
     pairPayPalFunding(tx);
+    markCategoryMoves(tx as unknown as typeof db);
     rescanRecurring(tx);
     refreshManualLoans(tx as unknown as typeof db);
   });

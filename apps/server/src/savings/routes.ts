@@ -7,6 +7,7 @@ import { requireUser } from "../auth/plugin.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, notFound, parse } from "../lib/http.js";
 import { savingsAccountsReport, setAccountApy, setSavingsPlan } from "./accounts.js";
+import { bucketsFor, setBuckets } from "./buckets.js";
 import {
   alternativeSuggestions,
   createSaving,
@@ -88,6 +89,38 @@ export function registerSavingsRoutes(app: FastifyInstance, db: MunyDb) {
     if (!setAccountApy(db, id, apyBps)) throw notFound("Savings account not found");
     log(user.id, "savings.apy", id, { apyBps });
     return { ok: true };
+  });
+
+  // Categories inside an account, with what each holds.
+  app.get("/api/savings/accounts/:id/buckets", async (req) => {
+    const { id } = parse(IdParams, req.params);
+    const b = bucketsFor(db, id);
+    if (!b) throw notFound("Savings account not found");
+    return b;
+  });
+
+  app.put("/api/savings/accounts/:id/buckets", async (req) => {
+    const user = requireUser(req);
+    const { id } = parse(IdParams, req.params);
+    const cents = z.number().int().min(-100_000_000_000).max(100_000_000_000);
+    const body = parse(
+      z.object({
+        buckets: z
+          .array(
+            z.object({
+              id: z.string().max(64).optional(),
+              name: z.string().trim().min(1, "Name each category").max(60),
+              balanceCents: cents,
+              goalCents: cents.min(0).nullable().optional(),
+            }),
+          )
+          .max(30),
+      }),
+      req.body,
+    );
+    if (!setBuckets(db, id, body.buckets)) throw notFound("Savings account not found");
+    log(user.id, "savings.buckets", id, { count: body.buckets.length });
+    return bucketsFor(db, id);
   });
 
   app.put("/api/savings/accounts/:id/plan", async (req) => {

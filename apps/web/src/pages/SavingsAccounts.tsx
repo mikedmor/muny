@@ -7,6 +7,7 @@ import { Modal } from "../components/forms.js";
 import { Alert, Button, Card, cx } from "../components/ui.js";
 import { api } from "../lib/api.js";
 import { keys } from "../lib/queries.js";
+import { SavingsBucketsSection } from "./SavingsBuckets.js";
 
 /** Savings accounts: balances, interest, rate and where they're heading. */
 
@@ -495,6 +496,7 @@ function AccountCard({ a, onSaved }: { a: SavingsAccountInfo; onSaved: () => voi
           />
         </div>
       </div>
+      <SavingsBucketsSection accountId={a.id} />
       <div className="mt-5">
         <PlanSummary a={a} onSaved={onSaved} />
       </div>

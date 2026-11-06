@@ -107,6 +107,21 @@ export function DocumentsPage() {
     queryFn: () => api.get<DocumentInfo[]>("/api/documents"),
   });
   const [folder, setFolder] = useState<string | null>(null);
+  // Folders start closed; opening one shows what's inside.
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const go = (path: string | null) => {
+    setFolder(path);
+    if (!path) return;
+    const p = parts(path);
+    setOpen((o) => {
+      const next = new Set(o);
+      // Its parents open; itself toggles when clicked again.
+      for (let i = 1; i < p.length; i++) next.add(join(p.slice(0, i)));
+      if (folder === path && next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  };
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -161,10 +176,18 @@ export function DocumentsPage() {
     await qc.invalidateQueries({ queryKey: docsKey });
   };
 
+  const hasKids = (path: string) => tree.some((n) => n.path.startsWith(`${path} /`));
+  const sub = tree.filter((n) =>
+    folder === null
+      ? n.depth === 0
+      : n.path.startsWith(`${folder} /`) && n.depth === parts(folder).length,
+  );
   const needle = q.trim().toLowerCase();
   const list = all.filter(
     (d) =>
-      (!folder || d.folder === folder || d.folder.startsWith(`${folder} /`)) &&
+      (needle
+        ? !folder || d.folder === folder || d.folder.startsWith(`${folder} /`)
+        : folder !== null && d.folder === folder) &&
       (!needle ||
         [d.name, d.lender, d.notes, d.documentDate, d.folder].some((x) =>
           x?.toLowerCase().includes(needle),
@@ -207,7 +230,7 @@ export function DocumentsPage() {
         <nav aria-label="Folders" className="space-y-0.5 text-sm">
           <button
             type="button"
-            onClick={() => setFolder(null)}
+            onClick={() => go(null)}
             className={cx(
               "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left",
               folder === null
@@ -219,28 +242,41 @@ export function DocumentsPage() {
             <span className="flex-1">All documents</span>
             <span className="text-xs text-slate-500">{all.length}</span>
           </button>
-          {tree.map((n) => (
-            <button
-              key={n.path}
-              type="button"
-              onClick={() => setFolder(n.path)}
-              style={{ paddingLeft: `${0.5 + n.depth}rem` }}
-              className={cx(
-                "flex w-full items-center gap-2 rounded-lg py-1.5 pr-2 text-left",
-                folder === n.path
-                  ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-700/20 dark:text-brand-500"
-                  : "hover:bg-slate-100 dark:hover:bg-slate-800",
-              )}
-            >
-              {folder === n.path ? (
-                <FolderOpen aria-hidden="true" className="size-4 shrink-0" />
-              ) : (
-                <Folder aria-hidden="true" className="size-4 shrink-0 text-slate-400" />
-              )}
-              <span className="min-w-0 flex-1 truncate">{n.name}</span>
-              <span className="text-xs text-slate-500">{n.count}</span>
-            </button>
-          ))}
+          {tree
+            .filter((n) => n.depth === 0 || open.has(join(parts(n.path).slice(0, -1))))
+            .map((n) => (
+              <button
+                key={n.path}
+                type="button"
+                aria-expanded={hasKids(n.path) ? open.has(n.path) : undefined}
+                onClick={() => go(n.path)}
+                style={{ paddingLeft: `${0.5 + n.depth}rem` }}
+                className={cx(
+                  "flex w-full items-center gap-2 rounded-lg py-1.5 pr-2 text-left",
+                  folder === n.path
+                    ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-700/20 dark:text-brand-500"
+                    : "hover:bg-slate-100 dark:hover:bg-slate-800",
+                )}
+              >
+                <span
+                  aria-hidden="true"
+                  className={cx(
+                    "w-2 text-[9px] text-slate-400 transition-transform",
+                    open.has(n.path) && "rotate-90",
+                    !hasKids(n.path) && "invisible",
+                  )}
+                >
+                  ▶
+                </span>
+                {folder === n.path ? (
+                  <FolderOpen aria-hidden="true" className="size-4 shrink-0" />
+                ) : (
+                  <Folder aria-hidden="true" className="size-4 shrink-0 text-slate-400" />
+                )}
+                <span className="min-w-0 flex-1 truncate">{n.name}</span>
+                <span className="text-xs text-slate-500">{n.count}</span>
+              </button>
+            ))}
         </nav>
 
         <div className="min-w-0 space-y-4">
@@ -257,7 +293,23 @@ export function DocumentsPage() {
             />
           </label>
           {docs.isError && <Alert>{docs.error.message}</Alert>}
-          {docs.data && list.length === 0 && (
+          {!needle && sub.length > 0 && (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {sub.map((n) => (
+                <button
+                  key={n.path}
+                  type="button"
+                  onClick={() => go(n.path)}
+                  className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-brand-500 dark:border-slate-800 dark:bg-slate-900"
+                >
+                  <Folder aria-hidden="true" className="size-5 shrink-0 text-brand-600" />
+                  <span className="min-w-0 flex-1 truncate font-medium">{n.name}</span>
+                  <span className="text-xs text-slate-500">{n.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {docs.data && list.length === 0 && sub.length === 0 && (
             <Card className="text-center text-sm text-slate-500">
               {all.length === 0
                 ? "No documents yet. Import a statement on Loans or Credit cards, or upload a file."

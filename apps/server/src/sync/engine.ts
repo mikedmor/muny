@@ -8,6 +8,8 @@ import { upsertPayee } from "../ledger/transactions.js";
 import { linkTransfersFor } from "../ledger/transfers.js";
 import { decryptJson, encryptJson } from "../lib/crypto.js";
 import { localToday } from "../lib/dates.js";
+import { markCategoryMoves } from "../savings/buckets.js";
+import { type SimpleFinCreds, SimpleFinProvider } from "./simplefin.js";
 
 export { localToday };
 
@@ -35,6 +37,7 @@ export interface Providers {
   teller?: TellerProvider;
   /** Always available: each PayPal connection brings its own keys. */
   paypal?: PayPalProvider;
+  simplefin?: SimpleFinProvider;
 }
 
 export function makeProviders(config: Config): Providers {
@@ -50,7 +53,7 @@ export interface SyncDeps {
   providers: Providers;
 }
 
-export type AnyCreds = PlaidCreds | TellerCreds | PayPalCreds;
+export type AnyCreds = PlaidCreds | TellerCreds | PayPalCreds | SimpleFinCreds;
 
 export function providerFor(deps: SyncDeps, provider: string): Provider<AnyCreds> {
   if (provider === "plaid") {
@@ -71,6 +74,8 @@ export function providerFor(deps: SyncDeps, provider: string): Provider<AnyCreds
   }
   if (provider === "paypal")
     return (deps.providers.paypal ?? new PayPalProvider()) as Provider<AnyCreds>;
+  if (provider === "simplefin")
+    return (deps.providers.simplefin ?? new SimpleFinProvider()) as Provider<AnyCreds>;
   throw new ProviderError("config", `"${provider}" connections don't sync`);
 }
 
@@ -370,6 +375,7 @@ export async function syncConnection(
       const terms = await provider.liabilities(creds);
       if (terms?.length) applyLoanTerms(db, connectionId, terms);
     }
+    markCategoryMoves(db);
     // Credit cards: limits, and the statement and rate when the login shares them.
     const limits = info.accounts
       .filter((a) => a.type === "credit" && typeof a.creditLimitCents === "number")

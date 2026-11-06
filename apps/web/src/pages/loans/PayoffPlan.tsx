@@ -267,16 +267,24 @@ function Planner({
         ),
         action: { label: `Use ${formatMoney(needed)}`, run: () => update({ extraCents: needed }) },
       });
-    else
+    else if (p.extraCents - needed >= 1_000)
       tips.push({
         text: (
           <>
-            You're on track to be debt-free by {monthYear(inMonths(goalMonths))}
-            {needed < p.extraCents
-              ? `; ${formatMoney(needed)} extra a month would be enough.`
-              : "."}
+            You're ahead of your goal: <strong>{formatMoney(needed)}</strong> extra a month is
+            enough to be debt-free by {monthYear(inMonths(goalMonths))} (
+            {formatMoney(p.extraCents - needed)} a month less than now)
+            {plan.months !== null && plan.months < goalMonths
+              ? `. At ${formatMoney(p.extraCents)} you'd finish ${span(goalMonths - plan.months)} early`
+              : ""}
+            .
           </>
         ),
+        action: { label: `Use ${formatMoney(needed)}`, run: () => update({ extraCents: needed }) },
+      });
+    else
+      tips.push({
+        text: <>You're on track to be debt-free by {monthYear(inMonths(goalMonths))}.</>,
       });
   }
   for (const [id, date] of Object.entries(p.targets)) {

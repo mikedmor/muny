@@ -168,3 +168,31 @@ export interface SavingsAccountsReport {
   blendedApyBps: number | null;
   accounts: SavingsAccountInfo[];
 }
+
+/** A category inside a savings account (e.g. "Vacation"). */
+export interface SavingsBucket {
+  id: string;
+  name: string;
+  /** What it holds now: the balance you entered plus the moves since. */
+  balanceCents: number;
+  /** What you entered, and when. */
+  enteredCents: number;
+  asOf: string;
+  goalCents: number | null;
+}
+
+export interface SavingsBuckets {
+  accountBalanceCents: number;
+  buckets: SavingsBucket[];
+  /** The account's balance not in any category. */
+  unassignedCents: number;
+  /** Category names seen in the account's transactions, not set up yet. */
+  suggestions: string[];
+}
+
+export interface SavingsBucketInput {
+  id?: string;
+  name: string;
+  balanceCents: number;
+  goalCents?: number | null;
+}
