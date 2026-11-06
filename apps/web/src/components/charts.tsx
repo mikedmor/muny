@@ -359,6 +359,105 @@ export function ColumnChart({
 }
 
 // ---------------------------------------------------------------------------
+// Stacked bands (a total split into parts: categories, coins, holdings)
+// ---------------------------------------------------------------------------
+
+export interface StackBand {
+  key: string;
+  label: string;
+  /** CSS color (a --viz-* token); the same thing keeps the same color everywhere. */
+  color: string;
+  /** One value per point, same length as the chart's points. */
+  values: number[];
+}
+
+/** Filled bands stacked from the baseline, the first band at the bottom. */
+function StackBands({
+  stack,
+  x,
+  y,
+  count,
+}: {
+  stack: StackBand[];
+  x: (i: number) => number;
+  y: (v: number) => number;
+  count: number;
+}) {
+  const base = new Array<number>(count).fill(0);
+  return (
+    <g>
+      {stack.map((b) => {
+        const lower = [...base];
+        for (let i = 0; i < count; i++) base[i] = (base[i] ?? 0) + Math.max(0, b.values[i] ?? 0);
+        const top = base.map((v, i) => `${i ? "L" : "M"}${x(i)},${y(v)}`).join(" ");
+        const back = lower
+          .map((_, j) => {
+            const i = count - 1 - j;
+            return `L${x(i)},${y(lower[i] ?? 0)}`;
+          })
+          .join(" ");
+        return (
+          <path
+            key={b.key}
+            d={`${top} ${back} Z`}
+            fill={b.color}
+            fillOpacity={0.85}
+            stroke="var(--viz-surface)"
+            strokeWidth={1}
+            strokeLinejoin="round"
+          />
+        );
+      })}
+    </g>
+  );
+}
+
+/** Legend for stacked bands, with each part's latest value. */
+export function StackLegend({ stack, at }: { stack: StackBand[]; at?: number }) {
+  return (
+    <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600 dark:text-slate-400">
+      {stack.map((b) => {
+        const v = b.values[at ?? b.values.length - 1] ?? 0;
+        return (
+          <li key={b.key} className="inline-flex items-center gap-1.5">
+            <span
+              aria-hidden="true"
+              className="inline-block size-2.5 rounded-sm"
+              style={{ background: b.color }}
+            />
+            {b.label}
+            <span className="tabular-nums text-slate-500">{formatMoney(Math.max(0, v))}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Tooltip lines for the bands at one point, largest first. */
+function StackTooltipRows({ stack, i }: { stack: StackBand[]; i: number }) {
+  return (
+    <>
+      {[...stack]
+        .map((b) => ({ b, v: b.values[i] ?? 0 }))
+        .filter((r) => r.v > 0)
+        .sort((a, c) => c.v - a.v)
+        .map(({ b, v }) => (
+          <p key={b.key} className="flex items-center gap-1.5 tabular-nums">
+            <span
+              aria-hidden="true"
+              className="inline-block size-2 rounded-sm"
+              style={{ background: b.color }}
+            />
+            <span className="text-slate-500">{b.label}</span>
+            <span className="ml-auto pl-3">{formatMoney(v)}</span>
+          </p>
+        ))}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Line chart (one series over time) with crosshair tooltip
 // ---------------------------------------------------------------------------
 
@@ -375,12 +474,15 @@ export function LineChart({
   ariaLabel,
   height = H,
   compareLabel,
+  stack,
 }: {
   points: LinePoint[];
   ariaLabel: string;
   height?: number;
   /** Name of the dashed line (shown in the tooltip and legend). */
   compareLabel?: string;
+  /** Split the area under the line into colored parts (they should add up to the line). */
+  stack?: StackBand[];
 }) {
   const { ref, width } = useWidth();
   const [hover, setHover] = useState<number | null>(null);
@@ -471,7 +573,11 @@ export function LineChart({
             </text>
           ) : null,
         )}
-        <path d={area} fill={`url(#${gradId})`} />
+        {stack?.length ? (
+          <StackBands stack={stack} x={x} y={y} count={points.length} />
+        ) : (
+          <path d={area} fill={`url(#${gradId})`} />
+        )}
         {hasCompare && (
           <path
             d={compareLine}
@@ -484,8 +590,8 @@ export function LineChart({
         <path
           d={line}
           fill="none"
-          stroke="var(--viz-series-1)"
-          strokeWidth={2}
+          stroke={stack?.length ? "var(--viz-ink-2)" : "var(--viz-series-1)"}
+          strokeWidth={stack?.length ? 1.5 : 2}
           strokeLinejoin="round"
           strokeLinecap="round"
         />
@@ -503,7 +609,7 @@ export function LineChart({
               cx={x(hover)}
               cy={y(hp.value)}
               r={4}
-              fill="var(--viz-series-1)"
+              fill={stack?.length ? "var(--viz-ink-2)" : "var(--viz-series-1)"}
               stroke="var(--viz-surface)"
               strokeWidth={2}
             />
@@ -514,9 +620,10 @@ export function LineChart({
         <Tooltip x={x(hover)} y={y(hp.value)} width={width}>
           <p className="font-medium">{hp.label}</p>
           <p className="tabular-nums">
-            {hasCompare ? "Value: " : ""}
+            {hasCompare || stack?.length ? "Value: " : ""}
             {formatMoney(hp.value)}
           </p>
+          {stack?.length ? <StackTooltipRows stack={stack} i={hover} /> : null}
           {hasCompare && hp.compare !== undefined && (
             <>
               <p className="tabular-nums">
@@ -554,9 +661,12 @@ export function PaceChart({
   dayLabel,
   ariaLabel,
   height = 180,
+  stack,
 }: {
   /** Running totals, index 0 = day 1, through today. */
   current: number[];
+  /** This month's running total split into parts (e.g. categories), adding up to `current`. */
+  stack?: StackBand[];
   /** Running totals for the whole comparison month. */
   previous: number[];
   /** Days in the current month. */
@@ -603,7 +713,7 @@ export function PaceChart({
               x2="17"
               y1="3"
               y2="3"
-              stroke="var(--viz-series-1)"
+              stroke={stack?.length ? "var(--viz-ink-2)" : "var(--viz-series-1)"}
               strokeWidth="2"
               strokeLinecap="round"
             />
@@ -682,12 +792,16 @@ export function PaceChart({
             strokeDasharray="4 3"
             strokeLinejoin="round"
           />
-          <path d={area} fill={`url(#${gradId})`} />
+          {stack?.length ? (
+            <StackBands stack={stack} x={x} y={y} count={current.length} />
+          ) : (
+            <path d={area} fill={`url(#${gradId})`} />
+          )}
           <path
             d={cur}
             fill="none"
-            stroke="var(--viz-series-1)"
-            strokeWidth={2}
+            stroke={stack?.length ? "var(--viz-ink-2)" : "var(--viz-series-1)"}
+            strokeWidth={stack?.length ? 1.5 : 2}
             strokeLinejoin="round"
             strokeLinecap="round"
           />
@@ -726,7 +840,7 @@ export function PaceChart({
                   cx={x(hover)}
                   cy={y(hv)}
                   r={4}
-                  fill="var(--viz-series-1)"
+                  fill={stack?.length ? "var(--viz-ink-2)" : "var(--viz-series-1)"}
                   stroke="var(--viz-surface)"
                   strokeWidth={2}
                 />
@@ -742,6 +856,9 @@ export function PaceChart({
                 {currentLabel}: {formatMoney(hv)}
               </p>
             )}
+            {stack?.length && hover < current.length ? (
+              <StackTooltipRows stack={stack} i={hover} />
+            ) : null}
             {hp !== undefined && (
               <p className="tabular-nums text-slate-500">
                 {previousLabel}: {formatMoney(hp)}

@@ -258,6 +258,55 @@ export function cumulativeDailySpending(db: Db, from: string, to: string): numbe
   return out;
 }
 
+/**
+ * The same running total split by category: the largest `top` categories
+ * (by the period's total) each get their own series, the rest are "Other".
+ * At every day the series add up to cumulativeDailySpending's total.
+ */
+export function cumulativeDailyByCategory(
+  db: Db,
+  from: string,
+  to: string,
+  top = 6,
+): { id: string | null; name: string; daily: number[] }[] {
+  const cats = categoryMeta(db);
+  const perCat = new Map<string, Map<string, number>>(); // category -> day -> spent
+  const totals = new Map<string, number>();
+  for (const t of dailyCategoryTotals(db, from, to)) {
+    if (t.categoryId === TRANSFER_KEY) continue;
+    if (t.categoryId && cats.get(t.categoryId)?.kind !== "expense") continue;
+    const k = t.categoryId ?? "";
+    const m = perCat.get(k) ?? new Map<string, number>();
+    m.set(t.month, (m.get(t.month) ?? 0) - t.cents);
+    perCat.set(k, m);
+    totals.set(k, (totals.get(k) ?? 0) - t.cents);
+  }
+  const ranked = [...totals].sort((a, b) => b[1] - a[1]);
+  const keep = new Set(ranked.slice(0, ranked.length > top + 1 ? top : top + 1).map(([k]) => k));
+  const days: string[] = [];
+  for (let d = from; d <= to && days.length < 400; d = addDays(d, 1)) days.push(d);
+  const run = (spentOn: (day: string) => number) => {
+    let total = 0;
+    return days.map((d) => {
+      total += spentOn(d);
+      return total;
+    });
+  };
+  const out = [...keep].map((k) => ({
+    id: k || null,
+    name: k ? (cats.get(k)?.name ?? "Unknown") : "Uncategorized",
+    daily: run((d) => perCat.get(k)?.get(d) ?? 0),
+  }));
+  const rest = [...perCat.keys()].filter((k) => !keep.has(k));
+  if (rest.length)
+    out.push({
+      id: "other",
+      name: "Other",
+      daily: run((d) => rest.reduce((t, k) => t + (perCat.get(k)?.get(d) ?? 0), 0)),
+    });
+  return out;
+}
+
 const CASH_TYPES: ReadonlySet<string> = new Set(["checking", "cash", "savings"]);
 
 /** Cash in checking & savings on each date (same accounts as the dashboard headline). */
@@ -321,6 +370,7 @@ export function overview(db: Db, today = localToday()): Overview {
       lastMonthSameDayCents: lastSpan.totalCents,
       lastMonthTotalCents: lastFull.totalCents,
       thisMonthDaily: cumulativeDailySpending(db, `${month}-01`, today),
+      thisMonthByCategory: cumulativeDailyByCategory(db, `${month}-01`, today),
       lastMonthDaily: cumulativeDailySpending(db, `${lastMonth}-01`, lastMonthEnd),
       daysInMonth: Number(monthEnd(month).slice(8)),
     },

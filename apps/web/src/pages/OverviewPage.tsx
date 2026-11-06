@@ -8,11 +8,19 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useState } from "react";
-import { ColumnChart, LineChart, PaceChart, RankedBars } from "../components/charts.js";
+import {
+  ColumnChart,
+  LineChart,
+  PaceChart,
+  RankedBars,
+  type StackBand,
+  StackLegend,
+} from "../components/charts.js";
 import { Alert, Card, cx, PageHeader } from "../components/ui.js";
 import { CategoryIcon, MerchantAvatar } from "../components/visuals.js";
 import { api } from "../lib/api.js";
 import { keys, useAccounts, useConnections } from "../lib/queries.js";
+import { assignColors, OTHER_COLOR, SERIES_SLOTS } from "../lib/series.js";
 import { CryptoOverviewCard } from "./crypto/CryptoTaxSection.js";
 
 /**
@@ -72,6 +80,29 @@ function SpendingCard({ d }: { d: Overview }) {
   const diff = s.monthToDateCents - s.lastMonthSameDayCents;
   const thisName = monthName(d.today);
   const lastName = monthName(addMonthsIso(d.today, -1));
+  // Each category keeps its color (by name); "Other" is always the neutral.
+  const parts = s.thisMonthByCategory ?? [];
+  const colors = assignColors(
+    parts
+      .filter((c) => c.id !== "other")
+      .map((c) => ({ key: c.id ?? "none", value: c.daily.at(-1) ?? 0, order: c.name })),
+    SERIES_SLOTS,
+  );
+  const stack: StackBand[] = parts
+    .map((c) => ({
+      key: c.id ?? "none",
+      label: c.name,
+      color: c.id === "other" ? OTHER_COLOR : (colors.get(c.id ?? "none") ?? OTHER_COLOR),
+      values: c.daily,
+    }))
+    .filter((b) => (b.values.at(-1) ?? 0) > 0)
+    .sort((a, b) =>
+      a.key === "other"
+        ? 1
+        : b.key === "other"
+          ? -1
+          : (b.values.at(-1) ?? 0) - (a.values.at(-1) ?? 0),
+    );
   return (
     <Card>
       <p className="text-sm font-medium text-slate-500">Spent this month</p>
@@ -101,7 +132,9 @@ function SpendingCard({ d }: { d: Overview }) {
           previousLabel={lastName}
           dayLabel={(day) => `Day ${day}`}
           ariaLabel={`Running spending total: ${thisName} so far compared with ${lastName}`}
+          stack={stack}
         />
+        {stack.length > 0 && <StackLegend stack={stack} />}
       </div>
       <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-3 text-sm dark:border-slate-800">
         <div>

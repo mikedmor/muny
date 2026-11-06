@@ -134,6 +134,10 @@ describe("reports", () => {
     const day = Number(today.slice(8));
     expect(o.spending.thisMonthDaily).toHaveLength(day);
     expect(o.spending.thisMonthDaily[day - 1]).toBe(4200);
+    // The category split adds up to the running total every day.
+    expect(o.spending.thisMonthByCategory).toEqual([
+      { id: null, name: "Uncategorized", daily: o.spending.thisMonthDaily },
+    ]);
     expect(o.spending.lastMonthDaily.length).toBeGreaterThanOrEqual(28);
     expect(o.spending.daysInMonth).toBeGreaterThanOrEqual(day);
     expect(o.topMerchants[0]).toMatchObject({ name: "Corner Cafe", cents: 4200, count: 1 });

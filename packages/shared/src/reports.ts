@@ -57,6 +57,8 @@ export interface Overview {
     lastMonthTotalCents: number;
     /** Running total spent, one entry per day from the 1st through today. */
     thisMonthDaily: number[];
+    /** The same running total by category: the largest few, then "Other" (id "other"). */
+    thisMonthByCategory: { id: string | null; name: string; daily: number[] }[];
     /** Running total spent, one entry per day of last month. */
     lastMonthDaily: number[];
     daysInMonth: number;
