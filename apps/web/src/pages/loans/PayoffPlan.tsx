@@ -111,6 +111,8 @@ function Planner({
     l.kind === "mortgage" ? p.included.includes(l.accountId) : !p.excluded.includes(l.accountId);
   const loans = open.filter(inPlan);
   const left = open.filter((l) => !inPlan(l));
+  const leftMortgages = left.filter((l) => l.kind === "mortgage");
+  const leftOther = left.filter((l) => l.kind !== "mortgage");
   const planLoans = loans.map(toPlanLoan);
   const byId = new Map(loans.map((l) => [l.accountId, l]));
 
@@ -576,7 +578,7 @@ function Planner({
         {left.length > 0 && (
           <p className="mt-3 text-xs text-slate-500">
             Not in the plan:{" "}
-            {left.map((l, i) => (
+            {leftOther.map((l, i) => (
               <span key={l.accountId}>
                 {i > 0 && ", "}
                 {l.name}{" "}
@@ -587,10 +589,26 @@ function Planner({
                 >
                   add
                 </button>
+                {i === leftOther.length - 1 && ". "}
               </span>
             ))}
-            {left.some((l) => l.kind === "mortgage") &&
-              ". Mortgages are left out unless you add them."}
+            {leftMortgages.length > 0 && (
+              <>
+                Mortgages are left out unless you{" "}
+                <button
+                  type="button"
+                  onClick={() =>
+                    update({
+                      included: [...p.included, ...leftMortgages.map((l) => l.accountId)],
+                    })
+                  }
+                  className="text-brand-600 hover:underline dark:text-brand-500"
+                >
+                  add them
+                </button>
+                .
+              </>
+            )}
           </p>
         )}
       </Card>
