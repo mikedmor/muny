@@ -45,6 +45,16 @@ interface Page<T> {
   pagination?: { next_uri?: string | null };
 }
 
+/**
+ * Coinbase's own tickers that differ from everyone else's (Koinly, price
+ * services): CGLD is Celo, CORECHAIN is Core.
+ */
+const ALIASES: Record<string, string> = { CGLD: "CELO", CORECHAIN: "CORE" };
+export const coinbaseAsset = (code: string) => {
+  const c = code.toUpperCase();
+  return ALIASES[c] ?? c;
+};
+
 /** Rewards and staking payouts: income when received. */
 const STAKING = new Set(["staking_reward", "inflation_reward", "interest", "earn_payout"]);
 const REWARD = new Set([
@@ -116,7 +126,7 @@ export const coinbase: ExchangeAdapter = async (ctx) => {
   const since = ctx.cursor?.height ?? 0;
   const accounts = await all<CbAccount>("/v2/accounts?limit=250");
   const code = (a: CbAccount) =>
-    (typeof a.currency === "string" ? a.currency : (a.currency?.code ?? "")).toUpperCase();
+    coinbaseAsset(typeof a.currency === "string" ? a.currency : (a.currency?.code ?? ""));
 
   // Transactions newer than the last sync, from accounts that changed since.
   const txns: CbTxn[] = [];
@@ -156,14 +166,14 @@ export const coinbase: ExchangeAdapter = async (ctx) => {
     const d = new Deltas();
     let fee: { asset: string; amount: string } | null = null;
     for (const x of list) {
-      const cur = x.amount.currency.toUpperCase();
+      const cur = coinbaseAsset(x.amount.currency);
       const amt = normDec(x.amount.amount);
       const netFee = x.network?.transaction_fee;
       if (
         x.type === "send" &&
         amt.startsWith("-") &&
         netFee &&
-        netFee.currency.toUpperCase() === cur
+        coinbaseAsset(netFee.currency) === cur
       ) {
         // A send's amount includes the network fee.
         const total = amt.slice(1);
