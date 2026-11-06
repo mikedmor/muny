@@ -16,7 +16,13 @@ Interest is any money in that's categorized **Interest & Dividends**, or that th
 
 ### Categories inside an account
 
-Some banks let you split a cash account into categories but report one balance. Muny files their moves ("Vacation Deposit CASH_CATEGORY") as internal transfers, so they never count as spending or income. Under the account on **Savings**, **Show what each holds** (or **Categories → Edit**) lets you enter what each category holds now, with an optional goal; Muny follows each one's moves from then on and shows what's unassigned. Money your bank's automations put straight into a category from outside may not show which category it went to: update that category's balance now and then.
+Some banks split a cash account into categories but report one balance. Muny files their moves ("Vacation Deposit CASH_CATEGORY") as internal transfers, so they never count as spending or income. Under the account on **Savings**, **Set them up** (or **Edit plan**) lays it out like your bank's plan:
+
+- The account's own cash comes first, with the amount it keeps (for example $1,000); its balance is whatever the categories don't hold.
+- Then each category in order, with what it holds now, a goal, and how much it saves at most a month; Muny shows when it reaches the goal at that rate.
+- The last can **save all remaining cash** instead of a goal.
+
+Muny follows each category's moves from when you enter its balance. Deposits your bank's automations put straight into a category from outside may not say which category they went to: update that category's balance now and then.
 
 ## Money saved
 

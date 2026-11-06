@@ -496,7 +496,7 @@ function AccountCard({ a, onSaved }: { a: SavingsAccountInfo; onSaved: () => voi
           />
         </div>
       </div>
-      <SavingsBucketsSection accountId={a.id} />
+      <SavingsBucketsSection accountId={a.id} accountName={a.name} />
       <div className="mt-5">
         <PlanSummary a={a} onSaved={onSaved} />
       </div>

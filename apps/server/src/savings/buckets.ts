@@ -30,17 +30,40 @@ export function bucketsFor(db: MunyDb, accountId: string): SavingsBuckets | null
     .where(eq(schema.savingsBuckets.accountId, accountId))
     .orderBy(asc(schema.savingsBuckets.sortOrder))
     .all();
-  const buckets = rows.map((b) => {
+  const balance = acc.balanceCents;
+  const thisMonth = localToday().slice(0, 7);
+  const goalMonth = (bal: number, goal: number | null, cap: number | null) => {
+    if (!goal || !cap || cap <= 0) return null;
+    if (bal >= goal) return thisMonth;
+    const n = Math.ceil((goal - bal) / cap);
+    const d = new Date(`${thisMonth}-01T00:00:00Z`);
+    d.setUTCMonth(d.getUTCMonth() + n);
+    return d.toISOString().slice(0, 7);
+  };
+  const others = rows.filter((b) => !b.isMain);
+  const tracked = others.map((b) => {
     const moved = moves
       .filter((m) => m.date > b.asOf && m.name?.toLowerCase() === b.name.toLowerCase())
       .reduce((s, m) => s + m.amount, 0);
+    return { b, current: b.balanceCents + moved };
+  });
+  const inCategories = tracked.reduce((s, x) => s + x.current, 0);
+  const buckets = rows.map((b) => {
+    // The main cash is whatever the categories don't hold.
+    const current = b.isMain
+      ? balance - inCategories
+      : (tracked.find((x) => x.b.id === b.id)?.current ?? b.balanceCents);
     return {
       id: b.id,
       name: b.name,
-      balanceCents: b.balanceCents + moved,
+      balanceCents: current,
       enteredCents: b.balanceCents,
       asOf: b.asOf,
       goalCents: b.goalCents,
+      monthlyCapCents: b.monthlyCapCents,
+      fillRemaining: b.fillRemaining,
+      isMain: b.isMain,
+      goalMonth: b.isMain ? null : goalMonth(current, b.goalCents, b.monthlyCapCents),
     };
   });
   const have = new Set(rows.map((b) => b.name.toLowerCase()));
@@ -49,7 +72,6 @@ export function bucketsFor(db: MunyDb, accountId: string): SavingsBuckets | null
       moves.map((m) => m.name).filter((n): n is string => !!n && !have.has(n.toLowerCase())),
     ),
   ];
-  const balance = acc.balanceCents;
   return {
     accountBalanceCents: balance,
     buckets,
@@ -78,9 +100,12 @@ export function setBuckets(
         id: old?.id ?? newId(),
         accountId,
         name: b.name.trim(),
-        balanceCents: same ? old.enteredCents : b.balanceCents,
+        balanceCents: b.isMain ? 0 : same ? old.enteredCents : b.balanceCents,
         asOf: same ? old.asOf : today,
         goalCents: b.goalCents ?? null,
+        monthlyCapCents: b.isMain ? null : (b.monthlyCapCents ?? null),
+        fillRemaining: !b.isMain && !!b.fillRemaining,
+        isMain: !!b.isMain,
         sortOrder: i,
       })
       .run();

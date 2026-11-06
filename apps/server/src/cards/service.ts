@@ -1,4 +1,4 @@
-import { type MunyDb, schema } from "@muny/db";
+import { type MunyDb, newId, schema } from "@muny/db";
 import type {
   CardDetailsInput,
   CardPayment,
@@ -6,7 +6,7 @@ import type {
   CardsReport,
   CreditCard,
 } from "@muny/shared";
-import { and, eq, gte, inArray } from "drizzle-orm";
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { listAccounts } from "../ledger/accounts.js";
 import { localToday } from "../lib/dates.js";
 import type { CardTerms } from "../sync/types.js";
@@ -82,29 +82,77 @@ export function cardsReport(db: Db, today = localToday()): CardsReport {
       : [],
   );
 
+  // Payments found by their words in your other accounts (when you linked them).
+  const linkedPayments = (
+    d: (typeof details extends Map<string, infer V> ? V : never) | undefined,
+  ) => {
+    const words = d?.paymentMatch?.trim();
+    if (!words) return [];
+    return db
+      .select({
+        id: t.id,
+        date: t.postedDate,
+        amount: t.amountCents,
+        pair: t.transferPairId,
+        name: schema.accounts.name,
+        mask: schema.accounts.mask,
+      })
+      .from(t)
+      .innerJoin(schema.accounts, eq(schema.accounts.id, t.accountId))
+      .where(
+        and(
+          gte(t.postedDate, yearAgo),
+          sql`${t.amountCents} < 0`,
+          sql`${schema.accounts.type} <> 'credit'`,
+          eq(t.pending, false),
+          sql`instr(lower(${t.rawDescription}), lower(${words})) > 0`,
+        ),
+      )
+      .all();
+  };
   const out: CreditCard[] = cards.map((a) => {
     const d = details.get(a.id);
     const mine = txns.filter((x) => x.accountId === a.id && !x.pending);
-    const payments: CardPayment[] = mine
+    const onCard: CardPayment[] = mine
       .filter((x) => x.amountCents > 0 && x.date >= yearAgo && (x.pair || PAYMENT.test(x.raw)))
-      .sort((x, y) => y.date.localeCompare(x.date))
       .map((x) => ({
         transactionId: x.id,
         date: x.date,
         amountCents: x.amountCents,
         fromAccountName: x.pair ? (pairFrom.get(x.pair) ?? null) : null,
       }));
+    // From your other accounts, unless the same payment already shows on the card.
+    const day = (iso: string) => Date.parse(`${iso}T00:00:00Z`) / 86_400_000;
+    const fromOthers: CardPayment[] = linkedPayments(d)
+      .filter(
+        (p) =>
+          !onCard.some(
+            (c) => c.amountCents === -p.amount && Math.abs(day(c.date) - day(p.date)) <= 5,
+          ),
+      )
+      .map((p) => ({
+        transactionId: p.id,
+        date: p.date,
+        amountCents: -p.amount,
+        fromAccountName: p.mask ? `${p.name} ••${p.mask}` : p.name,
+      }));
+    const payments = [...onCard, ...fromOthers].sort((x, y) => y.date.localeCompare(x.date));
     const owed = Math.max(0, -a.balanceCents);
     const limit = d?.creditLimitCents ?? null;
     const since = d?.statementDate ?? null;
     const spent = mine
       .filter((x) => x.amountCents < 0 && !x.hidden && !x.pair && (!since || x.date > since))
       .reduce((s, x) => s - x.amountCents, 0);
-    const interest = mine
+    const fromTxns = mine
       .filter(
         (x) => x.amountCents < 0 && x.date.startsWith(today.slice(0, 4)) && INTEREST.test(x.raw),
       )
       .reduce((s, x) => s - x.amountCents, 0);
+    // The statement's year-to-date figure, when it's this year's and higher.
+    const interest =
+      d?.interestYtdYear === Number(today.slice(0, 4)) && (d.interestYtdCents ?? 0) > fromTxns
+        ? (d.interestYtdCents ?? 0)
+        : fromTxns;
     const detected = payments[0];
     const lastPayment =
       d?.lastPaymentDate &&
@@ -137,6 +185,11 @@ export function cardsReport(db: Db, today = localToday()): CardsReport {
       interestThisYearCents: interest,
       payments: payments.slice(0, 12),
       source: d?.source ?? null,
+      paymentMatch: d?.paymentMatch ?? null,
+      minimumOnly:
+        d?.minOnlyMonths && d.minOnlyTotalCents
+          ? { months: d.minOnlyMonths, totalCents: d.minOnlyTotalCents }
+          : null,
     };
   });
   const withLimit = out.filter((c) => c.creditLimitCents);
@@ -204,6 +257,7 @@ export function applyCardStatement(db: Db, accountId: string, s: CardStatement):
     .where(eq(schema.cardDetails.accountId, accountId))
     .get();
   if (cur?.d && s.closingDate && s.closingDate < cur.d) return true; // older: keep the newer
+  // (the statement's transactions are added either way; see addStatementTransactions)
   const patch = Object.fromEntries(
     Object.entries({
       statementDate: s.closingDate,
@@ -212,6 +266,10 @@ export function applyCardStatement(db: Db, accountId: string, s: CardStatement):
       minimumPaymentCents: s.minimumPaymentCents,
       creditLimitCents: s.creditLimitCents,
       aprBps: s.aprBps,
+      interestYtdCents: s.interestYtd?.cents ?? null,
+      interestYtdYear: s.interestYtd?.year ?? null,
+      minOnlyMonths: s.minimumOnly?.months ?? null,
+      minOnlyTotalCents: s.minimumOnly?.totalCents ?? null,
     }).filter(([, v]) => v !== null),
   );
   upsert(db, accountId, patch, "statement");
@@ -273,28 +331,79 @@ const centsOf = (s: string | undefined) => {
   return Number(w) * 100 + Number(f.padEnd(2, "0").slice(0, 2));
 };
 
+/**
+ * Transaction lines: "10/05 10/05 Automatic Payment - Thank You REF123 250.00-".
+ * Charges are negative; payments and credits (a trailing or leading minus, or
+ * under a Payments/Credits heading) positive. The year comes from the closing date.
+ */
+function statementTransactions(text: string, closing: string | null) {
+  const out: { date: string; description: string; amountCents: number }[] = [];
+  const closeYear = Number((closing ?? new Date().toISOString()).slice(0, 4));
+  const closeMonth = Number((closing ?? new Date().toISOString()).slice(5, 7));
+  let section: "credit" | "charge" | null = null;
+  for (const raw of text.split("\n")) {
+    const line = raw.replace(/\s+/g, " ").trim();
+    if (/^(payments?|payments and( other)? credits|credits|other credits)\b/i.test(line))
+      section = "credit";
+    else if (
+      /^(purchases|interest charged|fees( charged)?|transactions|cash advances)\b/i.test(line)
+    )
+      section = "charge";
+    const m = line.match(
+      /^(\d{1,2})\/(\d{1,2})(?:\/\d{2,4})? (?:\d{1,2}\/\d{1,2}(?:\/\d{2,4})? )?(.+?) (-)?\$?([\d,]+\.\d{2})(-|CR)?$/i,
+    );
+    if (!m) continue;
+    const desc = (m[3] ?? "").replace(/ [A-Z0-9]{10,}$/, "").trim();
+    if (!desc || /^total\b/i.test(desc)) continue;
+    const month = Number(m[1]);
+    const year = month > closeMonth ? closeYear - 1 : closeYear;
+    const cents = centsOf(m[5]) ?? 0;
+    const credit =
+      !!m[4] || !!m[6] || section === "credit" || /payment|thank you|credit|refund/i.test(desc);
+    out.push({
+      date: `${year}-${String(month).padStart(2, "0")}-${String(Number(m[2])).padStart(2, "0")}`,
+      description: desc.slice(0, 200),
+      amountCents: credit ? cents : -cents,
+    });
+  }
+  return out;
+}
+
 export function parseCardStatement(text: string): CardStatement | null {
   const t = text.replace(/\s+/g, " ");
   const find = (re: RegExp) => t.match(re)?.[1];
   const newBalance = centsOf(find(new RegExp(`New Balance(?: Total)?:? ${MONEY}`, "i")));
   const minimum = centsOf(find(new RegExp(`Minimum Payment Due:? ${MONEY}`, "i")));
-  const due = isoOf(find(new RegExp(`Payment Due Date:? ${DATE}`, "i")));
+  // "Payment Due Date AUTO PAY ENABLED 11/05/2026": words may sit between the label and the date.
+  const due = isoOf(find(new RegExp(`Payment Due Date:?[^\\d]{0,40}?${DATE}`, "i")));
   const limit = centsOf(
     find(/(?:Total )?Credit (?:Limit|Line|Access Line)(?: Amount)?:? \$?\s?([\d,]+(?:\.\d{2})?)/i),
   );
   const closing =
     // "Opening/Closing Date 09/14/26 - 10/13/26"
-    isoOf(find(new RegExp(`Opening/Closing Date:? \\S+ ?- ?${DATE}`, "i"))) ??
+    isoOf(find(new RegExp(`Open(?:ing)?/Clos(?:e|ing) Date:? \\S+ ?- ?${DATE}`, "i"))) ??
     isoOf(find(new RegExp(`(?:Statement )?Closing Date:? ${DATE}`, "i"))) ??
     isoOf(find(new RegExp(`Billing Cycle (?:Ending|End Date|Closing Date):? ${DATE}`, "i"))) ??
     isoOf(find(new RegExp(`Statement (?:Date|Period Ending):? ${DATE}`, "i")));
+  // "Purchases 24.99%", or a rate table: "Purchases 3,083.68 14.75% (v) ...".
   const apr =
-    find(/Purchases?(?: APR)?:? (?:\d{1,2}\/\d{1,2}\/\d{2,4} )?(\d{1,2}\.\d{2,3})% ?(?:\(v\))?/i) ??
-    find(/Annual Percentage Rate[^%]{0,40}?(\d{1,2}\.\d{2,3})%/i);
+    find(
+      /Purchases?(?: APR)?:? (?:\d{1,2}\/\d{1,2}\/\d{2,4} |\$?[\d,]+\.\d{2} )?(\d{1,2}\.\d{2,3})% ?(?:\(v\))?/i,
+    ) ?? find(/Annual Percentage Rate[^%]{0,40}?(\d{1,2}\.\d{2,3})%/i);
   const previous = centsOf(find(new RegExp(`Previous Balance:? ${MONEY}`, "i")));
   const paid = centsOf(find(new RegExp(`Payments?(?:, Credits)?:? -?\\s?${MONEY}`, "i")));
   if (newBalance === null && !due) return null;
+  const ytd = t.match(/Total Interest charged in (\d{4}):? \$?([\d,]+\.\d{2})/i);
+  const minOnly = t.match(/Only the Minimum Payment:? (\d+) (years?|months?) \$?([\d,]+\.\d{2})/i);
   return {
+    interestYtd: ytd ? { year: Number(ytd[1]), cents: centsOf(ytd[2]) ?? 0 } : null,
+    minimumOnly: minOnly
+      ? {
+          months: Number(minOnly[1]) * (/^y/i.test(minOnly[2] ?? "") ? 12 : 1),
+          totalCents: centsOf(minOnly[3]) ?? 0,
+        }
+      : null,
+    transactions: statementTransactions(text, closing),
     closingDate: closing,
     dueDate: due,
     newBalanceCents: newBalance,
@@ -320,4 +429,51 @@ export function cardForText(db: Db, text: string): string | null {
     .where(eq(schema.accounts.type, "credit"))
     .all();
   return cards.find((c) => c.mask && ends.includes(c.mask))?.id ?? null;
+}
+
+/**
+ * Add a statement's transactions to the card, skipping any already there (same
+ * amount within 3 days). Returns the new transaction ids (for rules and transfers).
+ */
+export function addStatementTransactions(
+  db: Db,
+  accountId: string,
+  list: CardStatement["transactions"],
+): string[] {
+  const t = schema.transactions;
+  const acc = db
+    .select({ currency: schema.accounts.currency })
+    .from(schema.accounts)
+    .where(eq(schema.accounts.id, accountId))
+    .get();
+  if (!acc) return [];
+  const existing = db
+    .select({ date: t.postedDate, amount: t.amountCents })
+    .from(t)
+    .where(eq(t.accountId, accountId))
+    .all();
+  const day = (iso: string) => Date.parse(`${iso}T00:00:00Z`) / 86_400_000;
+  const ids: string[] = [];
+  for (const x of list) {
+    if (
+      existing.some((e) => e.amount === x.amountCents && Math.abs(day(e.date) - day(x.date)) <= 3)
+    )
+      continue;
+    const id = newId();
+    db.insert(t)
+      .values({
+        id,
+        accountId,
+        postedDate: x.date,
+        amountCents: x.amountCents,
+        currency: acc.currency,
+        rawDescription: x.description,
+        importHash: `stmt:${accountId}:${x.date}:${x.amountCents}:${x.description.slice(0, 40)}`,
+      })
+      .onConflictDoNothing()
+      .run();
+    existing.push({ date: x.date, amount: x.amountCents });
+    ids.push(id);
+  }
+  return ids;
 }

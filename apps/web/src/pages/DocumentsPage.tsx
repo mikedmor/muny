@@ -243,7 +243,12 @@ export function DocumentsPage() {
             <span className="text-xs text-slate-500">{all.length}</span>
           </button>
           {tree
-            .filter((n) => n.depth === 0 || open.has(join(parts(n.path).slice(0, -1))))
+            // Shown only when every folder above it is open.
+            .filter((n) =>
+              parts(n.path)
+                .slice(0, -1)
+                .every((_, i, p) => open.has(join(p.slice(0, i + 1)))),
+            )
             .map((n) => (
               <button
                 key={n.path}

@@ -37,6 +37,10 @@ export interface CreditCard {
   /** Payments to it, newest first (a year). */
   payments: CardPayment[];
   source: "plaid" | "statement" | "manual" | null;
+  /** Words your payments to it use in your other accounts. */
+  paymentMatch: string | null;
+  /** From the statement's minimum payment warning (null when not read). */
+  minimumOnly: { months: number; totalCents: number } | null;
 }
 
 export interface CardsReport {
@@ -57,6 +61,7 @@ export interface CardDetailsInput {
   statementDate?: string | null;
   minimumPaymentCents?: number | null;
   dueDate?: string | null;
+  paymentMatch?: string | null;
 }
 
 /** What Muny read from a card statement PDF. */
@@ -69,6 +74,12 @@ export interface CardStatement {
   aprBps: number | null;
   previousBalanceCents: number | null;
   paymentsCents: number | null;
+  /** Interest charged so far in the statement's year. */
+  interestYtd: { year: number; cents: number } | null;
+  /** The statement's minimum payment warning: how long and how much in total at the minimum. */
+  minimumOnly: { months: number; totalCents: number } | null;
+  /** Transactions listed on it (charges negative, payments and credits positive). */
+  transactions: { date: string; description: string; amountCents: number }[];
 }
 
 export interface CardStatementPreview {

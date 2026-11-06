@@ -4,10 +4,13 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
 import { saveDocument } from "../documents/service.js";
+import { linkTransfersFor } from "../ledger/transfers.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, notFound, parse } from "../lib/http.js";
 import { pdfLines } from "../loans/statements.js";
+import { runRulesOn } from "../rules/service.js";
 import {
+  addStatementTransactions,
   applyCardStatement,
   cardForText,
   cardsReport,
@@ -31,6 +34,7 @@ const Details = z.object({
   statementDate: isoDate.nullable().optional(),
   minimumPaymentCents: cents.nullable().optional(),
   dueDate: isoDate.nullable().optional(),
+  paymentMatch: z.string().trim().max(80).nullable().optional(),
 });
 const Statement = z.object({
   closingDate: isoDate.nullable(),
@@ -41,6 +45,19 @@ const Statement = z.object({
   aprBps: z.number().int().min(0).max(10_000).nullable(),
   previousBalanceCents: z.number().int().min(-100_000_000_000).max(100_000_000_000).nullable(),
   paymentsCents: cents.nullable(),
+  interestYtd: z.object({ year: z.number().int().min(1990).max(2100), cents }).nullable(),
+  minimumOnly: z
+    .object({ months: z.number().int().min(0).max(1200), totalCents: cents })
+    .nullable(),
+  transactions: z
+    .array(
+      z.object({
+        date: isoDate,
+        description: z.string().trim().min(1).max(200),
+        amountCents: z.number().int().min(-100_000_000_000).max(100_000_000_000),
+      }),
+    )
+    .max(2000),
 });
 const pdf = z.string().min(10).max(14_000_000, "The PDF is too large (10 MB max)");
 
@@ -88,6 +105,8 @@ export function registerCardRoutes(app: FastifyInstance, db: MunyDb, secret?: Bu
         pdfBase64: pdf.optional(),
         fileName: z.string().trim().max(200).optional(),
         cardName: z.string().trim().max(100).optional(),
+        /** Add the statement's transactions to the card (those not there yet). */
+        addTransactions: z.boolean().default(true),
       }),
       req.body,
     );
@@ -97,6 +116,16 @@ export function registerCardRoutes(app: FastifyInstance, db: MunyDb, secret?: Bu
       )
     )
       throw notFound("Card not found");
+    if (body.addTransactions && body.statement.transactions.length)
+      db.transaction((tx) => {
+        const ids = addStatementTransactions(
+          tx as unknown as MunyDb,
+          body.accountId,
+          body.statement.transactions,
+        );
+        runRulesOn(tx, ids);
+        linkTransfersFor(tx, ids);
+      });
     if (body.pdfBase64) {
       const bytes = Buffer.from(body.pdfBase64, "base64");
       if (bytes.subarray(0, 4).toString("latin1") === "%PDF")

@@ -112,8 +112,12 @@ export function registerSavingsRoutes(app: FastifyInstance, db: MunyDb) {
               name: z.string().trim().min(1, "Name each category").max(60),
               balanceCents: cents,
               goalCents: cents.min(0).nullable().optional(),
+              monthlyCapCents: cents.min(0).nullable().optional(),
+              fillRemaining: z.boolean().optional(),
+              isMain: z.boolean().optional(),
             }),
           )
+          .refine((l) => l.filter((b) => b.isMain).length <= 1, "Only one main cash")
           .max(30),
       }),
       req.body,

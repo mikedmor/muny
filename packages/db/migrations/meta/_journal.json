@@ -281,6 +281,20 @@
       "when": 1793998794062,
       "tag": "0039_savings_buckets",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1794000996808,
+      "tag": "0040_bucket_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1794001116934,
+      "tag": "0041_card_more",
+      "breakpoints": true
     }
   ]
 }

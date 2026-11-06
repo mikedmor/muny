@@ -179,6 +179,14 @@ export interface SavingsBucket {
   enteredCents: number;
   asOf: string;
   goalCents: number | null;
+  /** Saves at most this much a month. */
+  monthlyCapCents: number | null;
+  /** Takes whatever's left over. */
+  fillRemaining: boolean;
+  /** The account's own cash (what's not in a category); its goal is the target it keeps. */
+  isMain: boolean;
+  /** When it reaches its goal at its monthly cap (YYYY-MM), if it has both. */
+  goalMonth: string | null;
 }
 
 export interface SavingsBuckets {
@@ -193,6 +201,10 @@ export interface SavingsBuckets {
 export interface SavingsBucketInput {
   id?: string;
   name: string;
+  /** Ignored for the main cash (it's the rest of the account). */
   balanceCents: number;
   goalCents?: number | null;
+  monthlyCapCents?: number | null;
+  fillRemaining?: boolean;
+  isMain?: boolean;
 }

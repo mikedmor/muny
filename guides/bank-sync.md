@@ -57,16 +57,6 @@ The first sync reads up to three years of activity. Amounts are net of PayPal's 
 
 Without a business account, download your activity instead (PayPal → Activity → Statements → **Download**, as CSV) and add it on **Import**; Muny recognises PayPal's format, and importing again only adds what's new.
 
-## SimpleFIN
-
-For banks and card issuers Plaid can't reach (Discover, many credit unions and card issuers). [SimpleFIN Bridge](https://beta-bridge.simplefin.org) is a small read-only service (about $15 a year, paid to them) that connects to your banks; Muny reads from it.
-
-1. Make an account at SimpleFIN Bridge and connect your banks and cards there.
-2. Choose **New connection** and copy the **setup token**.
-3. In Muny, **Accounts → Connect with SimpleFIN**, paste it, and choose which accounts to track.
-
-The token works once; Muny swaps it for a private read-only link, stored encrypted and used only to read balances and transactions (the first sync goes back up to a year). SimpleFIN refreshes about once a day. It doesn't say what kind each account is, so Muny guesses from the name (a card, loan, savings or checking); change any on Accounts. Card networks (Visa, Mastercard, Discover) don't offer an API for your own accounts; the card's issuing bank holds the data, which is what these services reach.
-
 ## Connecting
 
 On **Accounts → Bank connections**, click **Connect**. After you log in to your bank, choose where each bank account goes. **Link it to an account you already have** (for example one from a Rocket Money import) to keep its history: transactions you already imported are matched instead of duplicated. From then on the account shows the bank's reported balance.

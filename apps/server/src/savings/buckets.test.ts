@@ -65,4 +65,33 @@ describe("savings categories", () => {
     const list = (await client.get("/api/transactions?limit=50")).json<TransactionPage>().items;
     expect(list.every((x) => x.categoryId === internal)).toBe(true);
   });
+
+  it("keeps the account's own cash first, with goals, monthly caps and a take-the-rest category", async () => {
+    const { client } = await makeSignedInApp();
+    const acc = (
+      await client.post("/api/accounts", { name: "Cash", type: "savings", balanceCents: 414_667 })
+    ).json<Account>();
+    const b = (
+      await client.put(`/api/savings/accounts/${acc.id}/buckets`, {
+        buckets: [
+          { name: "Cash", isMain: true, balanceCents: 0, goalCents: 100_000 },
+          { name: "Rig", balanceCents: 313_201, goalCents: 700_000, monthlyCapCents: 25_000 },
+          { name: "Car", balanceCents: 1_466, fillRemaining: true },
+        ],
+      })
+    ).json<SavingsBuckets>();
+    expect(b.buckets.map((x) => [x.name, x.balanceCents, x.isMain, x.fillRemaining])).toEqual([
+      ["Cash", 414_667 - 313_201 - 1_466, true, false],
+      ["Rig", 313_201, false, false],
+      ["Car", 1_466, false, true],
+    ]);
+    expect(b.unassignedCents).toBe(0);
+    // $3,867.99 to go at $250 a month: 16 months.
+    const months = (m: string) => {
+      const [y, mo] = m.split("-").map(Number);
+      return (y ?? 0) * 12 + (mo ?? 0);
+    };
+    const rig = b.buckets.find((x) => x.name === "Rig");
+    expect(months(rig?.goalMonth ?? "0-0") - months(localToday().slice(0, 7))).toBe(16);
+  });
 });

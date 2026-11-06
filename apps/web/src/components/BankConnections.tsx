@@ -175,7 +175,6 @@ export function BankConnections() {
   const [linking, setLinking] = useState<LinkStart | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [paypal, setPaypal] = useState<{ connectionId?: string } | null>(null);
-  const [simplefin, setSimplefin] = useState<{ connectionId?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const c = cfg.data;
@@ -266,14 +265,6 @@ export function BankConnections() {
           >
             Connect PayPal
           </Button>
-          <Button
-            variant="secondary"
-            disabled={busy !== null}
-            title="Banks and card issuers Plaid can't reach, through your SimpleFIN Bridge account"
-            onClick={() => setSimplefin({})}
-          >
-            Connect with SimpleFIN
-          </Button>
           {teller && (
             <Button variant="secondary" disabled={busy !== null} onClick={() => connectTeller()}>
               {busy === "teller" ? "Opening…" : plaid ? "Connect with Teller" : "Connect a bank"}
@@ -286,22 +277,6 @@ export function BankConnections() {
         <PlaidLogins logins={c.plaid.logins} />
       )}
       {!plaid && !teller && <SetupHelp cfg={c} />}
-      <Modal
-        open={simplefin !== null}
-        onClose={() => setSimplefin(null)}
-        title="Connect with SimpleFIN"
-      >
-        {simplefin && (
-          <SimpleFinForm
-            connectionId={simplefin.connectionId}
-            onDone={(start) => {
-              setSimplefin(null);
-              if (start && !simplefin.connectionId) setLinking(start);
-              void qc.invalidateQueries({ queryKey: keys.connections });
-            }}
-          />
-        )}
-      </Modal>
       <Modal open={paypal !== null} onClose={() => setPaypal(null)} title="Connect PayPal">
         {paypal && (
           <PayPalForm
@@ -337,9 +312,7 @@ export function BankConnections() {
                       ? "Plaid"
                       : conn.provider === "paypal"
                         ? "PayPal API"
-                        : conn.provider === "simplefin"
-                          ? "SimpleFIN"
-                          : "Teller"}
+                        : "Teller"}
                   </span>
                 </p>
                 <p className="text-xs text-slate-500">
@@ -364,18 +337,14 @@ export function BankConnections() {
                         ? fixPlaid(conn)
                         : conn.provider === "paypal"
                           ? setPaypal({ connectionId: conn.id })
-                          : conn.provider === "simplefin"
-                            ? setSimplefin({ connectionId: conn.id })
-                            : connectTeller(conn)
+                          : connectTeller(conn)
                     }
                   >
                     {busy === conn.id
                       ? "Opening…"
                       : conn.provider === "paypal"
                         ? "Update keys"
-                        : conn.provider === "simplefin"
-                          ? "New setup token"
-                          : "Log in again"}
+                        : "Log in again"}
                   </Button>
                 ) : (
                   <Button
@@ -648,87 +617,6 @@ function PayPalForm({
           disabled={busy || clientId.trim().length < 10 || secret.trim().length < 10}
         >
           {busy ? "Checking…" : connectionId ? "Update keys" : "Connect"}
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-/** SimpleFIN Bridge: a one-time setup token from your account there. */
-function SimpleFinForm({
-  connectionId,
-  onDone,
-}: {
-  connectionId?: string;
-  onDone: (start: LinkStart | null) => void;
-}) {
-  const [token, setToken] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      const start = await api.post<LinkStart>("/api/connections/simplefin", {
-        setupToken: token,
-        ...(connectionId ? { connectionId } : {}),
-      });
-      onDone(start);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't connect");
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <form onSubmit={submit} className="space-y-4 text-sm" noValidate>
-      <p className="text-slate-600 dark:text-slate-400">
-        For banks and card issuers Plaid can't reach (Discover, many credit unions and card
-        issuers). SimpleFIN Bridge is a small read-only service (about $15 a year, paid to them)
-        that connects to your banks; Muny reads from it.
-      </p>
-      <ol className="list-decimal space-y-1 pl-5 text-slate-600 dark:text-slate-400">
-        <li>
-          Make an account at{" "}
-          <a
-            href="https://beta-bridge.simplefin.org"
-            target="_blank"
-            rel="noreferrer"
-            className="text-brand-600 underline"
-          >
-            SimpleFIN Bridge
-          </a>{" "}
-          and connect your banks and cards there.
-        </li>
-        <li>
-          Choose <strong>New connection</strong> (for an app) and copy the{" "}
-          <strong>setup token</strong>.
-        </li>
-        <li>Paste it here. It works once; Muny swaps it for a private, read-only link.</li>
-      </ol>
-      <p className="text-xs text-slate-500">
-        The link is stored encrypted and used only to read balances and transactions from SimpleFIN,
-        which refreshes about once a day. Account types are guessed from their names; change any on
-        Accounts. Remove access any time at SimpleFIN Bridge.
-      </p>
-      {error && <Alert>{error}</Alert>}
-      <label className="block">
-        <span className="font-medium">Setup token</span>
-        <textarea
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          rows={3}
-          autoComplete="off"
-          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
-        />
-      </label>
-      <div className="flex justify-end gap-2">
-        <Button variant="secondary" onClick={() => onDone(null)}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={busy || token.trim().length < 20}>
-          {busy ? "Connecting…" : connectionId ? "Update" : "Connect"}
         </Button>
       </div>
     </form>

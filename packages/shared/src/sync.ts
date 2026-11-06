@@ -1,6 +1,6 @@
 import type { Account, AccountType } from "./ledger.js";
 
-export type SyncProvider = "plaid" | "teller" | "paypal" | "simplefin";
+export type SyncProvider = "plaid" | "teller" | "paypal";
 
 export type ConnectionStatus =
   | "pending_setup"

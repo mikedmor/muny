@@ -973,6 +973,14 @@ export const cardDetails = sqliteTable("card_details", {
   dueDate: text(),
   lastPaymentCents: integer(),
   lastPaymentDate: text(),
+  /** Words your payments to it use in your other accounts (e.g. "CARD PAYMENT"). */
+  paymentMatch: text(),
+  /** From the newest statement: interest charged so far that year. */
+  interestYtdCents: integer(),
+  interestYtdYear: integer(),
+  /** From the statement's minimum payment warning: how long and how much at the minimum. */
+  minOnlyMonths: integer(),
+  minOnlyTotalCents: integer(),
   /** Where the latest figures came from. */
   source: text({ enum: ["plaid", "statement", "manual"] })
     .notNull()
@@ -997,6 +1005,12 @@ export const savingsBuckets = sqliteTable("savings_buckets", {
   /** YYYY-MM-DD */
   asOf: text().notNull(),
   goalCents: integer(),
+  /** Saves at most this much a month (a bank's "save up to $250 a month"). */
+  monthlyCapCents: integer(),
+  /** Takes whatever's left over ("save all remaining cash"). */
+  fillRemaining: integer({ mode: "boolean" }).notNull().default(false),
+  /** The account's own cash (what's not in a category); its goal is the target it keeps. */
+  isMain: integer({ mode: "boolean" }).notNull().default(false),
   sortOrder: integer().notNull().default(0),
   updatedAt: updatedAt(),
 });

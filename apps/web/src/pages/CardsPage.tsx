@@ -8,7 +8,7 @@ import {
 } from "@muny/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { FileText, Pencil } from "lucide-react";
+import { FileText, Link2, Pencil } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Modal } from "../components/forms.js";
 import { Alert, Button, Card, cx, Field, PageHeader } from "../components/ui.js";
@@ -150,7 +150,17 @@ function toBase64(file: File): Promise<string> {
 }
 
 /** One or more card statement PDFs: each matched to a card by its last 4 digits. */
-function StatementImport({ cards, onDone }: { cards: CreditCard[]; onDone: () => void }) {
+function StatementImport({
+  cards,
+  onDone,
+  forCard,
+}: {
+  cards: CreditCard[];
+  onDone: () => void;
+  /** Opened from a card: statements go to it unless their last 4 say otherwise. */
+  forCard?: string;
+}) {
+  const [addTxns, setAddTxns] = useState(true);
   const qc = useQueryClient();
   const [items, setItems] = useState<
     {
@@ -179,7 +189,7 @@ function StatementImport({ cards, onDone }: { cards: CreditCard[]; onDone: () =>
           base64,
           preview,
           error: null,
-          accountId: preview.accountId ?? cards[0]?.accountId ?? "",
+          accountId: preview.accountId ?? forCard ?? cards[0]?.accountId ?? "",
         });
       } catch (err) {
         out.push({
@@ -212,6 +222,7 @@ function StatementImport({ cards, onDone }: { cards: CreditCard[]; onDone: () =>
           pdfBase64: it.base64,
           fileName: it.name,
           cardName: cards.find((c) => c.accountId === it.accountId)?.name,
+          addTransactions: addTxns,
         });
       }
       await qc.invalidateQueries({ queryKey: keys.accounts });
@@ -251,6 +262,7 @@ function StatementImport({ cards, onDone }: { cards: CreditCard[]; onDone: () =>
                 <th className="py-1.5 text-right font-medium">Balance</th>
                 <th className="py-1.5 text-right font-medium">Minimum</th>
                 <th className="py-1.5 text-right font-medium">Due</th>
+                <th className="py-1.5 text-right font-medium">Lines</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -288,9 +300,10 @@ function StatementImport({ cards, onDone }: { cards: CreditCard[]; onDone: () =>
                           {money(s.minimumPaymentCents)}
                         </td>
                         <td className="py-2 text-right whitespace-nowrap">{day(s.dueDate)}</td>
+                        <td className="py-2 text-right tabular-nums">{s.transactions.length}</td>
                       </>
                     ) : (
-                      <td colSpan={5} className="py-2 text-red-600">
+                      <td colSpan={6} className="py-2 text-red-600">
                         {it.error}
                       </td>
                     )}
@@ -300,6 +313,23 @@ function StatementImport({ cards, onDone }: { cards: CreditCard[]; onDone: () =>
             </tbody>
           </table>
         </div>
+      )}
+      {items.some((x) => x.preview?.statement.transactions.length) && (
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={addTxns}
+            onChange={(e) => setAddTxns(e.target.checked)}
+            className="mt-0.5 accent-brand-600"
+          />
+          <span>
+            Add the statements' transactions to the card
+            <span className="block text-xs text-slate-500">
+              Purchases, payments, interest and fees listed on them; ones already in Muny (same
+              amount within a few days) are skipped. Your rules run on the new ones.
+            </span>
+          </span>
+        </label>
       )}
       <div className="flex justify-end gap-2">
         <Button variant="secondary" onClick={onDone}>
@@ -313,12 +343,42 @@ function StatementImport({ cards, onDone }: { cards: CreditCard[]; onDone: () =>
   );
 }
 
+/**
+ * Paying only the minimum: banks set it as a share of the balance (with a
+ * floor), so it shrinks as the balance does and takes far longer than a fixed
+ * payment. The share comes from the statement (minimum / balance).
+ */
+function minimumOnly(
+  balanceCents: number,
+  aprBps: number,
+  minimumCents: number,
+  statementCents: number | null,
+) {
+  const share = Math.min(
+    0.05,
+    Math.max(0.01, statementCents && statementCents > 0 ? minimumCents / statementCents : 0.02),
+  );
+  const floor = Math.min(2_500, minimumCents);
+  let bal = balanceCents;
+  let interest = 0;
+  let months = 0;
+  while (bal > 0 && months < 600) {
+    const i = Math.round((bal * aprBps) / 120_000);
+    const pay = Math.min(bal + i, Math.max(floor, Math.round(bal * share)));
+    if (pay <= i) return { months: null, totalInterestCents: interest };
+    interest += i;
+    bal = bal + i - pay;
+    months++;
+  }
+  return { months: bal > 0 ? null : months, totalInterestCents: interest };
+}
+
 /** Paying more than the minimum: how long, and how much interest. */
 function PayDown({ card }: { card: CreditCard }) {
   const min = card.minimumPaymentCents ?? Math.max(2_500, Math.round(card.balanceCents * 0.02));
   const [pay, setPay] = useState(Math.ceil(Math.max(min, card.balanceCents / 12) / 1000) * 10);
   if (card.aprBps === null || card.balanceCents <= 0) return null;
-  const atMin = payoff(card.balanceCents, card.aprBps, min);
+  const atMin = minimumOnly(card.balanceCents, card.aprBps, min, card.statementBalanceCents);
   const atPay = payoff(card.balanceCents, card.aprBps, pay * 100);
   return (
     <div className="rounded-xl border border-slate-200 p-4 text-sm dark:border-slate-800">
@@ -334,6 +394,12 @@ function PayDown({ card }: { card: CreditCard }) {
           </>
         )}
         .
+        {card.minimumOnly && (
+          <span className="block text-xs text-slate-500">
+            Your statement says {monthsLabel(card.minimumOnly.months)} and{" "}
+            {formatMoney(card.minimumOnly.totalCents)} in all, if you add no new charges.
+          </span>
+        )}
       </p>
       <label className="mt-3 block">
         <span className="flex items-baseline justify-between">
@@ -367,8 +433,49 @@ function PayDown({ card }: { card: CreditCard }) {
   );
 }
 
-function CardTile({ card }: { card: CreditCard }) {
+function LinkPayments({ card, onDone }: { card: CreditCard; onDone: () => void }) {
+  const qc = useQueryClient();
+  const [words, setWords] = useState(card.paymentMatch ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.patch(`/api/cards/${card.accountId}`, { paymentMatch: words.trim() || null });
+      await qc.invalidateQueries({ queryKey: keys.accounts });
+      onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't save");
+    }
+  };
+  return (
+    <form onSubmit={save} className="space-y-3" noValidate>
+      {error && <Alert>{error}</Alert>}
+      <p className="text-sm text-slate-600 dark:text-slate-400">
+        Payments to the card from your checking account show up here once Muny can find them. Type
+        the words they use in checking, as on a transaction there (for example{" "}
+        <span className="font-mono">CENTRAL BANK CARD PYMT</span> or the card's last 4). Payments on
+        the card itself (from its statements or transactions) count already.
+      </p>
+      <Field
+        label="Words in your payments"
+        value={words}
+        onChange={(e) => setWords(e.target.value)}
+        placeholder={card.mask ? `e.g. ${card.mask}` : "e.g. CARD PAYMENT"}
+      />
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" onClick={onDone}>
+          Cancel
+        </Button>
+        <Button type="submit">Save</Button>
+      </div>
+    </form>
+  );
+}
+
+function CardTile({ card, all }: { card: CreditCard; all: CreditCard[] }) {
   const [editing, setEditing] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [linking, setLinking] = useState(false);
   const u = card.utilizationPct;
   const due = card.dueDate ? daysUntil(card.dueDate) : null;
   const facts = [
@@ -424,6 +531,13 @@ function CardTile({ card }: { card: CreditCard }) {
             className="inline-flex items-center gap-1 text-xs text-brand-600 hover:underline dark:text-brand-500"
           >
             <Pencil aria-hidden="true" className="size-3" /> Edit details
+          </button>
+          <button
+            type="button"
+            onClick={() => setUploading(true)}
+            className="ml-3 inline-flex items-center gap-1 text-xs text-brand-600 hover:underline dark:text-brand-500"
+          >
+            <FileText aria-hidden="true" className="size-3" /> Upload statement
           </button>
         </div>
       </div>
@@ -487,9 +601,37 @@ function CardTile({ card }: { card: CreditCard }) {
       <div className="grid gap-4 lg:grid-cols-2">
         <PayDown card={card} />
         <div className="rounded-xl border border-slate-200 p-4 text-sm dark:border-slate-800">
-          <p className="mb-2 font-semibold">Payments</p>
+          <p className="mb-2 flex items-baseline justify-between gap-2 font-semibold">
+            Payments
+            <button
+              type="button"
+              onClick={() => setLinking(true)}
+              className="inline-flex items-center gap-1 text-xs font-normal text-brand-600 hover:underline dark:text-brand-500"
+            >
+              <Link2 aria-hidden="true" className="size-3" />
+              {card.paymentMatch ? `Found by "${card.paymentMatch}"` : "Link payments"}
+            </button>
+          </p>
           {card.payments.length === 0 ? (
-            <p className="text-slate-500">No payments found in the last year.</p>
+            <p className="text-slate-500">
+              No payments found in the last year.{" "}
+              <button
+                type="button"
+                onClick={() => setLinking(true)}
+                className="text-brand-600 hover:underline dark:text-brand-500"
+              >
+                Link the ones from checking
+              </button>{" "}
+              or{" "}
+              <button
+                type="button"
+                onClick={() => setUploading(true)}
+                className="text-brand-600 hover:underline dark:text-brand-500"
+              >
+                upload a statement
+              </button>
+              .
+            </p>
           ) : (
             <ul className="max-h-56 divide-y divide-slate-100 overflow-y-auto dark:divide-slate-800">
               {card.payments.map((p) => (
@@ -511,6 +653,23 @@ function CardTile({ card }: { card: CreditCard }) {
       <Modal open={editing} onClose={() => setEditing(false)} title={`Edit ${card.name}`}>
         {editing && <CardForm card={card} onDone={() => setEditing(false)} />}
       </Modal>
+      <Modal open={linking} onClose={() => setLinking(false)} title={`Payments to ${card.name}`}>
+        {linking && <LinkPayments card={card} onDone={() => setLinking(false)} />}
+      </Modal>
+      <Modal
+        open={uploading}
+        onClose={() => setUploading(false)}
+        title={`${card.name} statements`}
+        wide
+      >
+        {uploading && (
+          <StatementImport
+            cards={all}
+            forCard={card.accountId}
+            onDone={() => setUploading(false)}
+          />
+        )}
+      </Modal>
     </Card>
   );
 }
@@ -527,7 +686,7 @@ export function CardsPage() {
           <span className="flex flex-wrap gap-2">
             <Link
               to="/accounts"
-              title="Add it as a credit card account; connect it there too (Plaid, Teller or SimpleFIN)"
+              title="Add it as a credit card account, or connect it there (Plaid or Teller)"
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
             >
               Add a card
@@ -545,10 +704,9 @@ export function CardsPage() {
         <Card className="text-center">
           <h2 className="text-lg font-semibold">No credit cards yet</h2>
           <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600 dark:text-slate-400">
-            Connect your card on the Accounts page (Plaid, Teller, or SimpleFIN for issuers Plaid
-            can't reach), or add it there by hand as a credit card account and import its
-            transactions. Then import its statement PDFs here for the limit, minimum payment, due
-            date and rate.
+            Connect your card on the Accounts page (Plaid or Teller), or add it there by hand as a
+            credit card account and import its transactions. Then import its statement PDFs here for
+            the limit, minimum payment, due date and rate.
           </p>
         </Card>
       )}
@@ -577,7 +735,7 @@ export function CardsPage() {
             <Tile label="Interest this year" value={formatMoney(r.interestThisYearCents)} />
           </div>
           {r.cards.map((c) => (
-            <CardTile key={c.accountId} card={c} />
+            <CardTile key={c.accountId} card={c} all={r.cards} />
           ))}
         </div>
       )}
