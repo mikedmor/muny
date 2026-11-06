@@ -922,5 +922,18 @@ export const assetDetails = sqliteTable("asset_details", {
   address: text(),
   /** What you still owe on it when no loan account is linked (0 = paid off). */
   owedCents: integer(),
+  /** Vehicles: what the valuation lookup needs. */
+  vehicleYear: integer(),
+  vehicleMake: text(),
+  vehicleModel: text(),
+  /** Miles. */
+  mileage: integer(),
+  vin: text(),
+  /** Where the current value came from: "manual", "apillow" (Zillow estimate) or "carapi". */
+  valueSource: text(),
+  /** When a lookup last ran (unix ms). */
+  valueCheckedAt: integer(),
+  /** Details from the last lookup (beds, baths, square feet, last sale, taxes...). */
+  details: text({ mode: "json" }).$type<Record<string, unknown>>(),
   updatedAt: updatedAt(),
 });

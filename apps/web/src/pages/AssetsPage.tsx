@@ -3,12 +3,13 @@ import {
   ASSET_KINDS,
   type Asset,
   type AssetKind,
+  type AssetValuationSettings,
   formatMoney,
 } from "@muny/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Pencil, Plus } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { LineChart } from "../components/charts.js";
 import { Modal } from "../components/forms.js";
 import { Alert, Button, Card, Field, PageHeader } from "../components/ui.js";
@@ -36,6 +37,11 @@ function AssetForm({ asset, onDone }: { asset?: Asset; onDone: () => void }) {
     price: fromCents(asset?.purchasePriceCents),
     date: asset?.purchaseDate ?? "",
     address: asset?.address ?? "",
+    year: asset?.vehicle.year ? String(asset.vehicle.year) : "",
+    make: asset?.vehicle.make ?? "",
+    model: asset?.vehicle.model ?? "",
+    mileage: asset?.vehicle.mileage != null ? String(asset.vehicle.mileage) : "",
+    vin: asset?.vehicle.vin ?? "",
   });
   const [error, setError] = useState<string | null>(null);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) =>
@@ -55,6 +61,15 @@ function AssetForm({ asset, onDone }: { asset?: Asset; onDone: () => void }) {
       purchasePriceCents: price,
       purchaseDate: f.date || null,
       address: f.address.trim() || null,
+      ...(f.kind === "vehicle"
+        ? {
+            vehicleYear: f.year.trim() ? Number(f.year) : null,
+            vehicleMake: f.make.trim() || null,
+            vehicleModel: f.model.trim() || null,
+            mileage: f.mileage.trim() ? Number(f.mileage.replace(/,/g, "")) : null,
+            vin: f.vin.trim().toUpperCase() || null,
+          }
+        : {}),
     };
     try {
       if (asset) await api.patch(`/api/assets/${asset.accountId}`, body);
@@ -93,7 +108,41 @@ function AssetForm({ asset, onDone }: { asset?: Asset; onDone: () => void }) {
         />
         <Field label="What you paid" value={f.price} onChange={set("price")} inputMode="decimal" />
         <Field label="Bought on" type="date" value={f.date} onChange={set("date")} />
-        <Field label="Address (optional)" value={f.address} onChange={set("address")} />
+        {f.kind !== "vehicle" && (
+          <Field
+            label={f.kind === "home" ? "Address" : "Address (optional)"}
+            value={f.address}
+            onChange={set("address")}
+            placeholder={f.kind === "home" ? "Street, city, state ZIP" : undefined}
+            hint={f.kind === "home" ? "As Zillow shows it, for automatic values." : undefined}
+          />
+        )}
+        {f.kind === "vehicle" && (
+          <>
+            <Field
+              label="Year"
+              value={f.year}
+              onChange={set("year")}
+              inputMode="numeric"
+              placeholder="2020"
+            />
+            <Field label="Make" value={f.make} onChange={set("make")} placeholder="Honda" />
+            <Field label="Model" value={f.model} onChange={set("model")} placeholder="Civic" />
+            <Field
+              label="Mileage"
+              value={f.mileage}
+              onChange={set("mileage")}
+              inputMode="numeric"
+              placeholder="30000"
+            />
+            <Field
+              label="VIN (optional)"
+              value={f.vin}
+              onChange={set("vin")}
+              placeholder="17 characters"
+            />
+          </>
+        )}
       </div>
       <p className="text-xs text-slate-500">
         To see your equity, link the loan that pays for it (Loans → Edit details → The home).
@@ -146,6 +195,238 @@ function UpdateValue({ asset }: { asset: Asset }) {
         Save
       </Button>
     </form>
+  );
+}
+
+const SOURCE_LABEL = {
+  apillow: "Zillow estimate (APillow)",
+  carapi: "Market value (CarAPI)",
+} as const;
+
+/** Look the value up now, for homes (APillow) and vehicles (CarAPI) once the key is added. */
+function LookupValue({ asset }: { asset: Asset }) {
+  const qc = useQueryClient();
+  const settings = useQuery({
+    queryKey: [...keys.accounts, "asset-valuation"],
+    queryFn: () => api.get<AssetValuationSettings>("/api/assets/valuation"),
+  });
+  const [state, setState] = useState<string | null>(null);
+  const can =
+    (asset.kind === "home" && settings.data?.apillow) ||
+    (asset.kind === "vehicle" && settings.data?.carapi);
+  if (!can) return null;
+  const run = async () => {
+    setState(asset.kind === "home" ? "Looking up… (up to a minute)" : "Looking up…");
+    try {
+      const r = await api.post<{ valueCents: number | null }>(
+        `/api/assets/${asset.accountId}/lookup`,
+      );
+      await qc.invalidateQueries({ queryKey: keys.accounts });
+      setState(r.valueCents === null ? "No estimate (see below)" : null);
+    } catch (e) {
+      setState(e instanceof Error ? e.message : "Couldn't look it up");
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={() => void run()}
+      disabled={state?.startsWith("Looking") ?? false}
+      title={
+        asset.kind === "home"
+          ? "Uses one of your APillow lookups"
+          : "Uses one of your CarAPI requests"
+      }
+      className="max-w-56 text-left text-xs text-brand-600 hover:underline disabled:opacity-60 dark:text-brand-500"
+    >
+      {state ?? "Look up value"}
+    </button>
+  );
+}
+
+function ValueSource({ asset }: { asset: Asset }) {
+  const v = asset.vehicle;
+  const car = asset.kind === "vehicle" && (v.year || v.make || v.model);
+  const src =
+    asset.valueSource === "apillow" || asset.valueSource === "carapi" ? asset.valueSource : null;
+  if (!car && !src && !asset.details?.note) return null;
+  return (
+    <p className="mt-3 text-xs text-slate-500">
+      {car && (
+        <span className="mr-3">
+          {[v.year, v.make, v.model].filter(Boolean).join(" ")}
+          {v.mileage != null && ` · ${v.mileage.toLocaleString()} mi`}
+        </span>
+      )}
+      {src && (
+        <span>
+          Value: {SOURCE_LABEL[src]}
+          {asset.valueCheckedAt &&
+            `, ${new Date(asset.valueCheckedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`}
+          . Updated monthly when you open Assets.
+        </span>
+      )}
+      {asset.details?.note && <span className="ml-1 text-amber-600">{asset.details.note}</span>}
+    </p>
+  );
+}
+
+/** What Zillow knows about the home. */
+function HomeDetails({ asset }: { asset: Asset }) {
+  const d = asset.details;
+  if (asset.kind !== "home" || !d) return null;
+  const items: [string, string | null][] = [
+    ["Beds", d.bedrooms != null ? String(d.bedrooms) : null],
+    ["Baths", d.bathrooms != null ? String(d.bathrooms) : null],
+    ["Living area", d.livingArea != null ? `${d.livingArea.toLocaleString()} sq ft` : null],
+    ["Lot", d.lotSize != null ? `${d.lotSize.toLocaleString()} sq ft` : null],
+    ["Built", d.yearBuilt != null ? String(d.yearBuilt) : null],
+    [
+      "Last sold",
+      d.lastSoldPriceCents != null
+        ? `${formatMoney(d.lastSoldPriceCents)}${d.lastSoldDate ? ` (${d.lastSoldDate})` : ""}`
+        : null,
+    ],
+    ["Property tax", d.annualTaxCents != null ? `${formatMoney(d.annualTaxCents)}/yr` : null],
+    [
+      "Rent estimate",
+      d.rentZestimateCents != null ? `${formatMoney(d.rentZestimateCents)}/mo` : null,
+    ],
+  ];
+  const shown = items.filter(([, v]) => v !== null);
+  if (!shown.length) return null;
+  return (
+    <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 rounded-xl bg-slate-50 p-3 text-sm sm:grid-cols-4 dark:bg-slate-800/40">
+      {shown.map(([k, v]) => (
+        <div key={k}>
+          <dt className="text-xs text-slate-500">{k}</dt>
+          <dd className="font-medium tabular-nums">{v}</dd>
+        </div>
+      ))}
+      {d.zillowUrl && (
+        <a
+          href={d.zillowUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="col-span-full text-xs text-brand-600 hover:underline dark:text-brand-500"
+        >
+          See it on Zillow
+        </a>
+      )}
+    </dl>
+  );
+}
+
+/** Your keys for automatic values (opt-in): APillow for homes, CarAPI for vehicles. */
+function ValuationKeys() {
+  const qc = useQueryClient();
+  const settings = useQuery({
+    queryKey: [...keys.accounts, "asset-valuation"],
+    queryFn: () => api.get<AssetValuationSettings>("/api/assets/valuation"),
+  });
+  const [editing, setEditing] = useState<"apillow" | "carapi" | null>(null);
+  const [key, setKey] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const save = async (service: "apillow" | "carapi", value: string | null) => {
+    setError(null);
+    try {
+      await api.put(`/api/assets/valuation/${service}`, { key: value });
+      await qc.invalidateQueries({ queryKey: [...keys.accounts, "asset-valuation"] });
+      setEditing(null);
+      setKey("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't save");
+    }
+  };
+  const rows = [
+    {
+      id: "apillow" as const,
+      name: "Home values: APillow (Zillow data)",
+      help: "Free plan: 50 lookups a month. Get a key at apillow.co. Sends only the home's address.",
+    },
+    {
+      id: "carapi" as const,
+      name: "Vehicle values: CarAPI.dev",
+      help: "Free plan: 100 requests a month. Get a key at carapi.dev. Sends only year, make, model and mileage.",
+    },
+  ];
+  return (
+    <Card>
+      <h2 className="font-semibold">Automatic values</h2>
+      <p className="mt-1 text-xs text-slate-500">
+        Optional: with your own keys, Muny looks values up when you ask, then about once a month.
+        Keys are stored encrypted and sent only to their service.
+      </p>
+      {error && <Alert>{error}</Alert>}
+      <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
+        {rows.map((r) => {
+          const on = settings.data?.[r.id] ?? false;
+          return (
+            <li
+              key={r.id}
+              className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+            >
+              <span>
+                <span className="font-medium">{r.name}</span>
+                <span className="block text-xs text-slate-500">{r.help}</span>
+              </span>
+              {editing === r.id ? (
+                <form
+                  className="flex items-center gap-1"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (key.trim()) void save(r.id, key.trim());
+                  }}
+                >
+                  <input
+                    type="password"
+                    aria-label={`${r.name} key`}
+                    value={key}
+                    onChange={(e) => setKey(e.target.value)}
+                    autoComplete="off"
+                    className="w-56 rounded border border-slate-300 bg-white px-2 py-1 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
+                  />
+                  <Button type="submit" className="px-2 py-1 text-xs">
+                    Save
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => setEditing(null)}
+                    className="text-xs text-slate-500"
+                  >
+                    Cancel
+                  </button>
+                </form>
+              ) : (
+                <span className="flex items-center gap-3 text-xs">
+                  <span
+                    className={on ? "text-emerald-700 dark:text-emerald-400" : "text-slate-500"}
+                  >
+                    {on ? "Key added" : "Off"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setEditing(r.id)}
+                    className="text-brand-600 hover:underline dark:text-brand-500"
+                  >
+                    {on ? "Replace key" : "Add key"}
+                  </button>
+                  {on && (
+                    <button
+                      type="button"
+                      onClick={() => void save(r.id, null)}
+                      className="text-red-600 hover:underline"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
   );
 }
 
@@ -234,6 +515,7 @@ function AssetCard({ asset }: { asset: Asset }) {
         <div className="text-right">
           <p className="text-2xl font-semibold tabular-nums">{formatMoney(asset.valueCents)}</p>
           <span className="flex justify-end gap-3">
+            <LookupValue asset={asset} />
             <UpdateValue asset={asset} />
             <button
               type="button"
@@ -289,6 +571,8 @@ function AssetCard({ asset }: { asset: Asset }) {
           <dd className="font-semibold tabular-nums">{formatMoney(asset.equityCents)}</dd>
         </div>
       </dl>
+      <ValueSource asset={asset} />
+      <HomeDetails asset={asset} />
       {asset.history.length >= 2 && (
         <div className="mt-4">
           <LineChart
@@ -316,6 +600,20 @@ export function AssetsPage() {
   const q = useQuery({ queryKey: assetsKey, queryFn: () => api.get<Asset[]>("/api/assets") });
   const [adding, setAdding] = useState(false);
   const list = q.data ?? [];
+  const qc = useQueryClient();
+  const refreshed = useRef(false);
+  useEffect(() => {
+    if (refreshed.current) return;
+    refreshed.current = true;
+    void api
+      .post<{ started: number }>("/api/assets/refresh-due")
+      .then((r) => {
+        // Lookups run in the background; check back after they've had time.
+        if (r.started)
+          setTimeout(() => void qc.invalidateQueries({ queryKey: keys.accounts }), 90_000);
+      })
+      .catch(() => {});
+  }, [qc]);
   return (
     <>
       <PageHeader
@@ -352,6 +650,7 @@ export function AssetsPage() {
               </Card>
             ))}
           </div>
+          <ValuationKeys />
           {list.map((a) => (
             <AssetCard key={a.accountId} asset={a} />
           ))}

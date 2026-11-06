@@ -63,6 +63,16 @@ export function listAssets(db: MunyDb): Asset[] {
         .map((s) => ({ date: s.date, valueCents: s.balanceCents })),
       loans: mine,
       owedCents: d?.owedCents ?? null,
+      vehicle: {
+        year: d?.vehicleYear ?? null,
+        make: d?.vehicleMake ?? null,
+        model: d?.vehicleModel ?? null,
+        mileage: d?.mileage ?? null,
+        vin: d?.vin ?? null,
+      },
+      valueSource: (d?.valueSource ?? null) as Asset["valueSource"],
+      valueCheckedAt: d?.valueCheckedAt ?? null,
+      details: (d?.details ?? null) as Asset["details"],
       // Linked loans say what's owed; otherwise what you entered (e.g. $0, paid off).
       equityCents:
         a.balanceCents -
@@ -102,6 +112,13 @@ export function createAsset(
       purchasePriceCents: input.purchasePriceCents ?? null,
       purchaseDate: input.purchaseDate ?? null,
       address: input.address ?? null,
+      owedCents: input.owedCents ?? null,
+      vehicleYear: input.vehicleYear ?? null,
+      vehicleMake: input.vehicleMake ?? null,
+      vehicleModel: input.vehicleModel ?? null,
+      mileage: input.mileage ?? null,
+      vin: input.vin ?? null,
+      valueSource: "manual",
     })
     .run();
   // The purchase is the first point in its history.
@@ -138,6 +155,13 @@ export function updateAsset(
       purchaseDate: input.purchaseDate,
       address: input.address,
       owedCents: input.owedCents,
+      vehicleYear: input.vehicleYear,
+      vehicleMake: input.vehicleMake,
+      vehicleModel: input.vehicleModel,
+      mileage: input.mileage,
+      vin: input.vin,
+      // A value you type in replaces the looked-up one (and pauses monthly lookups).
+      ...(input.valueCents !== undefined ? { valueSource: "manual" } : {}),
     }).filter(([, v]) => v !== undefined),
   );
   db.insert(schema.assetDetails)

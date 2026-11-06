@@ -28,13 +28,18 @@ export type BudgetProvider =
   | "gemini"
   | "binanceus"
   | "yahoo"
-  | "logos";
+  | "logos"
+  | "apillow"
+  | "carapi";
 
 export const LIMITS: Record<BudgetProvider, { day: number; month: number; label: string }> = {
   // Stock price history (one request per ticker per backfill); no published quota.
   yahoo: { day: 300, month: 4000, label: "Yahoo Finance stock prices" },
   // Company logos: one or two requests per ticker, once.
   logos: { day: 200, month: 1000, label: "Company logos" },
+  // Your own keys. APillow counts each property returned (free: 50 a month); polls are requests too.
+  apillow: { day: 40, month: 300, label: "APillow home values" },
+  carapi: { day: 20, month: 95, label: "CarAPI vehicle values" },
   // No published key-less quota; stay polite.
   defillama: { day: 300, month: 6000, label: "DefiLlama prices" },
   // Free Demo plan: 10,000 calls a month, 30 a minute.

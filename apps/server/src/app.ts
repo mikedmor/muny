@@ -130,7 +130,11 @@ export async function buildApp({
   registerPrefsRoutes(app, db);
   registerInvestRoutes(app, db, { fetch: priceFetch });
   registerLoanRoutes(app, db);
-  registerAssetRoutes(app, db);
+  registerAssetRoutes(app, db, {
+    fetch: priceFetch,
+    secretKey: config.secretKey,
+    pollMs: priceFetch ? 0 : undefined,
+  });
   registerPayeeRoutes(app, db);
   registerRuleRoutes(app, db);
   registerExportRoutes(app, db);

@@ -162,6 +162,41 @@ export interface Asset {
   /** What you entered as owed when no loan is linked (0 = paid off; null = not set). */
   owedCents: number | null;
   equityCents: number;
+  vehicle: {
+    year: number | null;
+    make: string | null;
+    model: string | null;
+    mileage: number | null;
+    vin: string | null;
+  };
+  /** Where the value came from, and when it was last looked up. */
+  valueSource: "manual" | "apillow" | "carapi" | null;
+  valueCheckedAt: number | null;
+  /** Details from the last lookup (homes: beds, baths, square feet, last sale, taxes). */
+  details: AssetDetails | null;
+}
+
+export interface AssetDetails {
+  bedrooms?: number | null;
+  bathrooms?: number | null;
+  livingArea?: number | null;
+  lotSize?: number | null;
+  yearBuilt?: number | null;
+  propertyType?: string | null;
+  rentZestimateCents?: number | null;
+  lastSoldPriceCents?: number | null;
+  lastSoldDate?: string | null;
+  annualTaxCents?: number | null;
+  taxRatePct?: number | null;
+  zillowUrl?: string | null;
+  /** Why there's no estimate (e.g. the home is listed for sale). */
+  note?: string | null;
+}
+
+/** Automatic values (opt-in): whether each service's key is set. */
+export interface AssetValuationSettings {
+  apillow: boolean;
+  carapi: boolean;
 }
 
 export interface AssetInput {
@@ -173,4 +208,9 @@ export interface AssetInput {
   address?: string | null;
   /** Owed on it when no loan is linked (0 = paid off; null clears). */
   owedCents?: number | null;
+  vehicleYear?: number | null;
+  vehicleMake?: string | null;
+  vehicleModel?: string | null;
+  mileage?: number | null;
+  vin?: string | null;
 }

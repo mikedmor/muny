@@ -27,6 +27,17 @@ Enter the home's **original value** (the lower of the purchase price and the ori
 
 On **Assets**, add your home with what it's worth now and what you paid. Update the value now and then (a home value site's estimate is fine); each update is kept, so you see its value over time, and it counts toward net worth. In the mortgage's **Edit details**, pick it as **The home** to see your equity and loan-to-value on both pages.
 
+For an asset with no loan linked (a car you own outright, say), set **Owed on it** yourself, or click **Paid off**.
+
+## Automatic values (optional)
+
+On **Assets → Automatic values**, add your own keys:
+
+- **Homes: APillow** (Zillow data, free plan 50 lookups a month, [apillow.co](https://apillow.co)). Give the home its address as Zillow shows it. **Look up value** fills in Zillow's estimate, plus beds, baths, square feet, lot, year built, last sale, property tax and the rent estimate. Zillow has no estimate for homes listed for sale; Muny says so and keeps your value.
+- **Vehicles: CarAPI.dev** (free plan 100 requests a month, [carapi.dev](https://carapi.dev)). Give the vehicle its year, make, model and mileage; **Look up value** fills in its US market value.
+
+After the first lookup, values over a month old are looked up again when you open Assets. Typing a value yourself takes over until you look it up again. Keys are stored encrypted and sent only to their service, which sees only the address (homes) or the year, make, model and mileage (vehicles).
+
 ## Payments and spending
 
 A payment from checking to a loan counts as spending under its category (for example "Loan Payment"). When the loan account is also connected, the money arriving there is matched to that payment as a transfer, and the loan's own entries (interest it charges, payments it receives) aren't counted again as spending, bills or income.

@@ -204,6 +204,13 @@
       "when": 1793977319745,
       "tag": "0028_asset_owed",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1793977473596,
+      "tag": "0029_asset_valuation",
+      "breakpoints": true
     }
   ]
 }
