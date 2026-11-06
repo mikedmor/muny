@@ -1,5 +1,5 @@
 import type { MunyDb } from "@muny/db";
-import type { CardStatementPreview } from "@muny/shared";
+import type { CardStatement, CardStatementPreview } from "@muny/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
@@ -9,8 +9,10 @@ import { audit } from "../lib/audit.js";
 import { badRequest, notFound, parse } from "../lib/http.js";
 import { pdfLines } from "../loans/statements.js";
 import { runRulesOn } from "../rules/service.js";
+import { applyTemplates } from "../statements/templates.js";
 import {
   addStatementTransactions,
+  anchorCardBalance,
   applyCardStatement,
   cardForText,
   cardsReport,
@@ -77,6 +79,7 @@ export function registerCardRoutes(app: FastifyInstance, db: MunyDb, secret?: Bu
     const user = requireUser(req);
     const { accountId } = parse(z.object({ accountId: z.string().min(1).max(64) }), req.params);
     if (!updateCard(db, accountId, parse(Details, req.body))) throw notFound("Card not found");
+    anchorCardBalance(db, accountId);
     log(user.id, "card.update", accountId);
     return { ok: true };
   });
@@ -87,16 +90,28 @@ export function registerCardRoutes(app: FastifyInstance, db: MunyDb, secret?: Bu
     const body = parse(z.object({ pdfBase64: pdf }), req.body);
     const bytes = new Uint8Array(Buffer.from(body.pdfBase64, "base64"));
     if (bytes[0] !== 0x25 || bytes[1] !== 0x50) throw badRequest("That isn't a PDF.");
-    let text = "";
+    let lines: string[] = [];
     try {
-      text = (await pdfLines(bytes)).map((l) => l.join(" ")).join("\n");
+      lines = (await pdfLines(bytes)).map((l) => l.join(" "));
     } catch {
       throw badRequest("Couldn't read that PDF.");
     }
-    const statement = parseCardStatement(text);
-    if (!statement)
-      throw badRequest("Couldn't find a balance or due date in that PDF. Is it a card statement?");
-    return { statement, accountId: cardForText(db, text) };
+    const text = lines.join("\n");
+    const statement: CardStatement = parseCardStatement(text) ?? {
+      closingDate: null,
+      dueDate: null,
+      newBalanceCents: null,
+      minimumPaymentCents: null,
+      creditLimitCents: null,
+      aprBps: null,
+      previousBalanceCents: null,
+      paymentsCents: null,
+      interestYtd: null,
+      minimumOnly: null,
+      transactions: [],
+    };
+    const templates = applyTemplates(db, "card", lines, statement);
+    return { statement, accountId: cardForText(db, text), lines: lines.slice(0, 600), templates };
   });
 
   app.post("/api/cards/statements/apply", async (req) => {
@@ -129,6 +144,8 @@ export function registerCardRoutes(app: FastifyInstance, db: MunyDb, secret?: Bu
         runRulesOn(tx, ids);
         linkTransfersFor(tx, ids);
       });
+    // The newest statement anchors a hand-added card's balance (after its transactions are in).
+    anchorCardBalance(db, body.accountId);
     if (body.pdfBase64) {
       const bytes = Buffer.from(body.pdfBase64, "base64");
       if (bytes.subarray(0, 4).toString("latin1") === "%PDF")

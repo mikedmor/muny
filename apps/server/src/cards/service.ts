@@ -202,7 +202,15 @@ export function cardsReport(db: Db, today = localToday()): CardsReport {
         fromAccountName: p.mask ? `${p.name} ••${p.mask}` : p.name,
       }));
     const payments = [...onCard, ...fromOthers].sort((x, y) => y.date.localeCompare(x.date));
-    const owed = Math.max(0, -a.balanceCents);
+    // A hand-added card: payments from checking since its newest statement aren't on
+    // the card yet (the next statement brings them), but they've been paid.
+    const paidSince =
+      a.balanceSource === "computed" && d?.statementDate
+        ? fromOthers
+            .filter((p) => p.date > (d.statementDate as string))
+            .reduce((s, p) => s + p.amountCents, 0)
+        : 0;
+    const owed = Math.max(0, -a.balanceCents - paidSince);
     const limit = d?.creditLimitCents ?? null;
     const since = d?.statementDate ?? null;
     const spent = mine
@@ -547,4 +555,51 @@ export function addStatementTransactions(
     ids.push(id);
   }
   return ids;
+}
+
+/**
+ * A card added by hand computes its balance from a starting balance plus its
+ * transactions. Once it has a statement, the statement is the truth: set the
+ * starting balance so the balance on the closing date is the statement's new
+ * balance (transactions after it still count). Statements added later never
+ * double-count. Cards synced from a bank report their own balance and are left alone.
+ */
+export function anchorCardBalance(db: Db, accountId: string): boolean {
+  const acc = db
+    .select({ source: schema.accounts.balanceSource, type: schema.accounts.type })
+    .from(schema.accounts)
+    .where(eq(schema.accounts.id, accountId))
+    .get();
+  if (acc?.type !== "credit" || acc.source !== "computed") return false;
+  const d = db
+    .select({
+      date: schema.cardDetails.statementDate,
+      balance: schema.cardDetails.statementBalanceCents,
+    })
+    .from(schema.cardDetails)
+    .where(eq(schema.cardDetails.accountId, accountId))
+    .get();
+  if (!d?.date || d.balance === null) return false;
+  const t = schema.transactions;
+  const upTo = db
+    .select({ s: sql<number>`coalesce(sum(${t.amountCents}), 0)` })
+    .from(t)
+    .where(and(eq(t.accountId, accountId), eq(t.pending, false), sql`${t.postedDate} <= ${d.date}`))
+    .get();
+  const opening = -d.balance - Number(upTo?.s ?? 0);
+  db.update(schema.accounts)
+    .set({ openingBalanceCents: opening })
+    .where(eq(schema.accounts.id, accountId))
+    .run();
+  return true;
+}
+
+/** Every hand-added card with a statement (startup; cheap). */
+export function anchorAllCards(db: Db) {
+  for (const c of db
+    .select({ id: schema.cardDetails.accountId })
+    .from(schema.cardDetails)
+    .where(sql`${schema.cardDetails.statementDate} is not null`)
+    .all())
+    anchorCardBalance(db, c.id);
 }

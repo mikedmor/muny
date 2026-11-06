@@ -14,6 +14,7 @@ export * from "./recurring.js";
 export * from "./reports.js";
 export * from "./rules.js";
 export * from "./savings.js";
+export * from "./statements.js";
 export * from "./sync.js";
 export * from "./tax.js";
 export * from "./transactions.js";

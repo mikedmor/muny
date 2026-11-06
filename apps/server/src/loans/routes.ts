@@ -4,6 +4,7 @@ import {
   LOAN_KINDS,
   type LoanPlanSettings,
   type LoanStatementRead,
+  type SingleLoanStatement,
 } from "@muny/shared";
 import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
@@ -12,6 +13,7 @@ import { requireUser } from "../auth/plugin.js";
 import { saveDocument } from "../documents/service.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, notFound, parse } from "../lib/http.js";
+import { applyTemplates } from "../statements/templates.js";
 import {
   applySingleStatement,
   applyStatement,
@@ -309,10 +311,18 @@ export function registerLoanRoutes(
     const groups = parseLoanStatement(lines);
     if (groups && groups.groups.length > 1)
       return { kind: "groups", groups: groups.groups.map((g) => g.name) };
-    const statement = parseSingleLoanStatement(lines.map((l) => l.join(" ")).join("\n"));
-    if (!statement)
-      throw badRequest("Couldn't find a balance or due date in that PDF. Is it a loan statement?");
-    return { kind: "single", statement };
+    const text = lines.map((l) => l.join(" "));
+    const statement: SingleLoanStatement = parseSingleLoanStatement(text.join("\n")) ?? {
+      statementDate: null,
+      dueDate: null,
+      balanceCents: null,
+      aprBps: null,
+      paymentCents: null,
+      lastPayment: null,
+      interestYtdCents: null,
+    };
+    const templates = applyTemplates(db, "loan", text, statement);
+    return { kind: "single", statement, lines: text.slice(0, 600), templates };
   });
 
   app.post("/api/loans/:accountId/statement/apply", async (req) => {

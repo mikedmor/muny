@@ -9,6 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { FileText, Link2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Modal } from "../../components/forms.js";
+import { TeachButton } from "../../components/TeachStatement.js";
 import { Alert, Button, Field } from "../../components/ui.js";
 import { api } from "../../lib/api.js";
 import { keys, useAccounts } from "../../lib/queries.js";
@@ -51,6 +52,8 @@ interface Item {
   base64: string;
   statement: SingleLoanStatement | null;
   error: string | null;
+  lines: string[];
+  templates: string[];
 }
 
 function Import({ loan, onDone }: { loan: Loan; onDone: () => void }) {
@@ -72,12 +75,21 @@ function Import({ loan, onDone }: { loan: Loan; onDone: () => void }) {
         );
         out.push(
           r.kind === "single"
-            ? { name: file.name, base64, statement: r.statement, error: null }
+            ? {
+                name: file.name,
+                base64,
+                statement: r.statement,
+                error: null,
+                lines: r.lines,
+                templates: r.templates,
+              }
             : {
                 name: file.name,
                 base64: "",
                 statement: null,
                 error: `Covers several loans (${r.groups.join(", ")}): use Import statements on the lender's card.`,
+                lines: [],
+                templates: [],
               },
         );
       } catch (err) {
@@ -86,12 +98,40 @@ function Import({ loan, onDone }: { loan: Loan; onDone: () => void }) {
           base64: "",
           statement: null,
           error: err instanceof Error ? err.message : "Couldn't read it",
+          lines: [],
+          templates: [],
         });
       }
     }
     out.sort((a, b) =>
       (a.statement?.statementDate ?? "").localeCompare(b.statement?.statementDate ?? ""),
     );
+    setItems(out);
+    setBusy(null);
+  };
+  /** Read every chosen statement again (after teaching Muny a layout). */
+  const reread = async () => {
+    setBusy("Reading again…");
+    const out: Item[] = [];
+    for (const it of items) {
+      if (!it.base64) {
+        out.push(it);
+        continue;
+      }
+      try {
+        const r = await api.post<LoanStatementRead>(
+          `/api/loans/${loan.accountId}/statement/preview`,
+          { pdfBase64: it.base64 },
+        );
+        out.push(
+          r.kind === "single"
+            ? { ...it, statement: r.statement, lines: r.lines, templates: r.templates }
+            : it,
+        );
+      } catch {
+        out.push(it);
+      }
+    }
     setItems(out);
     setBusy(null);
   };
@@ -153,7 +193,17 @@ function Import({ loan, onDone }: { loan: Loan; onDone: () => void }) {
                 const s = it.statement;
                 return (
                   <tr key={it.name}>
-                    <td className="max-w-40 truncate py-2">{it.name}</td>
+                    <td className="max-w-44 py-2">
+                      <span className="block truncate">{it.name}</span>
+                      {s && (s.balanceCents === null || s.dueDate === null) && (
+                        <TeachButton kind="loan" lines={it.lines} onSaved={() => void reread()} />
+                      )}
+                      {it.templates.length > 0 && (
+                        <span className="block text-[11px] text-slate-500">
+                          Read with {it.templates.join(", ")}
+                        </span>
+                      )}
+                    </td>
                     {s ? (
                       <>
                         <td className="py-2 text-right whitespace-nowrap">

@@ -388,5 +388,5 @@ export interface SingleLoanStatement {
 
 /** A statement read for one loan: one loan's figures, or several groups (use the lender's import). */
 export type LoanStatementRead =
-  | { kind: "single"; statement: SingleLoanStatement }
+  | { kind: "single"; statement: SingleLoanStatement; lines: string[]; templates: string[] }
   | { kind: "groups"; groups: string[] };

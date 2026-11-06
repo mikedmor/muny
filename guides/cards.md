@@ -11,6 +11,14 @@
 
 Transactions come from the bank connection, its statements, or your issuer's CSV or OFX/QFX download (see [Importing files](importing.md)). There's no free way to connect a card directly through Visa, Mastercard or Discover: the networks don't offer an API for your own accounts; your card's bank holds the data. Free routes are Plaid (Trial plan) and Teller (free development tier) when they support your bank, statements, and your bank's downloads.
 
+### Statements Muny can't read yet
+
+If a statement comes back with the balance, minimum or due date missing, click **Teach Muny** under its name. Pick the line each value is on (Muny lists the statement's lines that have that kind of value), and give text found on every one of these statements, like the bank's web address. Muny keeps it as a template and reads every statement containing that text the same way, including the ones you're importing now. Templates are also available through the API (`/api/statement-templates`), so an assistant can set them up for you.
+
+### Hand-added cards
+
+A card you added by hand counts its balance from what you owed when you added it plus its transactions. Once it has a statement, the newest statement's balance is used instead (plus anything after it), so adding a statement's transactions never counts twice. Payments linked from checking after the newest statement lower what's owed until the next statement includes them.
+
 ## Reading a card
 
 - **Limit used** under 30% is good for your credit score; above 50% is high.

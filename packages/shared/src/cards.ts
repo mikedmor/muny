@@ -97,4 +97,8 @@ export interface CardStatementPreview {
   statement: CardStatement;
   /** The card whose last 4 digits appear on it, if any. */
   accountId: string | null;
+  /** The statement's text, line by line (for teaching Muny its layout). */
+  lines: string[];
+  /** Templates you taught that were used on it. */
+  templates: string[];
 }

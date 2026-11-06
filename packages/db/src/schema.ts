@@ -1024,6 +1024,23 @@ export const savingsBuckets = sqliteTable("savings_buckets", {
 });
 
 /**
+ * Statement templates: how to read a statement Muny's built-in readers miss.
+ * Applied to statements whose text contains matchText; each field is the
+ * label text it follows. Made by you (Teach Muny) or through the API.
+ */
+export const statementTemplates = sqliteTable("statement_templates", {
+  id: text().primaryKey(),
+  kind: text({ enum: ["card", "loan"] }).notNull(),
+  name: text().notNull(),
+  /** Text that identifies these statements (e.g. the bank's web address). */
+  matchText: text().notNull(),
+  /** Field key → { label } (the text the value follows on its line). */
+  fields: text({ mode: "json" }).$type<Record<string, { label: string }>>().notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+/**
  * A lender's yearly fee (e.g. timeshare maintenance dues), one per lender:
  * payments of at least minCents with the words (else the lender's loans'
  * words). Listed on the lender's card and never counted as loan payments.

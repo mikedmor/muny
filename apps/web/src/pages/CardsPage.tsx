@@ -12,6 +12,7 @@ import { FileText, Link2, Pencil } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { LineChart } from "../components/charts.js";
 import { Modal } from "../components/forms.js";
+import { TeachButton } from "../components/TeachStatement.js";
 import { Alert, Button, Card, cx, Field, PageHeader } from "../components/ui.js";
 import { api } from "../lib/api.js";
 import { keys, useAccounts } from "../lib/queries.js";
@@ -210,6 +211,27 @@ function StatementImport({
     setItems(out);
     setBusy(null);
   };
+  /** Read every chosen statement again (after teaching Muny a layout). */
+  const reread = async () => {
+    setBusy("Reading again…");
+    const out: typeof items = [];
+    for (const it of items) {
+      if (!it.base64) {
+        out.push(it);
+        continue;
+      }
+      try {
+        const preview = await api.post<CardStatementPreview>("/api/cards/statements/preview", {
+          pdfBase64: it.base64,
+        });
+        out.push({ ...it, preview, accountId: it.accountId || preview.accountId || "" });
+      } catch {
+        out.push(it);
+      }
+    }
+    setItems(out);
+    setBusy(null);
+  };
   const apply = async () => {
     setError(null);
     try {
@@ -271,7 +293,24 @@ function StatementImport({
                 const s = it.preview?.statement;
                 return (
                   <tr key={it.name}>
-                    <td className="max-w-40 truncate py-2">{it.name}</td>
+                    <td className="max-w-44 py-2">
+                      <span className="block truncate">{it.name}</span>
+                      {s &&
+                        (s.newBalanceCents === null ||
+                          s.dueDate === null ||
+                          s.minimumPaymentCents === null) && (
+                          <TeachButton
+                            kind="card"
+                            lines={it.preview?.lines ?? []}
+                            onSaved={() => void reread()}
+                          />
+                        )}
+                      {!!it.preview?.templates.length && (
+                        <span className="block text-[11px] text-slate-500">
+                          Read with {it.preview.templates.join(", ")}
+                        </span>
+                      )}
+                    </td>
                     {s ? (
                       <>
                         <td className="py-2">

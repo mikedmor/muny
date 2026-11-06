@@ -1,6 +1,7 @@
 import { openDb } from "@muny/db";
 import { ensureAlertRules, startAlertScheduler } from "./alerts/service.js";
 import { buildApp } from "./app.js";
+import { anchorAllCards } from "./cards/service.js";
 import { loadConfig } from "./config.js";
 import { startBackupScheduler } from "./data/backups.js";
 import { repairRawAchPayees } from "./ledger/payees.js";
@@ -23,6 +24,7 @@ async function main() {
     pairLoanPayments(tx);
     pairPayPalFunding(tx);
     markCategoryMoves(tx as unknown as typeof db);
+    anchorAllCards(tx as unknown as typeof db);
     rescanRecurring(tx);
     refreshManualLoans(tx as unknown as typeof db);
   });

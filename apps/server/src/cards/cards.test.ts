@@ -205,4 +205,47 @@ describe("credit card statements", () => {
     expect(paid(a)).toEqual([25_000]);
     expect(paid(b)).toEqual([31_245]);
   });
+
+  it("anchors a hand-added card to its statement, so statement transactions don't double-count", async () => {
+    const { client } = await makeSignedInApp();
+    // Added by hand with what was owed at the time.
+    const card = (
+      await client.post("/api/accounts", { name: "Card", type: "credit", balanceCents: -9_010 })
+    ).json<{ id: string }>();
+    const chk = (await client.post("/api/accounts", { name: "Checking", type: "checking" })).json<{
+      id: string;
+    }>();
+    const statement: CardStatement = {
+      closingDate: "2026-10-04",
+      dueDate: "2026-11-01",
+      newBalanceCents: 9_010,
+      minimumPaymentCents: 2_500,
+      creditLimitCents: 100_000,
+      aprBps: 1650,
+      previousBalanceCents: 2_120,
+      paymentsCents: 2_120,
+      interestYtd: null,
+      minimumOnly: null,
+      transactions: [
+        { date: "2026-09-20", description: "PAYMENT THANK YOU", amountCents: 2_120 },
+        { date: "2026-09-25", description: "SHOP", amountCents: -9_010 },
+      ],
+    };
+    await client.post("/api/cards/statements/apply", { accountId: card.id, statement });
+    const owed = async () =>
+      (await client.get("/api/cards"))
+        .json<CardsReport>()
+        .cards.find((c) => c.accountId === card.id)?.balanceCents;
+    expect(await owed()).toBe(9_010);
+
+    // A payment from checking after the statement: owed drops before the next statement.
+    await client.post("/api/transactions", {
+      accountId: chk.id,
+      postedDate: "2026-11-01",
+      amountCents: -5_000,
+      description: "CARD PYMT 9999",
+    });
+    await client.patch(`/api/cards/${card.id}`, { paymentMatch: "CARD PYMT" });
+    expect(await owed()).toBe(4_010);
+  });
 });

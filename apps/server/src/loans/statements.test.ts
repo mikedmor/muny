@@ -1,4 +1,4 @@
-import type { LoanStatementPreview, LoansReport } from "@muny/shared";
+import type { CardStatementPreview, LoanStatementPreview, LoansReport } from "@muny/shared";
 import { describe, expect, it } from "vitest";
 import { parseCardStatement } from "../cards/service.js";
 import { makeSignedInApp } from "../test-utils.js";
@@ -304,5 +304,50 @@ describe("one loan's statement", () => {
       startBalanceCents: 18_765_432,
       startDate: "2026-10-15",
     });
+  });
+});
+
+describe("statement templates", () => {
+  it("learns a layout the built-in reader misses", async () => {
+    const { client } = await makeSignedInApp();
+    await client.post("/api/accounts", { name: "Acme", type: "credit", mask: "7777" });
+    const pdf = makePdf([
+      { x: 40, y: 760, t: "Acme Card Co - card ending 7777" },
+      { x: 40, y: 740, t: "Total Owed Now" },
+      { x: 300, y: 740, t: "$1,234.56" },
+      { x: 40, y: 720, t: "Pay By" },
+      { x: 300, y: 720, t: "11/05/2026" },
+      { x: 40, y: 700, t: "Least You Can Pay" },
+      { x: 300, y: 700, t: "$35.00" },
+    ]);
+    const preview = async () =>
+      (
+        await client.post("/api/cards/statements/preview", {
+          pdfBase64: Buffer.from(pdf).toString("base64"),
+        })
+      ).json<CardStatementPreview>();
+    const before = await preview();
+    expect(before.statement.newBalanceCents).toBeNull();
+    expect(before.lines.some((l) => l.includes("Total Owed Now"))).toBe(true);
+
+    const t = await client.post("/api/statement-templates", {
+      kind: "card",
+      name: "Acme",
+      matchText: "Acme Card Co",
+      fields: {
+        newBalanceCents: { label: "Total Owed Now" },
+        dueDate: { label: "Pay By" },
+        minimumPaymentCents: { label: "Least You Can Pay" },
+      },
+    });
+    expect(t.statusCode).toBe(200);
+    const after = await preview();
+    expect(after.templates).toEqual(["Acme"]);
+    expect(after.statement).toMatchObject({
+      newBalanceCents: 123_456,
+      dueDate: "2026-11-05",
+      minimumPaymentCents: 3_500,
+    });
+    expect(after.accountId).not.toBeNull();
   });
 });
