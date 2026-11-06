@@ -53,3 +53,7 @@ desktop.ini
 
 # Local compose data folder
 docker/data/
+
+# Maintainers' private design docs (roadmap, decisions, architecture notes).
+# Public documentation lives in guides/.
+docs/

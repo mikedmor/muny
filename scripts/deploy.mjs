@@ -12,7 +12,7 @@
  *
  * Only committed files are shipped (git archive), so local data, .env and
  * build output never leave this machine. The host keeps its own compose.yaml,
- * .env (MUNY_SECRET_KEY) and data/ folder; see docs/DEPLOYMENT.md.
+ * .env (MUNY_SECRET_KEY) and data/ folder; see guides/install.md.
  */
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";

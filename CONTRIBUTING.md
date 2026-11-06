@@ -43,8 +43,8 @@ Edit `packages/db/src/schema.ts`, then run `pnpm db:generate` (use `--name <what
 
 - `main` is always releasable. Work on branches named `feat/…`, `fix/…`, `docs/…`.
 - Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`).
-- Record significant technical choices in [docs/DECISIONS.md](docs/DECISIONS.md).
-- Update the status column in [docs/FEATURES.md](docs/FEATURES.md) and the checkboxes in [docs/ROADMAP.md](docs/ROADMAP.md) as work lands.
+- Explain significant technical choices in the pull request description.
+- Update the user guides in [guides/](guides/README.md) when you change how something is set up or used.
 
 ## Easy ways to help (once public)
 
