@@ -1,5 +1,10 @@
 import { type MunyDb, schema } from "@muny/db";
-import { DEFAULT_LOAN_PLAN, LOAN_KINDS, type LoanPlanSettings } from "@muny/shared";
+import {
+  DEFAULT_LOAN_PLAN,
+  LOAN_KINDS,
+  type LoanPlanSettings,
+  type LoanStatementRead,
+} from "@muny/shared";
 import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -8,6 +13,7 @@ import { saveDocument } from "../documents/service.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, notFound, parse } from "../lib/http.js";
 import {
+  applySingleStatement,
   applyStatement,
   createLenderLoans,
   createManualLoan,
@@ -19,6 +25,7 @@ import {
   setServicerSplit,
   updateLoan,
 } from "./service.js";
+import { parseLoanStatement, parseSingleLoanStatement, pdfLines } from "./statements.js";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 const cents = z.number().int().min(0).max(100_000_000_000);
@@ -279,6 +286,75 @@ export function registerLoanRoutes(
       setServicerSplit(tx as unknown as MunyDb, body.lender, body.mode === "servicer"),
     );
     log(user.id, "loan.lender_split.set", body.lender.toLowerCase(), { mode: body.mode });
+    return { ok: true };
+  });
+
+  // One loan's statements (mortgage, auto, personal…): read, then apply.
+  app.post("/api/loans/:accountId/statement/preview", async (req): Promise<LoanStatementRead> => {
+    requireUser(req);
+    const body = parse(
+      z.object({
+        pdfBase64: z.string().min(10).max(14_000_000, "The PDF is too large (10 MB max)"),
+      }),
+      req.body,
+    );
+    const bytes = new Uint8Array(Buffer.from(body.pdfBase64, "base64"));
+    if (bytes[0] !== 0x25 || bytes[1] !== 0x50) throw badRequest("That isn't a PDF.");
+    let lines: string[][];
+    try {
+      lines = await pdfLines(bytes);
+    } catch {
+      throw badRequest("Couldn't read that PDF.");
+    }
+    const groups = parseLoanStatement(lines);
+    if (groups && groups.groups.length > 1)
+      return { kind: "groups", groups: groups.groups.map((g) => g.name) };
+    const statement = parseSingleLoanStatement(lines.map((l) => l.join(" ")).join("\n"));
+    if (!statement)
+      throw badRequest("Couldn't find a balance or due date in that PDF. Is it a loan statement?");
+    return { kind: "single", statement };
+  });
+
+  app.post("/api/loans/:accountId/statement/apply", async (req) => {
+    const user = requireUser(req);
+    const { accountId } = parse(z.object({ accountId: z.string().min(1).max(64) }), req.params);
+    const date = isoDate.nullable();
+    const body = parse(
+      z.object({
+        statement: z.object({
+          statementDate: date,
+          dueDate: date,
+          balanceCents: cents.nullable(),
+          aprBps: z.number().int().min(0).max(10_000).nullable(),
+          paymentCents: cents.nullable(),
+          lastPayment: z.object({ date, amountCents: cents }).nullable(),
+          interestYtdCents: cents.nullable(),
+        }),
+        pdfBase64: z.string().min(10).max(14_000_000).optional(),
+        fileName: z.string().trim().max(200).optional(),
+        lender: z.string().trim().max(100).optional(),
+      }),
+      req.body,
+    );
+    if (
+      !db.transaction((tx) =>
+        applySingleStatement(tx as unknown as MunyDb, accountId, body.statement),
+      )
+    )
+      throw notFound("Loan not found");
+    if (body.pdfBase64) {
+      const bytes = Buffer.from(body.pdfBase64, "base64");
+      if (bytes.subarray(0, 4).toString("latin1") === "%PDF")
+        saveDocument(db, secret, {
+          name: body.fileName || `Loan statement ${body.statement.statementDate ?? ""}.pdf`,
+          mime: "application/pdf",
+          bytes,
+          kind: "loan_statement",
+          lender: body.lender ?? null,
+          documentDate: body.statement.statementDate,
+        });
+    }
+    log(user.id, "loan.statement.apply", accountId);
     return { ok: true };
   });
 

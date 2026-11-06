@@ -1,4 +1,4 @@
-import type { LoanStatement, LoanStatementGroup } from "@muny/shared";
+import type { LoanStatement, LoanStatementGroup, SingleLoanStatement } from "@muny/shared";
 import { getDocumentProxy } from "unpdf";
 
 /**
@@ -8,6 +8,17 @@ import { getDocumentProxy } from "unpdf";
  * principal). Only these numbers are kept; the PDF, account number, name and
  * address are never stored or logged.
  */
+
+/**
+ * Some statement fonts put "$" at a private-use code point (e.g. U+E024):
+ * before a number it's a dollar sign; anywhere else, drop it.
+ */
+const PRIVATE_USE = `${String.fromCharCode(0xe000)}-${String.fromCharCode(0xf8ff)}`;
+const PUA_BEFORE_NUMBER = new RegExp(`[${PRIVATE_USE}](?=\\s*\\d)`, "g");
+const PUA = new RegExp(`[${PRIVATE_USE}]`, "g");
+export function cleanPdfText(s: string) {
+  return s.replace(PUA_BEFORE_NUMBER, "$").replace(PUA, "").trim();
+}
 
 /** The PDF's text as lines (cells left to right), top to bottom, page by page. */
 export async function pdfLines(bytes: Uint8Array): Promise<string[][]> {
@@ -19,7 +30,7 @@ export async function pdfLines(bytes: Uint8Array): Promise<string[][]> {
     const items = (content.items as { str?: string; transform?: number[]; width?: number }[])
       .filter((i) => i.str?.trim() && i.transform)
       .map((i) => ({
-        s: (i.str as string).trim(),
+        s: cleanPdfText(i.str as string),
         x: (i.transform as number[])[4] ?? 0,
         y: (i.transform as number[])[5] ?? 0,
         w: i.width ?? 0,
@@ -136,5 +147,70 @@ export function parseLoanStatement(lines: string[][]): LoanStatement | null {
       ? { date: iso(last[1]) ?? statementDate, amountCents: cents(last[2]) ?? 0 }
       : null,
     groups,
+  };
+}
+
+const DATE_RE = String.raw`(\d{1,2}\/\d{1,2}\/\d{2,4}|[A-Z][a-z]{2,8}\.? \d{1,2},? \d{4})`;
+const MONEY_RE = String.raw`\$?\s?([\d,]+\.\d{2})`;
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+function anyDate(s: string | undefined): string | null {
+  if (!s) return null;
+  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (m) {
+    const y = (m[3] as string).length === 2 ? `20${m[3]}` : (m[3] as string);
+    return `${y}-${(m[1] as string).padStart(2, "0")}-${(m[2] as string).padStart(2, "0")}`;
+  }
+  m = s.match(/^([A-Z][a-z]{2,8})\.? (\d{1,2}),? (\d{4})$/);
+  if (!m) return null;
+  const mo = MONTHS.indexOf((m[1] as string).slice(0, 3).toLowerCase());
+  return mo < 0
+    ? null
+    : `${m[3]}-${String(mo + 1).padStart(2, "0")}-${(m[2] as string).padStart(2, "0")}`;
+}
+
+/**
+ * One loan's statement (mortgage, auto, personal, most servicers): the common
+ * labels for the statement and due dates, the principal or current balance,
+ * the rate, the regular payment, the last payment and interest paid this year.
+ * Returns null when it finds neither a balance nor a due date.
+ */
+export function parseSingleLoanStatement(text: string): SingleLoanStatement | null {
+  const t = text.replace(/\s+/g, " ");
+  const find = (re: RegExp) => t.match(re)?.[1];
+  const money = (re: RegExp) => cents(find(re));
+  const statementDate = anyDate(find(new RegExp(`Statement Date:? ${DATE_RE}`, "i")));
+  const dueDate = anyDate(find(new RegExp(`(?:Payment )?Due Date:?[^\\d]{0,30}?${DATE_RE}`, "i")));
+  const balanceCents =
+    money(
+      new RegExp(
+        `(?:Outstanding |Current |Unpaid |Remaining )?Principal Balance:?(?: as of \\S+)? ${MONEY_RE}`,
+        "i",
+      ),
+    ) ?? money(new RegExp(`(?:Current|Loan|Outstanding|Account|New) Balance:? ${MONEY_RE}`, "i"));
+  const rate = find(
+    /(?:Interest Rate|Annual Percentage Rate|APR)(?: \(APR\))?[^%\d]{0,30}(\d{1,2}(?:\.\d{1,4})?)\s?%/i,
+  );
+  const paymentCents =
+    money(new RegExp(`(?:Regular )?Monthly Payment(?: Amount)?:? ${MONEY_RE}`, "i")) ??
+    money(new RegExp(`(?:Regular |Scheduled )?Payment Amount:? ${MONEY_RE}`, "i")) ??
+    money(new RegExp(`(?:Total )?Amount Due:? ${MONEY_RE}`, "i"));
+  const last = t.match(
+    new RegExp(
+      `Last Payment(?: Received| Amount)?(?: \\(?(?:on |Effective |Received )?${DATE_RE}\\)?)?:? ${MONEY_RE}`,
+      "i",
+    ),
+  );
+  const interestYtdCents = money(
+    /(?:Interest Paid Year[- ]to[- ]Date|Year[- ]to[- ]Date Interest(?: Paid)?|YTD Interest(?: Paid)?|Interest Paid YTD|Interest Paid This Year)[:\s]*\$?\s?([\d,]+\.\d{2})/i,
+  );
+  if (balanceCents === null && !dueDate) return null;
+  return {
+    statementDate,
+    dueDate,
+    balanceCents,
+    aprBps: rate ? Math.round(Number(rate) * 100) : null,
+    paymentCents,
+    lastPayment: last ? { date: anyDate(last[1]), amountCents: cents(last[2]) ?? 0 } : null,
+    interestYtdCents,
   };
 }

@@ -372,3 +372,21 @@ export interface DocumentInfo {
   notes: string | null;
   createdAt: number;
 }
+
+/** One loan's statement (mortgage, auto, personal…): what Muny read from it. */
+export interface SingleLoanStatement {
+  statementDate: string | null;
+  dueDate: string | null;
+  /** Principal owed (or the balance, when the statement doesn't split it out). */
+  balanceCents: number | null;
+  aprBps: number | null;
+  /** The regular monthly payment (or the amount due). */
+  paymentCents: number | null;
+  lastPayment: { date: string | null; amountCents: number } | null;
+  interestYtdCents: number | null;
+}
+
+/** A statement read for one loan: one loan's figures, or several groups (use the lender's import). */
+export type LoanStatementRead =
+  | { kind: "single"; statement: SingleLoanStatement }
+  | { kind: "groups"; groups: string[] };

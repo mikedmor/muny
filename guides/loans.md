@@ -19,6 +19,14 @@ Loans with the same lender share one card on the Loans page, with a tab for each
   If the servicer changes how it splits a payment (a loan stops getting a share, say), open **Payments → Edit** and click **Split changed** on that payment. The old split keeps the payments before the date, and you change the copy from the date it changed (adjust **From** and **Until** if needed).
 - **One payment covering several loans, split by monthly payment** (common with student loans): give each loan the same payment words and no amount, plus its own monthly payment. Each payment is shared between them in proportion to their monthly payments.
 
+### Statements for any loan
+
+Every loan (mortgage, auto, personal…) has **Import statements**: choose one or more statement PDFs and Muny reads the statement and due dates, what you owe, the rate, the regular payment and the last payment, using the labels most servicers print. The newest statement sets the loan's rate, payment and due date (and, for a loan tracked from your payments, what you owe from its date); each one records what you owed that day, for the loan's history. Each PDF is kept under Insights → Documents. A statement covering several loan groups (federal student loans) is imported on the lender's card, below.
+
+### Linking payments
+
+Each loan's **Payments** has **Link payments**: the words its payments use in your accounts, and, when another loan or card uses the same words, about how much, the next due date (payments within about a week of that day count) and the account it's paid from.
+
 ### Student loan statements
 
 Federal student loan servicers send PDF statements with a table for each loan group. On the lender's card, click **Import statements** and choose one or more PDFs, from any months. Muny lists each statement it read and, for each group, its rate, what you owe, the regular payment and the due date, with the loan it belongs to; pick another loan, **Add as a new loan** or **Skip**, then update.

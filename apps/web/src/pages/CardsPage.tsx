@@ -10,6 +10,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { FileText, Link2, Pencil } from "lucide-react";
 import { type FormEvent, useState } from "react";
+import { LineChart } from "../components/charts.js";
 import { Modal } from "../components/forms.js";
 import { Alert, Button, Card, cx, Field, PageHeader } from "../components/ui.js";
 import { api } from "../lib/api.js";
@@ -380,9 +381,54 @@ function PayDown({ card }: { card: CreditCard }) {
   if (card.aprBps === null || card.balanceCents <= 0) return null;
   const atMin = minimumOnly(card.balanceCents, card.aprBps, min, card.statementBalanceCents);
   const atPay = payoff(card.balanceCents, card.aprBps, pay * 100);
+  const past = card.history.slice(0, -1).slice(-24);
+  const ahead = atPay.balances;
+  const step = ahead.length > 120 ? 3 : 1;
+  const shown = ahead
+    .map((b, m) => ({ b, m }))
+    .filter((x) => x.m % step === 0 || x.m === ahead.length - 1);
+  const inMonths = (n: number) => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + n);
+    return d;
+  };
   return (
     <div className="rounded-xl border border-slate-200 p-4 text-sm dark:border-slate-800">
       <p className="font-semibold">Paying it off</p>
+      {shown.length + past.length > 2 && (
+        <div className="mt-2">
+          <LineChart
+            ariaLabel={`${card.name}: what you've owed, then paid off at ${formatMoney(pay * 100)} a month`}
+            height={180}
+            projectedFrom={past.length}
+            points={[
+              ...past.map((h) => ({
+                date: h.date,
+                label: new Date(`${h.date}T00:00:00`).toLocaleDateString(undefined, {
+                  month: "short",
+                  year: "2-digit",
+                }),
+                value: h.balanceCents,
+              })),
+              ...shown.map((x) => ({
+                date: String(x.m),
+                label:
+                  x.m === 0
+                    ? "Today"
+                    : inMonths(x.m).toLocaleDateString(undefined, {
+                        month: "short",
+                        year: "2-digit",
+                      }),
+                value: x.b,
+              })),
+            ]}
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            {past.length > 0 ? "Solid: what you owed. " : ""}Dashed: paid off at{" "}
+            {formatMoney(pay * 100)} a month.
+          </p>
+        </div>
+      )}
       <p className="mt-1 text-slate-600 dark:text-slate-300">
         At the minimum ({formatMoney(min)}):{" "}
         {atMin.months === null ? (

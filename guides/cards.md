@@ -15,4 +15,4 @@ Transactions come from the bank connection, its statements, or your issuer's CSV
 
 - **Limit used** under 30% is good for your credit score; above 50% is high.
 - Paying the **statement balance** by the due date avoids interest on purchases. Muny says so once a payment of at least that much arrives after the statement.
-- **Paying it off** shows how long the balance lasts at the minimum (which shrinks with the balance, as banks figure it, with your statement's own estimate beside it), and what paying more each month saves.
+- **Paying it off** charts what you've owed (from your statements) and then the balance falling at the amount you pick, and shows how long the balance lasts at the minimum (which shrinks with the balance, as banks figure it, with your statement's own estimate beside it), and what paying more each month saves.

@@ -16,6 +16,7 @@ import {
   type LoanStatementPreview,
   type LoansReport,
   payoff,
+  type SingleLoanStatement,
   splitBackward,
 } from "@muny/shared";
 import { and, eq, inArray, lt, ne, sql } from "drizzle-orm";
@@ -1270,4 +1271,58 @@ export function applyStatement(
   }
   refreshManualLoans(db);
   return touched;
+}
+
+/**
+ * One loan's statement: the newest sets its rate, payment and due date (and a
+ * tracked loan's balance from its date); any statement records what you owed
+ * that day for the loan's history.
+ */
+export function applySingleStatement(db: Db, accountId: string, s: SingleLoanStatement): boolean {
+  const acc = db
+    .select({ type: schema.accounts.type })
+    .from(schema.accounts)
+    .where(eq(schema.accounts.id, accountId))
+    .get();
+  if (acc?.type !== "loan") return false;
+  const date = s.statementDate ?? localToday();
+  const latest = db
+    .select({ d: schema.balanceSnapshots.date })
+    .from(schema.balanceSnapshots)
+    .where(
+      and(
+        eq(schema.balanceSnapshots.accountId, accountId),
+        eq(schema.balanceSnapshots.estimated, false),
+        sql`${schema.balanceSnapshots.date} > ${date}`,
+        sql`${schema.balanceSnapshots.date} < ${localToday()}`,
+      ),
+    )
+    .get();
+  const details = db
+    .select({ startDate: schema.loanDetails.startDate })
+    .from(schema.loanDetails)
+    .where(eq(schema.loanDetails.accountId, accountId))
+    .get();
+  const newest = !latest && (!details?.startDate || details.startDate <= date);
+  if (newest) {
+    const patch = Object.fromEntries(
+      Object.entries({
+        aprBps: s.aprBps,
+        monthlyPaymentCents: s.paymentCents,
+        nextDueDate: s.dueDate,
+        startBalanceCents: s.balanceCents,
+        startDate: s.balanceCents !== null ? date : null,
+      }).filter(([, v]) => v !== null),
+    );
+    if (Object.keys(patch).length) updateLoan(db, accountId, patch);
+  }
+  if (s.balanceCents !== null)
+    db.insert(schema.balanceSnapshots)
+      .values({ accountId, date, balanceCents: -s.balanceCents })
+      .onConflictDoUpdate({
+        target: [schema.balanceSnapshots.accountId, schema.balanceSnapshots.date],
+        set: { balanceCents: -s.balanceCents, estimated: false },
+      })
+      .run();
+  return true;
 }

@@ -2,7 +2,12 @@ import type { LoanStatementPreview, LoansReport } from "@muny/shared";
 import { describe, expect, it } from "vitest";
 import { parseCardStatement } from "../cards/service.js";
 import { makeSignedInApp } from "../test-utils.js";
-import { parseLoanStatement, pdfLines } from "./statements.js";
+import {
+  cleanPdfText,
+  parseLoanStatement,
+  parseSingleLoanStatement,
+  pdfLines,
+} from "./statements.js";
 
 // A synthetic statement laid out like a servicer's: a summary, then a table with
 // a column per loan group. Made-up numbers only.
@@ -247,6 +252,57 @@ describe("loan statements", () => {
       newBalanceCents: 308_368,
       minimumPaymentCents: 9_300,
       dueDate: "2026-11-05",
+    });
+  });
+  it("reads a dollar sign a font stored as a private-use character", () => {
+    expect(cleanPdfText(`${String.fromCharCode(0xe024)}2,893.33`)).toBe("$2,893.33");
+    expect(cleanPdfText(`Total${String.fromCharCode(0xe024)}`)).toBe("Total");
+  });
+});
+
+describe("one loan's statement", () => {
+  it("reads the common labels and updates the loan", async () => {
+    const s = parseSingleLoanStatement(
+      [
+        "Statement Date: 10/15/2026",
+        "Payment Due Date 11/01/2026",
+        "Amount Due $1,234.56",
+        "Outstanding Principal Balance $187,654.32",
+        "Interest Rate 6.125%",
+        "Last Payment Received (10/01/2026) $1,234.56",
+        "Interest Paid Year-to-Date $9,876.54",
+      ].join("\n"),
+    );
+    expect(s).toEqual({
+      statementDate: "2026-10-15",
+      dueDate: "2026-11-01",
+      balanceCents: 18_765_432,
+      aprBps: 613,
+      paymentCents: 123_456,
+      lastPayment: { date: "2026-10-01", amountCents: 123_456 },
+      interestYtdCents: 987_654,
+    });
+    expect(parseSingleLoanStatement("Nothing useful here")).toBeNull();
+
+    const { client } = await makeSignedInApp();
+    const { accountId } = (
+      await client.post("/api/loans", {
+        name: "Car loan",
+        startBalanceCents: 2_000_000,
+        startDate: "2026-01-01",
+      })
+    ).json<{ accountId: string }>();
+    const res = await client.post(`/api/loans/${accountId}/statement/apply`, { statement: s });
+    expect(res.statusCode).toBe(200);
+    const loan = (await client.get("/api/loans"))
+      .json<LoansReport>()
+      .loans.find((l) => l.accountId === accountId);
+    expect(loan).toMatchObject({
+      aprBps: 613,
+      monthlyPaymentCents: 123_456,
+      nextDueDate: "2026-11-01",
+      startBalanceCents: 18_765_432,
+      startDate: "2026-10-15",
     });
   });
 });

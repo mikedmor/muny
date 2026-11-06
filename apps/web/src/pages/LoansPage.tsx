@@ -23,6 +23,7 @@ import { api } from "../lib/api.js";
 import { openPlaidLink } from "../lib/bankWidgets.js";
 import { keys, linkApi, useAccounts } from "../lib/queries.js";
 import { LenderLoansForm, LenderPaymentsStrip } from "./loans/LenderLoans.js";
+import { LoanLinkPaymentsButton, LoanStatementButton } from "./loans/LoanStatementImport.js";
 import { PayoffPlan } from "./loans/PayoffPlan.js";
 import { StatementImportButton, StatementStatus } from "./loans/StatementImport.js";
 
@@ -835,9 +836,12 @@ function Payments({ loan }: { loan: Loan }) {
     <Section
       title={`Payments${loan.payments.length ? ` (${loan.payments.length})` : ""}`}
       aside={
-        loan.splitEstimated ? (
-          <span className="text-xs text-slate-500">Interest and principal are estimates</span>
-        ) : undefined
+        <span className="flex flex-wrap items-baseline gap-x-3">
+          {loan.splitEstimated && (
+            <span className="text-xs text-slate-500">Interest and principal are estimates</span>
+          )}
+          <LoanLinkPaymentsButton loan={loan} />
+        </span>
       }
     >
       {loan.payments.length === 0 ? (
@@ -1020,8 +1024,12 @@ function LoanCard({
             >
               <Pencil aria-hidden="true" className="size-3" /> Edit details
             </button>
-            {!embedded && loan.kind === "student" && !loan.connected && loan.lender && (
-              <StatementImportButton lender={loan.lender} loans={[loan]} />
+            {loan.kind === "student" ? (
+              !embedded &&
+              !loan.connected &&
+              loan.lender && <StatementImportButton lender={loan.lender} loans={[loan]} />
+            ) : (
+              <LoanStatementButton loan={loan} />
             )}
             {canAddFee && (
               <button

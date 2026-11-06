@@ -142,6 +142,39 @@ export function cardsReport(db: Db, today = localToday()): CardsReport {
     }
   const linkedPayments = (cardId: string) =>
     (candidates.get(cardId)?.list ?? []).filter((c) => owner.get(c.id)?.card === cardId);
+  // What you owed over time: the last recorded balance each month (statements record theirs).
+  const twoYearsAgo = addMonths(today, -24);
+  const snaps = ids.length
+    ? db
+        .select({
+          accountId: schema.balanceSnapshots.accountId,
+          date: schema.balanceSnapshots.date,
+          cents: schema.balanceSnapshots.balanceCents,
+        })
+        .from(schema.balanceSnapshots)
+        .where(
+          and(
+            inArray(schema.balanceSnapshots.accountId, ids),
+            gte(schema.balanceSnapshots.date, twoYearsAgo),
+          ),
+        )
+        .all()
+    : [];
+  const historyOf = (id: string, owedNow: number) => {
+    const byMonth = new Map<string, { date: string; cents: number }>();
+    for (const x of snaps)
+      if (x.accountId === id) {
+        const m = x.date.slice(0, 7);
+        const cur = byMonth.get(m);
+        if (!cur || x.date > cur.date) byMonth.set(m, { date: x.date, cents: x.cents });
+      }
+    const list = [...byMonth.values()]
+      .filter((x) => x.date < today)
+      .sort((x, y) => x.date.localeCompare(y.date))
+      .map((x) => ({ date: x.date, balanceCents: Math.max(0, -x.cents) }));
+    return [...list, { date: today, balanceCents: owedNow }];
+  };
+
   const out: CreditCard[] = cards.map((a) => {
     const d = details.get(a.id);
     const mine = txns.filter((x) => x.accountId === a.id && !x.pending);
@@ -225,6 +258,7 @@ export function cardsReport(db: Db, today = localToday()): CardsReport {
         d?.minOnlyMonths && d.minOnlyTotalCents
           ? { months: d.minOnlyMonths, totalCents: d.minOnlyTotalCents }
           : null,
+      history: historyOf(a.id, owed),
     };
   });
   const withLimit = out.filter((c) => c.creditLimitCents);

@@ -47,6 +47,8 @@ export interface CreditCard {
   paymentFromAccountId: string | null;
   /** From the statement's minimum payment warning (null when not read). */
   minimumOnly: { months: number; totalCents: number } | null;
+  /** What you owed, the last recorded each month (two years), oldest first; the last is today's. */
+  history: { date: string; balanceCents: number }[];
 }
 
 export interface CardsReport {
