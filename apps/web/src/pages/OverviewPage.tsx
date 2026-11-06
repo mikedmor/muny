@@ -15,6 +15,11 @@ import {
   RankedBars,
   type StackBand,
 } from "../components/charts.js";
+import {
+  CardsOverviewCard,
+  LoansOverviewCard,
+  StocksOverviewCard,
+} from "../components/OverviewCards.js";
 import { Alert, Card, cx, PageHeader } from "../components/ui.js";
 import { CategoryIcon, MerchantAvatar } from "../components/visuals.js";
 import { api } from "../lib/api.js";
@@ -161,14 +166,85 @@ const GROUPS: { key: string; label: string; types: AccountType[]; debt?: boolean
   { key: "other", label: "Property & other", types: ["asset", "other"] },
 ];
 
+function AccountLine({ a, debt, indent }: { a: Account; debt?: boolean; indent?: boolean }) {
+  return (
+    <li
+      className={cx(
+        "flex items-center justify-between gap-3 py-1.5 pr-4",
+        indent ? "pl-14" : "pl-10",
+      )}
+    >
+      <span className="min-w-0">
+        <span className="block truncate">{a.name}</span>
+        <span className="text-xs text-slate-500">
+          {[a.institutionName, a.mask && `••${a.mask}`].filter(Boolean).join(" · ") || "Manual"}
+        </span>
+      </span>
+      <span className="tabular-nums">{formatMoney(debt ? -a.balanceCents : a.balanceCents)}</span>
+    </li>
+  );
+}
+
+/** Accounts from the same lender (institution) together, in balance order. */
+function lenderGroups(accounts: Account[]): Account[][] {
+  const by = new Map<string, Account[]>();
+  for (const a of accounts) {
+    const k = a.institutionName?.trim().toLowerCase() || `id:${a.id}`;
+    by.set(k, [...(by.get(k) ?? []), a]);
+  }
+  return [...by.values()].sort(
+    (x, y) =>
+      Math.abs(y.reduce((s, a) => s + a.balanceCents, 0)) -
+      Math.abs(x.reduce((s, a) => s + a.balanceCents, 0)),
+  );
+}
+
+/** A lender with several loans: one line, opening to its loans. */
+function LenderRow({ accounts, debt }: { accounts: Account[]; debt?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const total = accounts.reduce((s, a) => s + a.balanceCents, 0);
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-3 py-1.5 pr-4 pl-10 text-left hover:bg-slate-100/60 dark:hover:bg-slate-800/50"
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <span
+            aria-hidden="true"
+            className={cx("text-[10px] text-slate-400 transition-transform", open && "rotate-90")}
+          >
+            ▶
+          </span>
+          <span className="truncate">{accounts[0]?.institutionName}</span>
+          <span className="text-xs text-slate-500">{accounts.length} loans</span>
+        </span>
+        <span className="tabular-nums">{formatMoney(debt ? -total : total)}</span>
+      </button>
+      {open && (
+        <ul>
+          {accounts.map((a) => (
+            <AccountLine key={a.id} a={a} debt={debt} indent />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
 function AccountGroupRow({
   label,
   accounts,
   debt,
+  byLender,
 }: {
   label: string;
   accounts: Account[];
   debt?: boolean;
+  /** Group several accounts from one lender (loans). */
+  byLender?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const total = accounts.reduce((sum, a) => sum + a.balanceCents, 0);
@@ -199,20 +275,13 @@ function AccountGroupRow({
       </button>
       {open && (
         <ul className="bg-slate-50/60 pb-1 text-sm dark:bg-slate-800/30">
-          {accounts.map((a) => (
-            <li key={a.id} className="flex items-center justify-between gap-3 py-1.5 pl-10 pr-4">
-              <span className="min-w-0">
-                <span className="block truncate">{a.name}</span>
-                <span className="text-xs text-slate-500">
-                  {[a.institutionName, a.mask && `••${a.mask}`].filter(Boolean).join(" · ") ||
-                    "Manual"}
-                </span>
-              </span>
-              <span className="tabular-nums">
-                {formatMoney(debt ? -a.balanceCents : a.balanceCents)}
-              </span>
-            </li>
-          ))}
+          {(byLender ? lenderGroups(accounts) : accounts.map((a) => [a])).map((list) =>
+            list.length > 1 ? (
+              <LenderRow key={list[0]?.id} accounts={list} debt={debt} />
+            ) : (
+              list[0] && <AccountLine key={list[0].id} a={list[0]} debt={debt} />
+            ),
+          )}
         </ul>
       )}
     </li>
@@ -250,7 +319,15 @@ function AccountsCard() {
         {GROUPS.flatMap((g) => {
           const list = visible.filter((a) => g.types.includes(a.type));
           if (list.length === 0) return [];
-          const row = <AccountGroupRow key={g.key} label={g.label} accounts={list} debt={g.debt} />;
+          const row = (
+            <AccountGroupRow
+              key={g.key}
+              label={g.label}
+              accounts={list}
+              debt={g.debt}
+              byLender={g.key === "loan"}
+            />
+          );
           if (g.key !== "credit" || !hasCards) return [row];
           // Net cash sits right after credit cards, as in Rocket Money.
           return [
@@ -680,6 +757,15 @@ export function OverviewPage() {
             <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-6 lg:[grid-area:s]">
               <div className="order-2 min-w-0 lg:order-0">
                 <AccountsCard />
+              </div>
+              <div className="order-3 min-w-0 lg:order-0">
+                <CardsOverviewCard />
+              </div>
+              <div className="order-3 min-w-0 lg:order-0">
+                <LoansOverviewCard />
+              </div>
+              <div className="order-3 min-w-0 lg:order-0">
+                <StocksOverviewCard />
               </div>
               <div className="order-3 min-w-0 lg:order-0">
                 <CryptoOverviewCard />

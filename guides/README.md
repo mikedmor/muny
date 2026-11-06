@@ -9,7 +9,7 @@ How to install, set up and use Muny.
 | [Bank sync](bank-sync.md)                     | Connecting banks automatically through your own Plaid or Teller keys  |
 | [Importing files](importing.md)               | Rocket Money, bank CSV/OFX, brokerage and Koinly exports              |
 | [Loans](loans.md)                             | Loans: balances, rates, payoff dates and paying extra                 |
-| [Credit cards](cards.md)         | Limits, statements, due dates and paying cards off                    |
+| [Credit cards](cards.md)                      | Limits, statements, due dates and paying cards off                    |
 | [Stocks](stocks.md)                           | Tracking brokerage accounts, holdings and dividends                   |
 | [Savings](savings.md)                         | Savings accounts (interest, rate, projections) and money saved        |
 | [Crypto](crypto.md)                           | Wallets, exchanges, prices, cost basis and tax reports                |

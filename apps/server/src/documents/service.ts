@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { type MunyDb, newId, schema } from "@muny/db";
-import type { DocumentInfo } from "@muny/shared";
-import { desc, eq } from "drizzle-orm";
+import { CRYPTO_TAX_REPORTS, type DocumentInfo } from "@muny/shared";
+import { desc, eq, sql } from "drizzle-orm";
 import { decryptBytes, encryptBytes } from "../lib/crypto.js";
 
 /**
@@ -16,9 +16,20 @@ export const DOCUMENT_TYPES: Record<string, string> = {
   "image/jpeg": "jpg",
 };
 
+/** Statements file themselves by where they came from; uploads go where you put them. */
+function folderOf(r: typeof schema.documents.$inferSelect) {
+  if (r.kind === "loan_statement") return `Loans / ${r.lender ?? "Statements"}`;
+  if (r.kind === "card_statement") return `Credit cards / ${r.lender ?? "Statements"}`;
+  return r.folder?.trim() || "Uploads";
+}
+
 const info = (r: typeof schema.documents.$inferSelect): DocumentInfo => ({
   id: r.id,
   kind: r.kind,
+  folder: folderOf(r),
+  href: `/api/documents/${r.id}/file`,
+  downloadHref: `/api/documents/${r.id}/file?download=1`,
+  stored: true,
   name: r.name,
   mime: r.mime,
   sizeBytes: r.sizeBytes,
@@ -28,17 +39,108 @@ const info = (r: typeof schema.documents.$inferSelect): DocumentInfo => ({
   createdAt: r.createdAt.getTime(),
 });
 
-export function listDocuments(db: MunyDb): DocumentInfo[] {
-  return db
-    .select()
-    .from(schema.documents)
-    .orderBy(desc(schema.documents.createdAt))
-    .all()
-    .map(info)
-    .sort(
-      (a, b) =>
-        (b.documentDate ?? "").localeCompare(a.documentDate ?? "") || b.createdAt - a.createdAt,
+/** Tax forms kept with Crypto, and the tax reports Muny makes, for each year with data. */
+function taxDocuments(db: MunyDb): DocumentInfo[] {
+  const out: DocumentInfo[] = [];
+  const wallet = new Map(
+    db
+      .select({ id: schema.cryptoWallets.id, name: schema.cryptoWallets.name })
+      .from(schema.cryptoWallets)
+      .all()
+      .map((w) => [w.id, w.name]),
+  );
+  for (const d of db
+    .select({
+      id: schema.cryptoTaxDocs.id,
+      walletId: schema.cryptoTaxDocs.walletId,
+      year: schema.cryptoTaxDocs.year,
+      kind: schema.cryptoTaxDocs.kind,
+      filename: schema.cryptoTaxDocs.filename,
+      contentType: schema.cryptoTaxDocs.contentType,
+      size: schema.cryptoTaxDocs.size,
+      uploadedAt: schema.cryptoTaxDocs.uploadedAt,
+    })
+    .from(schema.cryptoTaxDocs)
+    .all())
+    out.push({
+      id: `taxdoc:${d.id}`,
+      kind: "tax_form",
+      folder: `Taxes / ${d.year} / Forms`,
+      href: `/api/crypto/tax/docs/${d.id}/file`,
+      downloadHref: `/api/crypto/tax/docs/${d.id}/file`,
+      stored: false,
+      name: d.filename,
+      mime: d.contentType,
+      sizeBytes: d.size,
+      lender: wallet.get(d.walletId) ?? null,
+      documentDate: `${d.year}-12-31`,
+      notes: `${d.kind} from ${wallet.get(d.walletId) ?? "an exchange"}`,
+      createdAt: d.uploadedAt,
+    });
+  const yearsOf = (rows: { y: string | number | null }[]) =>
+    rows.map((r) => Number(r.y)).filter((y) => Number.isInteger(y) && y > 1990);
+  const thisYear = new Date().getFullYear();
+  const txnYears = yearsOf(
+    db
+      .select({ y: sql<string>`distinct substr(${schema.transactions.postedDate}, 1, 4)` })
+      .from(schema.transactions)
+      .all(),
+  );
+  const cryptoYears = yearsOf(
+    db
+      .select({
+        y: sql<string>`distinct strftime('%Y', ${schema.cryptoTxns.at} / 1000, 'unixepoch')`,
+      })
+      .from(schema.cryptoTxns)
+      .all(),
+  );
+  const report = (year: number, key: string, name: string, href: string, notes: string) => ({
+    id: `report:${key}`,
+    kind: "report" as const,
+    folder: `Taxes / ${year} / Reports`,
+    href,
+    downloadHref: href,
+    stored: false,
+    name,
+    mime: "text/csv",
+    sizeBytes: 0,
+    lender: null,
+    documentDate: year === thisYear ? null : `${year}-12-31`,
+    notes,
+    createdAt: Date.now(),
+  });
+  for (const y of txnYears)
+    out.push(
+      report(
+        y,
+        `tax-${y}`,
+        `Tax summary ${y}.csv`,
+        `/api/tax/${y}/export.csv`,
+        "Made from your transactions when you open it",
+      ),
     );
+  for (const y of cryptoYears)
+    for (const [kind, label] of CRYPTO_TAX_REPORTS)
+      out.push(
+        report(
+          y,
+          `crypto-${kind}-${y}`,
+          `Crypto ${label.toLowerCase()} ${y}.csv`,
+          `/api/crypto/tax/${y}/report/${kind}`,
+          "Made from your crypto history when you open it",
+        ),
+      );
+  return out;
+}
+
+export function listDocuments(db: MunyDb): DocumentInfo[] {
+  return [
+    ...db.select().from(schema.documents).orderBy(desc(schema.documents.createdAt)).all().map(info),
+    ...taxDocuments(db),
+  ].sort(
+    (a, b) =>
+      (b.documentDate ?? "").localeCompare(a.documentDate ?? "") || b.createdAt - a.createdAt,
+  );
 }
 
 /** Keep a file (or update the details of the same file kept before). */
@@ -53,6 +155,7 @@ export function saveDocument(
     lender?: string | null;
     documentDate?: string | null;
     notes?: string | null;
+    folder?: string | null;
   },
 ): DocumentInfo {
   const sha256 = createHash("sha256").update(input.bytes).digest("hex");
@@ -88,6 +191,7 @@ export function saveDocument(
     lender: input.lender ?? null,
     documentDate: input.documentDate ?? null,
     notes: input.notes ?? null,
+    folder: input.folder?.trim() || null,
     encrypted: !!secret,
     data: secret ? encryptBytes(secret, input.bytes) : input.bytes,
   };
@@ -109,7 +213,12 @@ export function readDocument(
 export function updateDocument(
   db: MunyDb,
   id: string,
-  patch: { name?: string; notes?: string | null; documentDate?: string | null },
+  patch: {
+    name?: string;
+    notes?: string | null;
+    documentDate?: string | null;
+    folder?: string | null;
+  },
 ) {
   return (
     db.update(schema.documents).set(patch).where(eq(schema.documents.id, id)).run().changes > 0

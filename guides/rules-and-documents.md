@@ -12,6 +12,10 @@ All rules, their order and the full editor (several names, "any of") are in **Se
 
 ## Documents
 
-**Insights → Documents** keeps your files: loan statements you import on the Loans page are saved there automatically, and **Upload** adds your own PDF, PNG or JPEG files (titles, tax forms, receipts), up to 10 MB each. Search by name, lender or date; open, download or delete.
+**Insights → Documents** keeps your files in folders by where they come from:
 
-Files are stored in Muny's database, so backups include them, and they're encrypted with `MUNY_SECRET_KEY` when it's set. The same file is only kept once.
+- **Loans / lender** and **Credit cards / card:** statements you import, filed automatically.
+- **Taxes / year:** 1099-DA forms you added on the Taxes page, and the reports Muny makes for that year (the tax summary CSV and the crypto tax reports), made fresh when you open them.
+- **Your own folders:** **Upload** puts files (PDF, PNG or JPEG, up to 10 MB) in the folder you've picked on the left, or **Uploads**. Move a file with the folder button; type a new name like `Home / Insurance` to make a folder.
+
+Search by name, lender, year or folder; open, download or delete. Files are stored in Muny's database, so backups include them, and they're encrypted with `MUNY_SECRET_KEY` when it's set. The same file is only kept once.

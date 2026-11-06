@@ -346,10 +346,17 @@ export interface LoanStatementPreview {
   matches: Record<string, string>;
 }
 
-/** A document kept in Muny (Insights → Documents). */
+/** A document kept in Muny (Insights → Documents), or one it makes (tax reports). */
 export interface DocumentInfo {
   id: string;
-  kind: "loan_statement" | "card_statement" | "other";
+  kind: "loan_statement" | "card_statement" | "tax_form" | "report" | "other";
+  /** Where it's filed, e.g. "Loans / Seaview" or "Taxes / 2026". */
+  folder: string;
+  /** Open it (in the browser) and download it. */
+  href: string;
+  downloadHref: string;
+  /** Kept in Documents (can be renamed, moved, deleted); otherwise it lives elsewhere or is made on demand. */
+  stored: boolean;
   name: string;
   mime: string;
   sizeBytes: number;

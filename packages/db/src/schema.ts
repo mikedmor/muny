@@ -944,6 +944,8 @@ export const documents = sqliteTable(
     lender: text(),
     documentDate: text(),
     notes: text(),
+    /** Your own folder for uploads, e.g. "Car" or "Taxes / 2026" (statements file themselves). */
+    folder: text(),
     encrypted: integer({ mode: "boolean" }).notNull().default(false),
     data: blob({ mode: "buffer" }).notNull(),
     createdAt: createdAt(),

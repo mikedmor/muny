@@ -46,6 +46,7 @@ export function registerDocumentRoutes(
         dataBase64: z.string().min(10).max(14_000_000, "The file is too large (10 MB max)"),
         notes: z.string().trim().max(500).nullable().optional(),
         documentDate: isoDate.nullable().optional(),
+        folder: z.string().trim().max(120).nullable().optional(),
       }),
       req.body,
     );
@@ -83,6 +84,7 @@ export function registerDocumentRoutes(
         name: z.string().trim().min(1).max(120).optional(),
         notes: z.string().trim().max(500).nullable().optional(),
         documentDate: isoDate.nullable().optional(),
+        folder: z.string().trim().max(120).nullable().optional(),
       }),
       req.body,
     );

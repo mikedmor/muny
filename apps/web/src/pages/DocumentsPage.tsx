@@ -1,14 +1,27 @@
 import type { DocumentInfo } from "@muny/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, ExternalLink, FileText, Image, Search, Trash2, Upload } from "lucide-react";
+import {
+  Download,
+  ExternalLink,
+  FileSpreadsheet,
+  FileText,
+  Folder,
+  FolderInput,
+  FolderOpen,
+  Image,
+  Search,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { useState } from "react";
 import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
 import { api } from "../lib/api.js";
 
 /**
- * Documents (Insights): loan statements saved when you import them, and files
- * you upload (titles, tax forms, receipts). Kept in Muny's database, encrypted
- * when MUNY_SECRET_KEY is set.
+ * Documents (Insights), in folders by where they come from: loan and card
+ * statements you import, tax forms and the tax reports Muny makes, and your
+ * own uploads in folders you choose. Kept in Muny's database, encrypted when
+ * MUNY_SECRET_KEY is set; reports are made when you open them.
  */
 
 const docsKey = ["documents"] as const;
@@ -16,6 +29,8 @@ const TYPES = ["application/pdf", "image/png", "image/jpeg"];
 const KIND_LABEL: Record<DocumentInfo["kind"], string> = {
   loan_statement: "Loan statement",
   card_statement: "Card statement",
+  tax_form: "Tax form",
+  report: "Report",
   other: "Document",
 };
 
@@ -28,9 +43,17 @@ const day = (iso: string | null) =>
       })
     : null;
 const size = (b: number) =>
-  b < 1024 * 1024
-    ? `${Math.max(1, Math.round(b / 1024))} KB`
-    : `${(b / 1024 / 1024).toFixed(1)} MB`;
+  b <= 0
+    ? null
+    : b < 1024 * 1024
+      ? `${Math.max(1, Math.round(b / 1024))} KB`
+      : `${(b / 1024 / 1024).toFixed(1)} MB`;
+const parts = (folder: string) =>
+  folder
+    .split("/")
+    .map((p) => p.trim())
+    .filter(Boolean);
+const join = (p: string[]) => p.join(" / ");
 
 function toBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -41,17 +64,61 @@ function toBase64(file: File): Promise<string> {
   });
 }
 
+interface FolderNode {
+  path: string;
+  name: string;
+  depth: number;
+  count: number;
+}
+
+/** Every folder and its parents, in order, with how many documents are inside. */
+function folderTree(docs: DocumentInfo[]): FolderNode[] {
+  const counts = new Map<string, number>();
+  for (const d of docs) {
+    const p = parts(d.folder);
+    for (let i = 1; i <= p.length; i++) {
+      const k = join(p.slice(0, i));
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+  }
+  // Years newest first; everything else alphabetical.
+  const keys = [...counts.keys()].sort((a, b) => {
+    const pa = parts(a);
+    const pb = parts(b);
+    for (let i = 0; i < Math.min(pa.length, pb.length); i++) {
+      if (pa[i] === pb[i]) continue;
+      const na = Number(pa[i]);
+      const nb = Number(pb[i]);
+      if (Number.isInteger(na) && Number.isInteger(nb)) return nb - na;
+      return (pa[i] ?? "").localeCompare(pb[i] ?? "");
+    }
+    return pa.length - pb.length;
+  });
+  return keys.map((k) => {
+    const p = parts(k);
+    return { path: k, name: p.at(-1) ?? k, depth: p.length - 1, count: counts.get(k) ?? 0 };
+  });
+}
+
 export function DocumentsPage() {
   const qc = useQueryClient();
   const docs = useQuery({
     queryKey: docsKey,
     queryFn: () => api.get<DocumentInfo[]>("/api/documents"),
   });
+  const [folder, setFolder] = useState<string | null>(null);
   const [q, setQ] = useState("");
-  const [kind, setKind] = useState<"all" | DocumentInfo["kind"]>("all");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
+  const [moving, setMoving] = useState<{ id: string; folder: string } | null>(null);
+
+  const all = docs.data ?? [];
+  const tree = folderTree(all);
+  const uploadFolder = folder && !/^(Loans|Credit cards|Taxes)\b/.test(folder) ? folder : "Uploads";
+  const userFolders = [
+    ...new Set(all.filter((d) => d.stored && d.kind === "other").map((d) => d.folder)),
+  ];
 
   const upload = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -72,6 +139,7 @@ export function DocumentsPage() {
           name: file.name,
           mime: file.type,
           dataBase64: await toBase64(file),
+          folder: uploadFolder,
         });
       } catch (err) {
         setError(err instanceof Error ? err.message : `Couldn't upload ${file.name}`);
@@ -86,20 +154,25 @@ export function DocumentsPage() {
     setConfirm(null);
     await qc.invalidateQueries({ queryKey: docsKey });
   };
+  const move = async () => {
+    if (!moving) return;
+    await api.patch(`/api/documents/${moving.id}`, { folder: moving.folder.trim() || null });
+    setMoving(null);
+    await qc.invalidateQueries({ queryKey: docsKey });
+  };
 
   const needle = q.trim().toLowerCase();
-  const list = (docs.data ?? []).filter(
+  const list = all.filter(
     (d) =>
-      (kind === "all" || d.kind === kind) &&
+      (!folder || d.folder === folder || d.folder.startsWith(`${folder} /`)) &&
       (!needle ||
-        [d.name, d.lender, d.notes, d.documentDate].some((x) => x?.toLowerCase().includes(needle))),
+        [d.name, d.lender, d.notes, d.documentDate, d.folder].some((x) =>
+          x?.toLowerCase().includes(needle),
+        )),
   );
-  // Statements by lender; everything else together.
   const groups = new Map<string, DocumentInfo[]>();
-  for (const d of list) {
-    const k = d.kind === "loan_statement" ? `${d.lender ?? "Loan"} statements` : "Other documents";
-    groups.set(k, [...(groups.get(k) ?? []), d]);
-  }
+  for (const d of list) groups.set(d.folder, [...(groups.get(d.folder) ?? []), d]);
+  const ordered = tree.filter((n) => groups.has(n.path)).map((n) => n.path);
 
   return (
     <>
@@ -107,7 +180,7 @@ export function DocumentsPage() {
         title="Documents"
         actions={
           <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">
-            <Upload aria-hidden="true" className="size-4" /> Upload
+            <Upload aria-hidden="true" className="size-4" /> Upload to {uploadFolder}
             <input
               type="file"
               multiple
@@ -123,130 +196,206 @@ export function DocumentsPage() {
         }
       />
       <p className="-mt-3 mb-4 text-sm text-slate-500">
-        Loan statements you import are kept here, and you can upload your own (titles, tax forms,
-        receipts). They stay on your Muny server.
+        Statements you import file themselves by lender and card; tax forms and the tax reports Muny
+        makes are under Taxes by year. Your own uploads (titles, receipts) go into the folder you
+        pick on the left, or move them after.
       </p>
       {error && <Alert>{error}</Alert>}
       {busy && <p className="mb-3 text-sm text-slate-500">{busy}</p>}
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <label className="flex min-w-60 flex-1 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950">
-          <Search aria-hidden="true" className="size-4 text-slate-400" />
-          <span className="sr-only">Search documents</span>
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search by name, lender or date"
-            className="min-w-0 flex-1 bg-transparent outline-none"
-          />
-        </label>
-        {(["all", "loan_statement", "other"] as const).map((k) => (
+      <div className="grid gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
+        <nav aria-label="Folders" className="space-y-0.5 text-sm">
           <button
-            key={k}
             type="button"
-            aria-pressed={kind === k}
-            onClick={() => setKind(k)}
+            onClick={() => setFolder(null)}
             className={cx(
-              "rounded-full px-3 py-1.5 text-sm",
-              kind === k
-                ? "bg-brand-600 text-white"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300",
+              "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left",
+              folder === null
+                ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-700/20 dark:text-brand-500"
+                : "hover:bg-slate-100 dark:hover:bg-slate-800",
             )}
           >
-            {k === "all" ? "All" : k === "loan_statement" ? "Loan statements" : "Other"}
+            <FolderOpen aria-hidden="true" className="size-4" />
+            <span className="flex-1">All documents</span>
+            <span className="text-xs text-slate-500">{all.length}</span>
           </button>
-        ))}
-      </div>
+          {tree.map((n) => (
+            <button
+              key={n.path}
+              type="button"
+              onClick={() => setFolder(n.path)}
+              style={{ paddingLeft: `${0.5 + n.depth}rem` }}
+              className={cx(
+                "flex w-full items-center gap-2 rounded-lg py-1.5 pr-2 text-left",
+                folder === n.path
+                  ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-700/20 dark:text-brand-500"
+                  : "hover:bg-slate-100 dark:hover:bg-slate-800",
+              )}
+            >
+              {folder === n.path ? (
+                <FolderOpen aria-hidden="true" className="size-4 shrink-0" />
+              ) : (
+                <Folder aria-hidden="true" className="size-4 shrink-0 text-slate-400" />
+              )}
+              <span className="min-w-0 flex-1 truncate">{n.name}</span>
+              <span className="text-xs text-slate-500">{n.count}</span>
+            </button>
+          ))}
+        </nav>
 
-      {docs.isError && <Alert>{docs.error.message}</Alert>}
-      {docs.data && list.length === 0 && (
-        <Card className="text-center text-sm text-slate-500">
-          {docs.data.length === 0
-            ? "No documents yet. Import a loan statement on the Loans page, or upload a file."
-            : "Nothing matches."}
-        </Card>
-      )}
-      <div className="space-y-6">
-        {[...groups].map(([title, items]) => (
-          <section key={title}>
-            <h2 className="mb-2 px-1 text-sm font-semibold tracking-wide text-slate-500 uppercase">
-              {title}
-            </h2>
-            <Card className="p-0">
-              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                {items.map((d) => {
-                  const Icon = d.mime.startsWith("image/") ? Image : FileText;
-                  return (
-                    <li key={d.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                      <Icon aria-hidden="true" className="size-5 shrink-0 text-brand-600" />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{d.name}</p>
-                        <p className="truncate text-xs text-slate-500">
-                          {[
-                            KIND_LABEL[d.kind],
-                            d.documentDate && `Statement of ${day(d.documentDate)}`,
-                            size(d.sizeBytes),
-                            `Added ${new Date(d.createdAt).toLocaleDateString()}`,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </p>
-                      </div>
-                      <span className="flex items-center gap-1">
-                        <a
-                          href={`/api/documents/${d.id}/file`}
-                          target="_blank"
-                          rel="noopener"
-                          title="Open"
-                          className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800"
-                        >
-                          <ExternalLink aria-hidden="true" className="size-4" />
-                          <span className="sr-only">Open {d.name}</span>
-                        </a>
-                        <a
-                          href={`/api/documents/${d.id}/file?download=1`}
-                          title="Download"
-                          className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800"
-                        >
-                          <Download aria-hidden="true" className="size-4" />
-                          <span className="sr-only">Download {d.name}</span>
-                        </a>
-                        {confirm === d.id ? (
-                          <span className="flex items-center gap-1 text-xs">
-                            <Button
-                              variant="danger"
-                              className="px-2 py-1 text-xs"
-                              onClick={() => void remove(d.id)}
-                            >
-                              Delete
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              className="px-2 py-1 text-xs"
-                              onClick={() => setConfirm(null)}
-                            >
-                              Cancel
-                            </Button>
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            title="Delete"
-                            onClick={() => setConfirm(d.id)}
-                            className="rounded-md p-2 text-slate-400 hover:bg-slate-100 hover:text-red-600 dark:hover:bg-slate-800"
-                          >
-                            <Trash2 aria-hidden="true" className="size-4" />
-                            <span className="sr-only">Delete {d.name}</span>
-                          </button>
-                        )}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
+        <div className="min-w-0 space-y-4">
+          <label className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950">
+            <Search aria-hidden="true" className="size-4 text-slate-400" />
+            <span className="sr-only">Search documents</span>
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={
+                folder ? `Search in ${folder}` : "Search by name, lender, year or folder"
+              }
+              className="min-w-0 flex-1 bg-transparent outline-none"
+            />
+          </label>
+          {docs.isError && <Alert>{docs.error.message}</Alert>}
+          {docs.data && list.length === 0 && (
+            <Card className="text-center text-sm text-slate-500">
+              {all.length === 0
+                ? "No documents yet. Import a statement on Loans or Credit cards, or upload a file."
+                : "Nothing here."}
             </Card>
-          </section>
-        ))}
+          )}
+          {ordered.map((path) => (
+            <section key={path}>
+              <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                {path}
+              </h2>
+              <Card className="p-0">
+                <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {(groups.get(path) ?? []).map((d) => {
+                    const Icon = d.mime.startsWith("image/")
+                      ? Image
+                      : d.mime === "text/csv"
+                        ? FileSpreadsheet
+                        : FileText;
+                    return (
+                      <li key={d.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                        <Icon aria-hidden="true" className="size-5 shrink-0 text-brand-600" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{d.name}</p>
+                          <p className="truncate text-xs text-slate-500">
+                            {[
+                              KIND_LABEL[d.kind],
+                              d.kind !== "report" && d.documentDate && day(d.documentDate),
+                              d.notes,
+                              size(d.sizeBytes),
+                              d.stored && `Added ${new Date(d.createdAt).toLocaleDateString()}`,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </p>
+                          {moving?.id === d.id && (
+                            <form
+                              className="mt-2 flex flex-wrap items-center gap-2"
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                void move();
+                              }}
+                            >
+                              <input
+                                aria-label="Folder"
+                                list="doc-folders"
+                                value={moving.folder}
+                                onChange={(e) => setMoving({ id: d.id, folder: e.target.value })}
+                                placeholder="e.g. Car or Home / Insurance"
+                                className="w-64 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+                              />
+                              <datalist id="doc-folders">
+                                {userFolders.map((f) => (
+                                  <option key={f} value={f} />
+                                ))}
+                              </datalist>
+                              <Button type="submit" className="px-2.5 py-1 text-xs">
+                                Move
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                className="px-2 py-1 text-xs"
+                                onClick={() => setMoving(null)}
+                              >
+                                Cancel
+                              </Button>
+                            </form>
+                          )}
+                        </div>
+                        <span className="flex items-center gap-1">
+                          <a
+                            href={d.href}
+                            target="_blank"
+                            rel="noopener"
+                            title="Open"
+                            className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800"
+                          >
+                            <ExternalLink aria-hidden="true" className="size-4" />
+                            <span className="sr-only">Open {d.name}</span>
+                          </a>
+                          <a
+                            href={d.downloadHref}
+                            download
+                            title="Download"
+                            className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800"
+                          >
+                            <Download aria-hidden="true" className="size-4" />
+                            <span className="sr-only">Download {d.name}</span>
+                          </a>
+                          {d.stored && d.kind === "other" && (
+                            <button
+                              type="button"
+                              title="Move to a folder"
+                              onClick={() => setMoving({ id: d.id, folder: d.folder })}
+                              className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800"
+                            >
+                              <FolderInput aria-hidden="true" className="size-4" />
+                              <span className="sr-only">Move {d.name}</span>
+                            </button>
+                          )}
+                          {d.stored &&
+                            (confirm === d.id ? (
+                              <span className="flex items-center gap-1 text-xs">
+                                <Button
+                                  variant="danger"
+                                  className="px-2 py-1 text-xs"
+                                  onClick={() => void remove(d.id)}
+                                >
+                                  Delete
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  className="px-2 py-1 text-xs"
+                                  onClick={() => setConfirm(null)}
+                                >
+                                  Cancel
+                                </Button>
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                title="Delete"
+                                onClick={() => setConfirm(d.id)}
+                                className="rounded-md p-2 text-slate-400 hover:bg-slate-100 hover:text-red-600 dark:hover:bg-slate-800"
+                              >
+                                <Trash2 aria-hidden="true" className="size-4" />
+                                <span className="sr-only">Delete {d.name}</span>
+                              </button>
+                            ))}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </Card>
+            </section>
+          ))}
+        </div>
       </div>
     </>
   );
