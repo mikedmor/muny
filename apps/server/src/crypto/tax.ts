@@ -127,6 +127,7 @@ export function cryptoTax(db: MunyDb, range: { from?: number; to?: number }): Cr
   return {
     from,
     to,
+    txnCount: rows.filter((r) => inRange(r.at)).length,
     summary: {
       inCents: sum("in"),
       outCents: sum("out"),

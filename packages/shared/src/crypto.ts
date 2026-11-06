@@ -198,7 +198,8 @@ export interface CryptoOverview {
   missingHistory: { asset: string; walletName: string; amount: string }[];
   holdings: CryptoHolding[];
   /** Portfolio value per day (oldest first), from stored daily prices. */
-  history: { date: string; valueCents: number }[];
+  /** Value and cost basis (FIFO, what you paid for what you held) per day. */
+  history: { date: string; valueCents: number; costCents: number }[];
   pricesEnabled: boolean;
   pricesUpdatedAt: number | null;
   /** A price update is running right now. */
@@ -623,6 +624,8 @@ export interface CryptoTaxReport {
     feesCents: number;
     realizedCents: number;
   };
+  /** Transactions in the range. */
+  txnCount: number;
   /** The tax year of the range's end: realized gains by term. */
   year: number;
   realized: {

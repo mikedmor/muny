@@ -5,7 +5,7 @@ import { Donut, type DonutSlice, LineChart } from "../../components/charts.js";
 import { CoinIcon, WalletIcon } from "../../components/coins.js";
 import { Alert, Button, Card, cx } from "../../components/ui.js";
 import { api } from "../../lib/api.js";
-import { useCryptoMutation, useCryptoOverview } from "../../lib/queries.js";
+import { useCryptoMutation, useCryptoOverview, useCryptoTax } from "../../lib/queries.js";
 import { FlowsStrip, MaturityView, NftsView, TaxOptimizationView } from "./CryptoTaxViews.js";
 import { agoTime, CryptoHeader, fmtAmount, fmtPrice } from "./common.js";
 
@@ -354,10 +354,119 @@ function RefreshStatus() {
   );
 }
 
+type SortKey = "asset" | "amount" | "cost" | "value" | "roi" | "change";
+type HoldingSort = { key: SortKey; desc: boolean };
+
+/** Holdings in the chosen order; coins without a number go last either way. */
+function sortHoldings(list: CryptoHolding[], s: HoldingSort): CryptoHolding[] {
+  const num = (h: CryptoHolding): number | null => {
+    switch (s.key) {
+      case "amount":
+        return Number(h.amount);
+      case "cost":
+        return h.costCents;
+      case "value":
+        return h.valueCents;
+      case "roi":
+        return h.costCents && h.valueCents !== null
+          ? (h.valueCents - h.costCents) / h.costCents
+          : null;
+      case "change":
+        return h.change24hPct;
+      default:
+        return null;
+    }
+  };
+  return [...list].sort((a, b) => {
+    if (s.key === "asset") return (s.desc ? -1 : 1) * a.asset.localeCompare(b.asset);
+    const x = num(a);
+    const y = num(b);
+    if (x === null && y === null) return 0;
+    if (x === null) return 1;
+    if (y === null) return -1;
+    return s.desc ? y - x : x - y;
+  });
+}
+
+function SortTh({
+  k,
+  sort,
+  setSort,
+  className,
+  children,
+}: {
+  k: SortKey;
+  sort: HoldingSort;
+  setSort: (s: HoldingSort) => void;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const on = sort.key === k;
+  return (
+    <th
+      className={cx("font-medium", className)}
+      aria-sort={on ? (sort.desc ? "descending" : "ascending") : "none"}
+    >
+      <button
+        type="button"
+        onClick={() => setSort({ key: k, desc: on ? !sort.desc : k !== "asset" })}
+        className={cx(
+          "hover:text-slate-800 dark:hover:text-slate-200",
+          on && "text-slate-800 dark:text-slate-200",
+        )}
+      >
+        {children}
+        <span aria-hidden="true" className="ml-1 inline-block w-2">
+          {on ? (sort.desc ? "↓" : "↑") : ""}
+        </span>
+      </button>
+    </th>
+  );
+}
+
+/** This year so far: transactions, income, realized gains, fees. */
+function ThisYear() {
+  const year = new Date().getFullYear();
+  const t = useCryptoTax(`${year}-01-01`, new Date().toISOString().slice(0, 10));
+  const s = t.data?.summary;
+  const r = t.data?.realized;
+  const realized = r
+    ? r.short.profitCents + r.short.lossCents + r.long.profitCents + r.long.lossCents
+    : null;
+  return (
+    <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800">
+      <p className="mb-2 text-xs font-medium tracking-wide text-slate-500 uppercase">
+        {year} so far
+      </p>
+      <dl className="space-y-2 text-sm">
+        {(
+          [
+            ["Transactions", t.data ? String(t.data.txnCount) : "…"],
+            ["Income", s ? formatMoney(s.incomeCents) : "…"],
+            [
+              "Realized gains",
+              realized !== null
+                ? `${realized < 0 ? "−" : ""}${formatMoney(Math.abs(realized))}`
+                : "…",
+            ],
+            ["Fees", s ? formatMoney(s.feesCents) : "…"],
+          ] as const
+        ).map(([k, v]) => (
+          <div key={k} className="flex justify-between">
+            <dt className="text-slate-500">{k}</dt>
+            <dd className="font-medium tabular-nums">{v}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
 export function CryptoDashboard() {
   const o = useCryptoOverview();
   const [range, setRange] = useState<(typeof RANGES)[number][0]>("YTD");
   const [tab, setTab] = useState<(typeof TABS)[number][0]>("overview");
+  const [sort, setSort] = useState<HoldingSort>({ key: "value", desc: true });
   const [custom, setCustom] = useState({
     from: `${new Date().getFullYear()}-01-01`,
     to: isoDay(Date.now()),
@@ -397,7 +506,7 @@ export function CryptoDashboard() {
         ((h.valueCents ?? 0) * (h.change24hPct ?? 0)) / (100 + (h.change24hPct ?? 0)),
       ),
     }))
-    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+    .sort((a, b) => Math.abs(b.h.change24hPct ?? 0) - Math.abs(a.h.change24hPct ?? 0))
     .slice(0, 5);
 
   return (
@@ -545,7 +654,9 @@ export function CryptoDashboard() {
                 <LineChart
                   ariaLabel="Portfolio value over time"
                   height={220}
+                  compareLabel="Cost basis"
                   points={points.map((p) => ({
+                    compare: p.costCents,
                     date: p.date,
                     label: new Date(`${p.date}T00:00:00`).toLocaleDateString(undefined, {
                       month: "short",
@@ -635,6 +746,7 @@ export function CryptoDashboard() {
                   </div>
                 ))}
               </dl>
+              <ThisYear />
               <div className="mt-4 flex gap-2">
                 <Link to="/crypto/wallets">
                   <Button variant="secondary">Wallets</Button>
@@ -653,16 +765,38 @@ export function CryptoDashboard() {
                 <thead className="text-xs text-slate-500">
                   <tr>
                     <th className="w-8" />
-                    <th className="py-2 pr-2 font-medium">Asset</th>
-                    <th className="px-2 text-right font-medium">Balance</th>
-                    <th className="hidden px-2 text-right font-medium md:table-cell">Cost (USD)</th>
-                    <th className="px-2 text-right font-medium">Market value</th>
-                    <th className="hidden px-2 text-right font-medium sm:table-cell">ROI</th>
-                    <th className="pr-4 text-right font-medium">24h</th>
+                    <SortTh k="asset" sort={sort} setSort={setSort} className="py-2 pr-2">
+                      Asset
+                    </SortTh>
+                    <SortTh k="amount" sort={sort} setSort={setSort} className="px-2 text-right">
+                      Balance
+                    </SortTh>
+                    <SortTh
+                      k="cost"
+                      sort={sort}
+                      setSort={setSort}
+                      className="hidden px-2 text-right md:table-cell"
+                    >
+                      Cost (USD)
+                    </SortTh>
+                    <SortTh k="value" sort={sort} setSort={setSort} className="px-2 text-right">
+                      Market value
+                    </SortTh>
+                    <SortTh
+                      k="roi"
+                      sort={sort}
+                      setSort={setSort}
+                      className="hidden px-2 text-right sm:table-cell"
+                    >
+                      ROI
+                    </SortTh>
+                    <SortTh k="change" sort={sort} setSort={setSort} className="pr-4 text-right">
+                      24h
+                    </SortTh>
                   </tr>
                 </thead>
                 <tbody>
-                  {d.holdings.map((h) => (
+                  {sortHoldings(d.holdings, sort).map((h) => (
                     <Fragment key={h.asset}>
                       <HoldingRow h={h} />
                     </Fragment>

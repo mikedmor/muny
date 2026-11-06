@@ -366,21 +366,29 @@ export interface LinePoint {
   date: string;
   label: string;
   value: number;
+  /** A second, dashed line on the same axis (e.g. cost basis). */
+  compare?: number;
 }
 
 export function LineChart({
   points,
   ariaLabel,
   height = H,
+  compareLabel,
 }: {
   points: LinePoint[];
   ariaLabel: string;
   height?: number;
+  /** Name of the dashed line (shown in the tooltip and legend). */
+  compareLabel?: string;
 }) {
   const { ref, width } = useWidth();
   const [hover, setHover] = useState<number | null>(null);
   const gradId = useId();
-  const values = points.map((p) => p.value);
+  const values = points.flatMap((p) =>
+    p.compare !== undefined ? [p.value, p.compare] : [p.value],
+  );
+  const hasCompare = !!compareLabel && points.some((p) => p.compare !== undefined);
   const lo = Math.min(0, ...values);
   const hi = Math.max(1, ...values);
   const ticks = niceTicks(hi, lo);
@@ -392,6 +400,9 @@ export function LineChart({
     PAD.left + (points.length <= 1 ? plotW / 2 : (i / (points.length - 1)) * plotW);
   const y = (v: number) => PAD.top + plotH - ((v - bottom) / Math.max(1, top - bottom)) * plotH;
   const line = points.map((p, i) => `${i ? "L" : "M"}${x(i)},${y(p.value)}`).join(" ");
+  const compareLine = hasCompare
+    ? points.map((p, i) => `${i ? "L" : "M"}${x(i)},${y(p.compare ?? 0)}`).join(" ")
+    : "";
   const area = points.length
     ? `${line} L${x(points.length - 1)},${y(Math.max(bottom, 0))} L${x(0)},${y(Math.max(bottom, 0))} Z`
     : "";
@@ -459,6 +470,15 @@ export function LineChart({
           ) : null,
         )}
         <path d={area} fill={`url(#${gradId})`} />
+        {hasCompare && (
+          <path
+            d={compareLine}
+            fill="none"
+            stroke="var(--viz-muted)"
+            strokeWidth={1.5}
+            strokeDasharray="5 4"
+          />
+        )}
         <path
           d={line}
           fill="none"
@@ -491,7 +511,23 @@ export function LineChart({
       {hp && hover !== null && (
         <Tooltip x={x(hover)} y={y(hp.value)} width={width}>
           <p className="font-medium">{hp.label}</p>
-          <p className="tabular-nums">{formatMoney(hp.value)}</p>
+          <p className="tabular-nums">
+            {hasCompare ? "Value: " : ""}
+            {formatMoney(hp.value)}
+          </p>
+          {hasCompare && hp.compare !== undefined && (
+            <>
+              <p className="tabular-nums">
+                {compareLabel}: {formatMoney(hp.compare)}
+              </p>
+              <p className="tabular-nums">
+                Gain/loss: {hp.value - hp.compare < 0 ? "−" : ""}
+                {formatMoney(Math.abs(hp.value - hp.compare))}
+                {hp.compare > 0 &&
+                  ` (${(((hp.value - hp.compare) / hp.compare) * 100).toFixed(1)}%)`}
+              </p>
+            </>
+          )}
         </Tooltip>
       )}
     </div>

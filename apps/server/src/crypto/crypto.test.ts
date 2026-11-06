@@ -171,7 +171,7 @@ describe("crypto", () => {
     expect(o.missingHistory).toEqual([]);
     expect(o.totalValueCents).toBe(79_600 + 2); // + 0.01 ATOM at $1.50
     expect(o.history.length).toBeGreaterThanOrEqual(2);
-    expect(o.history[0]).toEqual({ date: "2025-01-10", valueCents: 100_000 });
+    expect(o.history[0]).toMatchObject({ date: "2025-01-10", valueCents: 100_000 });
 
     // A second update only fetches what's missing (no chart calls for stored days).
     urls.length = 0;

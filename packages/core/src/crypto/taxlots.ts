@@ -112,9 +112,19 @@ export function taxLedger(
     skip: Set<string>;
     /** Value in cents of `amount` of `asset` on that day, if a price is known. */
     valueAt: (asset: string, amount: string, at: number) => number | null;
+    /** Moments (ascending) to report the total cost of everything held at (the cost line). */
+    snapshots?: number[];
   },
-): { lots: Map<string, TaxLot[]>; gains: Gain[]; flows: Flow[] } {
+): { lots: Map<string, TaxLot[]>; gains: Gain[]; flows: Flow[]; costAt: number[] } {
   const lots = new Map<string, TaxLot[]>();
+  // Total cost of all lots held, kept as lots come and go.
+  let held = 0n;
+  const snaps = opts.snapshots ?? [];
+  const costAt: number[] = [];
+  const snapUntil = (at: number) => {
+    while (costAt.length < snaps.length && (snaps[costAt.length] as number) < at)
+      costAt.push(Number(held));
+  };
   const gains: Gain[] = [];
   const flows: Flow[] = [];
   const value = (asset: string | null, amount: string | null, at: number) =>
@@ -134,12 +144,9 @@ export function taxLedger(
     const a = toFixed(amount);
     if (a <= 0n) return;
     const q = lots.get(asset) ?? [];
-    q.push({
-      amount: a,
-      cost: BigInt(Math.max(0, Math.round(cents ?? 0))),
-      acquiredAt: at,
-      known: cents !== null,
-    });
+    const cost = BigInt(Math.max(0, Math.round(cents ?? 0)));
+    held += cost;
+    q.push({ amount: a, cost, acquiredAt: at, known: cents !== null });
     lots.set(asset, q);
   };
 
@@ -162,6 +169,7 @@ export function taxLedger(
         left = 0n;
       }
     }
+    for (const x of pieces) held -= x.cost;
     // More left than the pool had: purchase history is missing (cost 0, short term).
     if (left > 0n) pieces.push({ amount: left, cost: 0n, acquiredAt: Number.NaN, known: false });
     lots.set(asset, q);
@@ -217,6 +225,7 @@ export function taxLedger(
   };
 
   for (const t of [...txns].sort((a, b) => a.at - b.at)) {
+    snapUntil(t.at);
     if (t.type === "trade") {
       const cents =
         t.valueCents ??
@@ -256,5 +265,6 @@ export function taxLedger(
       flows.push({ at: t.at, kind: "fee", asset: t.feeAsset, valueCents: cents });
     }
   }
-  return { lots, gains, flows };
+  snapUntil(Number.POSITIVE_INFINITY);
+  return { lots, gains, flows, costAt };
 }

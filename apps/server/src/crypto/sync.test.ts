@@ -189,7 +189,13 @@ describe("crypto wallet sync", () => {
     expect((await settle(w.id)).status).toBe("ok");
     const u = bs.calls[0]?.url as URL;
     expect(u.origin + u.pathname).toBe("https://api.blockscout.com/8453/api");
-    expect(bs.calls.every((c) => c.auth === "Bearer proapi_test_key")).toBe(true);
+    // The key goes with every call to the key-based API (NFT lookups use the public site).
+    const keyed = bs.calls.filter((c) => c.url.host === "api.blockscout.com");
+    expect(keyed.length).toBeGreaterThan(0);
+    expect(keyed.every((c) => c.auth === "Bearer proapi_test_key")).toBe(true);
+    expect(bs.calls.filter((c) => c.url.host !== "api.blockscout.com").every((c) => !c.auth)).toBe(
+      true,
+    );
     expect(bs.calls.some((c) => c.url.href.includes("proapi"))).toBe(false);
   });
 

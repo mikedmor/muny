@@ -47,7 +47,7 @@ export function SettingsPage() {
       <PageHeader title="Settings" />
       <div
         role="tablist"
-        className="mb-6 flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800"
+        className="mb-6 flex gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-b border-slate-200 dark:border-slate-800"
       >
         {TABS.map(([key, label]) => (
           <button

@@ -3,6 +3,9 @@ import {
   addDec as addDecs,
   CHAINS,
   type ChainKey,
+  HdAccount,
+  type HdCoin,
+  isExtendedKey,
   type SyncedTxn,
   sourceHint,
   toFixed,
@@ -756,4 +759,43 @@ export async function siaOwnTransfer(db: MunyDb, txnId: string, deps: SyncDeps) 
   });
   await syncWallet(db, wallet.id, deps);
   return { added: added.length };
+}
+
+/**
+ * Where to receive coins into a synced wallet: its address, or for an
+ * extended public key the next unused receive address (derived here, no
+ * service asked). Null with a note when Muny can't give one (a Cardano stake
+ * key, a Sia wallet that makes a new address each time).
+ */
+export function receiveAddress(db: MunyDb, walletId: string, secretKey: Buffer | undefined) {
+  const wallet = db.select().from(w).where(eq(w.id, walletId)).get();
+  if (!wallet?.sourceEnc || !wallet.chain || !(wallet.chain in CHAINS) || !secretKey)
+    throw new SyncError("This wallet has no address (it isn't synced from a blockchain)");
+  const chain = CHAINS[wallet.chain as ChainKey];
+  const source = decryptJson<string>(secretKey, wallet.sourceEnc);
+  const base = { chain: chain.key, chainName: chain.name, coin: chain.asset };
+  if (isExtendedKey(source)) {
+    const used = Object.keys(readCursor(wallet.syncCursor)?.pos ?? {})
+      .filter((k) => k.startsWith("0/"))
+      .map((k) => Number(k.slice(2)));
+    const next = used.length ? Math.max(...used) + 1 : 0;
+    return {
+      ...base,
+      address: new HdAccount(source, chain.key as HdCoin).address(0, next),
+      note: "A new receive address from this wallet's extended public key (the next unused one), the same one your wallet app shows.",
+    };
+  }
+  if (chain.key === "ada" && source.startsWith("stake"))
+    return {
+      ...base,
+      address: null,
+      note: "Muny syncs this wallet by its stake key, which can't receive coins itself: use the receive address your Cardano wallet app shows.",
+    };
+  if (chain.key === "sc")
+    return {
+      ...base,
+      address: null,
+      note: "A Sia wallet makes a new address every time: use Receive in the Sia app. Muny finds its new addresses as you sync.",
+    };
+  return { ...base, address: source, note: null };
 }

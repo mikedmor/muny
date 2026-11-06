@@ -54,6 +54,7 @@ import {
 import {
   findSiaAddresses,
   isSyncing,
+  receiveAddress,
   removeWalletSource,
   SyncError,
   setExchangeKey,
@@ -183,6 +184,19 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
     removeWalletSource(db, id);
     log(user.id, "crypto.wallet_source_remove", id);
     return listWallets(db).find((x) => x.id === id);
+  });
+
+  /** Where to receive coins into this wallet (shown on its page, with a QR code). */
+  app.get("/api/crypto/wallets/:id/receive", async (req) => {
+    const user = requireUser(req);
+    const { id } = parse(IdParams, req.params);
+    try {
+      const res = receiveAddress(db, id, priceDeps.secretKey);
+      log(user.id, "crypto.wallet_receive", id);
+      return res;
+    } catch (err) {
+      throw badRequest(err instanceof SyncError ? err.message : "Couldn't work out the address");
+    }
   });
 
   /** Sync an exchange with a read-only API key (stored encrypted, sent only to that exchange). */

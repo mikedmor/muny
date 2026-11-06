@@ -10,6 +10,7 @@ import {
   type ParsedCryptoTxn,
   parseAnyKoinlyCsv,
   subDec,
+  taxLedger,
   toFixed,
   valueCents,
 } from "@muny/core";
@@ -785,7 +786,35 @@ export function cryptoOverview(
     .all();
   const held = new Map<string, string>();
   const lastPrice = new Map<string, string>();
-  const history: { date: string; valueCents: number }[] = [];
+  const history: { date: string; valueCents: number; costCents: number }[] = [];
+  const { costAt } = taxLedger(
+    db
+      .select({
+        at: t.at,
+        type: t.type,
+        label: t.label,
+        sentAsset: t.sentAsset,
+        sentAmount: t.sentAmount,
+        receivedAsset: t.receivedAsset,
+        receivedAmount: t.receivedAmount,
+        feeAsset: t.feeAsset,
+        feeAmount: t.feeAmount,
+        valueCents: t.valueCents,
+        feeValueCents: t.feeValueCents,
+        pair: t.transferPairId,
+      })
+      .from(t)
+      .all()
+      .map((r) => ({ ...r, paired: !!r.pair })),
+    {
+      skip: new Set([...FIAT, ...hidden]),
+      valueAt: (asset, amount, at) => {
+        const usd = priceOn(asset, at);
+        return usd ? valueCents(amount, usd) : null;
+      },
+      snapshots: dates.map((d) => Date.parse(`${d}T23:59:59.999Z`)),
+    },
+  );
   let i = 0;
   for (const d of dates) {
     const endOfDay = Date.parse(`${d}T23:59:59.999Z`);
@@ -807,7 +836,7 @@ export function cryptoOverview(
       const usd = a === "USD" ? "1" : lastPrice.get(a);
       if (usd) v += Math.max(0, valueCents(amt, usd));
     }
-    history.push({ date: d, valueCents: v });
+    history.push({ date: d, valueCents: v, costCents: costAt[history.length] ?? 0 });
   }
 
   return {

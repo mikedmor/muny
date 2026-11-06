@@ -106,7 +106,10 @@ interface NftPage {
 
 /** NFTs (ERC-721 / ERC-1155) the address holds now; null when the service can't say. */
 export async function heldNfts(ctx: ChainCtx): Promise<NftHeld[] | null> {
-  const { root, headers } = endpoint(ctx);
+  // Blockscout's key-based API answers this with 402 (a paid feature); the
+  // chain's public site has it for free.
+  const root = (ctx.override || ctx.chain.server).replace(/\/+$/, "");
+  const headers = {};
   const out: NftHeld[] = [];
   let next: Record<string, string | number> | null = null;
   try {
