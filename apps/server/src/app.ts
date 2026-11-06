@@ -113,7 +113,8 @@ export async function buildApp({
     reply.header("x-content-type-options", "nosniff");
     reply.header("referrer-policy", "same-origin");
     reply.header("x-frame-options", "DENY");
-    reply.header("content-security-policy", csp);
+    // Routes serving files (images) set a stricter, sandboxed policy of their own.
+    if (!reply.hasHeader("content-security-policy")) reply.header("content-security-policy", csp);
   });
 
   registerAuth(app, db);

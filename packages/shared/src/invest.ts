@@ -191,3 +191,41 @@ export interface WatchItem {
   /** What you hold of it across accounts, if any. */
   ownedValueCents: number | null;
 }
+
+/** Opt-in extras on the Stocks page. */
+export interface InvestSettings {
+  /** Show company logos (fetched once per ticker by the server). */
+  logos: boolean;
+  /** Show the market overview (index and sector prices from Yahoo Finance). */
+  market: boolean;
+}
+
+/** A fund or index in the market overview. Prices and percentages are for display only. */
+export interface MarketQuote {
+  symbol: string;
+  name: string;
+  price: number;
+  change1dPct: number | null;
+  change1mPct: number | null;
+  change6mPct: number | null;
+  changeYtdPct: number | null;
+  change1yPct: number | null;
+  change5yPct: number | null;
+  /** The last year of daily closes (indexes only). */
+  series: { date: string; close: number }[];
+}
+
+export interface MarketOverview {
+  updatedAt: number;
+  indexes: MarketQuote[];
+  sectors: MarketQuote[];
+  /** How many couldn't be loaded this time. */
+  failed: number;
+}
+
+export interface MarketIntraday {
+  symbol: string;
+  previousClose: number | null;
+  /** Unix ms and price, every 5 minutes today. */
+  points: { t: number; close: number }[];
+}

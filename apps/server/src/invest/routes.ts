@@ -7,6 +7,8 @@ import { BudgetError } from "../crypto/budget.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, parse } from "../lib/http.js";
 import { backfillInvestHistory, type HistoryDeps } from "./history.js";
+import { getInvestSettings, logoFor, setInvestSettings } from "./logos.js";
+import { marketIntraday, marketOverview } from "./market.js";
 import {
   importInvestFile,
   investSummary,
@@ -157,6 +159,60 @@ export function registerInvestRoutes(app: FastifyInstance, db: MunyDb, deps: His
       details: { accountId, cleared: input === null },
     });
     return { ok: true };
+  });
+
+  // --- Settings, logos and the market overview (opt-in) ------------------------
+
+  app.get("/api/invest/settings", async (req) => {
+    requireUser(req);
+    return getInvestSettings(db);
+  });
+
+  app.put("/api/invest/settings", async (req) => {
+    const user = requireUser(req);
+    const body = parse(
+      z.object({ logos: z.boolean().optional(), market: z.boolean().optional() }),
+      req.body,
+    );
+    const next = setInvestSettings(db, body);
+    audit(db, {
+      actorType: "user",
+      actorId: user.id,
+      action: "invest.settings",
+      entityType: "settings",
+      details: body,
+    });
+    return next;
+  });
+
+  app.get("/api/invest/logo/:symbol", async (req, reply) => {
+    requireUser(req);
+    const { symbol } = parse(z.object({ symbol: z.string().min(1).max(12) }), req.params);
+    const img = await logoFor(db, deps, symbol.toUpperCase());
+    if (!img) return reply.code(404).header("cache-control", "private, max-age=3600").send();
+    return reply
+      .header("content-type", img.type)
+      .header("cache-control", "private, max-age=604800")
+      .header("x-content-type-options", "nosniff")
+      .header("content-security-policy", "default-src 'none'; sandbox")
+      .send(img.body);
+  });
+
+  app.get("/api/invest/market", async (req) => {
+    requireUser(req);
+    if (!getInvestSettings(db).market) throw badRequest("Turn on the market overview first");
+    return marketOverview(db, deps);
+  });
+
+  app.get("/api/invest/market/intraday", async (req) => {
+    requireUser(req);
+    if (!getInvestSettings(db).market) throw badRequest("Turn on the market overview first");
+    const { symbol } = parse(z.object({ symbol: z.string().min(1).max(8) }), req.query);
+    try {
+      return await marketIntraday(db, deps, symbol);
+    } catch (e) {
+      throw badRequest(e instanceof Error ? e.message : "Couldn't load it");
+    }
   });
 
   app.get("/api/invest/securities/:id/prices", async (req) => {

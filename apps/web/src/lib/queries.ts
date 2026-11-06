@@ -31,10 +31,13 @@ import type {
   Interval,
   InvestBackfillResult,
   InvestImportResult,
+  InvestSettings,
   InvestSummary,
   InvestTxn,
   LinkResult,
   LinkStart,
+  MarketIntraday,
+  MarketOverview,
   NotificationChannel,
   NotificationList,
   PayeeCleanupPreview,
@@ -829,3 +832,32 @@ export const useSetHoldingCost = () =>
       ),
     [investKeys.all],
   );
+
+export const useInvestSettings = () =>
+  useQuery({
+    queryKey: [...investKeys.all, "settings"],
+    queryFn: () => api.get<InvestSettings>("/api/invest/settings"),
+  });
+
+export const useSetInvestSettings = () =>
+  useInvalidatingMutation(
+    (patch: Partial<InvestSettings>) => api.put<InvestSettings>("/api/invest/settings", patch),
+    [investKeys.all],
+  );
+
+export const useMarket = (enabled: boolean) =>
+  useQuery({
+    queryKey: [...investKeys.all, "market"],
+    queryFn: () => api.get<MarketOverview>("/api/invest/market"),
+    enabled,
+    staleTime: 15 * 60_000,
+  });
+
+export const useMarketIntraday = (symbol: string, enabled: boolean) =>
+  useQuery({
+    queryKey: [...investKeys.all, "market", "intraday", symbol],
+    queryFn: () =>
+      api.get<MarketIntraday>(`/api/invest/market/intraday?symbol=${encodeURIComponent(symbol)}`),
+    enabled,
+    staleTime: 5 * 60_000,
+  });

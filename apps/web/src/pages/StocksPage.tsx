@@ -17,6 +17,7 @@ import { api } from "../lib/api.js";
 import {
   useInvestBackfill,
   useInvestImport,
+  useInvestSettings,
   useInvestSummary,
   useInvestTxns,
   useSecurityPrices,
@@ -28,7 +29,8 @@ import {
 } from "../lib/queries.js";
 import { assignColors, OTHER_COLOR, seriesColor } from "../lib/series.js";
 import { Pct, Sparkline } from "./crypto/CryptoDashboard.js";
-import { fmtAmount } from "./crypto/common.js";
+import { fmtAmount, useDismissed } from "./crypto/common.js";
+import { MarketCard, StockLogo, StocksExtrasBanner, StocksExtrasSwitches } from "./StocksMarket.js";
 
 const RANGES = [
   ["1M", 31],
@@ -457,7 +459,7 @@ function HoldingRow({
         <td className="py-3 pr-2">
           <span className="flex items-center gap-3">
             <span className="relative">
-              <MerchantAvatar name={name} />
+              {cash ? <MerchantAvatar name={name} /> : <StockLogo symbol={p.symbol} />}
               <span
                 aria-hidden="true"
                 className="absolute -right-0.5 -bottom-0.5 size-3 rounded-full ring-2 ring-white dark:ring-slate-900"
@@ -682,7 +684,7 @@ function WatchList() {
                 <tr key={w.securityId} className="border-t border-slate-100 dark:border-slate-800">
                   <td className="px-4 py-2.5">
                     <span className="flex items-center gap-3">
-                      <MerchantAvatar name={w.symbol} size="sm" />
+                      <StockLogo symbol={w.symbol} size="sm" />
                       <span className="min-w-0">
                         <span className="block font-semibold">
                           {w.symbol}
@@ -941,6 +943,8 @@ export function StocksPage() {
   const [importing, setImporting] = useState(false);
   const s = summary.data;
   const empty = s && s.accounts.length === 0;
+  const settings = useInvestSettings();
+  const [extrasDismissed, dismissExtras] = useDismissed("stocks-extras");
   // One color per holding, shared by the table and the allocation chart.
   const colors = useMemo(
     () =>
@@ -995,6 +999,11 @@ export function StocksPage() {
         }
       />
       {summary.error && <Alert>{summary.error.message}</Alert>}
+      {s && !empty && !extrasDismissed && (
+        <div className="mb-6">
+          <StocksExtrasBanner onDismiss={dismissExtras} />
+        </div>
+      )}
 
       {empty && (
         <Card className="text-center">
@@ -1075,6 +1084,8 @@ export function StocksPage() {
             </Card>
           </div>
 
+          {settings.data?.market && <MarketCard />}
+
           <Card className="p-0">
             <h2 className="border-b border-slate-200 px-4 py-3 font-semibold dark:border-slate-800">
               Holdings
@@ -1126,6 +1137,7 @@ export function StocksPage() {
           <WatchList />
 
           <Activity accounts={s.accounts} />
+          <StocksExtrasSwitches />
         </div>
       )}
 

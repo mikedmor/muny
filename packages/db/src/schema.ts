@@ -846,3 +846,12 @@ export const holdingCosts = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.accountId, t.securityId] })],
 );
+
+/** Company logos (opt-in), fetched once per ticker and kept here. */
+export const securityLogos = sqliteTable("security_logos", {
+  symbol: text().primaryKey(),
+  contentType: text(),
+  /** Null when no logo was found (tried again after a while). */
+  data: blob({ mode: "buffer" }),
+  fetchedAt: integer().notNull(),
+});

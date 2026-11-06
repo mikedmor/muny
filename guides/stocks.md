@@ -52,6 +52,25 @@ The **Watch list** on the Stocks page follows tickers you're interested in, whet
 
 Watch list prices come from Yahoo Finance: a year of daily closes when you add a ticker, then an update at most once a day when you open Stocks. Only the ticker symbol is sent.
 
+## What you paid (cost basis)
+
+Gains need to know what you paid. Muny uses, in order:
+
+1. **Your broker's figure**, when it reports one.
+2. **Your trades:** if your history includes the buys behind every share you hold, Muny works the cost out (first in, first out, stock splits included).
+3. **What you enter:** expand a holding and click **Add cost** next to the account, then type your average cost per share. You can change or clear it later.
+
+Costs that Muny worked out or that you entered are marked with an asterisk.
+
+## Logos and market overview (optional)
+
+Two extras are off until you turn them on, from the banner on the Stocks page or the **Extras** switches at the bottom:
+
+- **Company logos:** Muny's server fetches each ticker's logo once, from Financial Modeling Prep or Parqet, and keeps it. Your browser only ever loads it from Muny.
+- **Market overview:** the S&P 500, Nasdaq 100, Dow and Russell 2000 (through the SPY, QQQ, DIA and IWM funds) and the VIX, with a chart for each from one day to one year, plus the Vanguard sector funds' returns over 1 day to 5 years. Prices come from Yahoo Finance, refreshed at most once an hour while you're looking.
+
+Both send only ticker symbols, never your holdings.
+
 ## Reading the page
 
 - **Unrealized gain** uses the cost basis your broker reports. Positions without a reported cost (for example shares transferred in from another broker) are left out of the gain and listed under it.

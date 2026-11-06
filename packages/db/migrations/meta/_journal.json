@@ -169,6 +169,13 @@
       "when": 1793948360553,
       "tag": "0023_holding_costs",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1793948535168,
+      "tag": "0024_security_logos",
+      "breakpoints": true
     }
   ]
 }
