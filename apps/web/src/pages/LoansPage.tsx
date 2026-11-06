@@ -24,7 +24,7 @@ import { openPlaidLink } from "../lib/bankWidgets.js";
 import { keys, linkApi } from "../lib/queries.js";
 import { LenderLoansForm, LenderPaymentsStrip } from "./loans/LenderLoans.js";
 import { PayoffPlan } from "./loans/PayoffPlan.js";
-import { StatementImportButton } from "./loans/StatementImport.js";
+import { StatementImportButton, StatementStatus } from "./loans/StatementImport.js";
 
 /** Loans: what you owe, the terms, when each is paid off, and what paying extra would do (D-040, D-042). */
 
@@ -385,6 +385,8 @@ function PayoffPlanner({ loan }: { loan: Loan }) {
       ? base.plan.totalInterestCents - plan.totalInterestCents
       : null;
   const step = plan.balances.length > 120 ? 3 : 1;
+  // Past balances (after each payment), up to today's (the projection's start).
+  const past = loan.history.slice(0, -1).slice(-24);
   const shown = plan.balances
     .map((b, m) => ({ b, m }))
     .filter((p) => p.m % step === 0 || p.m === plan.balances.length - 1);
@@ -404,20 +406,39 @@ function PayoffPlanner({ loan }: { loan: Loan }) {
         )
       }
     >
-      {plan.balances.length > 2 && (
+      {plan.balances.length + past.length > 2 && (
         <LineChart
-          ariaLabel={`${loan.name} balance until paid off`}
+          ariaLabel={`${loan.name} balance: your payments, then until paid off`}
           height={210}
-          projectedFrom={1}
-          points={shown.map((p) => ({
-            date: String(p.m),
-            label: addMonths(p.m).toLocaleDateString(undefined, {
-              month: "short",
-              year: "2-digit",
-            }),
-            value: p.b,
-          }))}
+          projectedFrom={past.length}
+          points={[
+            ...past.map((h) => ({
+              date: h.date,
+              label: new Date(`${h.date}T00:00:00`).toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+                year: "2-digit",
+              }),
+              value: h.balanceCents,
+            })),
+            ...shown.map((p) => ({
+              date: String(p.m),
+              label:
+                p.m === 0
+                  ? "Today"
+                  : addMonths(p.m).toLocaleDateString(undefined, {
+                      month: "short",
+                      year: "2-digit",
+                    }),
+              value: p.b,
+            })),
+          ]}
         />
+      )}
+      {past.length > 0 && (
+        <p className="mt-1 text-xs text-slate-500">
+          Solid: after each payment since {day(past[0]?.date ?? null)}. Dashed: until paid off.
+        </p>
       )}
       <label className="mt-3 block">
         <span className="flex items-baseline justify-between text-sm">
@@ -911,7 +932,15 @@ function LoanCard({
       value: money(loan.monthlyPaymentCents),
       sub: minimumDiffers ? `Minimum ${formatMoney(loan.minimumPaymentCents ?? 0)}` : null,
     },
-    { label: "Next due", value: day(loan.nextDueDate) },
+    {
+      label: "Next due",
+      value: day(loan.nextDueDate),
+      sub:
+        loan.nextDueDate &&
+        new Date(`${loan.nextDueDate}T00:00:00`).getTime() - Date.now() > 45 * 86_400_000
+          ? "Paid ahead: regular payments go elsewhere until then"
+          : null,
+    },
     {
       label: "Paid off",
       value: base?.plan.months != null ? monthYear(addMonths(base.plan.months)) : "—",
@@ -1096,12 +1125,15 @@ function LenderGroup({
   loans,
   fee,
   payments,
+  servicer,
 }: {
   lender: string;
   loans: Loan[];
   fee: LenderFee | undefined;
   /** Payments covering several of these loans. */
   payments: LenderPayment[];
+  /** Split like the servicer does (from statements). */
+  servicer: boolean;
 }) {
   const [sel, setSel] = useState(loans[0]?.accountId ?? "");
   const loan = loans.find((l) => l.accountId === sel) ?? loans[0];
@@ -1157,7 +1189,8 @@ function LenderGroup({
         embedded
         viaLender={payments.some((p) => loan.accountId in p.parts)}
       />
-      <LenderPaymentsStrip lender={lender} loans={loans} payments={payments} />
+      <StatementStatus loans={loans} />
+      <LenderPaymentsStrip lender={lender} loans={loans} payments={payments} servicer={servicer} />
       <FeeStrip
         lender={lender}
         fee={fee}
@@ -1285,6 +1318,7 @@ export function LoansPage() {
                 payments={(r.lenderPayments ?? []).filter(
                   (x) => x.lenderKey === g.lender.trim().toLowerCase(),
                 )}
+                servicer={(r.servicerLenders ?? []).includes(g.lender.trim().toLowerCase())}
               />
             ),
           )}

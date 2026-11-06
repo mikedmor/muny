@@ -493,12 +493,40 @@ export function LenderPaymentsStrip({
   lender,
   loans,
   payments,
+  servicer,
 }: {
   lender: string;
   loans: Loan[];
   payments: LenderPayment[];
+  servicer: boolean;
 }) {
+  const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
+  const withStatements = loans.some((l) => l.statementDate);
+  const setMode = async (mode: "servicer" | "parts") => {
+    await api.put("/api/loans/lender-split", { lender, mode });
+    await qc.invalidateQueries({ queryKey: keys.accounts });
+  };
+  if (servicer && withStatements)
+    return (
+      <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm dark:bg-slate-800/40">
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <span className="font-medium">Payments split like your servicer</span>
+          <button
+            type="button"
+            onClick={() => void setMode("parts")}
+            className="text-xs text-brand-600 hover:underline dark:text-brand-500"
+          >
+            Use set amounts instead
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">
+          From your statements: each payment goes first to what's currently due on each loan (in
+          proportion to its regular payment), then to the loans with the highest rate, by balance. A
+          loan paid ahead gets nothing until it's due again. Each new statement corrects it.
+        </p>
+      </div>
+    );
   const name = new Map(loans.map((l) => [l.accountId, l.name]));
   const modal = (
     <Modal open={editing} onClose={() => setEditing(false)} title={`${lender} payments`} wide>
@@ -515,14 +543,25 @@ export function LenderPaymentsStrip({
   if (!payments.length)
     return (
       <div>
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="inline-flex items-center gap-1 text-xs text-brand-600 hover:underline dark:text-brand-500"
-        >
-          <Plus aria-hidden="true" className="size-3" /> Set up payments that cover several of these
-          loans
-        </button>
+        <span className="flex flex-wrap gap-x-4 gap-y-1">
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="inline-flex items-center gap-1 text-xs text-brand-600 hover:underline dark:text-brand-500"
+          >
+            <Plus aria-hidden="true" className="size-3" /> Set up payments that cover several of
+            these loans
+          </button>
+          {withStatements && (
+            <button
+              type="button"
+              onClick={() => void setMode("servicer")}
+              className="text-xs text-brand-600 hover:underline dark:text-brand-500"
+            >
+              Split like my servicer (from statements)
+            </button>
+          )}
+        </span>
         {modal}
       </div>
     );
@@ -530,6 +569,15 @@ export function LenderPaymentsStrip({
     <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm dark:bg-slate-800/40">
       <div className="flex items-baseline justify-between gap-3">
         <span className="font-medium">Payments</span>
+        {withStatements && (
+          <button
+            type="button"
+            onClick={() => void setMode("servicer")}
+            className="ml-auto text-xs text-brand-600 hover:underline dark:text-brand-500"
+          >
+            Split like my servicer
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setEditing(true)}

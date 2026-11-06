@@ -162,4 +162,70 @@ describe("loan statements", () => {
     });
     expect(bad.statusCode).toBe(400);
   });
+
+  it("splits later payments like the servicer: what's due, then the highest rate", async () => {
+    const { client } = await makeSignedInApp();
+    const chk = (await client.post("/api/accounts", { name: "Checking", type: "checking" })).json<{
+      id: string;
+    }>();
+    const group = (
+      name: string,
+      aprBps: number,
+      monthlyPaymentCents: number,
+      principalCents: number,
+      dueDate: string,
+    ) => ({
+      name,
+      aprBps,
+      originalPrincipalCents: null,
+      firstDisbursed: null,
+      principalCents,
+      accruedInterestCents: 0,
+      monthlyPaymentCents,
+      paymentsLeft: null,
+      paidCents: 0,
+      paidInterestCents: 0,
+      paidPrincipalCents: 0,
+      amountDueCents: null,
+      dueDate,
+    });
+    const statement = {
+      statementDate: "2026-10-06",
+      lastPayment: null,
+      groups: [
+        group("XA", 425, 4_000, 200_000, "2026-11-15"),
+        group("XC", 655, 3_000, 40_000, "2027-09-28"),
+        group("XD", 655, 9_000, 120_000, "2027-09-28"),
+        group("XE", 580, 5_000, 80_000, "2027-06-28"),
+      ],
+    };
+    const mapping = { XA: "new", XC: "new", XD: "new", XE: "new" };
+    await client.post("/api/loans/statements/apply", {
+      lender: "Servicer",
+      statement,
+      mapping,
+    });
+    // Words for finding the payments.
+    const report0 = (await client.get("/api/loans")).json<LoansReport>();
+    for (const l of report0.loans)
+      await client.patch(`/api/loans/${l.accountId}`, { paymentMatch: "DEPT EDUCATION" });
+    await client.post("/api/transactions", {
+      accountId: chk.id,
+      postedDate: "2026-10-28",
+      amountCents: -20_000,
+      description: "DEPT EDUCATION STUDENT LN",
+    });
+    const report = (await client.get("/api/loans")).json<LoansReport>();
+    expect(report.servicerLenders).toEqual(["servicer"]);
+    const paid = (n: string) =>
+      report.loans.find((l) => l.name === `Group ${n}`)?.payments.map((p) => p.amountCents) ?? [];
+    expect(paid("XA")).toEqual([4_000]); // what was due
+    // The rest ($160) to the 6.55% groups by balance (40k : 120k); none to XE.
+    expect(paid("XC")).toEqual([4_000]);
+    expect(paid("XD")).toEqual([12_000]);
+    expect(paid("XE")).toEqual([]);
+    const xa = report.loans.find((l) => l.name === "Group XA");
+    expect(xa?.statementDate).toBe("2026-10-06");
+    expect(xa?.history.at(-1)?.balanceCents).toBe(xa?.balanceCents);
+  });
 });

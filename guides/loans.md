@@ -27,13 +27,15 @@ Federal student loan servicers send PDF statements with a table for each loan gr
 - Only the newest statement sets a loan's balance, rate, payment and due date; the loan counts on from its date. Payments after it are found in your bank and split as set under **Payments** until the next statement.
 - If you get more than one statement a month (one per due date), import them all.
 - Each PDF is kept under **Insights → Documents**.
+- **Split like your servicer:** once a lender has statements, Muny splits its later payments the way federal servicers do: first what's currently due on each loan (in proportion to its regular payment), then the rest to the loans with the highest rate, by balance. A loan paid ahead (its due date months away, marked **Paid ahead**) gets nothing until it's due again. You can switch back to **set amounts** on the lender's card.
+- **Statements** on the lender's card shows the newest statement for each billing cycle and when the next is due, and says when one is missing.
 
 ## Reading a loan
 
 - **Payment** shows your usual payment; **Minimum** is the lowest payment due (from the lender, or entered).
 - For a **mortgage** with its original amount, rate and term entered, Muny works out the principal and interest part of the payment; the rest is escrow (taxes and insurance). Payoff dates use the principal and interest part.
 - **Payments** lists each payment, the account it came from, and its split into interest and principal. For synced loans the split is worked back from today's balance, so it's an estimate. For loans tracked from your payments, payments before the **As of** date are listed with an estimated split worked back from what you owed then; only later payments lower the balance.
-- **Payoff** charts the balance down to zero. Drag **Pay extra each month** to see how much sooner it ends and how much interest you'd save.
+- **Payoff** charts your balance after each payment so far (solid), then down to zero (dashed). Drag **Pay extra each month** to see how much sooner it ends and how much interest you'd save.
 
 ## Payoff plan
 

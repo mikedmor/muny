@@ -373,6 +373,142 @@ function lenderPaymentParts(
   return { loans, others, monthly, dueDays, parts: out, claimed, list };
 }
 
+const SERVICER_KEY = "loans.servicerSplit";
+
+/** Lenders whose payments are split the way a federal student loan servicer does (from statements). */
+export function servicerLenders(db: Db): string[] {
+  const v = db
+    .select()
+    .from(schema.appSettings)
+    .where(eq(schema.appSettings.key, SERVICER_KEY))
+    .get()?.value;
+  return Array.isArray(v) ? (v as string[]) : [];
+}
+
+export function setServicerSplit(db: Db, lender: string, on: boolean) {
+  const key = lenderKeyOf(lender);
+  if (!key) return;
+  const set = new Set(servicerLenders(db));
+  if (on) set.add(key);
+  else set.delete(key);
+  const value = [...set];
+  db.insert(schema.appSettings)
+    .values({ key: SERVICER_KEY, value })
+    .onConflictDoUpdate({ target: schema.appSettings.key, set: { value } })
+    .run();
+  refreshManualLoans(db);
+}
+
+type StmtRow = typeof schema.loanStatementPayments.$inferSelect;
+
+/**
+ * Split a lender's payments since its statements the way federal servicers do
+ * (A federal servicer's statement: "Paying your current amount due ... in proportion to each
+ * group's regular monthly payment"; "Paying more ... starting with the highest
+ * interest rate"; each regular payment's worth advances the due date a month,
+ * up to 12). Starts from each loan's newest statement: its balance and due date.
+ * For loans whose statement already covers a payment, their known share is set
+ * aside (spread over the payments in that statement's period).
+ */
+function servicerSplit(
+  db: Db,
+  group: Acct[],
+  details: Map<string, Details>,
+  stmtRows: Map<string, StmtRow[]>,
+  words: string[],
+  feeMin: number | null,
+  since: string,
+) {
+  const state = group.map((a) => {
+    const d = details.get(a.id);
+    const rows = [...(stmtRows.get(a.id) ?? [])].sort((x, y) =>
+      x.statementDate.localeCompare(y.statementDate),
+    );
+    const last = rows.at(-1) as StmtRow;
+    return {
+      id: a.id,
+      apr: d?.aprBps ?? 0,
+      monthly: d?.monthlyPaymentCents ?? 0,
+      bal: last.balanceCents ?? d?.startBalanceCents ?? 0,
+      due: d?.nextDueDate ?? null,
+      stmtDate: last.statementDate,
+      stmtPaid: last.amountCents,
+    };
+  });
+  const start = state.reduce((m, g) => (g.stmtDate < m ? g.stmtDate : m), state[0]?.stmtDate ?? "");
+  const pays = new Map<string, RawPayment>();
+  for (const w of words)
+    for (const t of byWords(db, w)) {
+      const amount = -t.amountCents;
+      if (t.date <= start || t.date < since || (feeMin && amount >= feeMin)) continue;
+      pays.set(t.id, {
+        id: t.id,
+        date: t.date,
+        amountCents: amount,
+        description: t.description,
+        fromAccountName: t.mask ? `${t.from} ••${t.mask}` : t.from,
+      });
+    }
+  const list = [...pays.values()].sort((x, y) => x.date.localeCompare(y.date));
+  const periodTotal = (g: (typeof state)[number]) =>
+    list
+      .filter((p) => p.date > addMonths(g.stmtDate, -1) && p.date <= g.stmtDate)
+      .reduce((t, p) => t + p.amountCents, 0);
+
+  const parts = new Map<string, (RawPayment & { total: number })[]>();
+  const give = (g: (typeof state)[number], p: RawPayment, x: number) => {
+    if (x <= 0) return;
+    g.bal -= x;
+    parts.set(g.id, [...(parts.get(g.id) ?? []), { ...p, amountCents: x, total: p.amountCents }]);
+  };
+  const advance = (g: (typeof state)[number], months: number, p: RawPayment) => {
+    if (!g.due || months <= 0) return;
+    const next = addMonths(g.due, months);
+    const cap = addMonths(p.date, 12);
+    g.due = next < cap ? next : cap;
+  };
+  for (const p of list) {
+    let left = p.amountCents;
+    // Shares already on statements.
+    for (const g of state)
+      if (p.date <= g.stmtDate) {
+        const total = periodTotal(g);
+        left -= Math.min(left, total ? Math.round((g.stmtPaid * p.amountCents) / total) : 0);
+      }
+    const open = state.filter((g) => p.date > g.stmtDate && g.bal > 0);
+    // 1) What's currently due, in proportion to the regular payments.
+    const dueNow = open.filter((g) => g.due && g.due <= addMonths(p.date, 1) && g.monthly > 0);
+    const regular = dueNow.reduce((t, g) => t + Math.min(g.monthly, g.bal), 0);
+    if (regular > 0 && left > 0) {
+      const share = Math.min(1, left / regular);
+      for (const g of dueNow) {
+        const x = Math.min(left, Math.round(Math.min(g.monthly, g.bal) * share));
+        give(g, p, x);
+        left -= x;
+        if (share >= 1) advance(g, 1, p);
+      }
+    }
+    // 2) The rest: highest rate first, split by balance.
+    while (left > 0) {
+      const rest = open.filter((g) => g.bal > 0);
+      if (!rest.length) break;
+      const top = Math.max(...rest.map((g) => g.apr));
+      const tied = rest.filter((g) => g.apr === top);
+      const owed = tied.reduce((t, g) => t + g.bal, 0);
+      const pay = Math.min(left, owed);
+      let given = 0;
+      tied.forEach((g, i) => {
+        const x = i === tied.length - 1 ? pay - given : Math.round((pay * g.bal) / owed);
+        given += x;
+        give(g, p, x);
+        if (g.monthly > 0) advance(g, Math.floor(x / g.monthly), p);
+      });
+      left -= pay;
+    }
+  }
+  return { parts, claimed: new Set(list.map((p) => p.id)) };
+}
+
 export function loansReport(db: Db, today = localToday()): LoansReport {
   const all = listAccounts(db);
   const accounts = all.filter((a) => a.type === "loan" && !a.hidden);
@@ -413,6 +549,42 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
       return date > from && date <= x.statementDate;
     });
   };
+  // Lenders split like a servicer (from statements): that replaces their set parts.
+  const servicer = new Set(servicerLenders(db));
+  for (const key of servicer) {
+    const group = accounts.filter((a) => keyOf(a) === key && (stmtRows.get(a.id)?.length ?? 0) > 0);
+    if (!group.length) continue;
+    const words = [
+      ...new Set(
+        [
+          ...group.map((a) => details.get(a.id)?.paymentMatch),
+          ...db
+            .select({ w: schema.lenderPayments.paymentMatch })
+            .from(schema.lenderPayments)
+            .where(eq(schema.lenderPayments.lenderKey, key))
+            .all()
+            .map((x) => x.w),
+        ]
+          .map((w) => w?.trim().toLowerCase())
+          .filter((w): w is string => !!w),
+      ),
+    ];
+    const split = servicerSplit(
+      db,
+      group,
+      details,
+      stmtRows,
+      words,
+      feeOf.get(key)?.minCents ?? null,
+      twoYearsAgo,
+    );
+    for (const a of group) {
+      sched.loans.add(a.id);
+      sched.parts.set(a.id, split.parts.get(a.id) ?? []);
+      sched.others.set(a.id, new Set(group.map((g) => g.id).filter((x) => x !== a.id)));
+    }
+    for (const id of split.claimed) sched.claimed.add(id);
+  }
   const shared = shares(details, nameOf, sched.loans);
 
   // Every loan's payments, then each payment that several loans could claim
@@ -597,7 +769,25 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
     }
     const prop = d?.propertyAccountId ? all.find((x) => x.id === d.propertyAccountId) : undefined;
     const last = rows.at(-1);
+    // Balance history: today, then back through the payments (each one's principal added back).
+    const history: { date: string; balanceCents: number }[] = [];
+    {
+      let b = balance;
+      for (const p of [...rows].reverse()) {
+        if (p.date < twoYearsAgo) break;
+        history.push({ date: p.date, balanceCents: b });
+        b += p.principalCents ?? Math.max(0, p.amountCents - (p.escrowCents ?? 0));
+      }
+      history.reverse();
+    }
+    const newestStatement =
+      (stmtRows.get(a.id) ?? []).reduce<string | null>(
+        (m, x) => (!m || x.statementDate > m ? x.statementDate : m),
+        null,
+      ) ?? null;
     return {
+      history,
+      statementDate: newestStatement,
       accountId: a.id,
       name: a.name,
       institutionName: a.institutionName,
@@ -678,6 +868,7 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
       : null,
     loans: loans.sort((a, b) => b.balanceCents - a.balanceCents),
     lenderPayments: sched.list,
+    servicerLenders: [...servicer],
     lenderFees: feeRows.map((f) => {
       // The fee's own words, else the words of the lender's loans.
       const words = f.paymentMatch?.trim()
@@ -1063,6 +1254,10 @@ export function applyStatement(
         .run();
     }
     touched.push(id);
+  }
+  if (touched.length) {
+    const key = lenderKeyOf(lender);
+    if (key && !servicerLenders(db).includes(key)) setServicerSplit(db, lender, true);
   }
   refreshManualLoans(db);
   return touched;

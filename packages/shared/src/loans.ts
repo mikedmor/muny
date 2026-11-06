@@ -90,6 +90,10 @@ export interface Loan {
   lastPayment: { date: string; amountCents: number } | null;
   /** Newest first, up to two years. */
   payments: LoanPaymentRow[];
+  /** What you owed after each payment (two years), oldest first; the last is today's balance. */
+  history: { date: string; balanceCents: number }[];
+  /** The newest statement imported for it (YYYY-MM-DD), if any. */
+  statementDate: string | null;
   payoffMonths: number | null;
   payoffDate: string | null;
   interestRemainingCents: number | null;
@@ -192,6 +196,8 @@ export interface LoansReport {
   loans: Loan[];
   lenderFees: LenderFee[];
   lenderPayments: LenderPayment[];
+  /** Lenders whose payments are split like a federal servicer does, from their statements. */
+  servicerLenders: string[];
 }
 
 export interface LoanDetailsInput {

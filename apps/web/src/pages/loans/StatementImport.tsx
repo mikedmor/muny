@@ -269,3 +269,66 @@ function StatementImport({
     </div>
   );
 }
+
+/**
+ * The newest statement for each billing cycle (loans with the same statement
+ * date), and the next one to import: due about a month later, flagged once
+ * it's a week late.
+ */
+export function StatementStatus({ loans }: { loans: Loan[] }) {
+  const cycles = new Map<string, Loan[]>();
+  for (const l of loans)
+    if (l.statementDate) cycles.set(l.statementDate, [...(cycles.get(l.statementDate) ?? []), l]);
+  if (!cycles.size) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  const plusMonth = (iso: string) => {
+    const d = new Date(`${iso}T00:00:00Z`);
+    d.setUTCMonth(d.getUTCMonth() + 1);
+    return d.toISOString().slice(0, 10);
+  };
+  const plusDays = (iso: string, n: number) => {
+    const d = new Date(`${iso}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+  const rows = [...cycles.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, list]) => {
+      let next = plusMonth(date);
+      let missed = 0;
+      while (plusDays(next, 7) < today) {
+        missed++;
+        next = plusMonth(next);
+      }
+      const names = list.map((l) => l.name.replace(/^Group /, "")).join(", ");
+      return { date, next, missed, names, late: missed > 0, dueNow: next <= today };
+    });
+  return (
+    <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm dark:bg-slate-800/40">
+      <span className="font-medium">Statements</span>
+      <ul className="mt-1 space-y-1">
+        {rows.map((r) => (
+          <li key={r.date} className="flex flex-wrap items-baseline gap-x-3 text-xs">
+            <span className="text-slate-600 dark:text-slate-300">
+              {r.names}: last {day(r.date)}
+            </span>
+            {r.late ? (
+              <span className="font-medium text-amber-700 dark:text-amber-400">
+                {r.missed === 1
+                  ? `Missing the one from about ${day(plusDays(r.next, -31))}`
+                  : `Missing ${r.missed} statements`}
+                ; next around {day(r.next)}
+              </span>
+            ) : r.dueNow ? (
+              <span className="font-medium text-brand-700 dark:text-brand-500">
+                New one due about {day(r.next)}: import it when it arrives
+              </span>
+            ) : (
+              <span className="text-slate-500">Next around {day(r.next)}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}

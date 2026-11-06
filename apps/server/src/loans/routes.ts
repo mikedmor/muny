@@ -16,6 +16,7 @@ import {
   removeLenderFee,
   setLenderFee,
   setLenderPayments,
+  setServicerSplit,
   updateLoan,
 } from "./service.js";
 
@@ -259,6 +260,23 @@ export function registerLoanRoutes(
       loans: ids.length,
     });
     return { accountIds: ids };
+  });
+
+  // How a lender's payments are split: like a servicer (from statements) or by set amounts.
+  app.put("/api/loans/lender-split", async (req) => {
+    const user = requireUser(req);
+    const body = parse(
+      z.object({
+        lender: z.string().trim().min(1).max(100),
+        mode: z.enum(["servicer", "parts"]),
+      }),
+      req.body,
+    );
+    db.transaction((tx) =>
+      setServicerSplit(tx as unknown as MunyDb, body.lender, body.mode === "servicer"),
+    );
+    log(user.id, "loan.lender_split.set", body.lender.toLowerCase(), { mode: body.mode });
+    return { ok: true };
   });
 
   // A lender's yearly fee (dues, maintenance): one per lender.
