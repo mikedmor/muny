@@ -49,7 +49,7 @@ export function saveDocument(
     name: string;
     mime: string;
     bytes: Buffer;
-    kind?: "loan_statement" | "other";
+    kind?: "loan_statement" | "card_statement" | "other";
     lender?: string | null;
     documentDate?: string | null;
     notes?: string | null;

@@ -12,6 +12,7 @@ import { registerHouseholdRoutes } from "./auth/household.js";
 import { registerAuth } from "./auth/plugin.js";
 import { registerAuthRoutes } from "./auth/routes.js";
 import { registerBudgetRoutes } from "./budgets/routes.js";
+import { registerCardRoutes } from "./cards/routes.js";
 import type { Config } from "./config.js";
 import { registerCryptoRoutes } from "./crypto/routes.js";
 import { registerBackupRoutes } from "./data/backups.js";
@@ -132,6 +133,7 @@ export async function buildApp({
   registerInvestRoutes(app, db, { fetch: priceFetch });
   registerLoanRoutes(app, db, config.secretKey);
   registerDocumentRoutes(app, db, config.secretKey);
+  registerCardRoutes(app, db, config.secretKey);
   registerAssetRoutes(app, db, {
     fetch: priceFetch,
     secretKey: config.secretKey,

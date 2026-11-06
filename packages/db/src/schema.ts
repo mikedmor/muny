@@ -932,7 +932,7 @@ export const documents = sqliteTable(
   "documents",
   {
     id: text().primaryKey(),
-    kind: text({ enum: ["loan_statement", "other"] })
+    kind: text({ enum: ["loan_statement", "card_statement", "other"] })
       .notNull()
       .default("other"),
     name: text().notNull(),
@@ -950,6 +950,33 @@ export const documents = sqliteTable(
   },
   (t) => [uniqueIndex("documents_sha256_uq").on(t.sha256)],
 );
+
+/**
+ * Credit card details (Credit cards page): from the bank connection (Plaid
+ * liabilities), a statement PDF, or entered. Amounts in cents; rate in bps.
+ */
+export const cardDetails = sqliteTable("card_details", {
+  accountId: text()
+    .primaryKey()
+    .references(() => accounts.id, { onDelete: "cascade" }),
+  issuer: text(),
+  creditLimitCents: integer(),
+  /** Purchase APR. */
+  aprBps: integer(),
+  statementBalanceCents: integer(),
+  /** YYYY-MM-DD: when the last statement closed. */
+  statementDate: text(),
+  minimumPaymentCents: integer(),
+  /** YYYY-MM-DD: when the next payment is due. */
+  dueDate: text(),
+  lastPaymentCents: integer(),
+  lastPaymentDate: text(),
+  /** Where the latest figures came from. */
+  source: text({ enum: ["plaid", "statement", "manual"] })
+    .notNull()
+    .default("manual"),
+  updatedAt: updatedAt(),
+});
 
 /**
  * A lender's yearly fee (e.g. timeshare maintenance dues), one per lender:

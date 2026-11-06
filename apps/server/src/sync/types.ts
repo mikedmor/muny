@@ -17,6 +17,22 @@ export interface ProviderAccount {
   currency: string;
   /** Current (ledger) balance, Muny sign convention; null if unknown. */
   balanceCents: number | null;
+  /** Credit cards: the credit limit, when the provider reports it. */
+  creditLimitCents?: number | null;
+}
+
+/** A credit card's statement and terms from the provider (Plaid liabilities). */
+export interface CardTerms {
+  accountRef: string;
+  aprBps: number | null;
+  minimumPaymentCents: number | null;
+  dueDate: string | null;
+  statementBalanceCents: number | null;
+  statementDate: string | null;
+  lastPaymentCents: number | null;
+  lastPaymentDate: string | null;
+  /** The credit limit (from the account balances). */
+  creditLimitCents?: number | null;
 }
 
 export interface ProviderTransaction {
@@ -121,6 +137,8 @@ export interface Provider<Creds> {
   syncInvestments?(creds: Creds, since: string | null): Promise<InvestmentSync | null>;
   /** Loan terms (rate, payment, due date) for the login's loans; null when not available. */
   liabilities?(creds: Creds): Promise<LoanTerms[] | null>;
+  /** Credit card statements and rates (when the login shares them). */
+  cardLiabilities?(creds: Creds): Promise<CardTerms[] | null>;
   /** Revoke access at the provider (best effort). */
   remove(creds: Creds): Promise<void>;
 }

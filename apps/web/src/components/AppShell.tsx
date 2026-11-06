@@ -9,6 +9,7 @@ import {
   ChartPie,
   ChevronsUpDown,
   Code,
+  CreditCard,
   FolderOpen,
   HandCoins,
   House,
@@ -46,6 +47,7 @@ const NAV: { label?: string; items: { to: string; label: string; icon: LucideIco
       { to: "/spending", label: "Spending", icon: ChartPie },
       { to: "/budgets", label: "Budgets", icon: Target },
       { to: "/loans", label: "Loans", icon: HandCoins },
+      { to: "/cards", label: "Credit cards", icon: CreditCard },
     ],
   },
   {

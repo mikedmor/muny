@@ -15,6 +15,7 @@ const docsKey = ["documents"] as const;
 const TYPES = ["application/pdf", "image/png", "image/jpeg"];
 const KIND_LABEL: Record<DocumentInfo["kind"], string> = {
   loan_statement: "Loan statement",
+  card_statement: "Card statement",
   other: "Document",
 };
 

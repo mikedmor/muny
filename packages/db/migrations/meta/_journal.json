@@ -260,6 +260,13 @@
       "when": 1793988742571,
       "tag": "0036_documents",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1793990486344,
+      "tag": "0037_card_details",
+      "breakpoints": true
     }
   ]
 }

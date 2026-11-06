@@ -1,6 +1,7 @@
 import type { AccountType } from "@muny/shared";
 import type { PlaidConfig } from "../config.js";
 import {
+  type CardTerms,
   type ConnectionInfo,
   type InvestmentSync,
   type LoanTerms,
@@ -63,7 +64,12 @@ interface PlaidAccount {
   mask?: string | null;
   type: string;
   subtype?: string | null;
-  balances: { current: number | null; available: number | null; iso_currency_code?: string | null };
+  balances: {
+    current: number | null;
+    available: number | null;
+    limit?: number | null;
+    iso_currency_code?: string | null;
+  };
 }
 
 interface PlaidSecurity {
@@ -370,6 +376,10 @@ export class PlaidProvider implements Provider<PlaidCreds> {
           currency: a.balances.iso_currency_code ?? "USD",
           // Plaid reports what you owe on credit/loans as a positive number.
           balanceCents: cents === null ? null : LIABILITY.has(type) ? -cents : cents,
+          creditLimitCents:
+            type === "credit" && typeof a.balances.limit === "number"
+              ? plaidCents(a.balances.limit)
+              : null,
         };
       }),
     };
@@ -599,6 +609,45 @@ export class PlaidProvider implements Provider<PlaidCreds> {
         lender: null,
       });
     return out;
+  }
+
+  async cardLiabilities(creds: PlaidCreds): Promise<CardTerms[] | null> {
+    if (!has(creds, "transactions")) return null;
+    interface Credit {
+      account_id: string | null;
+      aprs?: { apr_percentage?: number | null; apr_type?: string | null }[] | null;
+      minimum_payment_amount?: number | null;
+      next_payment_due_date?: string | null;
+      last_statement_balance?: number | null;
+      last_statement_issue_date?: string | null;
+      last_payment_amount?: number | null;
+      last_payment_date?: string | null;
+    }
+    let r: { liabilities?: { credit?: Credit[] | null } };
+    try {
+      r = await this.call("/liabilities/get", { access_token: creds.accessToken });
+    } catch (e) {
+      if (e instanceof ProviderError && e.code !== "reauth_required") return null;
+      throw e;
+    }
+    const cents = (n: number | null | undefined) =>
+      n === null || n === undefined ? null : plaidCents(Math.abs(n));
+    return (r.liabilities?.credit ?? [])
+      .filter((x): x is Credit & { account_id: string } => !!x.account_id)
+      .map((x) => {
+        const apr = x.aprs?.find((a) => a.apr_type === "purchase_apr") ?? x.aprs?.[0] ?? null;
+        return {
+          accountRef: x.account_id,
+          aprBps:
+            typeof apr?.apr_percentage === "number" ? Math.round(apr.apr_percentage * 100) : null,
+          minimumPaymentCents: cents(x.minimum_payment_amount),
+          dueDate: x.next_payment_due_date ?? null,
+          statementBalanceCents: cents(x.last_statement_balance),
+          statementDate: x.last_statement_issue_date ?? null,
+          lastPaymentCents: cents(x.last_payment_amount),
+          lastPaymentDate: x.last_payment_date ?? null,
+        };
+      });
   }
 
   async remove(creds: PlaidCreds): Promise<void> {

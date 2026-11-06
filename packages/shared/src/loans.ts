@@ -349,7 +349,7 @@ export interface LoanStatementPreview {
 /** A document kept in Muny (Insights → Documents). */
 export interface DocumentInfo {
   id: string;
-  kind: "loan_statement" | "other";
+  kind: "loan_statement" | "card_statement" | "other";
   name: string;
   mime: string;
   sizeBytes: number;

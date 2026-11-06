@@ -1,6 +1,7 @@
 import { cleanPayeeName } from "@muny/core";
 import { type MunyDb, newId, schema } from "@muny/db";
 import { and, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { applyCardTerms } from "../cards/service.js";
 import type { Config } from "../config.js";
 import { computeHashes, findDuplicates } from "../import/service.js";
 import { upsertPayee } from "../ledger/transactions.js";
@@ -368,6 +369,25 @@ export async function syncConnection(
     if (provider.liabilities && info.accounts.some((a) => a.type === "loan")) {
       const terms = await provider.liabilities(creds);
       if (terms?.length) applyLoanTerms(db, connectionId, terms);
+    }
+    // Credit cards: limits, and the statement and rate when the login shares them.
+    const limits = info.accounts
+      .filter((a) => a.type === "credit" && typeof a.creditLimitCents === "number")
+      .map((a) => ({
+        accountRef: a.ref,
+        aprBps: null,
+        minimumPaymentCents: null,
+        dueDate: null,
+        statementBalanceCents: null,
+        statementDate: null,
+        lastPaymentCents: null,
+        lastPaymentDate: null,
+        creditLimitCents: a.creditLimitCents as number,
+      }));
+    if (limits.length) applyCardTerms(db, connectionId, limits);
+    if (provider.cardLiabilities && info.accounts.some((a) => a.type === "credit")) {
+      const terms = await provider.cardLiabilities(creds);
+      if (terms?.length) applyCardTerms(db, connectionId, terms);
     }
     // Manual loans paid from this account: their balances follow the new payments.
     refreshManualLoans(db);
