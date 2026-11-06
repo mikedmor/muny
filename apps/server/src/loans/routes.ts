@@ -53,6 +53,7 @@ const Plan = z.object({
   extraCents: cents.max(10_000_000),
   order: z.array(id).max(100),
   minimumsOnly: z.boolean(),
+  rollover: z.boolean().default(true),
   excluded: z.array(id).max(100),
   included: z.array(id).max(100),
   debtFreeBy: isoDate.nullable(),

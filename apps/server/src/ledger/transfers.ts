@@ -204,7 +204,7 @@ export function applyTransferPairs(tx: Tx, pairs: TransferPair[]): number {
 /** Detect + apply for the given (new) transactions; used after import and sync. */
 export function linkTransfersFor(tx: Tx, ids: string[]): number {
   if (ids.length === 0) return 0;
-  return applyTransferPairs(tx, findTransferPairs(tx, ids));
+  return applyTransferPairs(tx, findTransferPairs(tx, ids)) + pairPayPalFunding(tx);
 }
 
 export function previewTransfers(db: Db): TransferPreview {
@@ -255,4 +255,118 @@ export function pairLoanPayments(tx: Tx): number {
     .all()
     .map((r) => r.id);
   return ids.length ? applyTransferPairs(tx, findTransferPairs(tx, ids)) : 0;
+}
+
+/**
+ * PayPal pass-through: a purchase paid "through PayPal" from a bank shows up
+ * as money arriving in PayPal and leaving again for the merchant, plus the
+ * bank's own "PAYPAL ..." withdrawal. The arrival is a transfer from the bank,
+ * not income, and the bank side isn't spending (the PayPal purchase is). Pair
+ * the arrival with the bank withdrawal even when that was filed under a
+ * category (imported from another app), and move that category to the
+ * PayPal purchase if it has none, so the spending is counted once.
+ * "Not a transfer" on either side stops it.
+ */
+export function pairPayPalFunding(tx: Tx): number {
+  const t = schema.transactions;
+  const paypal = tx
+    .select({ id: schema.accounts.id })
+    .from(schema.accounts)
+    .leftJoin(schema.connections, eq(schema.connections.id, schema.accounts.connectionId))
+    .where(
+      sql`(${schema.connections.provider} = 'paypal' or lower(${schema.accounts.name}) like '%paypal%') and ${schema.accounts.type} not in ('credit', 'loan')`,
+    )
+    .all()
+    .map((a) => a.id);
+  if (!paypal.length) return 0;
+  const cats = transferCategoryIds(tx);
+  const kindOf = new Map(
+    tx
+      .select({ id: schema.categories.id, kind: schema.categoryGroups.kind })
+      .from(schema.categories)
+      .innerJoin(schema.categoryGroups, eq(schema.categoryGroups.id, schema.categories.groupId))
+      .all()
+      .map((c) => [c.id, c.kind]),
+  );
+  const cols = {
+    id: t.id,
+    accountId: t.accountId,
+    postedDate: t.postedDate,
+    amountCents: t.amountCents,
+    rawDescription: t.rawDescription,
+    categoryId: t.categoryId,
+    userModified: t.userModified,
+    pairId: t.transferPairId,
+    notTransfer: t.notTransfer,
+    pending: t.pending,
+  };
+  const inPaypal = tx.select(cols).from(t).where(inArray(t.accountId, paypal)).all();
+  const used = new Set<string>();
+  let n = 0;
+  for (const inRow of inPaypal) {
+    if (inRow.amountCents <= 0 || inRow.pairId || inRow.notTransfer || inRow.pending) continue;
+    const day = dayNum(inRow.postedDate);
+    // The PayPal purchase it paid for: same amount out, within a day.
+    const purchase = inPaypal
+      .filter(
+        (p) =>
+          p.accountId === inRow.accountId &&
+          p.amountCents === -inRow.amountCents &&
+          !used.has(p.id) &&
+          Math.abs(dayNum(p.postedDate) - day) <= 1,
+      )
+      .sort(
+        (a, b) => Math.abs(dayNum(a.postedDate) - day) - Math.abs(dayNum(b.postedDate) - day),
+      )[0];
+    if (!purchase) continue;
+    used.add(purchase.id);
+    // The bank's withdrawal to PayPal.
+    const out = tx
+      .select(cols)
+      .from(t)
+      .where(
+        and(
+          eq(t.amountCents, -inRow.amountCents),
+          isNull(t.transferPairId),
+          eq(t.notTransfer, false),
+          eq(t.pending, false),
+          sql`${t.accountId} not in (${sql.join(
+            paypal.map((id) => sql`${id}`),
+            sql`, `,
+          )})`,
+          sql`abs(julianday(${t.postedDate}) - julianday(${inRow.postedDate})) <= ${MAX_DAYS}`,
+          sql`lower(${t.rawDescription}) like '%paypal%'`,
+          sql`not exists (select 1 from ${schema.transactionSplits} s where s.transaction_id = ${t.id})`,
+        ),
+      )
+      .all()
+      .filter((o) => !used.has(o.id))
+      .sort(
+        (a, b) => Math.abs(dayNum(a.postedDate) - day) - Math.abs(dayNum(b.postedDate) - day),
+      )[0];
+    const internal = cats.internal;
+    if (!out) {
+      // Funded from somewhere Muny doesn't have: still not income.
+      if (!inRow.categoryId && internal)
+        tx.update(t).set({ categoryId: internal }).where(eq(t.id, inRow.id)).run();
+      continue;
+    }
+    used.add(out.id);
+    const outKind = out.categoryId ? kindOf.get(out.categoryId) : null;
+    if (out.categoryId && outKind !== "transfer" && !purchase.categoryId)
+      tx.update(t).set({ categoryId: out.categoryId }).where(eq(t.id, purchase.id)).run();
+    tx.update(t)
+      .set({ transferPairId: inRow.id, ...(internal ? { categoryId: internal } : {}) })
+      .where(eq(t.id, out.id))
+      .run();
+    tx.update(t)
+      .set({
+        transferPairId: out.id,
+        ...(internal && !(inRow.userModified && inRow.categoryId) ? { categoryId: internal } : {}),
+      })
+      .where(eq(t.id, inRow.id))
+      .run();
+    n++;
+  }
+  return n;
 }

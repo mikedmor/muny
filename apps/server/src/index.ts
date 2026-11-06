@@ -5,7 +5,7 @@ import { loadConfig } from "./config.js";
 import { startBackupScheduler } from "./data/backups.js";
 import { repairRawAchPayees } from "./ledger/payees.js";
 import { seedDefaultCategories } from "./ledger/seed.js";
-import { pairLoanPayments } from "./ledger/transfers.js";
+import { pairLoanPayments, pairPayPalFunding } from "./ledger/transfers.js";
 import { refreshManualLoans } from "./loans/service.js";
 import { rescanRecurring } from "./recurring/service.js";
 import { startSyncScheduler } from "./sync/engine.js";
@@ -20,6 +20,7 @@ async function main() {
   // Cheap (well under a second for years of history); picks up detection improvements after upgrades.
   db.transaction((tx) => {
     pairLoanPayments(tx);
+    pairPayPalFunding(tx);
     rescanRecurring(tx);
     refreshManualLoans(tx as unknown as typeof db);
   });

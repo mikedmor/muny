@@ -171,6 +171,8 @@ export interface LoanPlanSettings {
   /** "My own order" (loan account ids, first = paid first). */
   order: string[];
   minimumsOnly: boolean;
+  /** A paid-off loan's payment goes to the next loan (the "snowball"); off: it stops. */
+  rollover: boolean;
   /** Loans left out of the plan (by default, mortgages). */
   excluded: string[];
   /** Mortgages the user put in (otherwise left out). */
@@ -186,6 +188,7 @@ export const DEFAULT_LOAN_PLAN: LoanPlanSettings = {
   extraCents: 0,
   order: [],
   minimumsOnly: false,
+  rollover: true,
   excluded: [],
   included: [],
   debtFreeBy: null,

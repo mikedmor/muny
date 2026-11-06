@@ -118,7 +118,7 @@ function Planner({
 
   const calc = (() => {
     const order = orderLoans(planLoans, p.strategy, p.order);
-    const opts = { order, minimumsOnly: p.minimumsOnly };
+    const opts = { order, minimumsOnly: p.minimumsOnly, rollover: p.rollover };
     const now = currentPlan(planLoans);
     const plan = simulatePlan(planLoans, { ...opts, extraCents: p.extraCents });
     const other = (s: PlanStrategy) =>
@@ -126,6 +126,7 @@ function Planner({
         extraCents: p.extraCents,
         order: orderLoans(planLoans, s, p.order),
         minimumsOnly: p.minimumsOnly,
+        rollover: p.rollover,
       });
     const strategies = (["avalanche", "snowball"] as const).map((s) => ({ s, r: other(s) }));
     const moved = p.minimumsOnly
@@ -133,9 +134,25 @@ function Planner({
       : simulatePlan(planLoans, { ...opts, extraCents: p.extraCents, minimumsOnly: true });
     const goalMonths = p.debtFreeBy ? monthsUntil(p.debtFreeBy) : null;
     const needed = goalMonths !== null ? extraNeeded(planLoans, goalMonths, opts) : null;
-    return { order, now, plan, strategies, moved, goalMonths, needed };
+    // Rolling payments over vs not.
+    const rolled = p.rollover
+      ? null
+      : simulatePlan(planLoans, { ...opts, extraCents: p.extraCents, rollover: true });
+    // A quick win: the loan closest to done (not already first) cleared first frees its payment sooner.
+    const quick = [...planLoans]
+      .filter((l) => l.id !== order[0] && l.paymentCents > 0 && l.balanceCents > 0)
+      .sort((a, b) => a.balanceCents / a.paymentCents - b.balanceCents / b.paymentCents)[0];
+    const quickPlan = quick
+      ? simulatePlan(planLoans, {
+          ...opts,
+          extraCents: p.extraCents,
+          order: [quick.id, ...order.filter((id) => id !== quick.id)],
+        })
+      : null;
+    return { order, now, plan, strategies, moved, goalMonths, needed, rolled, quick, quickPlan };
   })();
-  const { order, now, plan, strategies, moved, goalMonths, needed } = calc;
+  const { order, now, plan, strategies, moved, goalMonths, needed, rolled, quick, quickPlan } =
+    calc;
 
   if (open.length === 0)
     return (
@@ -185,6 +202,52 @@ function Planner({
         ),
         action: { label: "Do that", run: () => update({ minimumsOnly: true }) },
       });
+  }
+  if (rolled && plan.totalInterestCents - rolled.totalInterestCents > 100)
+    tips.push({
+      text: (
+        <>
+          Rolling each paid-off loan's payment into the next would save{" "}
+          {formatMoney(plan.totalInterestCents - rolled.totalInterestCents)}
+          {rolled.months !== null && plan.months !== null && plan.months > rolled.months
+            ? ` and finish ${span(plan.months - rolled.months)} sooner`
+            : ""}
+          .
+        </>
+      ),
+      action: { label: "Roll them over", run: () => update({ rollover: true }) },
+    });
+  if (
+    p.rollover &&
+    quick &&
+    quickPlan &&
+    quickPlan.payoffMonth[quick.id] !== null &&
+    (plan.payoffMonth[quick.id] ?? 999) - (quickPlan.payoffMonth[quick.id] ?? 999) >= 2 &&
+    quickPlan.totalInterestCents - plan.totalInterestCents < 5_000
+  ) {
+    const freed = (plan.payoffMonth[quick.id] ?? 0) - (quickPlan.payoffMonth[quick.id] ?? 0);
+    const diff = quickPlan.totalInterestCents - plan.totalInterestCents;
+    tips.push({
+      text: (
+        <>
+          Quick win: <strong>{quick.name}</strong> has only {formatMoney(quick.balanceCents)} left.
+          Clearing it first frees its {formatMoney(quick.paymentCents)} payment {span(freed)} sooner
+          for the rest
+          {diff <= 0
+            ? `, and saves ${formatMoney(-diff)} in interest`
+            : `, for ${formatMoney(diff)} more interest overall`}
+          .
+        </>
+      ),
+      action: {
+        label: "Put it first",
+        run: () =>
+          update({
+            strategy: "custom",
+            order: [quick.id, ...order.filter((id) => id !== quick.id)],
+          }),
+      },
+    });
   }
   if (p.debtFreeBy && goalMonths !== null) {
     if (needed === null)
@@ -396,6 +459,21 @@ function Planner({
             Pay only the minimum on the others
             <span className="block text-xs text-slate-500">
               What you pay above the minimums goes to the first loan in the order instead.
+            </span>
+          </span>
+        </label>
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={p.rollover}
+            onChange={(e) => update({ rollover: e.target.checked })}
+            className="mt-0.5 accent-brand-600"
+          />
+          <span>
+            Roll paid-off loans into the next
+            <span className="block text-xs text-slate-500">
+              When a loan is paid off, keep paying its amount toward the next loan in the order (the
+              snowball). Off: that money stops when the loan does.
             </span>
           </span>
         </label>

@@ -174,7 +174,12 @@ export async function marketIntraday(
   const hit = intradayCache.get(symbol);
   if (hit && now - hit.at < 10 * 60_000) return hit.data;
   spend(db, "yahoo");
-  const { meta, points } = await chart(deps.fetch ?? fetch, symbol, "range=1d&interval=5m");
+  // Pre-market and after-hours too, so the index funds cover the day like the VIX does.
+  const { meta, points } = await chart(
+    deps.fetch ?? fetch,
+    symbol,
+    "range=1d&interval=5m&includePrePost=true",
+  );
   const data: MarketIntraday = {
     symbol,
     previousClose: meta.chartPreviousClose ?? meta.previousClose ?? null,
