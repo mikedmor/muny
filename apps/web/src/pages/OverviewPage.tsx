@@ -14,7 +14,6 @@ import {
   PaceChart,
   RankedBars,
   type StackBand,
-  StackLegend,
 } from "../components/charts.js";
 import { Alert, Card, cx, PageHeader } from "../components/ui.js";
 import { CategoryIcon, MerchantAvatar } from "../components/visuals.js";
@@ -134,7 +133,6 @@ function SpendingCard({ d }: { d: Overview }) {
           ariaLabel={`Running spending total: ${thisName} so far compared with ${lastName}`}
           stack={stack}
         />
-        {stack.length > 0 && <StackLegend stack={stack} />}
       </div>
       <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-3 text-sm dark:border-slate-800">
         <div>

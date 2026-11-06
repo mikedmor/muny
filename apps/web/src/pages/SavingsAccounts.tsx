@@ -2,7 +2,7 @@ import { formatMoney, type SavingsAccountInfo, type SavingsAccountsReport } from
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil } from "lucide-react";
 import { useState } from "react";
-import { ColumnChart, LineChart, type StackBand, StackLegend } from "../components/charts.js";
+import { ColumnChart, LineChart, type StackBand } from "../components/charts.js";
 import { Alert, Button, Card, cx } from "../components/ui.js";
 import { api } from "../lib/api.js";
 import { keys } from "../lib/queries.js";
@@ -239,19 +239,16 @@ function AccountCard({ a, onSaved }: { a: SavingsAccountInfo; onSaved: () => voi
         <div>
           <p className="mb-2 text-xs font-medium text-slate-500">Balance</p>
           {months.length >= 2 ? (
-            <>
-              <LineChart
-                ariaLabel={`${a.name} balance by month`}
-                height={180}
-                stack={stack}
-                points={months.map((m) => ({
-                  date: m.month,
-                  label: monthLabel(m.month, true),
-                  value: m.balanceCents,
-                }))}
-              />
-              <StackLegend stack={stack} />
-            </>
+            <LineChart
+              ariaLabel={`${a.name} balance by month`}
+              height={180}
+              stack={stack}
+              points={months.map((m) => ({
+                date: m.month,
+                label: monthLabel(m.month, true),
+                value: m.balanceCents,
+              }))}
+            />
           ) : (
             <p className="py-8 text-center text-sm text-slate-500">Not enough history yet.</p>
           )}

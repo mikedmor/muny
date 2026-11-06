@@ -1,13 +1,7 @@
 import { type CryptoHolding, formatMoney } from "@muny/shared";
 import { Link } from "@tanstack/react-router";
 import { Fragment, useMemo, useState } from "react";
-import {
-  Donut,
-  type DonutSlice,
-  LineChart,
-  type StackBand,
-  StackLegend,
-} from "../../components/charts.js";
+import { Donut, type DonutSlice, LineChart, type StackBand } from "../../components/charts.js";
 import { CoinIcon, WalletIcon } from "../../components/coins.js";
 import { Alert, Button, Card, cx } from "../../components/ui.js";
 import { api } from "../../lib/api.js";
@@ -730,7 +724,6 @@ export function CryptoDashboard() {
                 </p>
               )}
             </div>
-            {points.length > 1 && stack.length > 0 && <StackLegend stack={stack} />}
             <FlowsStrip from={rangeFrom || undefined} to={rangeTo} />
             <p className="mt-2 text-xs text-slate-500">
               Cost is first-in, first-out across all wallets; long term means held more than a year.

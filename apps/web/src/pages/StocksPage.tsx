@@ -9,7 +9,7 @@ import {
 import { Link } from "@tanstack/react-router";
 import { ChevronRight, FileUp, Link2, X } from "lucide-react";
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Donut, LineChart, type StackBand, StackLegend } from "../components/charts.js";
+import { Donut, LineChart, type StackBand } from "../components/charts.js";
 import { Modal } from "../components/forms.js";
 import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
 import { MerchantAvatar } from "../components/visuals.js";
@@ -127,7 +127,6 @@ function ValueChart({
           Not enough history yet. Fill it in from your trades and past prices below.
         </p>
       )}
-      {shown.length >= 2 && stack.length > 0 && <StackLegend stack={stack} />}
       {estimatedUntil ? (
         // Filled in: a quiet note, with a way to redo it after importing older trades.
         <p className="mt-3 text-xs text-slate-500">

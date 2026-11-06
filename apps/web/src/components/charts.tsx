@@ -1,5 +1,6 @@
 import { formatMoney } from "@muny/shared";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { cx } from "./ui.js";
 
 /**
  * Small hand-rolled charts (SVG/HTML) following the dataviz method:
@@ -377,11 +378,15 @@ function StackBands({
   x,
   y,
   count,
+  focus,
+  onFocus,
 }: {
   stack: StackBand[];
   x: (i: number) => number;
   y: (v: number) => number;
   count: number;
+  focus: string | null;
+  onFocus: (key: string | null) => void;
 }) {
   const base = new Array<number>(count).fill(0);
   return (
@@ -397,14 +402,18 @@ function StackBands({
           })
           .join(" ");
         return (
+          // biome-ignore lint/a11y/noStaticElementInteractions: hovering a band is a mouse shortcut; the legend buttons do the same with the keyboard
           <path
             key={b.key}
             d={`${top} ${back} Z`}
             fill={b.color}
-            fillOpacity={0.85}
+            fillOpacity={focus === null ? 0.9 : focus === b.key ? 1 : 0.18}
             stroke="var(--viz-surface)"
-            strokeWidth={1}
+            strokeWidth={0.75}
             strokeLinejoin="round"
+            onMouseEnter={() => onFocus(b.key)}
+            onMouseLeave={() => onFocus(null)}
+            style={{ transition: "fill-opacity 120ms" }}
           />
         );
       })}
@@ -412,21 +421,43 @@ function StackBands({
   );
 }
 
-/** Legend for stacked bands, with each part's latest value. */
-export function StackLegend({ stack, at }: { stack: StackBand[]; at?: number }) {
+/** Legend for stacked bands, with each part's latest value; hover one to highlight it. */
+export function StackLegend({
+  stack,
+  at,
+  focus = null,
+  onFocus,
+}: {
+  stack: StackBand[];
+  at?: number;
+  focus?: string | null;
+  onFocus?: (key: string | null) => void;
+}) {
   return (
-    <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600 dark:text-slate-400">
+    <ul className="mt-3 flex flex-wrap gap-x-1 gap-y-1 text-xs text-slate-600 dark:text-slate-400">
       {stack.map((b) => {
         const v = b.values[at ?? b.values.length - 1] ?? 0;
         return (
-          <li key={b.key} className="inline-flex items-center gap-1.5">
-            <span
-              aria-hidden="true"
-              className="inline-block size-2.5 rounded-sm"
-              style={{ background: b.color }}
-            />
-            {b.label}
-            <span className="tabular-nums text-slate-500">{formatMoney(Math.max(0, v))}</span>
+          <li key={b.key}>
+            <button
+              type="button"
+              onMouseEnter={() => onFocus?.(b.key)}
+              onMouseLeave={() => onFocus?.(null)}
+              onFocus={() => onFocus?.(b.key)}
+              onBlur={() => onFocus?.(null)}
+              className={cx(
+                "inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 transition-opacity hover:bg-slate-100 dark:hover:bg-slate-800",
+                focus !== null && focus !== b.key && "opacity-40",
+              )}
+            >
+              <span
+                aria-hidden="true"
+                className="inline-block size-2.5 rounded-sm"
+                style={{ background: b.color }}
+              />
+              <span className="font-medium text-slate-700 dark:text-slate-300">{b.label}</span>
+              <span className="tabular-nums">{formatMoney(Math.max(0, v))}</span>
+            </button>
           </li>
         );
       })}
@@ -486,6 +517,7 @@ export function LineChart({
 }) {
   const { ref, width } = useWidth();
   const [hover, setHover] = useState<number | null>(null);
+  const [focus, setFocus] = useState<string | null>(null);
   const gradId = useId();
   const values = points.flatMap((p) =>
     p.compare !== undefined ? [p.value, p.compare] : [p.value],
@@ -559,7 +591,7 @@ export function LineChart({
           </g>
         ))}
         {points.map((p, i) =>
-          (i % labelEvery === 0 && points.length - 1 - i >= labelEvery / 2) ||
+          (i % labelEvery === 0 && x(points.length - 1) - x(i) >= labelW) ||
           i === points.length - 1 ? (
             <text
               key={p.date}
@@ -574,7 +606,14 @@ export function LineChart({
           ) : null,
         )}
         {stack?.length ? (
-          <StackBands stack={stack} x={x} y={y} count={points.length} />
+          <StackBands
+            stack={stack}
+            x={x}
+            y={y}
+            count={points.length}
+            focus={focus}
+            onFocus={setFocus}
+          />
         ) : (
           <path d={area} fill={`url(#${gradId})`} />
         )}
@@ -587,14 +626,16 @@ export function LineChart({
             strokeDasharray="5 4"
           />
         )}
-        <path
-          d={line}
-          fill="none"
-          stroke={stack?.length ? "var(--viz-ink-2)" : "var(--viz-series-1)"}
-          strokeWidth={stack?.length ? 1.5 : 2}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
+        {!stack?.length && (
+          <path
+            d={line}
+            fill="none"
+            stroke="var(--viz-series-1)"
+            strokeWidth={2}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        )}
         {hp && hover !== null && (
           <g>
             <line
@@ -639,6 +680,9 @@ export function LineChart({
           )}
         </Tooltip>
       )}
+      {stack?.length ? (
+        <StackLegend stack={stack} at={hover ?? undefined} focus={focus} onFocus={setFocus} />
+      ) : null}
     </div>
   );
 }
@@ -680,6 +724,7 @@ export function PaceChart({
 }) {
   const { ref, width } = useWidth();
   const [hover, setHover] = useState<number | null>(null);
+  const [focus, setFocus] = useState<string | null>(null);
   const gradId = useId();
   const n = Math.max(days, previous.length, current.length, 2);
   const hi = Math.max(1, ...current, ...previous);
@@ -793,18 +838,27 @@ export function PaceChart({
             strokeLinejoin="round"
           />
           {stack?.length ? (
-            <StackBands stack={stack} x={x} y={y} count={current.length} />
+            <StackBands
+              stack={stack}
+              x={x}
+              y={y}
+              count={current.length}
+              focus={focus}
+              onFocus={setFocus}
+            />
           ) : (
             <path d={area} fill={`url(#${gradId})`} />
           )}
-          <path
-            d={cur}
-            fill="none"
-            stroke={stack?.length ? "var(--viz-ink-2)" : "var(--viz-series-1)"}
-            strokeWidth={stack?.length ? 1.5 : 2}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
+          {!stack?.length && (
+            <path
+              d={cur}
+              fill="none"
+              stroke="var(--viz-series-1)"
+              strokeWidth={2}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+          )}
           {lastI >= 0 && hover === null && (
             <circle
               cx={x(lastI)}
@@ -867,6 +921,14 @@ export function PaceChart({
           </Tooltip>
         )}
       </div>
+      {stack?.length ? (
+        <StackLegend
+          stack={stack}
+          at={hover !== null && hover < current.length ? hover : undefined}
+          focus={focus}
+          onFocus={setFocus}
+        />
+      ) : null}
     </div>
   );
 }
