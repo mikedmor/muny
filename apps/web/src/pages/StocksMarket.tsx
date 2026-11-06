@@ -11,10 +11,40 @@ import {
 } from "../lib/queries.js";
 
 /** A company logo (when logos are on), else the letter badge. */
+/**
+ * How to show a logo: "fill" when it has its own background (its corners are
+ * painted), else "dark" or "light" backing depending on how bright the mark is.
+ */
+type LogoLook = "fill" | "dark" | "light";
+const looks = new Map<string, LogoLook>();
+
+function lookOf(img: HTMLImageElement): LogoLook {
+  const n = 32;
+  const c = document.createElement("canvas");
+  c.width = n;
+  c.height = n;
+  const ctx = c.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return "light";
+  ctx.drawImage(img, 0, 0, n, n);
+  const px = ctx.getImageData(0, 0, n, n).data;
+  const alpha = (x: number, y: number) => px[(y * n + x) * 4 + 3] ?? 0;
+  const corners = [alpha(1, 1), alpha(n - 2, 1), alpha(1, n - 2), alpha(n - 2, n - 2)];
+  if (corners.every((a) => a > 200)) return "fill";
+  let lum = 0;
+  let count = 0;
+  for (let i = 0; i < px.length; i += 4) {
+    if ((px[i + 3] ?? 0) < 128) continue;
+    lum += 0.2126 * (px[i] ?? 0) + 0.7152 * (px[i + 1] ?? 0) + 0.0722 * (px[i + 2] ?? 0);
+    count++;
+  }
+  return count && lum / count > 180 ? "dark" : "light";
+}
+
 export function StockLogo({ symbol, size = "md" }: { symbol: string; size?: "sm" | "md" }) {
   const settings = useInvestSettings();
   const logos = settings.data?.logos ?? false;
   const [failed, setFailed] = useState(false);
+  const [look, setLook] = useState<LogoLook | undefined>(() => looks.get(symbol));
   if (!logos || failed || !/^[A-Z][A-Z0-9.-]{0,9}$/.test(symbol))
     return <MerchantAvatar name={symbol} size={size} />;
   return (
@@ -24,9 +54,24 @@ export function StockLogo({ symbol, size = "md" }: { symbol: string; size?: "sm"
       aria-hidden="true"
       loading="lazy"
       onError={() => setFailed(true)}
+      onLoad={(e) => {
+        if (looks.has(symbol)) return;
+        try {
+          const l = lookOf(e.currentTarget);
+          looks.set(symbol, l);
+          setLook(l);
+        } catch {
+          setLook("light");
+        }
+      }}
       className={cx(
-        "shrink-0 rounded-full bg-white object-contain p-1 ring-1 ring-slate-200 dark:ring-slate-700",
+        "shrink-0 rounded-full ring-1 ring-slate-200 dark:ring-slate-700",
         size === "sm" ? "size-7" : "size-9",
+        look === "fill"
+          ? "object-cover"
+          : look === "dark"
+            ? "bg-slate-900 object-contain p-1.5"
+            : "bg-white object-contain p-1.5",
       )}
     />
   );

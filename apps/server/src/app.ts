@@ -26,6 +26,7 @@ import { registerRecurringRoutes } from "./recurring/routes.js";
 import { registerReportRoutes } from "./reports/routes.js";
 import { registerRuleRoutes } from "./rules/routes.js";
 import { registerSavingsRoutes } from "./savings/routes.js";
+import { registerPrefsRoutes } from "./settings/prefs.js";
 import { makeProviders, type Providers } from "./sync/engine.js";
 import { registerSyncRoutes } from "./sync/routes.js";
 import { registerTrialRoutes } from "./trials/routes.js";
@@ -124,6 +125,7 @@ export async function buildApp({
   registerCategoryRoutes(app, db);
   registerTransactionRoutes(app, db);
   registerImportRoutes(app, db);
+  registerPrefsRoutes(app, db);
   registerInvestRoutes(app, db, { fetch: priceFetch });
   registerPayeeRoutes(app, db);
   registerRuleRoutes(app, db);

@@ -59,10 +59,12 @@ function Stat({
 
 function ApyEditor({ a, onSaved }: { a: SavingsAccountInfo; onSaved: () => void }) {
   const [editing, setEditing] = useState(false);
-  const [text, setText] = useState(a.apyBps === null ? "" : (a.apyBps / 100).toFixed(2));
+  // Start from what you entered, else the rate actually earned.
+  const start = a.apyBps ?? a.earnedApyBps;
+  const [text, setText] = useState(start === null ? "" : (start / 100).toFixed(2));
   const [error, setError] = useState<string | null>(null);
-  const save = async () => {
-    const v = text.trim();
+  const save = async (value = text) => {
+    const v = value.trim();
     const n = v === "" ? null : Number(v.replace("%", ""));
     if (n !== null && (!Number.isFinite(n) || n < 0 || n > 50)) {
       setError("Enter a rate like 4.35");
@@ -79,6 +81,29 @@ function ApyEditor({ a, onSaved }: { a: SavingsAccountInfo; onSaved: () => void 
       setError(e instanceof Error ? e.message : "Couldn't save");
     }
   };
+  if (!editing && a.apyBps === null && a.earnedApyBps !== null)
+    // Suggest the rate worked out from the interest it paid.
+    return (
+      <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span title="Worked out from the interest paid over the last year">
+          ≈{pctOf(a.earnedApyBps)} APY
+        </span>
+        <button
+          type="button"
+          onClick={() => void save(`${(a.earnedApyBps as number) / 100}`)}
+          className="text-xs font-normal text-brand-600 hover:underline dark:text-brand-500"
+        >
+          Use it
+        </button>
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="text-xs font-normal text-slate-500 hover:underline"
+        >
+          Enter another
+        </button>
+      </span>
+    );
   if (!editing)
     return (
       <button

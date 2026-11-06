@@ -1,5 +1,6 @@
 import { formatMoney } from "@muny/shared";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { useUiPrefs } from "../lib/queries.js";
 import { cx } from "./ui.js";
 
 /**
@@ -505,7 +506,7 @@ export function LineChart({
   ariaLabel,
   height = H,
   compareLabel,
-  stack,
+  stack: stackIn,
 }: {
   points: LinePoint[];
   ariaLabel: string;
@@ -515,6 +516,9 @@ export function LineChart({
   /** Split the area under the line into colored parts (they should add up to the line). */
   stack?: StackBand[];
 }) {
+  // Settings → Display can turn the split off.
+  const prefs = useUiPrefs();
+  const stack = prefs.data?.splitCharts === false ? undefined : stackIn;
   const { ref, width } = useWidth();
   const [hover, setHover] = useState<number | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
@@ -705,7 +709,7 @@ export function PaceChart({
   dayLabel,
   ariaLabel,
   height = 180,
-  stack,
+  stack: stackIn,
 }: {
   /** Running totals, index 0 = day 1, through today. */
   current: number[];
@@ -722,6 +726,9 @@ export function PaceChart({
   ariaLabel: string;
   height?: number;
 }) {
+  // Settings → Display can turn the split off.
+  const prefs = useUiPrefs();
+  const stack = prefs.data?.splitCharts === false ? undefined : stackIn;
   const { ref, width } = useWidth();
   const [hover, setHover] = useState<number | null>(null);
   const [focus, setFocus] = useState<string | null>(null);

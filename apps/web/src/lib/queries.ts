@@ -60,6 +60,7 @@ import type {
   TransactionPage,
   TransactionQuery,
   TransferPreview,
+  UiPrefs,
   UpcomingCharge,
   UpdateAccountInput,
   UpdateRecurringInput,
@@ -861,3 +862,16 @@ export const useMarketIntraday = (symbol: string, enabled: boolean) =>
     enabled,
     staleTime: 5 * 60_000,
   });
+
+export const useUiPrefs = () =>
+  useQuery({
+    queryKey: ["ui-prefs"],
+    queryFn: () => api.get<UiPrefs>("/api/settings/ui"),
+    staleTime: 5 * 60_000,
+  });
+
+export const useSetUiPrefs = () =>
+  useInvalidatingMutation(
+    (patch: Partial<UiPrefs>) => api.put<UiPrefs>("/api/settings/ui", patch),
+    [["ui-prefs"]],
+  );

@@ -8,6 +8,8 @@ import {
   useCreateGroup,
   useDeleteCategory,
   useDeleteGroup,
+  useSetUiPrefs,
+  useUiPrefs,
   useUpdateCategory,
   useUpdateGroup,
 } from "../lib/queries.js";
@@ -24,6 +26,7 @@ const TABS = [
   ["rules", "Rules"],
   ["merchants", "Merchants"],
   ["alerts", "Alerts"],
+  ["display", "Display"],
   ["data", "Data & backups"],
   ["household", "Household & account"],
 ] as const;
@@ -75,6 +78,7 @@ export function SettingsPage() {
       {tab === "merchants" && <PayeesSettings />}
       {tab === "alerts" && <AlertsSettings />}
       {tab === "data" && <DataSettings />}
+      {tab === "display" && <DisplaySettings />}
       {tab === "household" && <HouseholdSettings />}
     </>
   );
@@ -374,5 +378,32 @@ function DeleteCategoryForm({
         </Button>
       </div>
     </div>
+  );
+}
+
+function DisplaySettings() {
+  const prefs = useUiPrefs();
+  const set = useSetUiPrefs();
+  const split = prefs.data?.splitCharts ?? true;
+  return (
+    <Card className="max-w-2xl">
+      <h2 className="font-semibold">Charts</h2>
+      <label className="mt-3 flex items-start gap-3 text-sm">
+        <input
+          type="checkbox"
+          checked={split}
+          disabled={!prefs.data || set.isPending}
+          onChange={(e) => set.mutate({ splitCharts: e.target.checked })}
+          className="mt-0.5 size-4 accent-brand-600"
+        />
+        <span>
+          <span className="font-medium">Split totals into colored parts</span>
+          <span className="block text-xs text-slate-500">
+            Spending this month by category, crypto by coin, stocks by holding, and savings by money
+            added and interest. Off: one line per chart. Applies to everyone in the household.
+          </span>
+        </span>
+      </label>
+    </Card>
   );
 }

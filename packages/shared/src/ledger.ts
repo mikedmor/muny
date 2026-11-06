@@ -178,3 +178,9 @@ export const DEFAULT_CATEGORIES: { group: string; kind: CategoryKind; categories
     categories: ["Credit Card Payment", "Internal Transfer", "Savings", "Investments"],
   },
 ];
+
+/** Display preferences (Settings → Display), shared by the household. */
+export interface UiPrefs {
+  /** Split chart totals into colored parts (categories, coins, holdings). */
+  splitCharts: boolean;
+}
