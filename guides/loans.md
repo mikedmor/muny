@@ -23,6 +23,17 @@ Loans with the same lender share one card on the Loans page, with a tab for each
 - **Payments** lists each payment, the account it came from, and its split into interest and principal. For synced loans the split is worked back from today's balance, so it's an estimate. For loans tracked from your payments, payments before the **As of** date are listed with an estimated split worked back from what you owed then; only later payments lower the balance.
 - **Payoff** charts the balance down to zero. Drag **Pay extra each month** to see how much sooner it ends and how much interest you'd save.
 
+## Payoff plan
+
+The **Payoff plan** tab helps you pay your loans off sooner. Every loan keeps its payment; extra money you add, and the payments of loans you finish, go to the loans in your chosen order. It's a plan only: Muny never pays anything.
+
+- **Your goal:** **Highest rate first** pays the least interest; **Smallest balance first** clears loans one by one for quick wins; **My own order** lets you arrange them with the arrows.
+- **Extra each month:** what you can add on top of your payments.
+- **Pay only the minimum on the others:** whatever you pay above the minimums goes to the first loan instead.
+- **Debt-free by** and **Goal: paid off by** (per loan): Muny tells you how much extra or how much a month it would take.
+
+You see when you'd be debt-free, the interest left and what you'd save compared with paying as you do now, a chart of each loan's balance, and suggestions (a better order, moving payments, the extra needed for your dates) you can apply with one click. Mortgages are left out unless you add them. Your choices are saved.
+
 ## Mortgage insurance
 
 Enter the home's **original value** (the lower of the purchase price and the original appraisal) and the monthly mortgage insurance. Muny shows your equity on that value, when you reach 20% (you can ask your lender to cancel it) and 22% (it ends on its own), at your current payments.
@@ -40,7 +51,7 @@ On **Assets → Settings**, add your own keys:
 - **Homes: APillow** (Zillow data, free plan 50 lookups a month, [apillow.co](https://apillow.co)). Give the home its address as Zillow shows it. **Look up value** fills in Zillow's estimate, plus beds, baths, square feet, lot, year built, last sale, property tax and the rent estimate. Zillow has no estimate for homes listed for sale; Muny says so and keeps your value.
 - **Vehicles: CarAPI.dev** (free plan 100 requests a month, [carapi.dev](https://carapi.dev)). Give the vehicle its year, make, model and mileage (the make and model fields suggest names from NHTSA's public vehicle database, which only sees the make and year you type); **Look up value** fills in its US market value.
 
-**Request limits** on the same tab shows how many requests each service has had today and this month. Muny stops before its own cap, which sits under each free plan (45 home lookups and 95 vehicle lookups a month).
+**Request limits** on the same tab shows each service's use today and this month, and Muny stops before its own cap, under each free plan. APillow counts different homes per day (up to 45; looking the same home up again that day doesn't count) and every request separately; CarAPI stops at 95 lookups a month.
 
 After the first lookup, values over a month old are looked up again when you open Assets. Typing a value yourself takes over until you look it up again. Keys are stored encrypted and sent only to their service, which sees only the address (homes) or the year, make, model and mileage (vehicles).
 

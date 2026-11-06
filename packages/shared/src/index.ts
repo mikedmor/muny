@@ -8,6 +8,7 @@ export * from "./ledger.js";
 export * from "./loan-math.js";
 export * from "./loans.js";
 export * from "./money.js";
+export * from "./payoff-plan.js";
 export * from "./recurring.js";
 export * from "./reports.js";
 export * from "./rules.js";

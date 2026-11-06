@@ -30,7 +30,7 @@ export type BudgetProvider =
   | "yahoo"
   | "logos"
   | "apillow"
-  | "apillowpoll"
+  | "apillowreq"
   | "carapi"
   | "nhtsa";
 
@@ -39,10 +39,11 @@ export const LIMITS: Record<BudgetProvider, { day: number; month: number; label:
   yahoo: { day: 300, month: 4000, label: "Yahoo Finance stock prices" },
   // Company logos: one or two requests per ticker, once.
   logos: { day: 200, month: 1000, label: "Company logos" },
-  // Your own keys. APillow counts each property looked up (free: 50 a month); checking
-  // for the result is a request (5 a minute) but not a lookup.
-  apillow: { day: 10, month: 45, label: "APillow home lookups" },
-  apillowpoll: { day: 120, month: 600, label: "APillow result checks" },
+  // Your own keys. APillow's free plan: 50 different homes a day (looking the same home
+  // up again that day is free), 5 requests a minute. "apillow" counts new homes each day;
+  // "apillowreq" every request (lookups and result checks, which are spaced 15 s apart).
+  apillow: { day: 45, month: 1350, label: "APillow homes looked up" },
+  apillowreq: { day: 300, month: 6000, label: "APillow requests" },
   carapi: { day: 20, month: 95, label: "CarAPI vehicle values" },
   // NHTSA vPIC (public, no key): make and model names, cached a month.
   nhtsa: { day: 200, month: 2000, label: "NHTSA vehicle names" },

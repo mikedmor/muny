@@ -85,7 +85,7 @@ describe("automatic asset values", () => {
     expect(settings).toMatchObject({ apillow: true, carapi: true });
     expect(settings.usage.map((u) => u.provider)).toEqual([
       "apillow",
-      "apillowpoll",
+      "apillowreq",
       "carapi",
       "nhtsa",
     ]);
@@ -98,6 +98,11 @@ describe("automatic asset values", () => {
     expect(x.calls[0]?.body).toBe(
       JSON.stringify({ addresses: ["1 Example St, Springfield, IL 62701"] }),
     );
+    // The same home again today: more requests, still one home.
+    await client.post(`/api/assets/${home.accountId}/lookup`);
+    const used = (await client.get("/api/assets/valuation")).json<AssetValuationSettings>().usage;
+    expect(used.find((u) => u.provider === "apillow")?.today).toBe(1);
+    expect(used.find((u) => u.provider === "apillowreq")?.today).toBeGreaterThanOrEqual(2);
 
     const car = (
       await client.post("/api/assets", {

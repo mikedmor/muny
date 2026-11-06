@@ -1,7 +1,8 @@
+import { createHash } from "node:crypto";
 import { type MunyDb, schema } from "@muny/db";
 import type { AssetDetails, AssetValuationSettings } from "@muny/shared";
 import { eq } from "drizzle-orm";
-import { spend, usage } from "../crypto/budget.js";
+import { localDay, spend, usage } from "../crypto/budget.js";
 import { decryptJson, encryptJson } from "../lib/crypto.js";
 import { localToday } from "../lib/dates.js";
 
@@ -47,7 +48,7 @@ function readKeys(db: MunyDb, secret: Buffer | undefined): Keys {
 }
 
 /** The services Assets uses, for its request counts. */
-const ASSET_SERVICES = new Set(["apillow", "apillowpoll", "carapi", "nhtsa"]);
+const ASSET_SERVICES = new Set(["apillow", "apillowreq", "carapi", "nhtsa"]);
 
 export function valuationSettings(db: MunyDb, secret: Buffer | undefined): AssetValuationSettings {
   const k = readKeys(db, secret);
@@ -92,6 +93,31 @@ export class ValuationError extends Error {
   }
 }
 
+const HOMES_KEY = "assets.apillowHomes";
+
+/**
+ * APillow counts different homes per day: the first lookup of a home today
+ * spends one from the "apillow" budget; looking it up again today doesn't.
+ * Only a short hash of the address is kept, and only for today.
+ */
+function newHomeToday(db: MunyDb, address: string, now = new Date()) {
+  const day = localDay(now);
+  const id = createHash("sha256").update(address.trim().toLowerCase()).digest("hex").slice(0, 16);
+  const row = db
+    .select()
+    .from(schema.appSettings)
+    .where(eq(schema.appSettings.key, HOMES_KEY))
+    .get()?.value as { day?: string; homes?: string[] } | undefined;
+  const homes = row?.day === day ? (row.homes ?? []) : [];
+  if (homes.includes(id)) return;
+  spend(db, "apillow", now);
+  const value = { day, homes: [...homes, id] };
+  db.insert(schema.appSettings)
+    .values({ key: HOMES_KEY, value })
+    .onConflictDoUpdate({ target: schema.appSettings.key, set: { value } })
+    .run();
+}
+
 /** Look a home up by address: its Zestimate (cents) and details. */
 export async function apillowLookup(
   deps: ValuationDeps,
@@ -105,7 +131,8 @@ export async function apillowLookup(
     "content-type": "application/json",
     accept: "application/json",
   };
-  spend(db, "apillow");
+  newHomeToday(db, address);
+  spend(db, "apillowreq");
   const res = await f(`${APILLOW}/v1/properties`, {
     method: "POST",
     headers,
@@ -122,7 +149,7 @@ export async function apillowLookup(
   for (let i = 0; i < 6 && body.status !== "complete" && body.status !== "failed"; i++) {
     if (!job.job_id) break;
     await sleep(deps.pollMs ?? 15_000);
-    spend(db, "apillowpoll");
+    spend(db, "apillowreq");
     const r = await f(`${APILLOW}/v1/results/${encodeURIComponent(job.job_id)}`, {
       headers,
       signal: AbortSignal.timeout(30_000),

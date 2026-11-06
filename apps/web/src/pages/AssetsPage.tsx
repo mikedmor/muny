@@ -480,8 +480,10 @@ function ValuationKeys() {
 
 /** What each free plan allows, next to Muny's own cap (which stays under it). */
 const PLAN_NOTES: Record<string, string> = {
-  apillow: "Free plan: 50 homes a month. Each lookup is one home.",
-  apillowpoll: "Checking for a lookup's result, at most one every 15 seconds (5 a minute allowed).",
+  apillow:
+    "Free plan: 50 different homes a day. Looking the same home up again that day doesn't count.",
+  apillowreq:
+    "Every request: lookups and checks for their result, at most one every 15 seconds (5 a minute allowed).",
   carapi: "Free plan: 100 requests a month. Each lookup is one request.",
   nhtsa: "Public, no key. Make and model names while you fill in a vehicle, kept for a month.",
 };

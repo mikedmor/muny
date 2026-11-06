@@ -21,6 +21,7 @@ import { Alert, Button, Card, cx, Field, PageHeader } from "../components/ui.js"
 import { api } from "../lib/api.js";
 import { openPlaidLink } from "../lib/bankWidgets.js";
 import { keys, linkApi } from "../lib/queries.js";
+import { PayoffPlan } from "./loans/PayoffPlan.js";
 
 /** Loans: what you owe, the terms, when each is paid off, and what paying extra would do (D-040, D-042). */
 
@@ -1026,10 +1027,6 @@ function LoanCard({
         </div>
       )}
 
-      {!embedded && loan.lender && (
-        <FeeStrip lender={loan.lender} fee={fee} words={loan.paymentMatch} />
-      )}
-
       {loan.sharedWith.length > 0 && (
         <p className="text-xs text-slate-500">
           Payments are shared with {loan.sharedWith.join(", ")}; this loan's part is in proportion
@@ -1055,6 +1052,10 @@ function LoanCard({
           <PayoffPlanner loan={loan} />
           <Payments loan={loan} />
         </div>
+      )}
+
+      {!embedded && loan.lender && (
+        <FeeStrip lender={loan.lender} fee={fee} words={loan.paymentMatch} />
       )}
 
       <Modal open={editing} onClose={() => setEditing(false)} title={`Edit ${loan.name}`}>
@@ -1108,12 +1109,6 @@ function LenderGroup({
           <p className="text-2xl font-semibold tabular-nums">{formatMoney(owed)}</p>
         </div>
       </div>
-      <FeeStrip
-        lender={lender}
-        fee={fee}
-        words={loans.find((l) => l.paymentMatch)?.paymentMatch ?? null}
-        showAdd
-      />
       <div
         role="tablist"
         className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800"
@@ -1141,6 +1136,12 @@ function LenderGroup({
         ))}
       </div>
       <LoanCard key={loan.accountId} loan={loan} embedded />
+      <FeeStrip
+        lender={lender}
+        fee={fee}
+        words={loans.find((l) => l.paymentMatch)?.paymentMatch ?? null}
+        showAdd
+      />
     </Card>
   );
 }
@@ -1169,9 +1170,16 @@ function groupLoans(
   return out;
 }
 
+const TABS = [
+  ["loans", "Loans"],
+  ["plan", "Payoff plan"],
+] as const;
+type Tab = (typeof TABS)[number][0];
+
 export function LoansPage() {
   const q = useQuery({ queryKey: loansKey, queryFn: () => api.get<LoansReport>("/api/loans") });
   const [adding, setAdding] = useState(false);
+  const [tab, setTab] = useState<Tab>(() => (window.location.hash === "#plan" ? "plan" : "loans"));
   const r = q.data;
   const feeFor = (lender: string | null) =>
     r?.lenderFees.find((x) => x.lenderKey === lender?.trim().toLowerCase());
@@ -1196,6 +1204,34 @@ export function LoansPage() {
         </Card>
       )}
       {r && r.loans.length > 0 && (
+        <div
+          role="tablist"
+          className="mb-6 flex gap-1 border-b border-slate-200 dark:border-slate-800"
+        >
+          {TABS.map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              aria-selected={tab === k}
+              onClick={() => {
+                setTab(k);
+                window.history.replaceState(null, "", `#${k}`);
+              }}
+              className={cx(
+                "-mb-px border-b-2 px-3 py-2 text-sm font-medium",
+                tab === k
+                  ? "border-brand-600 text-brand-700 dark:text-brand-500"
+                  : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      {r && r.loans.length > 0 && tab === "plan" && <PayoffPlan report={r} />}
+      {r && r.loans.length > 0 && tab === "loans" && (
         <div className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Tile label="Total owed" value={formatMoney(r.totalOwedCents)} />

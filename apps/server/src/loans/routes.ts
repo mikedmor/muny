@@ -1,5 +1,6 @@
-import type { MunyDb } from "@muny/db";
-import { LOAN_KINDS } from "@muny/shared";
+import { type MunyDb, schema } from "@muny/db";
+import { DEFAULT_LOAN_PLAN, LOAN_KINDS, type LoanPlanSettings } from "@muny/shared";
+import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
@@ -40,6 +41,29 @@ const Fee = z.object({
   minCents: cents.min(1, "Enter the fee amount"),
   nextDueDate: isoDate.nullable().optional(),
 });
+const id = z.string().min(1).max(64);
+const Plan = z.object({
+  strategy: z.enum(["avalanche", "snowball", "custom"]),
+  extraCents: cents.max(10_000_000),
+  order: z.array(id).max(100),
+  minimumsOnly: z.boolean(),
+  excluded: z.array(id).max(100),
+  included: z.array(id).max(100),
+  debtFreeBy: isoDate.nullable(),
+  targets: z.record(id, isoDate).refine((t) => Object.keys(t).length <= 100),
+});
+const PLAN_KEY = "loans.plan";
+
+/** The saved payoff plan, with defaults for anything missing. */
+function readPlan(db: MunyDb): LoanPlanSettings {
+  const row = db
+    .select()
+    .from(schema.appSettings)
+    .where(eq(schema.appSettings.key, PLAN_KEY))
+    .get();
+  return { ...DEFAULT_LOAN_PLAN, ...((row?.value ?? {}) as Partial<LoanPlanSettings>) };
+}
+
 const Create = Details.extend({
   name: z.string().trim().min(1, "Name the loan").max(100),
   startBalanceCents: cents,
@@ -67,6 +91,23 @@ export function registerLoanRoutes(app: FastifyInstance, db: MunyDb) {
     const id = db.transaction((tx) => createManualLoan(tx as unknown as MunyDb, body));
     log(user.id, "loan.create", id, { kind: body.kind });
     return { accountId: id };
+  });
+
+  // The payoff plan (goals and order for paying loans off): settings only, nothing is paid.
+  app.get("/api/loans/plan", async (req) => {
+    requireUser(req);
+    return readPlan(db);
+  });
+
+  app.put("/api/loans/plan", async (req) => {
+    const user = requireUser(req);
+    const value = parse(Plan, req.body);
+    db.insert(schema.appSettings)
+      .values({ key: PLAN_KEY, value })
+      .onConflictDoUpdate({ target: schema.appSettings.key, set: { value } })
+      .run();
+    log(user.id, "loan.plan.update");
+    return value;
   });
 
   // A lender's yearly fee (dues, maintenance): one per lender.
