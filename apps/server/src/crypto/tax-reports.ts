@@ -310,3 +310,37 @@ export function deleteTaxDoc(db: MunyDb, id: string) {
     .where(and(eq(schema.cryptoTaxDocs.id, id)))
     .run().changes;
 }
+
+// ---------------------------------------------------------------------------
+// Exchanges you've marked as not sending a 1099-DA for a year (to-do list only;
+// sales with no form already go in Form 8949 box I/L).
+// ---------------------------------------------------------------------------
+
+const NOT_RECEIVED_KEY = "crypto.taxdocs.notReceived";
+
+function notReceivedAll(db: MunyDb): Record<string, string[]> {
+  return (
+    (db
+      .select({ value: schema.appSettings.value })
+      .from(schema.appSettings)
+      .where(eq(schema.appSettings.key, NOT_RECEIVED_KEY))
+      .get()?.value as Record<string, string[]> | undefined) ?? {}
+  );
+}
+
+export function listNotReceived(db: MunyDb, year: number): string[] {
+  return notReceivedAll(db)[String(year)] ?? [];
+}
+
+export function setNotReceived(db: MunyDb, year: number, walletId: string, on: boolean): string[] {
+  const all = notReceivedAll(db);
+  const cur = new Set(all[String(year)] ?? []);
+  if (on) cur.add(walletId);
+  else cur.delete(walletId);
+  all[String(year)] = [...cur];
+  db.insert(schema.appSettings)
+    .values({ key: NOT_RECEIVED_KEY, value: all })
+    .onConflictDoUpdate({ target: schema.appSettings.key, set: { value: all } })
+    .run();
+  return all[String(year)] ?? [];
+}

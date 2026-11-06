@@ -1,6 +1,7 @@
 import { CRYPTO_TAX_REPORTS, type CryptoTaxDoc, formatMoney } from "@muny/shared";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { CoinIcon, WalletIcon } from "../../components/coins.js";
 import { Alert, Button, Card, cx } from "../../components/ui.js";
@@ -265,12 +266,19 @@ function TaxDocs({ year }: { year: number }) {
     queryKey: ["crypto", "taxdocs", year],
     queryFn: () => api.get<CryptoTaxDoc[]>(`/api/crypto/tax/${year}/docs`),
   });
+  const notReceived = useQuery({
+    queryKey: ["crypto", "taxdocs", year, "not-received"],
+    queryFn: () => api.get<string[]>(`/api/crypto/tax/${year}/not-received`),
+  });
   const [tab, setTab] = useState<"pending" | "done">("pending");
   const exchanges = (wallets.data ?? []).filter((w) => w.kind === "exchange" || w.exchange);
   const byWallet = new Map<string, CryptoTaxDoc[]>();
   for (const d of docs.data ?? [])
     byWallet.set(d.walletId, [...(byWallet.get(d.walletId) ?? []), d]);
-  const list = exchanges.filter((w) => (tab === "done") === byWallet.has(w.id));
+  const flagged = new Set(notReceived.data ?? []);
+  // Done: a form is uploaded, or you've said none is coming.
+  const done = (id: string) => byWallet.has(id) || flagged.has(id);
+  const list = exchanges.filter((w) => (tab === "done") === done(w.id));
   return (
     <Card className="space-y-3">
       <h2 className="font-semibold">1099-DA forms</h2>
@@ -296,11 +304,19 @@ function TaxDocs({ year }: { year: number }) {
       </div>
       <ul className="divide-y divide-slate-100 dark:divide-slate-800">
         {list.map((w) => (
-          <DocRow key={w.id} year={year} wallet={w} docs={byWallet.get(w.id) ?? []} />
+          <DocRow
+            key={w.id}
+            year={year}
+            wallet={w}
+            docs={byWallet.get(w.id) ?? []}
+            notReceived={flagged.has(w.id)}
+          />
         ))}
         {list.length === 0 && (
           <li className="py-4 text-center text-sm text-slate-500">
-            {tab === "pending" ? "Every exchange has a form." : "No forms uploaded yet."}
+            {tab === "pending"
+              ? "Every exchange has a form or is marked as not sending one."
+              : "No forms uploaded or marked yet."}
           </li>
         )}
       </ul>
@@ -312,11 +328,20 @@ function DocRow({
   year,
   wallet,
   docs,
+  notReceived,
 }: {
   year: number;
   wallet: { id: string; name: string; chain: string | null; kind: string };
   docs: CryptoTaxDoc[];
+  notReceived: boolean;
 }) {
+  const qc = useQueryClient();
+  const mark = useMutation({
+    mutationFn: (on: boolean) =>
+      api.put(`/api/crypto/tax/${year}/not-received/${wallet.id}`, { notReceived: on }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["crypto", "taxdocs", year, "not-received"] }),
+  });
   const [basis, setBasis] = useState(true);
   const upload = useCryptoMutation(async (file: File) => {
     const buf = new Uint8Array(await file.arrayBuffer());
@@ -341,28 +366,61 @@ function DocRow({
         <span className="flex items-center gap-2 font-medium">
           <WalletIcon name={wallet.name} chain={wallet.chain} kind={wallet.kind} size="sm" />
           {wallet.name}
-        </span>
-        <span className="flex flex-wrap items-center gap-2 text-sm">
-          {docs.length === 0 && (
-            <label className="flex items-center gap-1 text-xs text-slate-500">
-              <input type="checkbox" checked={basis} onChange={(e) => setBasis(e.target.checked)} />
-              Reports cost basis
-            </label>
+          {notReceived && docs.length === 0 && (
+            <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+              Not received
+            </span>
           )}
-          <label className="cursor-pointer rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700">
-            {upload.isPending ? "Uploading…" : "Upload"}
-            <input
-              type="file"
-              accept="application/pdf,image/png,image/jpeg"
-              className="sr-only"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) upload.mutate(f);
-                e.target.value = "";
-              }}
-            />
-          </label>
         </span>
+        {notReceived && docs.length === 0 ? (
+          <button
+            type="button"
+            title="Undo: back to pending"
+            aria-label={`Undo not received for ${wallet.name}`}
+            disabled={mark.isPending}
+            onClick={() => mark.mutate(false)}
+            className="rounded-lg border border-slate-300 p-1.5 text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+          >
+            <RotateCcw aria-hidden="true" className="size-4" />
+          </button>
+        ) : (
+          <span className="flex flex-wrap items-center gap-2 text-sm">
+            {docs.length === 0 && (
+              <button
+                type="button"
+                title="This exchange didn't send a 1099-DA for this year"
+                disabled={mark.isPending}
+                onClick={() => mark.mutate(true)}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Not received
+              </button>
+            )}
+            {docs.length === 0 && (
+              <label className="flex items-center gap-1 text-xs text-slate-500">
+                <input
+                  type="checkbox"
+                  checked={basis}
+                  onChange={(e) => setBasis(e.target.checked)}
+                />
+                Reports cost basis
+              </label>
+            )}
+            <label className="cursor-pointer rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700">
+              {upload.isPending ? "Uploading…" : "Upload"}
+              <input
+                type="file"
+                accept="application/pdf,image/png,image/jpeg"
+                className="sr-only"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) upload.mutate(f);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          </span>
+        )}
       </div>
       {docs.map((d) => (
         <div

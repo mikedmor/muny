@@ -75,9 +75,11 @@ import { cryptoTax } from "./tax.js";
 import {
   cryptoTaxCsv,
   deleteTaxDoc,
+  listNotReceived,
   listTaxDocs,
   readTaxDoc,
   saveTaxDoc,
+  setNotReceived,
   updateTaxDoc,
 } from "./tax-reports.js";
 
@@ -381,6 +383,22 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
   app.get("/api/crypto/tax/:year/docs", async (req) => {
     const { year } = parse(YearParams, req.params);
     return listTaxDocs(db, year);
+  });
+
+  /** Exchanges marked as not sending a 1099-DA this year. */
+  app.get("/api/crypto/tax/:year/not-received", async (req) => {
+    const { year } = parse(YearParams, req.params);
+    return listNotReceived(db, year);
+  });
+
+  app.put("/api/crypto/tax/:year/not-received/:walletId", async (req) => {
+    const user = requireUser(req);
+    const { year } = parse(YearParams, req.params);
+    const { walletId } = parse(z.object({ walletId: z.string().min(1).max(64) }), req.params);
+    const { notReceived } = parse(z.object({ notReceived: z.boolean() }), req.body);
+    const list = setNotReceived(db, year, walletId, notReceived);
+    log(user.id, "crypto.taxdoc.notReceived", walletId, { year, notReceived });
+    return list;
   });
 
   app.post("/api/crypto/tax/:year/docs", async (req) => {
