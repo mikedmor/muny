@@ -1,10 +1,10 @@
-/*
+﻿/*
  * Muny service worker: makes the app installable and loads the UI quickly.
  * - /api/* is never cached (financial data stays on the server only).
  * - Built assets (/assets/*, hashed filenames) are cached on first use.
  * - Pages are network-first, falling back to the cached app shell offline.
  */
-const CACHE = "muny-shell-v1";
+const CACHE = "muny-shell-v2";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
