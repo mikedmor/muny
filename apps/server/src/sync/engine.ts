@@ -12,6 +12,7 @@ export { localToday };
 
 import { applyInvestmentSync, investSyncSince } from "../invest/service.js";
 import { applyMerchantMemory } from "../ledger/memory.js";
+import { applyLoanTerms, refreshManualLoans } from "../loans/service.js";
 import { rescanRecurring } from "../recurring/service.js";
 import { runRulesOn } from "../rules/service.js";
 import { type PlaidCreds, PlaidProvider } from "./plaid.js";
@@ -351,6 +352,13 @@ export async function syncConnection(
       } else throw e;
     }
     const summary = db.transaction((tx) => applySync(tx, conn, info, result));
+    // Loan terms from the lender, when the login has any loans.
+    if (provider.liabilities && info.accounts.some((a) => a.type === "loan")) {
+      const terms = await provider.liabilities(creds);
+      if (terms?.length) applyLoanTerms(db, connectionId, terms);
+    }
+    // Manual loans paid from this account: their balances follow the new payments.
+    refreshManualLoans(db);
     // Brokerage logins: holdings and investment history (after accounts exist).
     if (provider.syncInvestments) {
       try {

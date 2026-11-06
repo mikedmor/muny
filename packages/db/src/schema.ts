@@ -858,3 +858,40 @@ export const securityLogos = sqliteTable("security_logos", {
   data: blob({ mode: "buffer" }),
   fetchedAt: integer().notNull(),
 });
+
+/**
+ * Loan details (Loans page). Loan accounts are `accounts` rows of type
+ * "loan"; this holds their terms. From Plaid Liabilities when available, else
+ * entered by you. A manual loan's balance is worked out from your payments
+ * (found in other accounts by `paymentMatch`) at its rate. See D-040.
+ */
+export const loanDetails = sqliteTable("loan_details", {
+  accountId: text()
+    .primaryKey()
+    .references(() => accounts.id, { onDelete: "cascade" }),
+  kind: text({
+    enum: ["student", "mortgage", "auto", "personal", "credit_line", "other"],
+  })
+    .notNull()
+    .default("other"),
+  lender: text(),
+  /** Interest rate (APR) in hundredths of a percent: 649 = 6.49%. */
+  aprBps: integer(),
+  monthlyPaymentCents: integer(),
+  /** YYYY-MM-DD */
+  nextDueDate: text(),
+  originalPrincipalCents: integer(),
+  /** YYYY-MM-DD */
+  originationDate: text(),
+  termMonths: integer(),
+  /** Manual loans: what you owed on startDate. */
+  startBalanceCents: integer(),
+  /** YYYY-MM-DD */
+  startDate: text(),
+  /** Manual loans: words that identify your payments (e.g. "SEAVIEW RESORTS MTG"). */
+  paymentMatch: text(),
+  source: text({ enum: ["plaid", "manual"] })
+    .notNull()
+    .default("manual"),
+  updatedAt: updatedAt(),
+});

@@ -6,6 +6,7 @@ import { startBackupScheduler } from "./data/backups.js";
 import { repairRawAchPayees } from "./ledger/payees.js";
 import { seedDefaultCategories } from "./ledger/seed.js";
 import { pairLoanPayments } from "./ledger/transfers.js";
+import { refreshManualLoans } from "./loans/service.js";
 import { rescanRecurring } from "./recurring/service.js";
 import { startSyncScheduler } from "./sync/engine.js";
 import { VERSION } from "./version.js";
@@ -20,6 +21,7 @@ async function main() {
   db.transaction((tx) => {
     pairLoanPayments(tx);
     rescanRecurring(tx);
+    refreshManualLoans(tx as unknown as typeof db);
   });
   const app = await buildApp({ config, db });
 

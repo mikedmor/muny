@@ -57,6 +57,19 @@ export interface ConnectionInfo {
   accounts: ProviderAccount[];
 }
 
+/** A loan's terms as the lender reports them (D-040). */
+export interface LoanTerms {
+  accountRef: string;
+  kind: "student" | "mortgage";
+  aprBps: number | null;
+  monthlyPaymentCents: number | null;
+  nextDueDate: string | null;
+  originalPrincipalCents: number | null;
+  originationDate: string | null;
+  termMonths: number | null;
+  lender: string | null;
+}
+
 /** Holdings and investment history from a brokerage login (D-034). */
 export interface InvestmentSync {
   holdings: {
@@ -106,6 +119,8 @@ export interface Provider<Creds> {
    * otherwise. `since`: only history from this date (null: as far back as offered).
    */
   syncInvestments?(creds: Creds, since: string | null): Promise<InvestmentSync | null>;
+  /** Loan terms (rate, payment, due date) for the login's loans; null when not available. */
+  liabilities?(creds: Creds): Promise<LoanTerms[] | null>;
   /** Revoke access at the provider (best effort). */
   remove(creds: Creds): Promise<void>;
 }

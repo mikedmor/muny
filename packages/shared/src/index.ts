@@ -5,6 +5,8 @@ export * from "./crypto.js";
 export * from "./imports.js";
 export * from "./invest.js";
 export * from "./ledger.js";
+export * from "./loan-math.js";
+export * from "./loans.js";
 export * from "./money.js";
 export * from "./recurring.js";
 export * from "./reports.js";

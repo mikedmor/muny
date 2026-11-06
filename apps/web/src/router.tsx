@@ -14,6 +14,7 @@ import { CryptoTransactions } from "./pages/crypto/CryptoTransactions.js";
 import { CryptoWalletPage } from "./pages/crypto/CryptoWalletPage.js";
 import { CryptoWallets } from "./pages/crypto/CryptoWallets.js";
 import { ImportPage } from "./pages/ImportPage.js";
+import { LoansPage } from "./pages/LoansPage.js";
 import { NotificationsPage } from "./pages/NotificationsPage.js";
 import { OverviewPage } from "./pages/OverviewPage.js";
 import { PlaidOAuthPage } from "./pages/PlaidOAuthPage.js";
@@ -93,6 +94,7 @@ const routeTree = rootRoute.addChildren([
   page("/spending", SpendingPage),
   page("/savings", SavingsPage),
   page("/budgets", BudgetsPage),
+  page("/loans", LoansPage),
   page("/reports", ReportsPage),
   page("/taxes", TaxesPage),
   page("/stocks", StocksPage),

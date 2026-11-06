@@ -3,6 +3,7 @@ import type { PlaidConfig } from "../config.js";
 import {
   type ConnectionInfo,
   type InvestmentSync,
+  type LoanTerms,
   type Provider,
   type ProviderAccount,
   ProviderError,
@@ -314,6 +315,8 @@ export class PlaidProvider implements Provider<PlaidCreds> {
     else {
       body.products = productsFor(kind);
       body.transactions = { days_requested: 730 };
+      // Loan terms when the bank offers them; never hides a bank that doesn't.
+      body.optional_products = ["liabilities"];
     }
     const r = await this.call<{ link_token: string }>("/link/token/create", body);
     return r.link_token;
@@ -524,6 +527,73 @@ export class PlaidProvider implements Provider<PlaidCreds> {
       if (!(e instanceof ProviderError && e.code === "not_ready")) throw e;
     }
     return { holdings, txns };
+  }
+
+  async liabilities(creds: PlaidCreds): Promise<LoanTerms[] | null> {
+    if (!has(creds, "transactions")) return null;
+    interface Student {
+      account_id: string;
+      interest_rate_percentage?: number | null;
+      minimum_payment_amount?: number | null;
+      next_payment_due_date?: string | null;
+      origination_date?: string | null;
+      origination_principal_amount?: number | null;
+      loan_name?: string | null;
+      servicer_name?: string | null;
+    }
+    interface Mortgage {
+      account_id: string;
+      interest_rate?: { percentage?: number | null } | null;
+      next_monthly_payment?: number | null;
+      next_payment_due_date?: string | null;
+      origination_date?: string | null;
+      origination_principal_amount?: number | null;
+      loan_term?: string | null;
+    }
+    let r: { liabilities?: { student?: Student[] | null; mortgage?: Mortgage[] | null } };
+    try {
+      r = await this.call("/liabilities/get", { access_token: creds.accessToken });
+    } catch (e) {
+      // Not consented, not supported or no loans: nothing to add.
+      if (e instanceof ProviderError && e.code !== "reauth_required") return null;
+      throw e;
+    }
+    const bps = (p: number | null | undefined) =>
+      p === null || p === undefined || !Number.isFinite(p) ? null : Math.round(p * 100);
+    const cents = (n: number | null | undefined) =>
+      n === null || n === undefined ? null : plaidCents(Math.abs(n));
+    const term = (t: string | null | undefined) => {
+      const m = /(\d+)\s*(year|yr|month|mo)/i.exec(t ?? "");
+      if (!m) return null;
+      const n = Number(m[1]);
+      return /^y/i.test(m[2] ?? "") ? n * 12 : n;
+    };
+    const out: LoanTerms[] = [];
+    for (const x of r.liabilities?.student ?? [])
+      out.push({
+        accountRef: x.account_id,
+        kind: "student",
+        aprBps: bps(x.interest_rate_percentage),
+        monthlyPaymentCents: cents(x.minimum_payment_amount),
+        nextDueDate: x.next_payment_due_date ?? null,
+        originalPrincipalCents: cents(x.origination_principal_amount),
+        originationDate: x.origination_date ?? null,
+        termMonths: null,
+        lender: x.servicer_name ?? null,
+      });
+    for (const x of r.liabilities?.mortgage ?? [])
+      out.push({
+        accountRef: x.account_id,
+        kind: "mortgage",
+        aprBps: bps(x.interest_rate?.percentage),
+        monthlyPaymentCents: cents(x.next_monthly_payment),
+        nextDueDate: x.next_payment_due_date ?? null,
+        originalPrincipalCents: cents(x.origination_principal_amount),
+        originationDate: x.origination_date ?? null,
+        termMonths: term(x.loan_term),
+        lender: null,
+      });
+    return out;
   }
 
   async remove(creds: PlaidCreds): Promise<void> {

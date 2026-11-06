@@ -22,6 +22,7 @@ import { registerCategoryRoutes } from "./ledger/categories.js";
 import { registerPayeeRoutes } from "./ledger/payees.js";
 import { registerTransactionRoutes } from "./ledger/transactions.js";
 import { registerErrorHandler } from "./lib/http.js";
+import { registerLoanRoutes } from "./loans/routes.js";
 import { registerRecurringRoutes } from "./recurring/routes.js";
 import { registerReportRoutes } from "./reports/routes.js";
 import { registerRuleRoutes } from "./rules/routes.js";
@@ -127,6 +128,7 @@ export async function buildApp({
   registerImportRoutes(app, db);
   registerPrefsRoutes(app, db);
   registerInvestRoutes(app, db, { fetch: priceFetch });
+  registerLoanRoutes(app, db);
   registerPayeeRoutes(app, db);
   registerRuleRoutes(app, db);
   registerExportRoutes(app, db);

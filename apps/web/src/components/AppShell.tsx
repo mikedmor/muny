@@ -9,6 +9,7 @@ import {
   ChartPie,
   ChevronsUpDown,
   Code,
+  HandCoins,
   Import,
   Landmark,
   LayoutDashboard,
@@ -42,6 +43,7 @@ const NAV: { label?: string; items: { to: string; label: string; icon: LucideIco
       { to: "/recurring", label: "Recurring", icon: Repeat },
       { to: "/spending", label: "Spending", icon: ChartPie },
       { to: "/budgets", label: "Budgets", icon: Target },
+      { to: "/loans", label: "Loans", icon: HandCoins },
     ],
   },
   {

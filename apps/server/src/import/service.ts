@@ -27,6 +27,7 @@ import { applyMerchantMemory } from "../ledger/memory.js";
 import { upsertPayee, upsertTag } from "../ledger/transactions.js";
 import { linkTransfersFor } from "../ledger/transfers.js";
 import { badRequest } from "../lib/http.js";
+import { refreshManualLoans } from "../loans/service.js";
 import { rescanRecurring } from "../recurring/service.js";
 import { runRulesOn } from "../rules/service.js";
 
@@ -592,6 +593,7 @@ export function commitImport(db: MunyDb, req: ImportCommitRequest, userId: strin
     linkTransfersFor(tx, newIds);
     const rulesApplied = ruleChanges + applyMerchantMemory(tx, newIds);
     if (newIds.length) rescanRecurring(tx);
+    if (newIds.length) refreshManualLoans(tx as unknown as MunyDb);
 
     // 5. Statement balances (after transactions, so the math includes them).
     let balancesUpdated = 0;
