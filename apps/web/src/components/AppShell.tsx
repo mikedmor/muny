@@ -42,7 +42,6 @@ const NAV: { label?: string; items: { to: string; label: string; icon: LucideIco
       { to: "/recurring", label: "Recurring", icon: Repeat },
       { to: "/spending", label: "Spending", icon: ChartPie },
       { to: "/budgets", label: "Budgets", icon: Target },
-      { to: "/accounts", label: "Accounts", icon: Landmark },
     ],
   },
   {
@@ -133,6 +132,17 @@ function UserBox({ user, onNavigate }: { user: CurrentUser; onNavigate?: () => v
             role="menu"
             className="absolute right-0 bottom-full left-0 z-20 mb-2 rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
           >
+            <Link
+              to="/accounts"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onNavigate?.();
+              }}
+              className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              <Landmark aria-hidden="true" className="size-4" /> Accounts
+            </Link>
             <Link
               to="/import"
               role="menuitem"
