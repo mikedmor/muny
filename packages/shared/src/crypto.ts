@@ -628,6 +628,48 @@ export function guessCryptoExchange(name: string): string | null {
   return null;
 }
 
+/** A 1099-DA (or similar) form an exchange sent for a tax year. */
+export interface CryptoTaxDoc {
+  id: string;
+  walletId: string;
+  year: number;
+  filename: string;
+  size: number;
+  /** The form reports cost basis to the IRS (Form 8949 box G/J instead of H/K). */
+  basisReported: boolean;
+  uploadedAt: number;
+}
+
+/** The reports Muny can make for a tax year (CSV). */
+export const CRYPTO_TAX_REPORTS = [
+  [
+    "capital-gains",
+    "Capital gains report",
+    "Every sale, spend and fee: dates, proceeds, cost, gain, term",
+  ],
+  [
+    "form-8949",
+    "Form 8949 lines",
+    "Ready to copy into Form 8949 (Parts I/II, the box from your 1099-DA forms)",
+  ],
+  ["income", "Income report", "Rewards, staking, mining, airdrops and other income at their value"],
+  ["expenses", "Expenses report", "Coins spent (tagged Cost)"],
+  [
+    "gifts",
+    "Gifts, donations & lost assets",
+    "What left as a gift, donation or loss, at its value",
+  ],
+  [
+    "holdings-start",
+    "Beginning of year holdings",
+    "What you held on January 1, with cost and value",
+  ],
+  ["holdings-end", "End of year holdings", "What you held on December 31, with cost and value"],
+  ["balances", "Balances per wallet", "Each wallet's coins at the end of the year"],
+  ["transactions", "Transaction history", "Every crypto transaction in the year"],
+] as const;
+export type CryptoTaxReportKind = (typeof CRYPTO_TAX_REPORTS)[number][0];
+
 /** One lot still held: what it cost and when it was acquired (FIFO order). */
 export interface CryptoTaxLot {
   acquiredAt: number;
@@ -648,8 +690,12 @@ export interface CryptoTaxReport {
     incomeCents: number;
     expensesCents: number;
     feesCents: number;
+    /** Gifts, donations and lost coins (their value when they left). */
+    giftsCents: number;
     realizedCents: number;
   };
+  /** Transactions in the range, by type. */
+  counts: { total: number; deposit: number; withdrawal: number; trade: number; transfer: number };
   /** Transactions in the range. */
   txnCount: number;
   /** The tax year of the range's end: realized gains by term. */

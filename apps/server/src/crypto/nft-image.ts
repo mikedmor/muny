@@ -1,10 +1,12 @@
-import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
+import type { lookup } from "node:dns/promises";
 import type { MunyDb } from "@muny/db";
 import { schema } from "@muny/db";
 import { eq } from "drizzle-orm";
+import { assertPublicUrl, PublicUrlError } from "../lib/net-guard.js";
 import { getCryptoSettings } from "./prices.js";
 import { readCursor } from "./sync.js";
+
+export { isPrivateAddress } from "../lib/net-guard.js";
 
 /**
  * NFT images, fetched by this server for the browser (opt-in: Crypto →
@@ -29,49 +31,6 @@ export class NftImageError extends Error {
   }
 }
 
-/** True for addresses that aren't on the public internet. */
-export function isPrivateAddress(ip: string): boolean {
-  if (isIP(ip) === 4) {
-    const [a = 0, b = 0] = ip.split(".").map(Number);
-    return (
-      a === 0 ||
-      a === 10 ||
-      a === 127 ||
-      (a === 100 && b >= 64 && b <= 127) ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      (a === 198 && (b === 18 || b === 19)) ||
-      a >= 224
-    );
-  }
-  const v = ip.toLowerCase();
-  if (v.startsWith("::ffff:")) return isPrivateAddress(v.slice(7));
-  return (
-    v === "::" ||
-    v === "::1" ||
-    v.startsWith("fc") ||
-    v.startsWith("fd") ||
-    v.startsWith("fe8") ||
-    v.startsWith("fe9") ||
-    v.startsWith("fea") ||
-    v.startsWith("feb") ||
-    v.startsWith("ff")
-  );
-}
-
-async function assertPublic(url: URL, resolve: typeof lookup) {
-  if (url.protocol !== "https:" && url.protocol !== "http:")
-    throw new NftImageError("Not a web link", 400);
-  if (url.username || url.password) throw new NftImageError("Not allowed", 400);
-  const host = url.hostname.replace(/^\[|\]$/g, "");
-  if (host === "localhost" || host.endsWith(".local") || host.endsWith(".internal"))
-    throw new NftImageError("Not allowed", 400);
-  const addrs = isIP(host) ? [{ address: host }] : await resolve(host, { all: true });
-  if (!addrs.length || addrs.some((a) => isPrivateAddress(a.address)))
-    throw new NftImageError("Not allowed", 400);
-}
-
 export async function fetchNftImage(
   db: MunyDb,
   q: { walletId: string; contract: string; tokenId: string },
@@ -89,10 +48,14 @@ export async function fetchNftImage(
   );
   if (!nft?.image) throw new NftImageError("No image for that NFT", 404);
   const f = deps.fetch ?? fetch;
-  const resolve = deps.resolve ?? lookup;
   let url = new URL(nft.image.replace(/^ipfs:\/\/(ipfs\/)?/i, "https://ipfs.io/ipfs/"));
   for (let hop = 0; hop <= 3; hop++) {
-    await assertPublic(url, resolve);
+    try {
+      await assertPublicUrl(url, deps.resolve);
+    } catch (err) {
+      if (err instanceof PublicUrlError) throw new NftImageError("Not allowed", 400);
+      throw err;
+    }
     let res: Response;
     try {
       res = await f(url, {

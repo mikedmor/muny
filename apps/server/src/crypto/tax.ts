@@ -18,10 +18,15 @@ import { latestPrices, loadDaily, priceLookup } from "./service.js";
  * fees) and realized gains, the tax year's gains by term, and what's held
  * split into short and long term with when each lot matures. Read-only.
  */
-export function cryptoTax(db: MunyDb, range: { from?: number; to?: number }): CryptoTaxReport {
+/** All crypto transactions run through the tax ledger (optionally only those before `until`). */
+export function runLedger(db: MunyDb, until?: number) {
   const t = schema.cryptoTxns;
   const rows = db
     .select({
+      id: t.id,
+      walletId: t.walletId,
+      txHash: t.txHash,
+      description: t.description,
       at: t.at,
       type: t.type,
       label: t.label,
@@ -36,9 +41,10 @@ export function cryptoTax(db: MunyDb, range: { from?: number; to?: number }): Cr
       pair: t.transferPairId,
     })
     .from(t)
-    .all();
+    .all()
+    .filter((r) => until === undefined || r.at < until);
   const priceOn = priceLookup(loadDaily(db));
-  const { lots, gains, flows } = taxLedger(
+  const ledger = taxLedger(
     rows.map((r) => ({ ...r, paired: !!r.pair })),
     {
       skip: FIAT,
@@ -49,6 +55,13 @@ export function cryptoTax(db: MunyDb, range: { from?: number; to?: number }): Cr
       },
     },
   );
+  return { rows, priceOn, ...ledger };
+}
+
+export function cryptoTax(db: MunyDb, range: { from?: number; to?: number }): CryptoTaxReport {
+  const { rows, lots, gains: allGains, flows } = runLedger(db);
+  // Lost coins are reported with gifts and donations, not as capital gains.
+  const gains = allGains.filter((g) => g.kind !== "lost");
 
   const now = Date.now();
   const to = range.to ?? now;
@@ -135,7 +148,15 @@ export function cryptoTax(db: MunyDb, range: { from?: number; to?: number }): Cr
       incomeCents: sum("income"),
       expensesCents: sum("expense"),
       feesCents: sum("fee"),
+      giftsCents: sum("gift"),
       realizedCents,
+    },
+    counts: {
+      total: rows.filter((r) => inRange(r.at)).length,
+      deposit: rows.filter((r) => inRange(r.at) && r.type === "deposit").length,
+      withdrawal: rows.filter((r) => inRange(r.at) && r.type === "withdrawal").length,
+      trade: rows.filter((r) => inRange(r.at) && r.type === "trade").length,
+      transfer: rows.filter((r) => inRange(r.at) && r.type === "transfer").length,
     },
     year,
     realized,

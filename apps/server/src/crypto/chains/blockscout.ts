@@ -11,6 +11,7 @@ import {
 import { schema } from "@muny/db";
 import { eq } from "drizzle-orm";
 import { decryptJson } from "../../lib/crypto.js";
+import { assertPublicUrl } from "../../lib/net-guard.js";
 import { BLOCKSCOUT_KEY } from "../prices.js";
 import {
   type Adapter,
@@ -137,10 +138,68 @@ export async function heldNfts(ctx: ChainCtx): Promise<NftHeld[] | null> {
       next = r.next_page_params ?? null;
       if (!next) break;
     }
-    return out;
   } catch {
     return null;
   }
+  // Explorers keep an old copy of the metadata (e.g. a domain's generic logo
+  // instead of its picture): ask the contract for the current link (ERC-721
+  // tokenURI) and use that image. Best effort, a few NFTs per sync.
+  for (const n of out.filter((x) => /721/.test(x.type)).slice(0, 20)) {
+    const image = await currentImage(ctx, root, n).catch(() => null);
+    if (image) n.image = image;
+  }
+  return out;
+}
+
+/** The image in the token's current metadata (tokenURI), or null. */
+async function currentImage(ctx: ChainCtx, root: string, n: NftHeld): Promise<string | null> {
+  let id: bigint;
+  try {
+    id = BigInt(n.tokenId);
+  } catch {
+    return null;
+  }
+  const data = `0xc87b56dd${id.toString(16).padStart(64, "0")}`;
+  const rpc = await ctx.post<{ result?: string }>(`${root}/api/eth-rpc`, {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "eth_call",
+    params: [{ to: n.contract, data }, "latest"],
+  });
+  const uri = decodeAbiString(rpc.result ?? "");
+  if (!uri) return null;
+  let meta: { image?: string } | null = null;
+  if (/^data:application\/json;base64,/i.test(uri))
+    meta = JSON.parse(Buffer.from(uri.split(",")[1] ?? "", "base64").toString("utf8"));
+  else if (/^data:application\/json[,;]/i.test(uri))
+    meta = JSON.parse(decodeURIComponent(uri.slice(uri.indexOf(",") + 1)));
+  else {
+    // Someone else's link: only public web hosts, small JSON, quickly.
+    const url = new URL(uri.replace(/^ipfs:\/\/(ipfs\/)?/i, "https://ipfs.io/ipfs/"));
+    await assertPublicUrl(url);
+    const res = await (ctx.deps.fetch ?? fetch)(url, {
+      redirect: "error",
+      headers: { accept: "application/json", "user-agent": "Muny (self-hosted)" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) return null;
+    const text = await res.text();
+    if (text.length > 1_000_000) return null;
+    meta = JSON.parse(text);
+  }
+  const image = meta?.image;
+  return typeof image === "string" && /^(https?|ipfs):\/\//i.test(image)
+    ? image.slice(0, 1000)
+    : null;
+}
+
+/** An ABI-encoded string (eth_call result) → text. */
+function decodeAbiString(hex: string): string | null {
+  const h = hex.replace(/^0x/, "");
+  if (h.length < 128) return null;
+  const len = Number.parseInt(h.slice(64, 128), 16);
+  if (!Number.isFinite(len) || len <= 0 || len > 4096) return null;
+  return Buffer.from(h.slice(128, 128 + len * 2), "hex").toString("utf8");
 }
 
 export const blockscout: Adapter = async (ctx) => {

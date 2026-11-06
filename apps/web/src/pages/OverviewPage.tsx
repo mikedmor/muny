@@ -13,6 +13,7 @@ import { Alert, Card, cx, PageHeader } from "../components/ui.js";
 import { CategoryIcon, MerchantAvatar } from "../components/visuals.js";
 import { api } from "../lib/api.js";
 import { keys, useAccounts, useConnections } from "../lib/queries.js";
+import { CryptoOverviewCard } from "./crypto/CryptoTaxSection.js";
 
 /**
  * The home dashboard, modeled on Rocket Money's: how this month's spending is
@@ -648,6 +649,9 @@ export function OverviewPage() {
             <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-6 lg:[grid-area:s]">
               <div className="order-2 min-w-0 lg:order-0">
                 <AccountsCard />
+              </div>
+              <div className="order-3 min-w-0 lg:order-0">
+                <CryptoOverviewCard />
               </div>
               <div className="order-3 min-w-0 lg:order-0">
                 <BudgetCard d={d} />

@@ -22,6 +22,8 @@ import { fromFixed, toFixed, valueCents } from "./decimal.js";
 
 export interface TaxTxn {
   id?: string;
+  /** The wallet it happened in (for per-wallet reports and Form 8949 boxes). */
+  walletId?: string;
   at: number;
   type: "deposit" | "withdrawal" | "trade" | "transfer";
   label: string | null;
@@ -58,13 +60,21 @@ export interface Gain {
   kind: "trade" | "cost" | "lost" | "fee";
   /** Part of the amount had no purchase history (cost counted as 0). */
   missingCost: boolean;
+  /** Earliest and latest acquisition of the coins sold (Form 8949 says "Various" when they differ). */
+  acquiredAt: number | null;
+  acquiredLast: number | null;
+  walletId: string | null;
 }
 
 export interface Flow {
   at: number;
-  kind: "in" | "out" | "income" | "expense" | "fee";
+  /** "gift": gifts, donations and lost coins (at their value when they left). */
+  kind: "in" | "out" | "income" | "expense" | "fee" | "gift";
   asset: string;
   valueCents: number | null;
+  label: string | null;
+  amount: string | null;
+  walletId: string | null;
 }
 
 export const INCOME_LABELS = new Set([
@@ -203,6 +213,7 @@ export function taxLedger(
     proceeds: number | null,
     at: number,
     kind: Gain["kind"],
+    walletId: string | null,
   ) => {
     if (!asset || !amount || opts.skip.has(asset)) return;
     const total = toFixed(amount);
@@ -211,12 +222,30 @@ export function taxLedger(
     const p = BigInt(Math.max(0, Math.round(proceeds ?? 0)));
     const byTerm = new Map<
       Term,
-      { amount: bigint; cost: bigint; proceeds: bigint; missing: boolean }
+      {
+        amount: bigint;
+        cost: bigint;
+        proceeds: bigint;
+        missing: boolean;
+        first: number | null;
+        last: number | null;
+      }
     >();
     for (const x of pieces) {
       const term: Term =
         Number.isFinite(x.acquiredAt) && isLongTerm(x.acquiredAt, at) ? "long" : "short";
-      const g = byTerm.get(term) ?? { amount: 0n, cost: 0n, proceeds: 0n, missing: false };
+      const g = byTerm.get(term) ?? {
+        amount: 0n,
+        cost: 0n,
+        proceeds: 0n,
+        missing: false,
+        first: null,
+        last: null,
+      };
+      if (Number.isFinite(x.acquiredAt)) {
+        g.first = g.first === null ? x.acquiredAt : Math.min(g.first, x.acquiredAt);
+        g.last = g.last === null ? x.acquiredAt : Math.max(g.last, x.acquiredAt);
+      }
       g.amount += x.amount;
       g.cost += x.cost;
       g.proceeds += (p * x.amount) / total;
@@ -234,6 +263,9 @@ export function taxLedger(
         term,
         kind,
         missingCost: g.missing,
+        acquiredAt: g.first,
+        acquiredLast: g.last,
+        walletId,
       });
   };
 
@@ -251,7 +283,7 @@ export function taxLedger(
         t.valueCents ??
         value(t.sentAsset, t.sentAmount, t.at) ??
         value(t.receivedAsset, t.receivedAmount, t.at);
-      dispose(t.sentAsset, t.sentAmount, cents, t.at, "trade");
+      dispose(t.sentAsset, t.sentAmount, cents, t.at, "trade", t.walletId ?? null);
       acquire(t.receivedAsset, t.receivedAmount, cents, t.at);
     } else if (!t.paired) {
       if (t.receivedAsset && t.receivedAmount) {
@@ -263,26 +295,47 @@ export function taxLedger(
             kind: INCOME_LABELS.has(t.label ?? "") ? "income" : "in",
             asset: t.receivedAsset,
             valueCents: cents,
+            label: t.label,
+            amount: t.receivedAmount,
+            walletId: t.walletId ?? null,
           });
       }
       if (t.sentAsset && t.sentAmount) {
         const cents = t.valueCents ?? value(t.sentAsset, t.sentAmount, t.at);
-        if (t.label === "cost") dispose(t.sentAsset, t.sentAmount, cents, t.at, "cost");
-        else if (t.label === "lost") dispose(t.sentAsset, t.sentAmount, 0, t.at, "lost");
+        if (t.label === "cost")
+          dispose(t.sentAsset, t.sentAmount, cents, t.at, "cost", t.walletId ?? null);
+        else if (t.label === "lost")
+          dispose(t.sentAsset, t.sentAmount, 0, t.at, "lost", t.walletId ?? null);
         else remove(t.sentAsset, t.sentAmount);
         if (!opts.skip.has(t.sentAsset))
           flows.push({
             at: t.at,
-            kind: t.label === "cost" ? "expense" : "out",
+            kind:
+              t.label === "cost"
+                ? "expense"
+                : t.label === "gift" || t.label === "donation" || t.label === "lost"
+                  ? "gift"
+                  : "out",
             asset: t.sentAsset,
             valueCents: cents,
+            label: t.label,
+            amount: t.sentAmount,
+            walletId: t.walletId ?? null,
           });
       }
     }
     if (t.feeAsset && t.feeAmount && !opts.skip.has(t.feeAsset)) {
       const cents = t.feeValueCents ?? value(t.feeAsset, t.feeAmount, t.at);
-      dispose(t.feeAsset, t.feeAmount, cents, t.at, "fee");
-      flows.push({ at: t.at, kind: "fee", asset: t.feeAsset, valueCents: cents });
+      dispose(t.feeAsset, t.feeAmount, cents, t.at, "fee", t.walletId ?? null);
+      flows.push({
+        at: t.at,
+        kind: "fee",
+        asset: t.feeAsset,
+        valueCents: cents,
+        label: null,
+        amount: t.feeAmount,
+        walletId: t.walletId ?? null,
+      });
     }
   }
   snapUntil(Number.POSITIVE_INFINITY);

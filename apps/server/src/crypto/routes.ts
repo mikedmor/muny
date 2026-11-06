@@ -1,6 +1,11 @@
 import { CHAINS, type ChainKey, normDec } from "@muny/core";
 import { type MunyDb, newId, schema } from "@muny/db";
-import { type CryptoTxnType, cryptoExchange } from "@muny/shared";
+import {
+  CRYPTO_TAX_REPORTS,
+  type CryptoTaxReportKind,
+  type CryptoTxnType,
+  cryptoExchange,
+} from "@muny/shared";
 import { eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -67,6 +72,14 @@ import {
   walletsDue,
 } from "./sync.js";
 import { cryptoTax } from "./tax.js";
+import {
+  cryptoTaxCsv,
+  deleteTaxDoc,
+  listTaxDocs,
+  readTaxDoc,
+  saveTaxDoc,
+  updateTaxDoc,
+} from "./tax-reports.js";
 
 const IdParams = z.object({ id: z.string().min(1).max(64) });
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -341,6 +354,88 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
   });
 
   // --- Transactions ------------------------------------------------------------
+
+  // --- Tax reports and 1099-DA forms ------------------------------------------------
+
+  const YearParams = z.object({ year: z.coerce.number().int().min(2009).max(2100) });
+
+  /** A tax year's report as CSV (capital gains, Form 8949 lines, income…). */
+  app.get("/api/crypto/tax/:year/report/:kind", async (req, reply) => {
+    const user = requireUser(req);
+    const p = parse(
+      YearParams.extend({
+        kind: z.enum(
+          CRYPTO_TAX_REPORTS.map(([k]) => k) as [CryptoTaxReportKind, ...CryptoTaxReportKind[]],
+        ),
+      }),
+      req.params,
+    );
+    log(user.id, "crypto.tax_report", undefined, { year: p.year, kind: p.kind });
+    return reply
+      .header("content-type", "text/csv; charset=utf-8")
+      .header("content-disposition", `attachment; filename="muny-crypto-${p.kind}-${p.year}.csv"`)
+      .send(cryptoTaxCsv(db, p.year, p.kind));
+  });
+
+  /** Exchanges and their forms for a year. */
+  app.get("/api/crypto/tax/:year/docs", async (req) => {
+    const { year } = parse(YearParams, req.params);
+    return listTaxDocs(db, year);
+  });
+
+  app.post("/api/crypto/tax/:year/docs", async (req) => {
+    const user = requireUser(req);
+    const { year } = parse(YearParams, req.params);
+    const body = parse(
+      z.object({
+        walletId: z.string().min(1).max(64),
+        filename: z.string().min(1).max(200),
+        contentType: z.string().max(100),
+        base64: z.string().min(1).max(15_000_000),
+        basisReported: z.boolean(),
+      }),
+      req.body,
+    );
+    try {
+      const res = saveTaxDoc(db, priceDeps.secretKey, { ...body, year });
+      log(user.id, "crypto.tax_doc_upload", body.walletId, { year });
+      return res;
+    } catch (err) {
+      throw badRequest(err instanceof Error ? err.message : "Couldn't save the form");
+    }
+  });
+
+  app.get("/api/crypto/tax/docs/:id/file", async (req, reply) => {
+    const user = requireUser(req);
+    const { id } = parse(IdParams, req.params);
+    const doc = readTaxDoc(db, priceDeps.secretKey, id);
+    if (!doc) throw notFound("Form not found");
+    log(user.id, "crypto.tax_doc_view", id);
+    return reply
+      .header("content-type", doc.contentType)
+      .header("content-disposition", `inline; filename="${doc.filename.replace(/"/g, "")}"`)
+      .header("cache-control", "private, no-store")
+      .header("x-content-type-options", "nosniff")
+      .header("content-security-policy", "default-src 'none'; object-src 'self'; sandbox")
+      .send(doc.body);
+  });
+
+  app.patch("/api/crypto/tax/docs/:id", async (req) => {
+    const user = requireUser(req);
+    const { id } = parse(IdParams, req.params);
+    const body = parse(z.object({ basisReported: z.boolean() }), req.body);
+    if (!updateTaxDoc(db, id, body.basisReported)) throw notFound("Form not found");
+    log(user.id, "crypto.tax_doc_update", id);
+    return { ok: true };
+  });
+
+  app.delete("/api/crypto/tax/docs/:id", async (req) => {
+    const user = requireUser(req);
+    const { id } = parse(IdParams, req.params);
+    if (!deleteTaxDoc(db, id)) throw notFound("Form not found");
+    log(user.id, "crypto.tax_doc_delete", id);
+    return { ok: true };
+  });
 
   /** NFTs in synced EVM wallets. */
   app.get("/api/crypto/nfts", async () => listNfts(db));

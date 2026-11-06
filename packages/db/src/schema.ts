@@ -11,6 +11,7 @@
 import { sql } from "drizzle-orm";
 import {
   type AnySQLiteColumn,
+  blob,
   index,
   integer,
   primaryKey,
@@ -605,6 +606,31 @@ export const cryptoWallets = sqliteTable("crypto_wallets", {
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
+
+/**
+ * Tax forms from exchanges (e.g. 1099-DA), per tax year and wallet. The file
+ * is encrypted at rest (MUNY_SECRET_KEY); whether the form reports cost basis
+ * decides the Form 8949 box.
+ */
+export const cryptoTaxDocs = sqliteTable(
+  "crypto_tax_docs",
+  {
+    id: text().primaryKey(),
+    walletId: text()
+      .notNull()
+      .references(() => cryptoWallets.id, { onDelete: "cascade" }),
+    year: integer().notNull(),
+    kind: text().notNull().default("1099-DA"),
+    filename: text().notNull(),
+    contentType: text().notNull(),
+    size: integer().notNull(),
+    basisReported: integer({ mode: "boolean" }).notNull().default(true),
+    /** Encrypted file bytes. */
+    data: blob({ mode: "buffer" }).notNull(),
+    uploadedAt: integer().notNull(),
+  },
+  (t) => [index("crypto_tax_docs_year").on(t.year, t.walletId)],
+);
 
 /** One row per wallet sync attempt (the wallet page's "View history"). */
 export const cryptoSyncRuns = sqliteTable(

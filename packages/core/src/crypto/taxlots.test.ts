@@ -107,7 +107,7 @@ describe("tax ledger", () => {
       ],
       { skip, valueAt: noPrice },
     );
-    expect(flows.map((f) => f.kind)).toEqual(["income", "out", "out"]);
+    expect(flows.map((f) => f.kind)).toEqual(["income", "out", "gift"]);
     expect(gains).toEqual([
       expect.objectContaining({
         kind: "lost",

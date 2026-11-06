@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Alert, Card, PageHeader } from "../components/ui.js";
 import { api } from "../lib/api.js";
 import { keys } from "../lib/queries.js";
+import { CryptoTaxSection } from "./crypto/CryptoTaxSection.js";
 
 /**
  * Tax year summary: totals from your own data to hand to tax software or an
@@ -177,16 +178,8 @@ export function TaxesPage() {
             {t.sections.map((s) => (
               <Section key={s.key} s={s} />
             ))}
-            <Card className="border-dashed">
-              <h2 className="flex items-center gap-2 font-semibold">
-                <span aria-hidden="true">🪙</span> Crypto gains &amp; losses
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Coming with the Koinly import: Muny will show the realized gains from your Koinly
-                capital gains report here, so everything for the year is in one place.
-              </p>
-            </Card>
           </div>
+          <CryptoTaxSection year={year} />
         </div>
       )}
     </>

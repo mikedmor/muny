@@ -37,3 +37,29 @@ export function decryptJson<T>(secret: Buffer, stored: string): T {
     throw new DecryptError("Couldn't decrypt stored credentials. Was MUNY_SECRET_KEY changed?");
   }
 }
+
+/**
+ * Files at rest (e.g. tax forms): AES-256-GCM with a key derived for files,
+ * stored as iv[12] | tag[16] | ciphertext.
+ */
+const FILE_INFO = "muny:files:v1";
+const fileKey = (secret: Buffer) =>
+  Buffer.from(hkdfSync("sha256", secret, Buffer.alloc(0), FILE_INFO, 32));
+
+export function encryptBytes(secret: Buffer, data: Buffer): Buffer {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", fileKey(secret), iv);
+  const ct = Buffer.concat([cipher.update(data), cipher.final()]);
+  return Buffer.concat([iv, cipher.getAuthTag(), ct]);
+}
+
+export function decryptBytes(secret: Buffer, stored: Buffer): Buffer {
+  if (stored.length < 29) throw new DecryptError("File is truncated");
+  try {
+    const decipher = createDecipheriv("aes-256-gcm", fileKey(secret), stored.subarray(0, 12));
+    decipher.setAuthTag(stored.subarray(12, 28));
+    return Buffer.concat([decipher.update(stored.subarray(28)), decipher.final()]);
+  } catch {
+    throw new DecryptError("Couldn't decrypt the file. Was MUNY_SECRET_KEY changed?");
+  }
+}
