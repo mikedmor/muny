@@ -438,6 +438,11 @@ export interface CryptoReconcile {
     duplicates: number;
     /** Imported rows with a transaction hash (a synced wallet can use the chain's version). */
     importedWithHash: number;
+    /**
+     * Siacoin: synced sends the import doesn't have. Moving coins between the
+     * wallet's own addresses looks the same as paying someone, so you say which.
+     */
+    siaSends: { txnId: string; at: number; amount: string }[];
     /** Swap proceeds recorded here that arrived in another wallet. */
     crossChain: {
       txnId: string;

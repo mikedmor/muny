@@ -242,6 +242,7 @@ function WalletIssues({ w }: { w: Report["wallets"][number] }) {
         ),
       )}
 
+      {w.siaSends.length > 0 && <SiaSends sends={w.siaSends} />}
       {w.mismatches.map((x) => (
         <Mismatch
           key={x.asset}
@@ -273,6 +274,47 @@ const SYNCABLE = new Set<string>([
 ]);
 
 type MismatchT = Report["wallets"][number]["mismatches"][number];
+
+/**
+ * Siacoin sends the import doesn't have: a move between the wallet's own
+ * addresses looks the same as a payment, so the user says which.
+ */
+function SiaSends({ sends }: { sends: Report["wallets"][number]["siaSends"] }) {
+  const own = useCryptoMutation((txnId: string) =>
+    api.post<{ added: number }>("/api/crypto/reconcile/sia-own", { txnId }),
+  );
+  return (
+    <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700">
+      <p>
+        <span className="font-medium">
+          {sends.length === 1
+            ? "A send your import doesn't have."
+            : "Sends your import doesn't have."}
+        </span>{" "}
+        The Sia wallet moves coins between its own addresses (it shows them as 0 SC), which looks
+        the same on the blockchain as paying someone. If your Sia app shows this as 0 SC, it went to
+        another of your addresses: Muny adds that address and reads the wallet again.
+      </p>
+      <ul className="space-y-1">
+        {sends.map((s) => (
+          <li key={s.txnId} className="flex flex-wrap items-center gap-2">
+            <span>
+              {dayLabel(s.at)}: −{fmtAmount(s.amount, 8)} SC
+            </span>
+            <Button
+              variant="secondary"
+              disabled={own.isPending}
+              onClick={() => own.mutate(s.txnId)}
+            >
+              {own.isPending ? "Reading the wallet again…" : "It went to another of my addresses"}
+            </Button>
+          </li>
+        ))}
+      </ul>
+      {own.error && <p className="text-xs text-red-600">{own.error.message}</p>}
+    </div>
+  );
+}
 
 /** Synced wallet vs. its blockchain: explain the gap and offer the fitting fix. */
 /** EVM chains and their own coin (the compare tool checks only that coin). */

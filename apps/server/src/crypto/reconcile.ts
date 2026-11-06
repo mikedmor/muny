@@ -231,7 +231,8 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
       }
     const dupes = x.sourceEnc ? duplicateSyncRows(db, x.id) : [];
     const crossChain = crossChainFor(x.id);
-    if (missing.length || mismatches.length || dupes.length || crossChain.length)
+    const siaSends = x.chain === "sc" ? siaSendsFor(x.id) : [];
+    if (missing.length || mismatches.length || dupes.length || crossChain.length || siaSends.length)
       report.push({
         walletId: x.id,
         walletName: x.name,
@@ -246,7 +247,28 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
             ? rows.filter((r) => r.walletId === x.id && r.source === "import" && r.txHash).length
             : 0,
         crossChain,
+        siaSends,
       });
+  }
+
+  /** Synced Siacoin sends with no imported row for the same transaction (when there is an import). */
+  function siaSendsFor(walletId: string) {
+    const mine = rows.filter((r) => r.walletId === walletId);
+    const imported = new Set(
+      mine.filter((r) => r.source !== "sync" && r.txHash).map((r) => normHash(r.txHash as string)),
+    );
+    if (!imported.size) return [];
+    return mine
+      .filter(
+        (r) =>
+          r.source === "sync" &&
+          r.sentAsset === "SC" &&
+          r.sentAmount &&
+          r.txHash &&
+          !r.transferPairId &&
+          !imported.has(normHash(r.txHash)),
+      )
+      .map((r) => ({ txnId: r.id, at: r.at, amount: r.sentAmount as string }));
   }
 
   /**

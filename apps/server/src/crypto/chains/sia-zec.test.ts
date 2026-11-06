@@ -240,6 +240,111 @@ describe("Siacoin addresses from an imported send", () => {
   });
 });
 
+describe("a Sia move between the wallet's own addresses", () => {
+  it("is listed, and when confirmed the wallet adds up to what the Sia app shows", async () => {
+    const DEP = "a5".repeat(38); // received 6138.624 (imported deposit)
+    const FEE = "b6".repeat(38); // got 0.018, then paid the host announcement fee
+    const REST = "c7".repeat(38); // where the rest went (unknown to Muny)
+    const TXD = "d8".repeat(32);
+    const TXS = "e9".repeat(32);
+    const TXF = "fa".repeat(32);
+    const v = (sc: string) => {
+      const [w0, f = ""] = sc.split(".");
+      return `${w0}${f.padEnd(24, "0")}`.replace(/^0+/, "") || "0";
+    };
+    const txs: Record<string, unknown> = {
+      [TXD]: {
+        siacoinInputs: [{ address: EXT, value: v("6139.374") }],
+        siacoinOutputs: [{ siacoinOutput: { address: DEP, value: v("6138.624") } }],
+        minerFees: [v("0.75")],
+      },
+      [TXS]: {
+        siacoinInputs: [{ address: DEP, value: v("6138.624") }],
+        siacoinOutputs: [
+          { siacoinOutput: { address: FEE, value: v("0.018") } },
+          { siacoinOutput: { address: REST, value: v("6138.606") } },
+        ],
+        minerFees: ["0"],
+      },
+      [TXF]: {
+        siacoinInputs: [{ address: FEE, value: v("0.018") }],
+        siacoinOutputs: [],
+        minerFees: [v("0.018")],
+      },
+    };
+    const ev = (id: string, h: number, at: string) => ({
+      id,
+      index: { height: h },
+      type: "v1Transaction",
+      timestamp: at,
+      data: { transaction: txs[id] },
+    });
+    const byAddr: Record<string, unknown[]> = {
+      [A]: (events[A] as unknown[]).slice(2), // its 10 SC deposit only
+      [DEP]: [ev(TXS, 20, "2021-02-06T03:00:18Z"), ev(TXD, 10, "2017-07-11T02:53:00Z")],
+      [FEE]: [ev(TXF, 21, "2021-02-06T03:00:30Z"), ev(TXS, 20, "2021-02-06T03:00:18Z")],
+      [REST]: [ev(TXS, 20, "2021-02-06T03:00:18Z")],
+    };
+    const bal: Record<string, string> = { [A]: v("10"), [REST]: v("6138.606") };
+    const fake = (async (url: string) => {
+      const u = new URL(url);
+      const p = u.pathname.split("/");
+      if (p[1] === "transactions")
+        return txs[p[2] as string]
+          ? Response.json(txs[p[2] as string])
+          : new Response("", { status: 404 });
+      if (p[1] !== "addresses") return new Response("", { status: 404 });
+      const addr = p[2] as string;
+      if (p[3] === "events")
+        return Response.json(Number(u.searchParams.get("offset")) ? [] : (byAddr[addr] ?? []));
+      return Response.json({ unspentSiacoins: bal[addr] ?? "0" });
+    }) as unknown as typeof fetch;
+    const { client, db, w, settle } = await wallet(fake, "sc", A);
+    await settle();
+    const { schema } = await import("@muny/db");
+    const imp = (id: string, vals: Record<string, unknown>) =>
+      db
+        .insert(schema.cryptoTxns)
+        .values({
+          id,
+          walletId: w.id,
+          externalId: `koinly:${id}`,
+          source: "import",
+          ...vals,
+        } as never)
+        .run();
+    imp("dep", {
+      at: Date.UTC(2017, 6, 11),
+      type: "deposit",
+      receivedAsset: "SC",
+      receivedAmount: "6138.624",
+      txHash: TXD,
+    });
+    imp("fee", {
+      at: Date.UTC(2021, 1, 6, 3),
+      type: "withdrawal",
+      sentAsset: "SC",
+      sentAmount: "0.018",
+      txHash: TXF,
+    });
+    await client.post(`/api/crypto/wallets/${w.id}/sync`);
+    await settle();
+    const report = async () =>
+      (await client.get("/api/crypto/reconcile")).json<import("@muny/shared").CryptoReconcile>()
+        .wallets[0];
+    const r = await report();
+    expect(r?.siaSends).toEqual([expect.objectContaining({ amount: "6138.606" })]);
+    const res = await client.post("/api/crypto/reconcile/sia-own", {
+      txnId: r?.siaSends[0]?.txnId,
+    });
+    expect(res.json()).toEqual({ added: 1 });
+    const done = await settle();
+    expect(done.onChain).toEqual([{ asset: "SC", amount: "6148.606" }]);
+    expect(done.balances[0]).toMatchObject({ asset: "SC", amount: "6148.606" });
+    expect(await report()).toBeUndefined();
+  });
+});
+
 describe("Zcash", () => {
   const ZEC = `t1${"a".repeat(33)}`;
   it("asks for a Blockbook server first, then syncs through it", async () => {

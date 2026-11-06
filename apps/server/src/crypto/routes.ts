@@ -56,6 +56,7 @@ import {
   SyncError,
   setExchangeKey,
   setWalletSource,
+  siaOwnTransfer,
   syncAll,
   syncMany,
   syncWallet,
@@ -588,6 +589,22 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
       return res;
     } catch (err) {
       throw badRequest(err instanceof Error ? err.message : "Couldn't look them up");
+    }
+  });
+
+  /** A synced Siacoin send was a move between the wallet's own addresses. */
+  app.post("/api/crypto/reconcile/sia-own", async (req) => {
+    const user = requireUser(req);
+    const body = parse(z.object({ txnId: z.string().min(1).max(64) }), req.body);
+    try {
+      const res = await siaOwnTransfer(db, body.txnId, {
+        ...priceDeps,
+        delayMs: priceDeps.delayMs ?? 500,
+      });
+      log(user.id, "crypto.reconcile_sia_own", body.txnId, res);
+      return res;
+    } catch (err) {
+      throw badRequest(err instanceof Error ? err.message : "Couldn't do that");
     }
   });
 

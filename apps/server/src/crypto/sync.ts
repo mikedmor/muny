@@ -702,3 +702,42 @@ export async function findSiaAddresses(db: MunyDb, walletId: string, deps: SyncD
   await syncWallet(db, walletId, deps);
   return res;
 }
+
+/**
+ * A synced Siacoin send was really a move between the wallet's own addresses
+ * (the Sia app shows it as 0 SC): add the transaction's other addresses to the
+ * wallet, drop the synced send, and read the history again.
+ */
+export async function siaOwnTransfer(db: MunyDb, txnId: string, deps: SyncDeps) {
+  const row = db.select().from(t).where(eq(t.id, txnId)).get();
+  const wallet = row ? db.select().from(w).where(eq(w.id, row.walletId)).get() : undefined;
+  if (
+    !row?.txHash ||
+    row.source !== "sync" ||
+    !wallet?.sourceEnc ||
+    wallet.chain !== "sc" ||
+    !deps.secretKey
+  )
+    throw new SyncError("That isn't a synced Siacoin send");
+  const ctx = walletCtx(db, wallet, deps);
+  const known = new Set(siaAddresses(ctx.source));
+  const tx = await siaTxn(ctx, row.txHash);
+  if (!tx) throw new SyncError("SiaScan doesn't have that transaction");
+  const added = tx.outputs.map((o) => o.address).filter((a) => !known.has(a));
+  if (!added.length) throw new SyncError("Every address it paid is already in this wallet");
+  const all = [...new Set([...known, ...added])];
+  db.transaction((txn) => {
+    txn.delete(t).where(eq(t.id, row.id)).run();
+    txn
+      .update(w)
+      .set({
+        sourceEnc: encryptJson(deps.secretKey as Buffer, all.join(", ")),
+        sourceHint: `${all.length} addresses`,
+        syncCursor: null,
+      })
+      .where(eq(w.id, wallet.id))
+      .run();
+  });
+  await syncWallet(db, wallet.id, deps);
+  return { added: added.length };
+}
