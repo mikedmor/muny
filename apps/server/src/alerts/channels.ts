@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import type { ChannelConfig, ChannelType } from "@muny/shared";
 import { createTransport } from "nodemailer";
 import { z } from "zod";
+import { PushGone, sendWebPush, type Vapid } from "./webpush.js";
 
 /**
  * Outbound notification channels. Each one is opt-in (the user adds it) and
@@ -15,6 +16,8 @@ export interface OutboundMessage {
   body: string;
   /** Absolute link (only when MUNY_PUBLIC_URL is set). */
   url: string | null;
+  /** The in-app path (e.g. /recurring), for device notifications that open Muny itself. */
+  link?: string | null;
   severity: "info" | "warning";
   type: string;
   createdAt: number;
@@ -56,6 +59,15 @@ export function parseChannelConfig(type: ChannelType, input: unknown): ChannelCo
           to: z.email({ message: "Enter where to send alerts" }),
         })
         .parse(input);
+    case "push":
+      return z
+        .object({
+          endpoint: httpUrl.refine((u) => u.startsWith("https://"), "Push endpoints use https"),
+          p256dh: z.string().regex(/^[\w-]{80,100}$/, "Bad key"),
+          auth: z.string().regex(/^[\w-]{16,30}$/, "Bad key"),
+          device: z.string().trim().max(80).default("This device"),
+        })
+        .parse(input);
   }
 }
 
@@ -76,6 +88,8 @@ export function channelSummary(type: ChannelType, c: ChannelConfig): string {
       return host(c.url);
     case "smtp":
       return c.to ?? "";
+    case "push":
+      return `${c.device ?? "Device"} notifications`;
   }
 }
 
@@ -103,8 +117,34 @@ export async function sendToChannel(
   config: ChannelConfig,
   msg: OutboundMessage,
   fetchImpl: typeof fetch = fetch,
+  /** push: this server's VAPID keys and contact (MUNY_PUBLIC_URL). */
+  push?: { vapid: Vapid; subject: string },
 ): Promise<void> {
   switch (type) {
+    case "push": {
+      if (!push) throw new ChannelError("MUNY_SECRET_KEY isn't set");
+      try {
+        await sendWebPush(
+          {
+            endpoint: config.endpoint as string,
+            p256dh: config.p256dh as string,
+            auth: config.auth as string,
+          },
+          { title: msg.title, body: msg.body, url: msg.url, tag: msg.type },
+          push.vapid,
+          push.subject,
+          fetchImpl,
+        );
+      } catch (err) {
+        if (err instanceof PushGone)
+          throw new ChannelError(
+            "This device stopped accepting notifications. Turn them on there again.",
+          );
+        const timedOut = err instanceof Error && err.name === "TimeoutError";
+        throw new ChannelError(timedOut ? "Timed out" : "The push service didn't take it");
+      }
+      return;
+    }
     case "ntfy": {
       // JSON publishing keeps non-ASCII titles intact.
       const server = (config.server ?? "https://ntfy.sh").replace(/\/+$/, "");

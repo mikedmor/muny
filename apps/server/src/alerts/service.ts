@@ -15,6 +15,7 @@ import { verifySavings } from "../savings/service.js";
 import { moveAlertsToAccounts } from "./accounts.js";
 import { ChannelError, type OutboundMessage, sendToChannel } from "./channels.js";
 import { type Candidate, DEFAULT_PARAMS, evaluateRules } from "./evaluate.js";
+import { vapidKeys } from "./webpush.js";
 
 export interface AlertDeps {
   secretKey: Buffer | undefined;
@@ -110,6 +111,7 @@ export function outbound(
     title: n.title,
     body: n.body,
     url: publicUrl && n.link ? `${publicUrl.replace(/\/+$/, "")}${n.link}` : null,
+    link: n.link,
     severity: n.severity,
     type: n.ruleType,
     createdAt: n.createdAt.getTime(),
@@ -132,13 +134,33 @@ export async function deliver(
   try {
     if (!deps.secretKey) throw new ChannelError("MUNY_SECRET_KEY isn't set");
     const config = decryptJson<ChannelConfig>(deps.secretKey, ch.configEnc);
-    await sendToChannel(ch.type as ChannelType, config, msg, deps.fetch);
+    const push =
+      ch.type === "push"
+        ? {
+            vapid: vapidKeys(db, deps.secretKey),
+            subject: deps.publicUrl ?? "https://github.com/mikedmor/muny",
+          }
+        : undefined;
+    // Links in notifications open Muny (relative when no public address is set).
+    await sendToChannel(
+      ch.type as ChannelType,
+      config,
+      ch.type === "push" && !msg.url ? { ...msg, url: msg.link ?? null } : msg,
+      deps.fetch,
+      push,
+    );
   } catch (err) {
     // Only our own short messages are kept; never URLs or tokens.
     error = err instanceof ChannelError ? err.message : "Sending failed";
   }
+  // A device that turned notifications off: stop sending to it.
+  const gone = ch.type === "push" && error?.startsWith("This device stopped");
   db.update(schema.notificationChannels)
-    .set(error ? { lastError: error } : { lastError: null, lastSentAt: new Date() })
+    .set(
+      error
+        ? { lastError: error, ...(gone ? { enabled: false } : {}) }
+        : { lastError: null, lastSentAt: new Date() },
+    )
     .where(eq(schema.notificationChannels.id, channelId))
     .run();
   return error ? { ok: false, error } : { ok: true };

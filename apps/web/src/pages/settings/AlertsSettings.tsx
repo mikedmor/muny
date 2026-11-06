@@ -7,11 +7,12 @@ import {
   type ChannelType,
   type NotificationChannel,
 } from "@muny/shared";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { Checkbox, MoneyField, SelectField } from "../../components/forms.js";
 import { Alert, Button, Card, Field } from "../../components/ui.js";
-import { ApiError } from "../../lib/api.js";
+import { ApiError, api } from "../../lib/api.js";
 import {
   useAlertRules,
   useChannels,
@@ -187,19 +188,16 @@ function RuleParams({ rule, save }: { rule: AlertRule; save: (params: AlertParam
   }
 }
 
-function Rules({ channels }: { channels: NotificationChannel[] }) {
+function Rules() {
   const rules = useAlertRules();
   const update = useUpdateAlertRule();
-  const accountRules = (rules.data ?? []).filter((r) => ACCOUNT_ALERT_TYPES.includes(r.type));
   return (
     <Card className="p-0">
       <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
         <h3 className="font-semibold">What to alert on</h3>
         <p className="text-sm text-slate-500">
-          Alerts always show under <span className="font-medium">Alerts</span> in Muny.
-          {channels.length > 0
-            ? " Tick a channel to also send it there."
-            : " Add a channel below to also get them on your phone or by email."}
+          Alerts always show under <span className="font-medium">Alerts</span> in Muny. Choose below
+          where else each one goes.
         </p>
       </div>
       {rules.isError && <Alert>{rules.error.message}</Alert>}
@@ -221,34 +219,6 @@ function Rules({ channels }: { channels: NotificationChannel[] }) {
               .
             </p>
           </div>
-          {channels.length > 0 && accountRules.length > 0 && (
-            <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-              <legend className="sr-only">Also send account alerts to</legend>
-              <span className="text-slate-600 dark:text-slate-400">Also send to</span>
-              {channels.map((c) => {
-                const on = accountRules.every((r) => r.channelIds.includes(c.id));
-                return (
-                  <label key={c.id} className="flex items-center gap-1.5">
-                    <input
-                      type="checkbox"
-                      className="size-4 accent-brand-600"
-                      checked={on}
-                      onChange={(e) => {
-                        for (const r of accountRules)
-                          update.mutate({
-                            type: r.type,
-                            channelIds: e.target.checked
-                              ? [...new Set([...r.channelIds, c.id])]
-                              : r.channelIds.filter((id) => id !== c.id),
-                          });
-                      }}
-                    />
-                    {c.name}
-                  </label>
-                );
-              })}
-            </fieldset>
-          )}
         </li>
         {rules.data
           ?.filter((r) => !ACCOUNT_ALERT_TYPES.includes(r.type))
@@ -268,30 +238,6 @@ function Rules({ channels }: { channels: NotificationChannel[] }) {
                       rule={r}
                       save={(params) => update.mutate({ type: r.type, params })}
                     />
-                    {channels.length > 0 && (
-                      <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-                        <legend className="sr-only">Also send to</legend>
-                        <span className="text-slate-600 dark:text-slate-400">Also send to</span>
-                        {channels.map((c) => (
-                          <label key={c.id} className="flex items-center gap-1.5">
-                            <input
-                              type="checkbox"
-                              className="size-4 accent-brand-600"
-                              checked={r.channelIds.includes(c.id)}
-                              onChange={(e) =>
-                                update.mutate({
-                                  type: r.type,
-                                  channelIds: e.target.checked
-                                    ? [...r.channelIds, c.id]
-                                    : r.channelIds.filter((id) => id !== c.id),
-                                })
-                              }
-                            />
-                            {c.name}
-                          </label>
-                        ))}
-                      </fieldset>
-                    )}
                   </div>
                 )}
               </li>
@@ -302,14 +248,226 @@ function Rules({ channels }: { channels: NotificationChannel[] }) {
   );
 }
 
+/** Where each alert goes: a row per alert, a column per channel (in Muny always). */
+function DeliveryGrid({ channels }: { channels: NotificationChannel[] }) {
+  const rules = useAlertRules();
+  const update = useUpdateAlertRule();
+  const list = rules.data ?? [];
+  const accountRules = list.filter((r) => ACCOUNT_ALERT_TYPES.includes(r.type));
+  const rows: { key: string; label: string; rules: AlertRule[] }[] = [
+    ...(accountRules.length
+      ? [
+          {
+            key: "account",
+            label: "Account alerts (low balance, large, unusual, duplicate)",
+            rules: accountRules,
+          },
+        ]
+      : []),
+    ...list
+      .filter((r) => !ACCOUNT_ALERT_TYPES.includes(r.type) && r.enabled)
+      .map((r) => ({ key: r.type, label: RULES[r.type].label, rules: [r] })),
+  ];
+  const on = (row: (typeof rows)[number], id: string) =>
+    row.rules.every((r) => r.channelIds.includes(id));
+  const set = (row: (typeof rows)[number], id: string, value: boolean) => {
+    for (const r of row.rules)
+      update.mutate({
+        type: r.type,
+        channelIds: value
+          ? [...new Set([...r.channelIds, id])]
+          : r.channelIds.filter((x) => x !== id),
+      });
+  };
+  const live = channels.filter((c) => c.enabled);
+  return (
+    <Card className="p-0">
+      <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+        <h3 className="font-semibold">Where each alert goes</h3>
+        <p className="text-sm text-slate-500">
+          Every alert shows in Muny. Tick the devices and channels each should also reach.
+        </p>
+      </div>
+      {live.length === 0 ? (
+        <p className="px-4 py-3 text-sm text-slate-500">
+          Turn on notifications on this device, or add an email or other channel below, to choose
+          here.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs text-slate-500">
+              <tr>
+                <th className="px-4 py-2 text-left font-medium">Alert</th>
+                <th className="px-3 py-2 text-center font-medium">In Muny</th>
+                {live.map((c) => (
+                  <th key={c.id} className="px-3 py-2 text-center font-medium">
+                    {c.name}
+                    <span className="block font-normal">{TYPE_LABEL[c.type]}</span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {rows.map((row) => (
+                <tr key={row.key}>
+                  <td className="px-4 py-2">{row.label}</td>
+                  <td className="px-3 py-2 text-center text-slate-400">✓</td>
+                  {live.map((c) => (
+                    <td key={c.id} className="px-3 py-2 text-center">
+                      <input
+                        type="checkbox"
+                        aria-label={`Send ${row.label} to ${c.name}`}
+                        checked={on(row, c.id)}
+                        onChange={(e) => set(row, c.id, e.target.checked)}
+                        className="size-4 accent-brand-600"
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              <tr>
+                <td className="px-4 py-2 text-xs text-slate-500">All of them</td>
+                <td />
+                {live.map((c) => (
+                  <td key={c.id} className="px-3 py-2 text-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const all = rows.every((row) => on(row, c.id));
+                        for (const row of rows) set(row, c.id, !all);
+                      }}
+                      className="text-xs text-brand-600 hover:underline dark:text-brand-500"
+                    >
+                      {rows.every((row) => on(row, c.id)) ? "None" : "All"}
+                    </button>
+                  </td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/** "Android · Chrome", "Windows · Edge"… for naming this device. */
+function deviceName() {
+  const ua = navigator.userAgent;
+  const os = /Android/i.test(ua)
+    ? "Android"
+    : /iPhone|iPad/i.test(ua)
+      ? "iPhone"
+      : /Windows/i.test(ua)
+        ? "Windows"
+        : /Mac OS X/i.test(ua)
+          ? "Mac"
+          : /Linux/i.test(ua)
+            ? "Linux"
+            : "This device";
+  const br = /Edg\//.test(ua)
+    ? "Edge"
+    : /Firefox\//.test(ua)
+      ? "Firefox"
+      : /Chrome\//.test(ua)
+        ? "Chrome"
+        : /Safari\//.test(ua)
+          ? "Safari"
+          : "Browser";
+  return `${os} · ${br}`;
+}
+
+/** Turn on notifications for this phone or computer (Muny installed, or open in the browser). */
+function ThisDevice({ channels }: { channels: NotificationChannel[] }) {
+  const qc = useQueryClient();
+  const [state, setState] = useState<string | null>(null);
+  const [mine, setMine] = useState<string | null>(null);
+  const supported =
+    typeof window !== "undefined" &&
+    "serviceWorker" in navigator &&
+    "PushManager" in window &&
+    "Notification" in window;
+  useEffect(() => {
+    if (!supported) return;
+    void navigator.serviceWorker.getRegistration().then(async (reg) => {
+      const sub = await reg?.pushManager.getSubscription();
+      setMine(sub ? sub.endpoint : null);
+    });
+  }, [supported]);
+  const turnOn = async () => {
+    setState("Asking…");
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") {
+        setState("Notifications are blocked for Muny in this browser's site settings.");
+        return;
+      }
+      const reg =
+        (await navigator.serviceWorker.getRegistration()) ??
+        (await navigator.serviceWorker.register("/sw.js"));
+      await navigator.serviceWorker.ready;
+      const { publicKey } = await api.get<{ publicKey: string }>("/api/alerts/push/key");
+      const key = Uint8Array.from(atob(publicKey.replace(/-/g, "+").replace(/_/g, "/")), (c) =>
+        c.charCodeAt(0),
+      );
+      const sub =
+        (await reg.pushManager.getSubscription()) ??
+        (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }));
+      const json = sub.toJSON();
+      await api.post("/api/alerts/push/subscribe", {
+        endpoint: json.endpoint,
+        keys: json.keys,
+        device: deviceName(),
+      });
+      setMine(sub.endpoint);
+      setState("On. Use Send test on it below.");
+      await qc.invalidateQueries();
+    } catch (err) {
+      setState(err instanceof Error ? err.message : "Couldn't turn them on");
+    }
+  };
+  const isOn = !!mine && channels.some((c) => c.type === "push" && c.enabled);
+  return (
+    <Card className="space-y-2">
+      <h3 className="font-semibold">Notifications on this device</h3>
+      {!supported ? (
+        <p className="text-sm text-slate-500">
+          This browser can't receive notifications here. They need Muny opened over HTTPS (your
+          Tailscale address) in Chrome, Edge or Firefox; on Android, install Muny from the browser
+          menu (Install app / Add to Home screen) first.
+        </p>
+      ) : (
+        <>
+          <p className="text-sm text-slate-500">
+            On a phone, install Muny first (browser menu → Install app). Alerts arrive like any
+            app's, even with Muny closed. Each device you turn on shows up as a channel, so you can
+            choose which alerts it gets. They go through this browser's push service (Google,
+            Microsoft, Mozilla or Apple), encrypted so only this device can read them.
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button onClick={() => void turnOn()}>
+              {isOn ? "Turn on again" : "Turn on notifications here"}
+            </Button>
+            {isOn && <span className="text-sm text-emerald-700 dark:text-emerald-400">On</span>}
+            {state && <span className="text-sm text-slate-500">{state}</span>}
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
 const TYPE_LABEL: Record<ChannelType, string> = {
   ntfy: "ntfy (phone push)",
   apprise: "Apprise",
   smtp: "Email (SMTP)",
   webhook: "Webhook",
+  push: "Device notifications",
 };
 
 const TYPE_HELP: Record<ChannelType, string> = {
+  push: "Turned on from each device itself (Notifications on this device, above).",
   ntfy: "Install the ntfy app, subscribe to a hard-to-guess topic, and enter it here. Use your own ntfy server if you run one.",
   apprise:
     "The URL of an Apprise API notify endpoint, e.g. http://apprise:8000/notify/muny. Apprise fans out to Discord, Telegram, Pushover and 100+ others.",
@@ -360,11 +518,13 @@ function AddChannel({ onDone }: { onDone: () => void }) {
             setC({});
           }}
         >
-          {(Object.keys(TYPE_LABEL) as ChannelType[]).map((t) => (
-            <option key={t} value={t}>
-              {TYPE_LABEL[t]}
-            </option>
-          ))}
+          {(Object.keys(TYPE_LABEL) as ChannelType[])
+            .filter((t) => t !== "push")
+            .map((t) => (
+              <option key={t} value={t}>
+                {TYPE_LABEL[t]}
+              </option>
+            ))}
         </SelectField>
         <Field
           label="Name"
@@ -538,7 +698,9 @@ export function AlertsSettings() {
   const list = channels.data ?? [];
   return (
     <section className="space-y-6">
-      <Rules channels={list} />
+      <ThisDevice channels={list} />
+      <Rules />
+      <DeliveryGrid channels={list} />
       <Channels channels={list} />
       <p className="text-xs text-slate-500">
         Links in outbound alerts need <code>MUNY_PUBLIC_URL</code> (the address you open Muny at) in

@@ -29,6 +29,7 @@ import {
   outbound,
   runAlerts,
 } from "./service.js";
+import { vapidKeys } from "./webpush.js";
 
 const IdParams = z.object({ id: z.string().min(1).max(64) });
 const cents = z.number().int().min(0).max(1_000_000_000);
@@ -217,6 +218,64 @@ export function registerAlertRoutes(app: FastifyInstance, db: MunyDb, deps: Aler
       .all()
       .map((r) => toChannel(r, deps.secretKey)),
   );
+
+  // --- Notifications on this device (Web Push) ----------------------------------
+
+  /** The key a browser needs to subscribe this device. */
+  app.get("/api/alerts/push/key", async (req) => {
+    requireUser(req);
+    return { publicKey: vapidKeys(db, needKey()).publicKey };
+  });
+
+  /**
+   * Turn on notifications for this device: it becomes a channel (once per
+   * device), sending every alert that's on until you change it.
+   */
+  app.post("/api/alerts/push/subscribe", async (req) => {
+    const user = requireUser(req);
+    const key = needKey();
+    const body = parse(
+      z.object({
+        endpoint: z.string().max(1000),
+        keys: z.object({ p256dh: z.string().max(200), auth: z.string().max(100) }),
+        device: z.string().trim().min(1).max(80),
+      }),
+      req.body,
+    );
+    const config = parseConfig("push", {
+      endpoint: body.endpoint,
+      p256dh: body.keys.p256dh,
+      auth: body.keys.auth,
+      device: body.device,
+    });
+    const existing = db
+      .select()
+      .from(ch)
+      .where(eq(ch.type, "push"))
+      .all()
+      .find((c) => decryptJson<ChannelConfig>(key, c.configEnc).endpoint === config.endpoint);
+    let id = existing?.id;
+    if (id) {
+      db.update(ch)
+        .set({ configEnc: encryptJson(key, config), enabled: true, lastError: null })
+        .where(eq(ch.id, id))
+        .run();
+    } else {
+      id = newId();
+      db.insert(ch)
+        .values({ id, type: "push", name: body.device, configEnc: encryptJson(key, config) })
+        .run();
+      // New device: every alert that's on goes to it too (untick any on Alerts → Settings).
+      for (const r of listRules(db))
+        if (r.enabled)
+          db.update(schema.alertRules)
+            .set({ channelIds: [...r.channelIds, id] })
+            .where(eq(schema.alertRules.type, r.type))
+            .run();
+    }
+    log(user.id, "alert.push_subscribe", id);
+    return toChannel(db.select().from(ch).where(eq(ch.id, id)).get() as never, key);
+  });
 
   app.post("/api/alerts/channels", async (req, reply) => {
     const user = requireUser(req);

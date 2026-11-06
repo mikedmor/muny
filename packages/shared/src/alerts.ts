@@ -63,7 +63,7 @@ export interface AlertRule {
   channelIds: string[];
 }
 
-export const CHANNEL_TYPES = ["ntfy", "apprise", "smtp", "webhook"] as const;
+export const CHANNEL_TYPES = ["ntfy", "apprise", "smtp", "webhook", "push"] as const;
 export type ChannelType = (typeof CHANNEL_TYPES)[number];
 
 /** What's sent when creating/updating a channel. Secrets are write-only. */
@@ -86,6 +86,12 @@ export interface ChannelConfig {
   password?: string;
   from?: string;
   to?: string;
+  /** push (this device's notifications): the browser's subscription */
+  endpoint?: string;
+  p256dh?: string;
+  auth?: string;
+  /** push: which device, e.g. "Android · Chrome" */
+  device?: string;
 }
 
 export interface NotificationChannel {

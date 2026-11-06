@@ -470,7 +470,7 @@ export const accountAlerts = sqliteTable("account_alerts", {
 
 export const notificationChannels = sqliteTable("notification_channels", {
   id: text().primaryKey(),
-  type: text({ enum: ["ntfy", "apprise", "smtp", "webhook"] }).notNull(),
+  type: text({ enum: ["ntfy", "apprise", "smtp", "webhook", "push"] }).notNull(),
   name: text().notNull(),
   enabled: integer({ mode: "boolean" }).notNull().default(true),
   /** AES-256-GCM encrypted JSON config (URLs, tokens, SMTP password). Never logged. */

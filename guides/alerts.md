@@ -15,7 +15,15 @@ Every alert appears under **Alerts** in Muny (the bell).
 - **Alerts for an account** (a low balance, large charges, unusual charges, possible duplicates) are set on each account: on **Accounts**, click the bell next to it. A ringing bell means a low-balance or large-charge alert is on. Unusual charges and possible duplicates are on for new accounts.
 - **Everything else** (bills, trials, budgets, price increases, charges after cancelling, banks needing attention) is on **Alerts → Settings**.
 
-## Getting alerts on your phone or by email
+## Notifications on your phone or computer
+
+On **Alerts → Settings**, click **Turn on notifications here** on each device you want alerts on. On Android, install Muny first: open it in Chrome over HTTPS (your Tailscale address), then browser menu → **Install app**, and turn notifications on from the installed app. On Windows, Edge or Chrome works the same way (installed or in a tab). Alerts then arrive like any app's, even with Muny closed.
+
+Each device becomes a channel. The **Where each alert goes** grid has a row per alert (account alerts together) and a column per device or channel: tick which alerts each one gets, or **All** / **None**. A new device starts with every alert that's on.
+
+Notifications go through the browser's own push service (Google for Chrome and Android, Microsoft for Edge, Mozilla for Firefox, Apple for Safari), encrypted so only that device can read them; Muny contacts it only for devices you turned on. A device that turns notifications off is switched off here too.
+
+## Getting alerts by email or other apps
 
 Add a **channel** on Alerts → Settings, and tick it for the alerts you want sent there (one tick covers all account alerts). Muny only contacts channels you add, and only sends the alert's title, a short description and a link, never account numbers or logins. Channel settings (URLs, tokens, passwords) are stored encrypted.
 
