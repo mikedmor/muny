@@ -57,3 +57,6 @@ docker/data/
 # Maintainers' private design docs (roadmap, decisions, architecture notes).
 # Public documentation lives in guides/.
 docs/
+
+# AI agent instructions (private, like docs/)
+CLAUDE.md
