@@ -10,6 +10,7 @@ import {
   ChevronsUpDown,
   Code,
   HandCoins,
+  House,
   Import,
   Landmark,
   LayoutDashboard,
@@ -52,6 +53,7 @@ const NAV: { label?: string; items: { to: string; label: string; icon: LucideIco
       { to: "/stocks", label: "Stocks", icon: ChartCandlestick },
       { to: "/crypto", label: "Crypto", icon: Bitcoin },
       { to: "/savings", label: "Savings", icon: PiggyBank },
+      { to: "/assets", label: "Assets", icon: House },
     ],
   },
   {

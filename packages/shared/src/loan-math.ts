@@ -110,3 +110,43 @@ export function payoff(
     balances,
   };
 }
+
+/**
+ * The standard monthly payment (principal and interest) that pays off a loan
+ * of this amount at this rate over this many months.
+ */
+export function amortizedPayment(principalCents: number, aprBps: number, months: number): number {
+  if (months <= 0) return 0;
+  if (aprBps <= 0) return Math.ceil(principalCents / months);
+  const r = aprBps / 10000 / 12;
+  return Math.round((principalCents * r) / (1 - (1 + r) ** -months));
+}
+
+/**
+ * Split past payments into interest and principal, working back from today's
+ * balance (for loans whose balance the lender reports): before each payment
+ * the balance was higher by its principal, and the interest was what that
+ * balance earned since the payment before. Estimates; newest payment first.
+ */
+export function splitBackward(
+  balanceNowCents: number,
+  aprBps: number,
+  newestFirst: { date: string; amountCents: number }[],
+): { interestCents: number; principalCents: number }[] {
+  let after = BigInt(Math.max(0, balanceNowCents));
+  const out: { interestCents: number; principalCents: number }[] = [];
+  newestFirst.forEach((p, i) => {
+    const older = newestFirst[i + 1];
+    const days = older ? Math.max(1, Math.round(dayNum(p.date) - dayNum(older.date))) : 30;
+    // interest = (after + payment - interest) × rate × days ⇒ solve for interest.
+    const k = BigInt(aprBps) * BigInt(days);
+    const den = 10000n * 365n;
+    const pay = BigInt(Math.max(0, p.amountCents));
+    let interest = div((after + pay) * k, den + k);
+    if (interest > pay) interest = pay;
+    const principal = pay - interest;
+    out.push({ interestCents: Number(interest), principalCents: Number(principal) });
+    after += principal;
+  });
+  return out;
+}

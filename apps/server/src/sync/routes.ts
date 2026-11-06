@@ -203,6 +203,25 @@ export function registerSyncRoutes(app: FastifyInstance, db: MunyDb, deps: SyncD
   });
 
   /** Link token in update mode, to fix a login that needs attention. */
+  /** Update mode asking an existing login to share loan details (rate, payment, due date). */
+  app.post("/api/connections/:id/plaid/liabilities-token", async (req) => {
+    const user = requireUser(req);
+    const { id } = parse(IdParams, req.params);
+    const conn = getConn(id);
+    if (conn.provider !== "plaid" || !deps.providers.plaid)
+      throw badRequest("Not a Plaid connection");
+    const creds = openCreds<PlaidCreds>(deps.config, conn);
+    try {
+      return {
+        linkToken: await deps.providers.plaid.createLinkToken(user.id, creds.accessToken, "bank", [
+          "liabilities",
+        ]),
+      };
+    } catch (e) {
+      asHttp(e);
+    }
+  });
+
   app.post("/api/connections/:id/plaid/update-token", async (req) => {
     const user = requireUser(req);
     const conn = getConn(parse(IdParams, req.params).id);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyPayments, payoff } from "./loan-math.js";
+import { amortizedPayment, applyPayments, payoff, splitBackward } from "./loan-math.js";
 
 describe("applyPayments", () => {
   it("covers interest first, then principal", () => {
@@ -39,5 +39,24 @@ describe("payoff", () => {
 
   it("never ends when the payment doesn't cover the interest", () => {
     expect(payoff(1_000_000, 1200, 5000).months).toBeNull();
+  });
+});
+
+describe("amortizedPayment and splitBackward", () => {
+  it("gives the standard 30-year payment", () => {
+    // $332,500 at 6.13% over 30 years: $2,021.38.
+    expect(amortizedPayment(33_250_000, 613, 360)).toBe(202_138);
+    expect(amortizedPayment(12_000, 0, 12)).toBe(1000);
+  });
+
+  it("works interest and principal back from today's balance", () => {
+    const [last, first] = splitBackward(1_000_000, 730, [
+      { date: "2026-03-02", amountCents: 50_000 },
+      { date: "2026-01-31", amountCents: 50_000 },
+    ]);
+    // 30 days at 7.30% on the balance before the newest payment.
+    expect((last?.interestCents ?? 0) + (last?.principalCents ?? 0)).toBe(50_000);
+    expect(last?.interestCents).toBeGreaterThan(6000);
+    expect(first?.interestCents).toBeGreaterThan(last?.interestCents ?? 0);
   });
 });

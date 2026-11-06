@@ -1,4 +1,5 @@
 import {
+  type Asset,
   formatMoney,
   LOAN_KIND_LABELS,
   LOAN_KINDS,
@@ -9,23 +10,34 @@ import {
   payoff,
 } from "@muny/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { Download, Pencil, Plus } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { LineChart } from "../components/charts.js";
 import { Modal } from "../components/forms.js";
 import { Alert, Button, Card, cx, Field, PageHeader } from "../components/ui.js";
 import { api } from "../lib/api.js";
-import { keys } from "../lib/queries.js";
+import { openPlaidLink } from "../lib/bankWidgets.js";
+import { keys, linkApi } from "../lib/queries.js";
 
-/** Loans: what you owe, the terms, when each is paid off, and what paying extra would do (D-040). */
+/** Loans: what you owe, the terms, when each is paid off, and what paying extra would do (D-040, D-042). */
 
 const loansKey = [...keys.accounts, "loans"] as const;
+const assetsKey = [...keys.accounts, "assets"] as const;
 const pct = (bps: number | null) => (bps === null ? "—" : `${(bps / 100).toFixed(2)}%`);
+const money = (c: number | null) => (c === null ? "—" : formatMoney(c));
 const day = (d: string | null) =>
   d
     ? new Date(`${d}T00:00:00`).toLocaleDateString(undefined, {
         month: "short",
         day: "numeric",
+        year: "numeric",
+      })
+    : "—";
+const monthYear = (d: string | Date | null) =>
+  d
+    ? (typeof d === "string" ? new Date(`${d}T00:00:00`) : d).toLocaleDateString(undefined, {
+        month: "long",
         year: "numeric",
       })
     : "—";
@@ -50,7 +62,7 @@ function Tile({ label, value, sub }: { label: string; value: string; sub?: strin
   );
 }
 
-/** Money typed as dollars ("1,234.56") → cents, or null when empty/invalid. */
+/** Money typed as dollars ("1,234.56") → cents; null when empty; NaN when invalid. */
 const toCents = (s: string) => {
   const v = s.trim().replace(/[$,]/g, "");
   if (!v) return null;
@@ -64,46 +76,92 @@ const toBps = (s: string) => {
   const n = Number(v);
   return Number.isFinite(n) && n >= 0 && n <= 100 ? Math.round(n * 100) : Number.NaN;
 };
-const fromCents = (c: number | null) => (c === null ? "" : (c / 100).toFixed(2));
+const toInt = (s: string) => {
+  const v = s.trim();
+  if (!v) return null;
+  const n = Number(v);
+  return Number.isInteger(n) && n > 0 ? n : Number.NaN;
+};
+const fromCents = (c: number | null | undefined) => (c == null ? "" : (c / 100).toFixed(2));
+
+function Select({
+  label,
+  value,
+  onChange,
+  children,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block text-sm">
+      <span className="font-medium text-slate-700 dark:text-slate-300">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
+      >
+        {children}
+      </select>
+    </label>
+  );
+}
 
 /** Add a loan Muny tracks from your payments, or edit any loan's details. */
 function LoanForm({ loan, onDone }: { loan?: Loan; onDone: () => void }) {
   const qc = useQueryClient();
-  const manual = !loan || loan.source === "manual";
+  const assets = useQuery({ queryKey: assetsKey, queryFn: () => api.get<Asset[]>("/api/assets") });
+  const manual = !loan?.connected;
   const [f, setF] = useState({
     name: loan?.name ?? "",
     kind: (loan?.kind ?? "personal") as LoanKind,
     lender: loan?.lender ?? "",
-    balance: fromCents(loan?.startBalanceCents ?? null),
+    balance: fromCents(loan?.startBalanceCents),
     startDate: loan?.startDate ?? new Date().toISOString().slice(0, 10),
-    apr: loan?.aprBps === null || loan?.aprBps === undefined ? "" : (loan.aprBps / 100).toFixed(2),
-    payment: fromCents(loan?.monthlyPaymentCents ?? null),
+    apr: loan?.aprBps == null ? "" : (loan.aprBps / 100).toFixed(2),
+    payment: fromCents(loan?.monthlyPaymentCents),
+    minimum: fromCents(loan?.minimumPaymentCents),
     nextDue: loan?.nextDueDate ?? "",
-    original: fromCents(loan?.originalPrincipalCents ?? null),
+    original: fromCents(loan?.originalPrincipalCents),
+    termYears: loan?.termMonths ? String(Math.round(loan.termMonths / 12)) : "",
     match: loan?.paymentMatch ?? "",
+    matchAmount: fromCents(loan?.paymentAmountCents),
+    homeValue: fromCents(loan?.originalValueCents),
+    pmi: fromCents(loan?.pmiMonthlyCents),
+    property: loan?.propertyAccountId ?? "",
   });
   const [error, setError] = useState<string | null>(null);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) =>
     setF((x) => ({ ...x, [k]: e.target.value }));
+  const mortgage = f.kind === "mortgage";
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const apr = toBps(f.apr);
-    const payment = toCents(f.payment);
-    const original = toCents(f.original);
+    const nums = {
+      aprBps: toBps(f.apr),
+      monthlyPaymentCents: toCents(f.payment),
+      minimumPaymentCents: toCents(f.minimum),
+      originalPrincipalCents: toCents(f.original),
+      paymentAmountCents: toCents(f.matchAmount),
+      originalValueCents: mortgage ? toCents(f.homeValue) : null,
+      pmiMonthlyCents: mortgage ? toCents(f.pmi) : null,
+    };
+    const years = toInt(f.termYears);
     const balance = toCents(f.balance);
-    if ([apr, payment, original, balance].some((v) => Number.isNaN(v))) {
-      setError("Check the amounts and rate (numbers like 1234.56 and 6.49).");
+    if ([...Object.values(nums), years, balance].some((v) => Number.isNaN(v))) {
+      setError("Check the amounts, rate and years (numbers like 1234.56, 6.49 and 30).");
       return;
     }
     const details: LoanDetailsInput = {
+      ...nums,
       kind: f.kind,
       lender: f.lender.trim() || null,
-      aprBps: apr,
-      monthlyPaymentCents: payment,
       nextDueDate: f.nextDue || null,
-      originalPrincipalCents: original,
+      termMonths: years === null ? null : years * 12,
       paymentMatch: f.match.trim() || null,
+      propertyAccountId: f.property || null,
       ...(manual ? { startBalanceCents: balance, startDate: f.startDate || null } : {}),
     };
     try {
@@ -132,24 +190,27 @@ function LoanForm({ loan, onDone }: { loan?: Loan; onDone: () => void }) {
           principal at the loan's rate.
         </p>
       )}
+      {loan?.connected && (
+        <p className="text-xs text-slate-500">
+          The balance comes from your bank connection. Add the terms below for payoff dates and the
+          interest/principal split.
+        </p>
+      )}
       <div className="grid gap-4 sm:grid-cols-2">
         {!loan && (
           <Field label="Name" value={f.name} onChange={set("name")} placeholder="e.g. Car loan" />
         )}
-        <label className="block text-sm">
-          <span className="font-medium text-slate-700 dark:text-slate-300">Kind</span>
-          <select
-            value={f.kind}
-            onChange={set("kind")}
-            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
-          >
-            {LOAN_KINDS.map((k) => (
-              <option key={k} value={k}>
-                {LOAN_KIND_LABELS[k]}
-              </option>
-            ))}
-          </select>
-        </label>
+        <Select
+          label="Kind"
+          value={f.kind}
+          onChange={(v) => setF((x) => ({ ...x, kind: v as LoanKind }))}
+        >
+          {LOAN_KINDS.map((k) => (
+            <option key={k} value={k}>
+              {LOAN_KIND_LABELS[k]}
+            </option>
+          ))}
+        </Select>
         <Field
           label="Lender"
           value={f.lender}
@@ -177,11 +238,18 @@ function LoanForm({ loan, onDone }: { loan?: Loan; onDone: () => void }) {
           placeholder="6.49"
         />
         <Field
-          label="Monthly payment"
+          label="Your monthly payment"
           value={f.payment}
           onChange={set("payment")}
           inputMode="decimal"
           placeholder="350.00"
+        />
+        <Field
+          label="Minimum payment"
+          value={f.minimum}
+          onChange={set("minimum")}
+          inputMode="decimal"
+          hint="From your statement, if it differs."
         />
         <Field label="Next payment due" type="date" value={f.nextDue} onChange={set("nextDue")} />
         <Field
@@ -189,16 +257,70 @@ function LoanForm({ loan, onDone }: { loan?: Loan; onDone: () => void }) {
           value={f.original}
           onChange={set("original")}
           inputMode="decimal"
-          hint="Optional: shows how much is paid off."
+          hint="Shows how much is paid off."
+        />
+        <Field
+          label="Term (years)"
+          value={f.termYears}
+          onChange={set("termYears")}
+          inputMode="numeric"
+          placeholder="30"
         />
       </div>
-      <Field
-        label="Words in your payments"
-        value={f.match}
-        onChange={set("match")}
-        placeholder="e.g. SEAVIEW RESORTS"
-        hint="How the payment appears in your checking account. Muny counts every payment containing these words."
-      />
+      {mortgage && (
+        <div className="grid gap-4 rounded-xl bg-slate-50 p-3 sm:grid-cols-2 dark:bg-slate-800/40">
+          <Field
+            label="Original home value"
+            value={f.homeValue}
+            onChange={set("homeValue")}
+            inputMode="decimal"
+            hint="The lower of the price and the appraisal: mortgage insurance ends at 20% equity on it."
+          />
+          <Field
+            label="Mortgage insurance (PMI) a month"
+            value={f.pmi}
+            onChange={set("pmi")}
+            inputMode="decimal"
+            placeholder="47.95"
+          />
+          <Select
+            label="The home"
+            value={f.property}
+            onChange={(v) => setF((x) => ({ ...x, property: v }))}
+          >
+            <option value="">Not linked</option>
+            {(assets.data ?? []).map((a) => (
+              <option key={a.accountId} value={a.accountId}>
+                {a.name}
+              </option>
+            ))}
+          </Select>
+          <p className="self-end text-xs text-slate-500">
+            Add your home on the{" "}
+            <Link to="/assets" className="text-brand-600 underline">
+              Assets
+            </Link>{" "}
+            page to see its value and your equity.
+          </p>
+        </div>
+      )}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field
+          label="Words in your payments"
+          value={f.match}
+          onChange={set("match")}
+          placeholder="e.g. SEAVIEW RESORTS"
+          hint="How the payment appears in checking. Loans with the same words share each payment."
+        />
+        <Field
+          label="Only payments of about"
+          value={f.matchAmount}
+          onChange={set("matchAmount")}
+          inputMode="decimal"
+          placeholder="e.g. 245.00"
+          hint="For a lender with several loans (or dues) paid separately under one name."
+        />
+      </div>
       <div className="flex justify-end gap-2">
         <Button variant="secondary" onClick={onDone}>
           Cancel
@@ -211,15 +333,16 @@ function LoanForm({ loan, onDone }: { loan?: Loan; onDone: () => void }) {
 
 function PayoffPlanner({ loan }: { loan: Loan }) {
   const [extra, setExtra] = useState(0);
-  if (loan.aprBps === null || !loan.monthlyPaymentCents)
+  const paying = loan.principalInterestCents ?? loan.monthlyPaymentCents;
+  if (loan.aprBps === null || !paying)
     return (
       <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500 dark:bg-slate-800/40">
         Add the interest rate and monthly payment (Edit details) to see when it's paid off and what
         paying extra would save.
       </p>
     );
-  const base = payoff(loan.balanceCents, loan.aprBps, loan.monthlyPaymentCents);
-  const plan = payoff(loan.balanceCents, loan.aprBps, loan.monthlyPaymentCents, extra * 100);
+  const base = payoff(loan.balanceCents, loan.aprBps, paying);
+  const plan = payoff(loan.balanceCents, loan.aprBps, paying, extra * 100);
   const saved =
     base.months !== null && plan.months !== null
       ? base.totalInterestCents - plan.totalInterestCents
@@ -237,13 +360,7 @@ function PayoffPlanner({ loan }: { loan: Loan }) {
             <span className="text-red-600">The payment doesn't cover the interest.</span>
           ) : (
             <>
-              Paid off{" "}
-              <strong>
-                {addMonths(plan.months).toLocaleDateString(undefined, {
-                  month: "short",
-                  year: "numeric",
-                })}
-              </strong>{" "}
+              Paid off <strong>{monthYear(addMonths(plan.months))}</strong>{" "}
               <span className="text-slate-500">
                 ({monthsLabel(plan.months)}, {formatMoney(plan.totalInterestCents)} interest)
               </span>
@@ -251,6 +368,12 @@ function PayoffPlanner({ loan }: { loan: Loan }) {
           )}
         </p>
       </div>
+      {loan.principalInterestCents !== null && (
+        <p className="mt-1 text-xs text-slate-500">
+          At the {formatMoney(loan.principalInterestCents)} principal and interest part of the
+          payment.
+        </p>
+      )}
       {plan.balances.length > 2 && (
         <div className="mt-2">
           <LineChart
@@ -276,7 +399,7 @@ function PayoffPlanner({ loan }: { loan: Loan }) {
         <input
           type="range"
           min={0}
-          max={Math.max(500, Math.round((loan.monthlyPaymentCents / 100) * 2))}
+          max={Math.max(500, Math.round((paying / 100) * 2))}
           step={10}
           value={extra}
           onChange={(e) => setExtra(Number(e.target.value))}
@@ -293,10 +416,100 @@ function PayoffPlanner({ loan }: { loan: Loan }) {
   );
 }
 
+/** Mortgage insurance until 20% equity on the original value (like a servicer's "manage PMI"). */
+function MortgageInsurance({ loan }: { loan: Loan }) {
+  const p = loan.pmi;
+  if (!p) return null;
+  const toward = Math.min(100, (p.equityPct / 20) * 100);
+  return (
+    <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+      <p className="text-sm font-semibold">Mortgage insurance</p>
+      {p.monthlyCents !== null && (
+        <p className="mt-1 text-sm">
+          {formatMoney(p.monthlyCents)} monthly until you reach 20% equity
+        </p>
+      )}
+      <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
+        <span>0%</span>
+        <div className="h-3 flex-1 overflow-hidden rounded bg-slate-300 dark:bg-slate-600">
+          <div className="h-full bg-emerald-600" style={{ width: `${toward}%` }} />
+        </div>
+        <span>20%</span>
+      </div>
+      <p className="mt-1 text-xs">Currently at {p.equityPct.toFixed(1)}%</p>
+      <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-800/50 dark:text-slate-300">
+        {p.equityPct >= 20 ? (
+          <>You've reached 20% equity: you can ask your lender to cancel it.</>
+        ) : (
+          <>
+            Based on the original home value of{" "}
+            <strong>{formatMoney(loan.originalValueCents ?? 0)}</strong>, you can ask to cancel it
+            around <strong>{monthYear(p.requestDate)}</strong>
+            {p.autoEndDate && (
+              <>
+                , and it ends on its own around <strong>{monthYear(p.autoEndDate)}</strong> (22%)
+              </>
+            )}
+            . Paying extra toward principal gets you there sooner.
+          </>
+        )}
+      </p>
+    </div>
+  );
+}
+
 function LoanCard({ loan }: { loan: Loan }) {
+  const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [fetching, setFetching] = useState<string | null>(null);
   const payments = showAll ? loan.payments : loan.payments.slice(0, 6);
+  const tracked = loan.source === "manual" || loan.splitEstimated;
+  const shared = loan.payments.some((p) => p.totalCents !== null);
+  const mortgage = loan.principalInterestCents !== null;
+
+  // Ask the lender (through Plaid) for the loan's terms.
+  const getDetails = async () => {
+    if (!loan.connectionId) return;
+    setFetching("Opening…");
+    try {
+      const { linkToken } = await api.post<{ linkToken: string }>(
+        `/api/connections/${loan.connectionId}/plaid/liabilities-token`,
+      );
+      if (await openPlaidLink(linkToken)) {
+        setFetching("Syncing…");
+        await linkApi.plaidReauthed(loan.connectionId);
+        await qc.invalidateQueries({ queryKey: keys.accounts });
+      }
+      setFetching(null);
+    } catch (e) {
+      setFetching(e instanceof Error ? e.message : "Couldn't get them");
+    }
+  };
+
+  const stats: [string, string, string | null][] = [
+    ["Rate", pct(loan.aprBps), null],
+    [
+      "Payment",
+      loan.monthlyPaymentCents ? `${formatMoney(loan.monthlyPaymentCents)}/mo` : "—",
+      mortgage && loan.escrowCents !== null
+        ? `${formatMoney(loan.principalInterestCents ?? 0)} principal & interest + ${formatMoney(loan.escrowCents)} escrow`
+        : null,
+    ],
+    [
+      "Minimum",
+      money(loan.minimumPaymentCents),
+      loan.minimumPaymentCents === null ? "Not reported" : null,
+    ],
+    ["Next due", day(loan.nextDueDate), null],
+    [
+      "Interest this year",
+      money(loan.interestThisYearCents),
+      loan.splitEstimated ? "Estimated" : null,
+    ],
+    ["Interest left", money(loan.interestRemainingCents), null],
+  ];
+
   return (
     <Card>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -316,23 +529,32 @@ function LoanCard({ loan }: { loan: Loan }) {
                   : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
               )}
             >
-              {loan.connected
-                ? "Synced"
-                : loan.source === "manual"
-                  ? "Tracked from your payments"
-                  : "Manual"}
+              {loan.connected ? "Synced" : "Tracked from your payments"}
             </span>
           </p>
         </div>
         <div className="text-right">
           <p className="text-2xl font-semibold tabular-nums">{formatMoney(loan.balanceCents)}</p>
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="inline-flex items-center gap-1 text-xs text-brand-600 hover:underline dark:text-brand-500"
-          >
-            <Pencil aria-hidden="true" className="size-3" /> Edit details
-          </button>
+          <span className="flex flex-wrap justify-end gap-3 text-xs">
+            {loan.connectionId && loan.aprBps === null && (
+              <button
+                type="button"
+                onClick={() => void getDetails()}
+                title="Ask the lender, through Plaid, for the rate, payment and due date"
+                className="inline-flex items-center gap-1 text-brand-600 hover:underline dark:text-brand-500"
+              >
+                <Download aria-hidden="true" className="size-3" />
+                {fetching ?? "Get details from your lender"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="inline-flex items-center gap-1 text-brand-600 hover:underline dark:text-brand-500"
+            >
+              <Pencil aria-hidden="true" className="size-3" /> Edit details
+            </button>
+          </span>
         </div>
       </div>
       {loan.paidOffPct !== null && (
@@ -346,74 +568,103 @@ function LoanCard({ loan }: { loan: Loan }) {
           </p>
         </div>
       )}
-      <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-5">
-        {(
-          [
-            ["Rate", pct(loan.aprBps)],
-            [
-              "Payment",
-              loan.monthlyPaymentCents ? `${formatMoney(loan.monthlyPaymentCents)}/mo` : "—",
-            ],
-            ["Next due", day(loan.nextDueDate)],
-            [
-              "Interest this year",
-              loan.interestThisYearCents === null ? "—" : formatMoney(loan.interestThisYearCents),
-            ],
-            [
-              "Interest left",
-              loan.interestRemainingCents === null ? "—" : formatMoney(loan.interestRemainingCents),
-            ],
-          ] as const
-        ).map(([k, v]) => (
+      <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3 lg:grid-cols-6">
+        {stats.map(([k, v, sub]) => (
           <div key={k}>
             <dt className="text-xs text-slate-500">{k}</dt>
             <dd className="font-medium tabular-nums">{v}</dd>
+            {sub && <dd className="text-xs text-slate-500">{sub}</dd>}
           </div>
         ))}
       </dl>
+      {loan.property && (
+        <p className="mt-3 text-sm">
+          <Link
+            to="/assets"
+            className="font-medium text-brand-600 hover:underline dark:text-brand-500"
+          >
+            {loan.property.name}
+          </Link>{" "}
+          worth {formatMoney(loan.property.valueCents)} · your equity{" "}
+          <strong>{formatMoney(loan.property.equityCents)}</strong>
+          {loan.property.loanToValuePct !== null &&
+            ` · ${loan.property.loanToValuePct.toFixed(0)}% loan-to-value`}
+        </p>
+      )}
+      {loan.sharedWith.length > 0 && (
+        <p className="mt-2 text-xs text-slate-500">
+          Payments are shared with {loan.sharedWith.join(", ")}; this loan's part is in proportion
+          to its monthly payment.
+        </p>
+      )}
       <div className="mt-5 grid gap-6 lg:grid-cols-2">
-        <PayoffPlanner loan={loan} />
+        <div className="space-y-4">
+          <PayoffPlanner loan={loan} />
+          <MortgageInsurance loan={loan} />
+        </div>
         <div>
-          <p className="mb-2 text-xs font-medium text-slate-500">Payments</p>
+          <p className="mb-2 text-xs font-medium text-slate-500">
+            Payments
+            {loan.splitEstimated && " · interest and principal are estimates from today's balance"}
+          </p>
           {loan.payments.length === 0 ? (
             <p className="text-sm text-slate-500">
               {loan.paymentMatch
-                ? `No payments containing "${loan.paymentMatch}" found yet.`
+                ? `No payments containing "${loan.paymentMatch}" found${loan.paymentAmountCents ? ` of about ${formatMoney(loan.paymentAmountCents)}` : ""}.`
                 : "No payments found. Add the words your payments use (Edit details) so Muny can find them."}
             </p>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="text-xs text-slate-500">
-                <tr>
-                  <th className="py-1 text-left font-medium">Date</th>
-                  <th className="py-1 text-right font-medium">Paid</th>
-                  {loan.source === "manual" && (
-                    <>
-                      <th className="py-1 text-right font-medium">Interest</th>
-                      <th className="py-1 text-right font-medium">Principal</th>
-                    </>
-                  )}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {payments.map((p) => (
-                  <tr key={p.transactionId}>
-                    <td className="py-1.5">{day(p.date)}</td>
-                    <td className="py-1.5 text-right tabular-nums">{formatMoney(p.amountCents)}</td>
-                    {loan.source === "manual" && (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[30rem] text-sm">
+                <thead className="text-xs text-slate-500">
+                  <tr>
+                    <th className="py-1 text-left font-medium">Date</th>
+                    <th className="py-1 text-left font-medium">From</th>
+                    <th className="py-1 text-right font-medium">Paid</th>
+                    {mortgage && <th className="py-1 text-right font-medium">Escrow</th>}
+                    {tracked && (
                       <>
-                        <td className="py-1.5 text-right tabular-nums text-slate-500">
-                          {p.interestCents === null ? "—" : formatMoney(p.interestCents)}
-                        </td>
-                        <td className="py-1.5 text-right tabular-nums">
-                          {p.principalCents === null ? "—" : formatMoney(p.principalCents)}
-                        </td>
+                        <th className="py-1 text-right font-medium">Interest</th>
+                        <th className="py-1 text-right font-medium">Principal</th>
                       </>
                     )}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {payments.map((p) => (
+                    <tr key={p.transactionId}>
+                      <td className="py-1.5 whitespace-nowrap">{day(p.date)}</td>
+                      <td className="max-w-40 truncate py-1.5 text-slate-500" title={p.description}>
+                        {p.fromAccountName}
+                      </td>
+                      <td className="py-1.5 text-right tabular-nums">
+                        {formatMoney(p.amountCents)}
+                        {p.totalCents !== null && (
+                          <span className="block text-[11px] text-slate-500">
+                            of {formatMoney(p.totalCents)}
+                          </span>
+                        )}
+                      </td>
+                      {mortgage && (
+                        <td className="py-1.5 text-right tabular-nums text-slate-500">
+                          {money(p.escrowCents)}
+                        </td>
+                      )}
+                      {tracked && (
+                        <>
+                          <td className="py-1.5 text-right tabular-nums text-slate-500">
+                            {money(p.interestCents)}
+                          </td>
+                          <td className="py-1.5 text-right tabular-nums">
+                            {money(p.principalCents)}
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
           {loan.payments.length > 6 && (
             <button
@@ -424,6 +675,7 @@ function LoanCard({ loan }: { loan: Loan }) {
               {showAll ? "Show fewer" : `Show all ${loan.payments.length}`}
             </button>
           )}
+          {shared && <p className="mt-2 text-xs text-slate-500">"of" is the whole payment.</p>}
         </div>
       </div>
       <Modal open={editing} onClose={() => setEditing(false)} title={`Edit ${loan.name}`}>

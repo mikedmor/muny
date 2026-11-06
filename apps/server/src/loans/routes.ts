@@ -21,6 +21,11 @@ const Details = z.object({
   paymentMatch: z.string().trim().max(80).nullable().optional(),
   startBalanceCents: cents.nullable().optional(),
   startDate: isoDate.nullable().optional(),
+  paymentAmountCents: cents.nullable().optional(),
+  minimumPaymentCents: cents.nullable().optional(),
+  originalValueCents: cents.nullable().optional(),
+  pmiMonthlyCents: cents.nullable().optional(),
+  propertyAccountId: z.string().max(64).nullable().optional(),
 });
 const Create = Details.extend({
   name: z.string().trim().min(1, "Name the loan").max(100),

@@ -1,4 +1,4 @@
-/** Loans (D-040). Money is integer cents; rates are hundredths of a percent (649 = 6.49%). */
+/** Loans (D-040, D-042). Money is integer cents; rates are hundredths of a percent (649 = 6.49%). */
 
 export const LOAN_KINDS = [
   "student",
@@ -22,12 +22,17 @@ export const LOAN_KIND_LABELS: Record<LoanKind, string> = {
 export interface LoanPaymentRow {
   transactionId: string;
   date: string;
-  /** What you paid (positive). */
+  /** The part of the payment that went to this loan (positive). */
   amountCents: number;
-  /** Worked out for loans whose balance Muny tracks; null otherwise. */
+  /** The whole payment, when it's shared with other loans. */
+  totalCents: number | null;
+  /** Escrow (taxes and insurance) in a mortgage payment. */
+  escrowCents: number | null;
   interestCents: number | null;
   principalCents: number | null;
   description: string;
+  /** The account the payment came out of. */
+  fromAccountName: string;
 }
 
 export interface Loan {
@@ -37,32 +42,63 @@ export interface Loan {
   mask: string | null;
   kind: LoanKind;
   lender: string | null;
-  /** plaid: the lender reports the balance (and maybe the terms); manual: Muny works it out from your payments. */
+  /** plaid: the lender reports the balance; manual: Muny works it out from your payments. */
   source: "plaid" | "manual";
-  /** Synced through a bank connection. */
+  /** Synced through a bank connection (the balance comes from the lender). */
   connected: boolean;
+  /** The connection, when the lender's loan details could be added through it. */
+  connectionId: string | null;
   /** What you owe now (positive). */
   balanceCents: number;
   aprBps: number | null;
-  /** The payment you entered or the lender reports, else your usual payment. */
+  /** What you usually pay (entered, else your recent payments). */
   monthlyPaymentCents: number | null;
+  /** The lowest payment due (from the lender, or entered). */
+  minimumPaymentCents: number | null;
+  /** Mortgages: principal and interest of the payment (from the original amount, rate and term). */
+  principalInterestCents: number | null;
+  /** Mortgages: the rest of the payment (taxes, insurance, PMI). */
+  escrowCents: number | null;
   nextDueDate: string | null;
   originalPrincipalCents: number | null;
   originationDate: string | null;
   termMonths: number | null;
   paymentMatch: string | null;
+  paymentAmountCents: number | null;
   startBalanceCents: number | null;
   startDate: string | null;
-  /** Share of the original amount paid off, 0–100 (when the original is known). */
+  originalValueCents: number | null;
+  pmiMonthlyCents: number | null;
+  propertyAccountId: string | null;
+  /** Other loans sharing the same payments (each gets its share). */
+  sharedWith: string[];
+  /** Interest/principal in the payments are estimates worked back from today's balance. */
+  splitEstimated: boolean;
   paidOffPct: number | null;
   interestThisYearCents: number | null;
   lastPayment: { date: string; amountCents: number } | null;
   /** Newest first, up to two years. */
   payments: LoanPaymentRow[];
-  /** At the monthly payment and rate; null when unknown or never. */
   payoffMonths: number | null;
   payoffDate: string | null;
   interestRemainingCents: number | null;
+  /** Mortgage insurance: equity on the original value and when it can end. */
+  pmi: {
+    monthlyCents: number | null;
+    equityPct: number;
+    /** When equity reaches 20% (you can ask to cancel). */
+    requestDate: string | null;
+    /** When it reaches 22% (it ends by law). */
+    autoEndDate: string | null;
+  } | null;
+  /** The home (or other asset) this loan pays for. */
+  property: {
+    accountId: string;
+    name: string;
+    valueCents: number;
+    equityCents: number;
+    loanToValuePct: number | null;
+  } | null;
 }
 
 export interface LoansReport {
@@ -77,18 +113,60 @@ export interface LoanDetailsInput {
   lender?: string | null;
   aprBps?: number | null;
   monthlyPaymentCents?: number | null;
+  minimumPaymentCents?: number | null;
   nextDueDate?: string | null;
   originalPrincipalCents?: number | null;
   originationDate?: string | null;
   termMonths?: number | null;
   paymentMatch?: string | null;
+  paymentAmountCents?: number | null;
   /** Manual loans: what you owed on startDate. */
   startBalanceCents?: number | null;
   startDate?: string | null;
+  originalValueCents?: number | null;
+  pmiMonthlyCents?: number | null;
+  propertyAccountId?: string | null;
 }
 
 export interface CreateLoanInput extends LoanDetailsInput {
   name: string;
   /** What you owe on startDate (defaults to today). */
   startBalanceCents: number;
+}
+
+// ---------------------------------------------------------------------------
+// Assets (Assets page): a home, a car; their value over time.
+// ---------------------------------------------------------------------------
+
+export const ASSET_KINDS = ["home", "vehicle", "other"] as const;
+export type AssetKind = (typeof ASSET_KINDS)[number];
+
+export const ASSET_KIND_LABELS: Record<AssetKind, string> = {
+  home: "Home",
+  vehicle: "Vehicle",
+  other: "Other",
+};
+
+export interface Asset {
+  accountId: string;
+  name: string;
+  kind: AssetKind;
+  valueCents: number;
+  purchasePriceCents: number | null;
+  purchaseDate: string | null;
+  address: string | null;
+  /** Value over time (your updates), oldest first. */
+  history: { date: string; valueCents: number }[];
+  /** Loans that pay for it, and what you own after them. */
+  loans: { accountId: string; name: string; balanceCents: number }[];
+  equityCents: number;
+}
+
+export interface AssetInput {
+  name?: string;
+  kind?: AssetKind;
+  valueCents?: number;
+  purchasePriceCents?: number | null;
+  purchaseDate?: string | null;
+  address?: string | null;
 }

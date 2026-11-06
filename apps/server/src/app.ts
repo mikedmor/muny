@@ -7,6 +7,7 @@ import type { HealthResponse, MetaResponse } from "@muny/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import { registerAlertRoutes } from "./alerts/routes.js";
 import type { AlertDeps } from "./alerts/service.js";
+import { registerAssetRoutes } from "./assets/routes.js";
 import { registerHouseholdRoutes } from "./auth/household.js";
 import { registerAuth } from "./auth/plugin.js";
 import { registerAuthRoutes } from "./auth/routes.js";
@@ -129,6 +130,7 @@ export async function buildApp({
   registerPrefsRoutes(app, db);
   registerInvestRoutes(app, db, { fetch: priceFetch });
   registerLoanRoutes(app, db);
+  registerAssetRoutes(app, db);
   registerPayeeRoutes(app, db);
   registerRuleRoutes(app, db);
   registerExportRoutes(app, db);

@@ -1,17 +1,31 @@
-# Loans
+# Loans and assets
 
-**Loans** (in the menu, under Money) shows every loan account: what you owe, the interest rate, the monthly payment, the next due date, when it'll be paid off and how much interest is left.
+**Loans** (under Money) shows every loan account: what you owe, the rate, your payment and the minimum, the next due date, when it'll be paid off and how much interest is left. **Assets** (under Wealth) holds your home, car and other things of value, so loans can show your equity.
 
 ## Getting your loans in
 
-- **Through your bank connection.** Loans you connect with Plaid (student loans, mortgages and others) sync their balance. When the lender shares them, Muny also gets the rate, minimum payment, due date and original amount. These details come with connections made from now on; for an older connection, enter them yourself with **Edit details**.
-- **Tracked from your payments.** For lenders bank sync can't reach, click **Add a loan** and enter what you owe on a date (from a recent statement), the rate, and the words your payments use in checking, for example `SEAVIEW RESORTS`. Muny finds every payment containing those words, takes out the interest that built up since the last payment, and lowers the balance by the rest. The balance counts toward net worth like any other account.
+- **Through your bank connection.** Synced loans keep the balance the lender reports. Connections made from now on also bring the rate, minimum payment, due date and original amount when the lender shares them. For an older connection, click **Get details from your lender** on the loan: Plaid asks you to approve sharing loan details on the same login (no new login is used). Or enter them yourself with **Edit details**.
+- **Tracked from your payments.** For lenders bank sync can't reach, click **Add a loan** and enter what you owe on a date (from a recent statement), the rate, and the words your payments use in checking, for example `SEAVIEW RESORTS`. Muny finds every payment containing those words, takes out the interest that built up since the last payment, and lowers the balance by the rest.
+
+### Several loans with one lender
+
+- **Paid separately, each with its own amount** (for example three timeshare loans plus yearly dues, all under one name): give each loan the same payment words and its own **Only payments of about** amount. Payments of other amounts, such as the dues, aren't counted toward any of them.
+- **One payment covering several loans** (common with student loans): give each loan the same payment words and no amount, plus its own monthly payment. Each payment is shared between them in proportion to their monthly payments.
 
 ## Reading a loan
 
-- **Paid off** (with an original amount entered) shows how much of the loan is behind you.
-- **Payoff** charts the balance down to zero at your monthly payment. Drag **Pay extra each month** to see how much sooner it would end and how much interest you'd save.
-- **Payments** lists the payments Muny found. For loans it tracks from your payments, each is split into interest and principal.
+- **Payment** shows your usual payment; **Minimum** is the lowest payment due (from the lender, or entered).
+- For a **mortgage** with its original amount, rate and term entered, Muny works out the principal and interest part of the payment; the rest is escrow (taxes and insurance). Payoff dates use the principal and interest part.
+- **Payments** lists each payment, the account it came from, and its split into interest and principal. For synced loans the split is worked back from today's balance, so it's an estimate.
+- **Payoff** charts the balance down to zero. Drag **Pay extra each month** to see how much sooner it ends and how much interest you'd save.
+
+## Mortgage insurance
+
+Enter the home's **original value** (the lower of the purchase price and the original appraisal) and the monthly mortgage insurance. Muny shows your equity on that value, when you reach 20% (you can ask your lender to cancel it) and 22% (it ends on its own), at your current payments.
+
+## Assets and equity
+
+On **Assets**, add your home with what it's worth now and what you paid. Update the value now and then (a home value site's estimate is fine); each update is kept, so you see its value over time, and it counts toward net worth. In the mortgage's **Edit details**, pick it as **The home** to see your equity and loan-to-value on both pages.
 
 ## Payments and spending
 

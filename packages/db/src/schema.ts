@@ -890,8 +890,35 @@ export const loanDetails = sqliteTable("loan_details", {
   startDate: text(),
   /** Manual loans: words that identify your payments (e.g. "SEAVIEW RESORTS MTG"). */
   paymentMatch: text(),
+  /** Only payments of about this amount (one lender, several loans or dues under the same name). */
+  paymentAmountCents: integer(),
+  /** The lowest payment due (Plaid Liabilities or entered). */
+  minimumPaymentCents: integer(),
+  /** Mortgages: the home's original value (the lower of price and appraisal), for mortgage insurance. */
+  originalValueCents: integer(),
+  /** Mortgages: monthly mortgage insurance (PMI), until 20% equity. */
+  pmiMonthlyCents: integer(),
+  /** The asset (e.g. the home) this loan pays for. */
+  propertyAccountId: text().references((): AnySQLiteColumn => accounts.id, {
+    onDelete: "set null",
+  }),
   source: text({ enum: ["plaid", "manual"] })
     .notNull()
     .default("manual"),
+  updatedAt: updatedAt(),
+});
+
+/** Things you own that aren't accounts (Assets page): a home, a car. Value history is balance snapshots. */
+export const assetDetails = sqliteTable("asset_details", {
+  accountId: text()
+    .primaryKey()
+    .references(() => accounts.id, { onDelete: "cascade" }),
+  kind: text({ enum: ["home", "vehicle", "other"] })
+    .notNull()
+    .default("other"),
+  purchasePriceCents: integer(),
+  /** YYYY-MM-DD */
+  purchaseDate: text(),
+  address: text(),
   updatedAt: updatedAt(),
 });

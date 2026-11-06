@@ -302,6 +302,8 @@ export class PlaidProvider implements Provider<PlaidCreds> {
     userId: string,
     accessToken?: string,
     kind: PlaidLinkKind = "bank",
+    /** Update mode: ask the login to also share these (e.g. liabilities). */
+    addConsent?: string[],
   ): Promise<string> {
     const body: Record<string, unknown> = {
       client_name: "Muny",
@@ -310,8 +312,11 @@ export class PlaidProvider implements Provider<PlaidCreds> {
       user: { client_user_id: userId },
       ...(this.cfg.redirectUri && { redirect_uri: this.cfg.redirectUri }),
     };
-    if (accessToken) body.access_token = accessToken;
-    else if (kind === "brokerage") body.products = productsFor(kind);
+    if (accessToken) {
+      // Update mode (log in again, or share more such as loan details).
+      body.access_token = accessToken;
+      if (addConsent?.length) body.additional_consented_products = addConsent;
+    } else if (kind === "brokerage") body.products = productsFor(kind);
     else {
       body.products = productsFor(kind);
       body.transactions = { days_requested: 730 };
