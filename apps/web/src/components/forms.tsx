@@ -148,11 +148,14 @@ export function Modal({
   onClose,
   title,
   children,
+  bare,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
+  /** Wide, with no built-in title bar or padding: the content draws its own. */
+  bare?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -170,9 +173,14 @@ export function Modal({
       onClick={(e) => {
         if (e.target === ref.current) onClose();
       }}
-      className="m-auto w-[calc(100%-2rem)] max-w-lg rounded-xl border border-slate-200 bg-white p-0 text-slate-900 shadow-xl backdrop:bg-slate-900/50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100"
+      aria-label={title}
+      className={cx(
+        "m-auto w-[calc(100%-2rem)] border border-slate-200 bg-white p-0 text-slate-900 shadow-xl backdrop:bg-slate-900/50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100",
+        bare ? "max-w-3xl overflow-hidden rounded-2xl" : "max-w-lg rounded-xl",
+      )}
     >
-      {open && (
+      {open && bare && children}
+      {open && !bare && (
         <div className="p-6">
           <div className="mb-4 flex items-start justify-between gap-4">
             <h2 className="text-lg font-semibold">{title}</h2>

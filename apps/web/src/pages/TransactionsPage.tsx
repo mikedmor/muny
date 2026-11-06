@@ -8,9 +8,21 @@ import {
   toDecimalString,
 } from "@muny/shared";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  CalendarDays,
+  ChevronDown,
+  EyeOff,
+  type LucideIcon,
+  Repeat,
+  Split,
+  Tag,
+  Trash2,
+  Wand2,
+  X,
+} from "lucide-react";
+import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import { CategorySelect } from "../components/CategorySelect.js";
-import { Checkbox, Modal, MoneyField, SelectField } from "../components/forms.js";
+import { Modal, MoneyField, SelectField } from "../components/forms.js";
 import { type RuleDraft, RuleEditor } from "../components/RuleEditor.js";
 import { Alert, Button, Card, cx, Field, PageHeader } from "../components/ui.js";
 import { ApiError } from "../lib/api.js";
@@ -293,10 +305,15 @@ export function TransactionsPage() {
         open={open !== null}
         onClose={() => setOpen(null)}
         title={open === "new" ? "Add transaction" : "Transaction"}
+        bare={open !== null && open !== "new"}
       >
         {open === "new" && <NewTransactionForm onDone={() => setOpen(null)} />}
         {open && open !== "new" && (
-          <TransactionDetail key={open.id} txn={open} onDone={() => setOpen(null)} />
+          <TransactionDetail
+            key={open.id}
+            txn={items.find((t) => t.id === open.id) ?? open}
+            onDone={() => setOpen(null)}
+          />
         )}
       </Modal>
     </>
@@ -533,66 +550,160 @@ function NewTransactionForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-function RecurringBadge({ txn }: { txn: Transaction }) {
+/** One row in the dialog's Actions column. */
+function ActionRow({
+  icon: Icon,
+  title,
+  subtitle,
+  onClick,
+  trailing,
+  danger,
+  children,
+}: {
+  icon: LucideIcon;
+  title: string;
+  subtitle?: ReactNode;
+  onClick?: () => void;
+  trailing?: ReactNode;
+  danger?: boolean;
+  children?: ReactNode;
+}) {
+  const body = (
+    <>
+      <Icon
+        aria-hidden="true"
+        className={cx("mt-0.5 size-4 shrink-0", danger ? "text-red-500" : "text-brand-600")}
+      />
+      <span className="min-w-0 flex-1">
+        <span
+          className={cx("block text-sm font-medium", danger && "text-red-600 dark:text-red-400")}
+        >
+          {title}
+        </span>
+        {subtitle && <span className="block truncate text-xs text-slate-500">{subtitle}</span>}
+      </span>
+      {trailing}
+    </>
+  );
+  return (
+    <div className="px-4 py-3">
+      {onClick ? (
+        <button
+          type="button"
+          onClick={onClick}
+          className="-m-2 flex w-[calc(100%+1rem)] items-start gap-3 rounded-lg p-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800"
+        >
+          {body}
+        </button>
+      ) : (
+        <div className="flex items-start gap-3">{body}</div>
+      )}
+      {children}
+    </div>
+  );
+}
+
+function Switch({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => onChange(!checked)}
+      className={cx(
+        "relative h-5 w-9 shrink-0 rounded-full transition-colors",
+        checked ? "bg-brand-600" : "bg-slate-300 dark:bg-slate-700",
+      )}
+    >
+      <span
+        className={cx(
+          "absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow transition-transform",
+          checked && "translate-x-4",
+        )}
+      />
+    </button>
+  );
+}
+
+function RecurringAction({ txn }: { txn: Transaction }) {
   const create = useCreateRecurring();
   const [open, setOpen] = useState(false);
   const [interval, setRepeat] = useState<Interval>("monthly");
   if (txn.recurringName)
     return (
-      <p className="mt-1 text-xs">
-        <Link
-          to="/recurring"
-          className="rounded bg-violet-100 px-1.5 py-0.5 text-violet-800 hover:underline dark:bg-violet-900/40 dark:text-violet-300"
-        >
-          ↻ {txn.recurringName}
-        </Link>
-      </p>
+      <ActionRow
+        icon={Repeat}
+        title="Recurring"
+        subtitle={
+          <Link to="/recurring" className="hover:underline">
+            {txn.recurringName}
+          </Link>
+        }
+      />
     );
   if (txn.pending || txn.transferPairId) return null;
-  if (!open)
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="mt-1 text-xs text-slate-500 underline"
-      >
-        Mark as recurring
-      </button>
-    );
   return (
-    <p className="mt-1 flex flex-wrap items-center gap-2 text-xs">
-      Repeats
-      <select
-        aria-label="Repeats"
-        value={interval}
-        onChange={(e) => setRepeat(e.target.value as Interval)}
-        className="rounded border border-slate-300 bg-white px-1 py-0.5 dark:border-slate-700 dark:bg-slate-950"
-      >
-        {INTERVALS.map((i) => (
-          <option key={i} value={i}>
-            {INTERVAL_LABELS[i]}
-          </option>
-        ))}
-      </select>
-      <button
-        type="button"
-        disabled={create.isPending}
-        onClick={() => create.mutate({ transactionId: txn.id, interval })}
-        className="font-medium text-brand-600"
-      >
-        Save
-      </button>
-      <button type="button" onClick={() => setOpen(false)} className="text-slate-500">
-        Cancel
-      </button>
-      {create.error && <span className="text-red-600">{create.error.message}</span>}
-    </p>
+    <ActionRow
+      icon={Repeat}
+      title="Recurring"
+      subtitle="Not recurring"
+      onClick={() => setOpen((o) => !o)}
+      trailing={
+        <ChevronDown
+          aria-hidden="true"
+          className={cx("mt-0.5 size-4 text-slate-400 transition-transform", open && "rotate-180")}
+        />
+      }
+    >
+      {open && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 pl-7 text-xs">
+          <select
+            aria-label="Repeats"
+            value={interval}
+            onChange={(e) => setRepeat(e.target.value as Interval)}
+            className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
+          >
+            {INTERVALS.map((i) => (
+              <option key={i} value={i}>
+                {INTERVAL_LABELS[i]}
+              </option>
+            ))}
+          </select>
+          <Button
+            className="px-2.5 py-1 text-xs"
+            disabled={create.isPending}
+            onClick={() =>
+              create.mutate(
+                { transactionId: txn.id, interval },
+                { onSuccess: () => setOpen(false) },
+              )
+            }
+          >
+            Mark recurring
+          </Button>
+          {create.error && <span className="text-red-600">{create.error.message}</span>}
+        </div>
+      )}
+    </ActionRow>
   );
 }
 
+/** Edits save as you go: switches and pickers at once, text when you leave the field. */
 function TransactionDetail({ txn, onDone }: { txn: Transaction; onDone: () => void }) {
   const update = useUpdateTransaction();
   const remove = useDeleteTransaction();
+  const notTransfer = useNotTransfer();
+  const accounts = useAccounts();
+  const account = accounts.data?.find((a) => a.id === txn.accountId);
   const [payeeName, setPayeeName] = useState(txn.payeeName ?? "");
   const [categoryId, setCategoryId] = useState(txn.categoryId);
   const [notes, setNotes] = useState(txn.notes ?? "");
@@ -600,176 +711,292 @@ function TransactionDetail({ txn, onDone }: { txn: Transaction; onDone: () => vo
   const [hidden, setHidden] = useState(txn.hidden);
   const [postedDate, setDate] = useState(txn.postedDate);
   const [amount, setAmount] = useState<number | null>(txn.amountCents);
-  const [splitting, setSplitting] = useState(txn.splits.length > 0);
+  const [panel, setPanel] = useState<"split" | "rule" | null>(
+    txn.splits.length > 0 ? "split" : null,
+  );
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [ruleDraft, setRuleDraft] = useState<RuleDraft | null>(null);
-  const notTransfer = useNotTransfer();
-  const fields = update.error instanceof ApiError ? update.error.fieldErrors() : {};
+  const [saved, setSaved] = useState(false);
 
-  const save = (e: FormEvent) => {
-    e.preventDefault();
-    update.mutate(
-      {
-        id: txn.id,
-        payeeName: payeeName.trim() || null,
-        ...(txn.splits.length === 0 && !splitting ? { categoryId } : {}),
-        notes: notes.trim() || null,
-        tags: tags
-          .split(",")
-          .map((t) => t.trim().replace(/^#/, ""))
-          .filter(Boolean),
-        hidden,
-        ...(txn.manual ? { postedDate, amountCents: amount ?? txn.amountCents } : {}),
-      },
-      { onSuccess: onDone },
-    );
+  const patch = (input: Omit<Parameters<typeof update.mutate>[0], "id">) =>
+    update.mutate({ id: txn.id, ...input }, { onSuccess: () => setSaved(true) });
+  const tagList = (s: string) =>
+    s
+      .split(",")
+      .map((t) => t.trim().replace(/^#/, ""))
+      .filter(Boolean);
+
+  const isSplit = txn.splits.length > 0;
+  const shownAmount = txn.manual && amount !== null ? amount : txn.amountCents;
+
+  const openRule = () => {
+    setRuleDraft({
+      name: txn.payeeName ?? txn.description,
+      match: "all",
+      conditions: [
+        txn.payeeName
+          ? { field: "payee", op: "equals", value: txn.payeeName }
+          : { field: "description", op: "contains", value: txn.rawDescription },
+      ],
+      actions: [{ type: "setCategory", categoryId: categoryId ?? "" }],
+    });
+    setPanel(panel === "rule" ? null : "rule");
   };
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-start justify-between gap-4 rounded-lg bg-slate-50 p-3 dark:bg-slate-800/50">
-        <div className="min-w-0">
-          <p className="truncate font-medium">{txn.description}</p>
-          <p className="truncate text-xs text-slate-500" title="Original bank description">
-            {txn.rawDescription}
-          </p>
-          <p className="text-xs text-slate-500">
-            {txn.accountName} · {formatDay(txn.postedDate)}
-          </p>
-          <RecurringBadge txn={txn} />
-          {txn.transferAccountName && (
-            <p className="mt-1 text-xs">
-              <span className="rounded bg-sky-100 px-1.5 py-0.5 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300">
-                Transfer {txn.amountCents < 0 ? "to" : "from"} {txn.transferAccountName}
-              </span>{" "}
-              <button
-                type="button"
-                onClick={() => notTransfer.mutate(txn.id)}
-                className="text-slate-500 underline hover:text-slate-700"
-              >
-                Not a transfer
-              </button>
-            </p>
-          )}
-        </div>
-        <Amount cents={txn.amountCents} className="text-lg font-semibold" />
-      </div>
-
-      <form onSubmit={save} className="space-y-4" noValidate>
-        {update.error && !Object.keys(fields).length && <Alert>{update.error.message}</Alert>}
-        <Field
-          label="Merchant name"
-          value={payeeName}
-          onChange={(e) => setPayeeName(e.target.value)}
-          placeholder={txn.rawDescription}
-          hint="Shown instead of the bank's description."
-        />
-        {txn.manual && (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field
-              label="Date"
+    <div className="flex max-h-[calc(100dvh-2rem)] flex-col">
+      {/* Header: date and links */}
+      <div className="flex items-center gap-2 border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+        {txn.manual ? (
+          <label className="flex items-center gap-2 rounded-full border border-slate-300 px-3 py-1.5 text-sm font-medium dark:border-slate-700">
+            <CalendarDays aria-hidden="true" className="size-4 text-slate-400" />
+            <span className="sr-only">Date</span>
+            <input
               type="date"
               value={postedDate}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={(e) => {
+                setDate(e.target.value);
+                if (e.target.value) patch({ postedDate: e.target.value });
+              }}
+              className="bg-transparent outline-none"
             />
-            <MoneyField
-              label="Amount (negative = spending)"
-              cents={amount}
-              onChange={(c) => setAmount(c)}
-            />
-          </div>
+          </label>
+        ) : (
+          <span className="flex items-center gap-2 rounded-full border border-slate-300 px-3 py-1.5 text-sm font-medium dark:border-slate-700">
+            <CalendarDays aria-hidden="true" className="size-4 text-slate-400" />
+            {formatDay(txn.postedDate)}
+          </span>
         )}
-        {!splitting && (
-          <div>
-            <div className="flex items-baseline justify-between">
-              <span className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                Category
-              </span>
+        {txn.pending && (
+          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+            Pending
+          </span>
+        )}
+        <span className="ml-auto text-xs text-slate-400" aria-live="polite">
+          {update.isPending ? "Saving…" : saved ? "Saved" : ""}
+        </span>
+        {txn.recurringSeriesId && (
+          <Link
+            to="/recurring"
+            className="hidden rounded-full border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-100 sm:block dark:border-slate-700 dark:hover:bg-slate-800"
+          >
+            See recurring
+          </Link>
+        )}
+        <button
+          type="button"
+          onClick={onDone}
+          aria-label="Close"
+          className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+        >
+          <X aria-hidden="true" className="size-5" />
+        </button>
+      </div>
+
+      <div className="min-h-0 overflow-y-auto">
+        <div className="grid md:grid-cols-[minmax(0,1fr)_17rem]">
+          {/* Left: what it is */}
+          <div className="space-y-4 p-6">
+            {update.error && <Alert>{update.error.message}</Alert>}
+            <input
+              aria-label="Merchant name"
+              title="Shown instead of the bank's description"
+              value={payeeName}
+              placeholder={txn.rawDescription}
+              onChange={(e) => setPayeeName(e.target.value)}
+              onBlur={() => {
+                if (payeeName.trim() !== (txn.payeeName ?? ""))
+                  patch({ payeeName: payeeName.trim() || null });
+              }}
+              className="-mx-2 w-[calc(100%+1rem)] truncate rounded-lg border border-transparent bg-transparent px-2 py-1 text-xl font-semibold placeholder:text-slate-900 hover:border-slate-300 focus:border-brand-500 focus:outline-none dark:placeholder:text-slate-100 dark:hover:border-slate-700"
+            />
+            <div>
+              <Amount cents={shownAmount} className="text-3xl font-bold tracking-tight" />
+              {txn.manual && (
+                // biome-ignore lint/a11y/noStaticElementInteractions: saves the amount when its field loses focus
+                <div
+                  className="mt-2 max-w-48"
+                  onBlur={() => {
+                    if (amount !== null && amount !== txn.amountCents)
+                      patch({ amountCents: amount });
+                  }}
+                >
+                  <MoneyField
+                    label="Amount (negative = spending)"
+                    cents={amount}
+                    onChange={(c) => setAmount(c)}
+                  />
+                </div>
+              )}
+            </div>
+            {isSplit ? (
               <button
                 type="button"
-                onClick={() => setSplitting(true)}
-                className="text-xs text-brand-600 hover:underline"
+                onClick={() => setPanel("split")}
+                className="rounded-full bg-slate-100 px-3 py-1.5 text-sm dark:bg-slate-800"
               >
-                Split transaction
+                Split into {txn.splits.length} categories
               </button>
-            </div>
-            <CategorySelect
-              aria-label="Category"
-              value={categoryId}
-              onChange={setCategoryId}
-              className={cx(selectClass, "mt-1 w-full")}
+            ) : (
+              <CategorySelect
+                aria-label="Category"
+                value={categoryId}
+                onChange={(id) => {
+                  setCategoryId(id);
+                  patch({ categoryId: id });
+                }}
+                className={cx(
+                  "max-w-full rounded-full border border-slate-200 bg-slate-50 py-1 pr-3 pl-1.5 text-sm hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700",
+                  !categoryId && "text-amber-600",
+                )}
+              />
+            )}
+            {txn.transferAccountName && (
+              <p className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs text-sky-800 dark:bg-sky-900/40 dark:text-sky-300">
+                  Transfer {txn.amountCents < 0 ? "to" : "from"} {txn.transferAccountName}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => notTransfer.mutate(txn.id)}
+                  className="text-xs text-slate-500 underline hover:text-slate-700"
+                >
+                  Not a transfer
+                </button>
+              </p>
+            )}
+            <textarea
+              aria-label="Notes"
+              value={notes}
+              placeholder="Add a note…"
+              rows={3}
+              onChange={(e) => setNotes(e.target.value)}
+              onBlur={() => {
+                if (notes.trim() !== (txn.notes ?? "")) patch({ notes: notes.trim() || null });
+              }}
+              className="w-full resize-none rounded-xl border border-transparent bg-slate-100 px-4 py-3 text-sm placeholder:text-slate-400 focus:border-brand-500 focus:outline-none dark:bg-slate-800/70"
             />
+            <label className="flex items-center gap-2 rounded-xl bg-slate-100 px-4 py-2.5 text-sm focus-within:ring-1 focus-within:ring-brand-500 dark:bg-slate-800/70">
+              <Tag aria-hidden="true" className="size-4 shrink-0 text-slate-400" />
+              <span className="sr-only">Tags (comma-separated)</span>
+              <input
+                value={tags}
+                placeholder="Add tags, e.g. homelab, reimbursable"
+                onChange={(e) => setTags(e.target.value)}
+                onBlur={() => {
+                  const next = tagList(tags);
+                  if (next.join(",") !== txn.tags.map((t) => t.name).join(","))
+                    patch({ tags: next });
+                }}
+                className="min-w-0 flex-1 bg-transparent placeholder:text-slate-400 focus:outline-none"
+              />
+            </label>
+          </div>
+
+          {/* Right: actions */}
+          <div className="border-t border-slate-200 md:border-t-0 md:border-l dark:border-slate-800">
+            <p className="px-4 pt-4 pb-1 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
+              Actions
+            </p>
+            <div className="divide-y divide-slate-200 dark:divide-slate-800">
+              <ActionRow
+                icon={EyeOff}
+                title="Hide transaction"
+                subtitle="Left out of totals and reports"
+                trailing={
+                  <Switch
+                    label="Hide transaction"
+                    checked={hidden}
+                    onChange={(v) => {
+                      setHidden(v);
+                      patch({ hidden: v });
+                    }}
+                  />
+                }
+              />
+              <RecurringAction txn={txn} />
+              <ActionRow
+                icon={Split}
+                title="Split"
+                subtitle={isSplit ? `${txn.splits.length} categories` : "Across categories"}
+                onClick={() => setPanel(panel === "split" ? null : "split")}
+                trailing={
+                  <ChevronDown
+                    aria-hidden="true"
+                    className={cx(
+                      "mt-0.5 size-4 text-slate-400 transition-transform",
+                      panel === "split" && "rotate-180",
+                    )}
+                  />
+                }
+              />
+              <ActionRow
+                icon={Wand2}
+                title="Create rule"
+                subtitle="For transactions like this"
+                onClick={openRule}
+                trailing={
+                  <ChevronDown
+                    aria-hidden="true"
+                    className={cx(
+                      "mt-0.5 size-4 text-slate-400 transition-transform",
+                      panel === "rule" && "rotate-180",
+                    )}
+                  />
+                }
+              />
+              <ActionRow
+                icon={Trash2}
+                title="Delete"
+                danger
+                onClick={confirmDelete ? undefined : () => setConfirmDelete(true)}
+              >
+                {confirmDelete && (
+                  <div className="mt-2 flex items-center gap-2 pl-7 text-xs">
+                    <span className="text-red-600">Delete permanently?</span>
+                    <Button
+                      variant="danger"
+                      className="px-2.5 py-1 text-xs"
+                      onClick={() => remove.mutate(txn.id, { onSuccess: onDone })}
+                    >
+                      Delete
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="px-2 py-1 text-xs"
+                      onClick={() => setConfirmDelete(false)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                )}
+              </ActionRow>
+            </div>
+          </div>
+        </div>
+
+        {panel === "split" && (
+          <div className="border-t border-slate-200 p-6 dark:border-slate-800">
+            <SplitEditor txn={txn} onCancel={() => setPanel(null)} />
           </div>
         )}
-        <Field label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
-        <Field
-          label="Tags"
-          value={tags}
-          onChange={(e) => setTags(e.target.value)}
-          placeholder="e.g. homelab, reimbursable"
-          hint="Comma-separated."
-        />
-        <Checkbox
-          label="Hide transaction"
-          description="Excluded from totals, budgets and reports."
-          checked={hidden}
-          onChange={setHidden}
-        />
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          {confirmDelete ? (
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-red-600">Delete permanently?</span>
-              <Button variant="danger" onClick={() => remove.mutate(txn.id, { onSuccess: onDone })}>
-                Delete
-              </Button>
-              <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
-                Cancel
-              </Button>
-            </div>
-          ) : (
-            <Button variant="ghost" className="text-red-600" onClick={() => setConfirmDelete(true)}>
-              Delete
-            </Button>
-          )}
-          <div className="flex gap-2">
-            <Button
-              variant="ghost"
-              title="Make a rule for transactions like this one"
-              onClick={() =>
-                setRuleDraft({
-                  name: txn.payeeName ?? txn.description,
-                  match: "all",
-                  conditions: [
-                    txn.payeeName
-                      ? { field: "payee", op: "equals", value: txn.payeeName }
-                      : { field: "description", op: "contains", value: txn.rawDescription },
-                  ],
-                  actions: categoryId
-                    ? [{ type: "setCategory", categoryId }]
-                    : [{ type: "setCategory", categoryId: "" }],
-                })
-              }
-            >
-              Create rule
-            </Button>
-            <Button variant="secondary" onClick={onDone}>
-              Close
-            </Button>
-            <Button type="submit" disabled={update.isPending}>
-              Save
-            </Button>
+        {panel === "rule" && ruleDraft && (
+          <div className="border-t border-slate-200 p-6 dark:border-slate-800">
+            <h3 className="mb-3 text-sm font-semibold">New rule</h3>
+            <RuleEditor initial={ruleDraft} onDone={() => setPanel(null)} />
           </div>
-        </div>
-      </form>
+        )}
 
-      {splitting && <SplitEditor txn={txn} onCancel={() => setSplitting(false)} />}
-
-      {ruleDraft && (
-        <div className="border-t border-slate-200 pt-4 dark:border-slate-800">
-          <h3 className="mb-3 text-sm font-semibold">New rule</h3>
-          <RuleEditor initial={ruleDraft} onDone={() => setRuleDraft(null)} />
+        {/* Footer: where it came from */}
+        <div className="space-y-1.5 bg-slate-50 px-6 py-4 text-center font-mono text-xs dark:bg-slate-950/60">
+          <p className="text-slate-700 uppercase dark:text-slate-300">
+            {[txn.accountName, account?.institutionName, account?.mask ? `••${account.mask}` : null]
+              .filter(Boolean)
+              .join("  |  ")}
+          </p>
+          <p className="break-words text-slate-500 uppercase">{txn.rawDescription}</p>
         </div>
-      )}
+      </div>
     </div>
   );
 }
