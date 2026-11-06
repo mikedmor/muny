@@ -9,7 +9,7 @@ import {
 import { Link } from "@tanstack/react-router";
 import { ChevronRight, FileUp, Link2 } from "lucide-react";
 import { type ChangeEvent, useMemo, useState } from "react";
-import { Donut, LineChart } from "../components/charts.js";
+import { Donut, LineChart, type StackBand, StackLegend } from "../components/charts.js";
 import { Modal } from "../components/forms.js";
 import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
 import { MerchantAvatar } from "../components/visuals.js";
@@ -49,15 +49,27 @@ function thin<T extends { date: string }>(list: T[]): T[] {
 function ValueChart({
   history,
   estimatedUntil,
+  bySecurity,
+  colors,
 }: {
   history: { date: string; valueCents: number }[];
   estimatedUntil: string | null;
+  bySecurity: { key: string; label: string; values: number[] }[];
+  colors: Map<string, string>;
 }) {
   const [range, setRange] = useState<(typeof RANGES)[number][0]>("All");
   const backfill = useInvestBackfill();
   const days = RANGES.find((r) => r[0] === range)?.[1] ?? 0;
   const cutoff = days ? new Date(Date.now() - days * 86400000).toISOString().slice(0, 10) : "";
-  const shown = thin(history.filter((p) => p.date >= cutoff));
+  const shown = thin(history.map((p, i) => ({ ...p, i })).filter((p) => p.date >= cutoff));
+  const stack: StackBand[] = bySecurity
+    .map((b) => ({
+      key: b.key,
+      label: b.label,
+      color: b.key === "other" ? OTHER_COLOR : (colors.get(b.key) ?? OTHER_COLOR),
+      values: shown.map((p) => b.values[p.i] ?? 0),
+    }))
+    .filter((b) => b.values.some((v) => v > 0));
   const first = shown[0];
   const last = shown[shown.length - 1];
   const change = first && last ? last.valueCents - first.valueCents : null;
@@ -98,6 +110,7 @@ function ValueChart({
         <LineChart
           ariaLabel="Portfolio value over time"
           height={220}
+          stack={stack}
           points={shown.map((p) => ({
             date: p.date,
             label: shortDate(p.date, days === 0 || days > 92),
@@ -109,6 +122,7 @@ function ValueChart({
           Not enough history yet. Fill it in from your trades and past prices below.
         </p>
       )}
+      {shown.length >= 2 && stack.length > 0 && <StackLegend stack={stack} />}
       {estimatedUntil ? (
         // Filled in: a quiet note, with a way to redo it after importing older trades.
         <p className="mt-3 text-xs text-slate-500">
@@ -778,7 +792,12 @@ export function StocksPage() {
           </div>
 
           <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-            <ValueChart history={s.history} estimatedUntil={s.estimatedUntil} />
+            <ValueChart
+              history={s.history}
+              estimatedUntil={s.estimatedUntil}
+              bySecurity={s.historyBySecurity}
+              colors={colors}
+            />
             <Card>
               <h2 className="mb-3 font-semibold">Allocation</h2>
               <div className="flex flex-col items-center gap-4">

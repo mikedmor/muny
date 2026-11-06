@@ -1,4 +1,4 @@
-import { type HistoryTxn, normDec, reconstructValues } from "@muny/core";
+import { type HistoryTxn, normDec, reconstructParts, reconstructValues } from "@muny/core";
 import { type MunyDb, schema } from "@muny/db";
 import type { InvestBackfillResult } from "@muny/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -244,4 +244,95 @@ export async function backfillInvestHistory(
     if (!earliest || from < earliest) earliest = from;
   }
   return { accounts: done, tickers, missing, from: earliest, points };
+}
+
+/**
+ * Split a value history by holding for the chart: each top holding's value on
+ * each day (shares that day × that day's close, from the trades and stored
+ * closes), scaled so the parts never exceed the recorded total; "Other" is
+ * the rest (cash and smaller holdings).
+ */
+export function historyBySecurity(
+  db: MunyDb,
+  accountIds: string[],
+  history: { date: string; valueCents: number }[],
+  top: { securityId: string; symbol: string }[],
+): { key: string; label: string; values: number[] }[] {
+  const first = history[0];
+  const last = history[history.length - 1];
+  if (!first || !last || !top.length || !accountIds.length) return [];
+  const h = schema.investmentHoldings;
+  const s = schema.securities;
+  const t = schema.investmentTxns;
+  const p = schema.securityPrices;
+  const holdings = db
+    .select({
+      accountId: h.accountId,
+      securityId: h.securityId,
+      quantity: h.quantity,
+      type: s.type,
+    })
+    .from(h)
+    .innerJoin(s, eq(s.id, h.securityId))
+    .where(inArray(h.accountId, accountIds))
+    .all()
+    .filter((x) => x.type !== "cash");
+  const txns = db
+    .select({
+      accountId: t.accountId,
+      date: t.date,
+      type: t.type,
+      securityId: t.securityId,
+      quantity: t.quantity,
+      amountCents: t.amountCents,
+    })
+    .from(t)
+    .where(inArray(t.accountId, accountIds))
+    .all();
+  const ids = [...new Set(holdings.map((x) => x.securityId))];
+  const prices = new Map<string, Map<string, string>>();
+  if (ids.length)
+    for (const row of db
+      .select({ securityId: p.securityId, date: p.date, close: p.close })
+      .from(p)
+      .where(inArray(p.securityId, ids))
+      .all()) {
+      const m = prices.get(row.securityId) ?? new Map<string, string>();
+      m.set(row.date, row.close);
+      prices.set(row.securityId, m);
+    }
+  const byDate = new Map<string, Map<string, number>>();
+  for (const accountId of new Set(holdings.map((x) => x.accountId))) {
+    const parts = reconstructParts({
+      holdings: holdings
+        .filter((x) => x.accountId === accountId)
+        .map((x) => ({ securityId: x.securityId, quantity: x.quantity })),
+      cashCents: 0,
+      txns: txns.filter((x) => x.accountId === accountId).map((x) => ({ ...x, amountCents: 0 })),
+      prices,
+      from: first.date,
+      to: last.date,
+    });
+    for (const d of parts) {
+      const m = byDate.get(d.date) ?? new Map<string, number>();
+      for (const [id, v] of d.bySecurity) m.set(id, (m.get(id) ?? 0) + v);
+      byDate.set(d.date, m);
+    }
+  }
+  const series = top.map((x) => ({ key: x.securityId, label: x.symbol, values: [] as number[] }));
+  const other: number[] = [];
+  for (const pt of history) {
+    const m = byDate.get(pt.date);
+    const raw = top.map((x) => m?.get(x.securityId) ?? 0);
+    const sum = raw.reduce((a, b) => a + b, 0);
+    const scale = sum > pt.valueCents && sum > 0 ? pt.valueCents / sum : 1;
+    let named = 0;
+    raw.forEach((v, i) => {
+      const scaled = Math.floor(v * scale);
+      named += scaled;
+      series[i]?.values.push(scaled);
+    });
+    other.push(Math.max(0, pt.valueCents - named));
+  }
+  return [...series, { key: "other", label: "Other", values: other }];
 }

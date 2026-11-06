@@ -841,6 +841,13 @@ export function cryptoOverview(
       snapshots: dates.map((d) => Date.parse(`${d}T23:59:59.999Z`)),
     },
   );
+  // The largest holdings today get their own series in the chart; the rest are "Other".
+  const topAssets = holdings
+    .filter((h) => (h.valueCents ?? 0) > 0)
+    .slice(0, 7)
+    .map((h) => h.asset);
+  const seriesOf = new Map<string, number[]>(topAssets.map((a) => [a, []]));
+  const otherValues: number[] = [];
   let i = 0;
   for (const d of dates) {
     const endOfDay = Date.parse(`${d}T23:59:59.999Z`);
@@ -857,11 +864,21 @@ export function cryptoOverview(
     }
     for (const [a, usd] of byDate.get(d) ?? []) lastPrice.set(a, usd);
     let v = 0;
+    let named = 0;
+    for (const a of topAssets) (seriesOf.get(a) as number[]).push(0);
     for (const [a, amt] of held) {
       if (isZeroDec(amt)) continue;
       const usd = a === "USD" ? "1" : lastPrice.get(a);
-      if (usd) v += Math.max(0, valueCents(amt, usd));
+      if (!usd) continue;
+      const cents = Math.max(0, valueCents(amt, usd));
+      v += cents;
+      const list = seriesOf.get(a);
+      if (list) {
+        list[list.length - 1] = cents;
+        named += cents;
+      }
     }
+    otherValues.push(v - named);
     history.push({ date: d, valueCents: v, costCents: costAt[history.length] ?? 0 });
   }
 
@@ -874,6 +891,10 @@ export function cryptoOverview(
     missingHistory,
     holdings,
     history,
+    historyByAsset: [
+      ...topAssets.map((asset) => ({ asset, values: seriesOf.get(asset) ?? [] })),
+      ...(otherValues.some((x) => x > 0) ? [{ asset: "Other", values: otherValues }] : []),
+    ],
     pricesEnabled: opts.pricesEnabled,
     pricesUpdatedAt: opts.pricesUpdatedAt,
     walletCount: names.size,

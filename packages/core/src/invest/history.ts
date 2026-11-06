@@ -45,6 +45,13 @@ function* days(from: string, to: string) {
 
 /** Each day's value in cents, oldest first. */
 export function reconstructValues(input: HistoryInput): { date: string; valueCents: number }[] {
+  return reconstructParts(input).map(({ date, valueCents }) => ({ date, valueCents }));
+}
+
+/** Each day's value, and how much of it each security was (cash is the rest). */
+export function reconstructParts(
+  input: HistoryInput,
+): { date: string; valueCents: number; bySecurity: Map<string, number> }[] {
   const all = [...days(input.from, input.to)];
   // State as of the end of each day, walking back from today.
   const qty = new Map<string, bigint>(); // today's units
@@ -77,16 +84,20 @@ export function reconstructValues(input: HistoryInput): { date: string; valueCen
     });
   }
 
-  const out: { date: string; valueCents: number }[] = [];
+  const out: { date: string; valueCents: number; bySecurity: Map<string, number> }[] = [];
   for (let i = all.length - 1; i >= 0; i--) {
     const date = all[i] as string;
     let value = Math.max(0, cash);
+    const bySecurity = new Map<string, number>();
     for (const [id, q] of qty) {
       if (q <= 0n) continue;
       const p = priceOn.get(id)?.(date);
-      if (p) value += valueCents(fromFixed(q), p);
+      if (!p) continue;
+      const v = valueCents(fromFixed(q), p);
+      bySecurity.set(id, v);
+      value += v;
     }
-    out.push({ date, valueCents: value });
+    out.push({ date, valueCents: value, bySecurity });
     // Undo this day's transactions to get the end of the previous day.
     for (const t of byDate.get(date) ?? []) {
       cash -= t.amountCents;

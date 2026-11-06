@@ -200,6 +200,8 @@ export interface CryptoOverview {
   /** Portfolio value per day (oldest first), from stored daily prices. */
   /** Value and cost basis (FIFO, what you paid for what you held) per day. */
   history: { date: string; valueCents: number; costCents: number }[];
+  /** Each of the largest holdings' value per history point, then "Other"; they add up to the value. */
+  historyByAsset: { asset: string; values: number[] }[];
   pricesEnabled: boolean;
   pricesUpdatedAt: number | null;
   /** A price update is running right now. */

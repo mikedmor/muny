@@ -18,6 +18,7 @@ import type {
 import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { localToday } from "../lib/dates.js";
 import type { ConnectionInfo, InvestmentSync } from "../sync/types.js";
+import { historyBySecurity } from "./history.js";
 
 type Db = Pick<MunyDb, "select" | "insert" | "update" | "delete">;
 
@@ -180,6 +181,15 @@ export function investSummary(db: Db, today = localToday()): InvestSummary {
       .sort((a, b) => b.valueCents - a.valueCents),
     history,
     incomeLast12Cents: Number(income),
+    historyBySecurity: historyBySecurity(
+      db as MunyDb,
+      ids,
+      history,
+      list
+        .filter((p) => p.type !== "cash" && p.valueCents > 0)
+        .slice(0, 7)
+        .map((p) => ({ securityId: p.securityId, symbol: p.symbol })),
+    ),
     estimatedUntil: snaps
       .filter((x) => x.estimated)
       .reduce<string | null>((m, x) => (m && m > x.date ? m : x.date), null),

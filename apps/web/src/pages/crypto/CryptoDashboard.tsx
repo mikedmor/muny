@@ -1,11 +1,18 @@
 import { type CryptoHolding, formatMoney } from "@muny/shared";
 import { Link } from "@tanstack/react-router";
 import { Fragment, useMemo, useState } from "react";
-import { Donut, type DonutSlice, LineChart } from "../../components/charts.js";
+import {
+  Donut,
+  type DonutSlice,
+  LineChart,
+  type StackBand,
+  StackLegend,
+} from "../../components/charts.js";
 import { CoinIcon, WalletIcon } from "../../components/coins.js";
 import { Alert, Button, Card, cx } from "../../components/ui.js";
 import { api } from "../../lib/api.js";
 import { useCryptoMutation, useCryptoOverview, useCryptoTax } from "../../lib/queries.js";
+import { assignColors, OTHER_COLOR } from "../../lib/series.js";
 import { FlowsStrip, MaturityView, NftsView, TaxOptimizationView } from "./CryptoTaxViews.js";
 import {
   agoTime,
@@ -493,9 +500,39 @@ export function CryptoDashboard() {
     if (days > 0) return [isoDay(Date.now() - days * 86_400_000), today];
     return ["", today];
   }, [range, custom]);
-  const points = useMemo(
-    () => (d?.history ?? []).filter((p) => p.date >= rangeFrom && p.date <= rangeTo),
+  // Indexes into the history for the chosen range (the per-coin series share them).
+  const shownIdx = useMemo(
+    () =>
+      (d?.history ?? []).flatMap((p, i) => (p.date >= rangeFrom && p.date <= rangeTo ? [i] : [])),
     [d, rangeFrom, rangeTo],
+  );
+  const points = useMemo(
+    () => shownIdx.map((i) => d?.history[i]).filter((p) => p !== undefined),
+    [d, shownIdx],
+  );
+  // One color per coin (largest few, in a stable order), used by the bands and the donut.
+  const coinColors = useMemo(
+    () =>
+      assignColors(
+        (d?.holdings ?? []).map((h) => ({
+          key: h.asset,
+          value: h.valueCents ?? 0,
+          order: h.asset,
+        })),
+      ),
+    [d],
+  );
+  const stack: StackBand[] = useMemo(
+    () =>
+      (d?.historyByAsset ?? [])
+        .map((a) => ({
+          key: a.asset,
+          label: a.asset,
+          color: a.asset === "Other" ? OTHER_COLOR : (coinColors.get(a.asset) ?? OTHER_COLOR),
+          values: shownIdx.map((i) => a.values[i] ?? 0),
+        }))
+        .filter((b) => b.values.some((v) => v > 0)),
+    [d, shownIdx, coinColors],
   );
   const first = points[0]?.valueCents ?? 0;
   const last = d?.totalValueCents ?? 0;
@@ -503,11 +540,13 @@ export function CryptoDashboard() {
 
   const slices: DonutSlice[] = [];
   if (d) {
-    const priced = d.holdings.filter((h) => (h.valueCents ?? 0) > 0);
-    for (const [i, h] of priced.slice(0, SLOTS).entries())
-      slices.push({ key: h.asset, label: h.asset, cents: h.valueCents ?? 0, color: color(i) });
-    const rest = priced.slice(SLOTS).reduce((s, h) => s + (h.valueCents ?? 0), 0);
-    if (rest > 0) slices.push({ key: "other", label: "Other", cents: rest, color: color(SLOTS) });
+    let rest = 0;
+    for (const h of d.holdings.filter((x) => (x.valueCents ?? 0) > 0)) {
+      const c = coinColors.get(h.asset) ?? OTHER_COLOR;
+      if (c === OTHER_COLOR) rest += h.valueCents ?? 0;
+      else slices.push({ key: h.asset, label: h.asset, cents: h.valueCents ?? 0, color: c });
+    }
+    if (rest > 0) slices.push({ key: "other", label: "Other", cents: rest, color: OTHER_COLOR });
   }
   const movers = (d?.holdings ?? [])
     .filter((h) => h.change24hPct !== null && (h.valueCents ?? 0) > 0)
@@ -672,6 +711,7 @@ export function CryptoDashboard() {
                   ariaLabel="Portfolio value over time"
                   height={220}
                   compareLabel="Cost basis"
+                  stack={stack}
                   points={points.map((p) => ({
                     compare: p.costCents,
                     date: p.date,
@@ -690,6 +730,7 @@ export function CryptoDashboard() {
                 </p>
               )}
             </div>
+            {points.length > 1 && stack.length > 0 && <StackLegend stack={stack} />}
             <FlowsStrip from={rangeFrom || undefined} to={rangeTo} />
             <p className="mt-2 text-xs text-slate-500">
               Cost is first-in, first-out across all wallets; long term means held more than a year.

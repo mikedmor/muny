@@ -101,5 +101,14 @@ describe("investment history backfill", () => {
     expect(v["2026-01-03"]).toBe(30000 + 11000);
     expect(v["2026-01-04"]).toBe(10000 + 33000);
     expect(v["2026-01-05"]).toBe(10000 + 36000);
+    // Split by holding: VTI's share each day, the rest (cash) is Other; they add up.
+    const [vti, other] = s.historyBySecurity;
+    expect(vti?.label).toBe("VTI");
+    expect(other?.key).toBe("other");
+    s.history.forEach((p, i) => {
+      expect((vti?.values[i] ?? 0) + (other?.values[i] ?? 0)).toBe(p.valueCents);
+    });
+    const jan3 = s.history.findIndex((p) => p.date === "2026-01-03");
+    expect(vti?.values[jan3]).toBe(11000);
   });
 });

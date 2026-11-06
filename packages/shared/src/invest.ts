@@ -99,6 +99,8 @@ export interface InvestSummary {
   history: { date: string; valueCents: number }[];
   /** Dividends and interest received in the last 12 months. */
   incomeLast12Cents: number;
+  /** The history split by the largest holdings (key = securityId), then "other"; adds up to it. */
+  historyBySecurity: { key: string; label: string; values: number[] }[];
   /** History before this date is estimated (rebuilt from trades and past closes). */
   estimatedUntil: string | null;
 }
