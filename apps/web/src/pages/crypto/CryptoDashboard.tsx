@@ -459,19 +459,13 @@ export function CryptoDashboard() {
               </Link>
             </div>
           )}
-          {(d.missingHistory.length > 0 || (d.pricesEnabled && d.unpricedAssets.length > 0)) && (
+          {/* Only what needs fixing: coins without a price are listed in Reconcile. */}
+          {d.missingHistory.length > 0 && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
               <span>
-                {[
-                  d.missingHistory.length > 0 &&
-                    `${d.missingHistory.length} wallet balances are missing history`,
-                  d.pricesEnabled &&
-                    d.unpricedAssets.length > 0 &&
-                    `${d.unpricedAssets.length} ${d.unpricedAssets.length === 1 ? "coin has" : "coins have"} no price (${d.unpricedAssets.slice(0, 6).join(", ")}${d.unpricedAssets.length > 6 ? "…" : ""}), so they count as $0`,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-                . Values may be off until these are sorted out.
+                {d.missingHistory.length} wallet{" "}
+                {d.missingHistory.length === 1 ? "balance is" : "balances are"} missing history.
+                Values may be off until that's sorted out.
               </span>
               <Link to="/crypto/reconcile" className="font-medium underline">
                 Review and fix
