@@ -2,11 +2,15 @@ import {
   addDec,
   type BrokerageFile,
   type BrokeragePosition,
+  fifoCost,
   parseBrokerageCsv,
+  sameShares,
   toFixed,
+  valueCents,
 } from "@muny/core";
 import { type MunyDb, newId, schema } from "@muny/db";
 import type {
+  CostSource,
   InvestAccount,
   InvestImportPreview,
   InvestImportResult,
@@ -62,7 +66,60 @@ export function investSummary(db: Db, today = localToday()): InvestSummary {
         .innerJoin(s, eq(s.id, h.securityId))
         .where(inArray(h.accountId, ids))
         .all()
+        .map((x) => ({
+          ...x,
+          costSource: (x.costBasisCents === null ? null : "broker") as CostSource,
+        }))
     : [];
+
+  // Brokers that don't report cost: what you entered, else the trades (when they explain every share).
+  const missing = rows.filter((x) => x.costBasisCents === null && x.type !== "cash");
+  if (missing.length) {
+    const entered = new Map(
+      db
+        .select()
+        .from(schema.holdingCosts)
+        .where(inArray(schema.holdingCosts.accountId, ids))
+        .all()
+        .map((c) => [`${c.accountId}|${c.securityId}`, c.costBasisCents]),
+    );
+    const t = schema.investmentTxns;
+    const trades = db
+      .select({
+        accountId: t.accountId,
+        securityId: t.securityId,
+        date: t.date,
+        type: t.type,
+        quantity: t.quantity,
+        amountCents: t.amountCents,
+      })
+      .from(t)
+      .where(
+        and(
+          inArray(t.accountId, ids),
+          inArray(
+            t.securityId,
+            missing.map((x) => x.securityId),
+          ),
+        ),
+      )
+      .all();
+    for (const x of missing) {
+      const mine = entered.get(`${x.accountId}|${x.securityId}`);
+      if (mine !== undefined) {
+        x.costBasisCents = mine;
+        x.costSource = "entered";
+        continue;
+      }
+      const fifo = fifoCost(
+        trades.filter((y) => y.accountId === x.accountId && y.securityId === x.securityId),
+      );
+      if (fifo && fifo.costCents > 0 && sameShares(fifo.quantity, x.quantity)) {
+        x.costBasisCents = fifo.costCents;
+        x.costSource = "trades";
+      }
+    }
+  }
 
   const nameOf = new Map(accts.map((a) => [a.id, a.name]));
   const positions = new Map<string, InvestPosition>();
@@ -117,6 +174,8 @@ export function investSummary(db: Db, today = localToday()): InvestSummary {
       accountName: nameOf.get(r.accountId) ?? "",
       quantity: r.quantity,
       valueCents: r.valueCents,
+      costBasisCents: r.type === "cash" ? null : r.costBasisCents,
+      costSource: r.type === "cash" ? null : r.costSource,
     });
     positions.set(r.securityId, p);
   }
@@ -554,4 +613,38 @@ export function applyInvestmentSync(
     if (r.changes) added++;
   }
   return { accounts, added };
+}
+
+/** Enter (or clear, with null) what you paid for a holding, as a total or per share. */
+export function setHoldingCost(
+  db: Db,
+  accountId: string,
+  securityId: string,
+  input: { totalCents: number } | { perShare: string } | null,
+): boolean {
+  const held = db
+    .select({ quantity: schema.investmentHoldings.quantity })
+    .from(schema.investmentHoldings)
+    .where(
+      and(
+        eq(schema.investmentHoldings.accountId, accountId),
+        eq(schema.investmentHoldings.securityId, securityId),
+      ),
+    )
+    .get();
+  if (!held) return false;
+  const k = schema.holdingCosts;
+  if (input === null) {
+    db.delete(k)
+      .where(and(eq(k.accountId, accountId), eq(k.securityId, securityId)))
+      .run();
+    return true;
+  }
+  const cents =
+    "totalCents" in input ? input.totalCents : valueCents(held.quantity, input.perShare);
+  db.insert(k)
+    .values({ accountId, securityId, costBasisCents: cents })
+    .onConflictDoUpdate({ target: [k.accountId, k.securityId], set: { costBasisCents: cents } })
+    .run();
+  return true;
 }

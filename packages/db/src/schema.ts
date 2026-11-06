@@ -827,3 +827,22 @@ export const watchlist = sqliteTable("watchlist", {
     .references(() => securities.id, { onDelete: "cascade" }),
   addedAt: createdAt(),
 });
+
+/**
+ * What you paid for a holding, entered by you, for brokers that don't report
+ * cost basis. Used only while the broker's own figure is missing.
+ */
+export const holdingCosts = sqliteTable(
+  "holding_costs",
+  {
+    accountId: text()
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    securityId: text()
+      .notNull()
+      .references(() => securities.id, { onDelete: "cascade" }),
+    costBasisCents: integer().notNull(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [primaryKey({ columns: [t.accountId, t.securityId] })],
+);

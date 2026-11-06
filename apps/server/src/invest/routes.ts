@@ -7,7 +7,13 @@ import { BudgetError } from "../crypto/budget.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, parse } from "../lib/http.js";
 import { backfillInvestHistory, type HistoryDeps } from "./history.js";
-import { importInvestFile, investSummary, listInvestTxns, previewInvestImport } from "./service.js";
+import {
+  importInvestFile,
+  investSummary,
+  listInvestTxns,
+  previewInvestImport,
+  setHoldingCost,
+} from "./service.js";
 import {
   addToWatchlist,
   listWatchlist,
@@ -112,6 +118,45 @@ export function registerInvestRoutes(app: FastifyInstance, db: MunyDb, deps: His
   app.post("/api/invest/watchlist/refresh", async (req) => {
     requireUser(req);
     return refreshWatchlist(db, deps);
+  });
+
+  /** What you paid for a holding (for brokers that don't report it); null clears it. */
+  app.put("/api/invest/holdings/:accountId/:securityId/cost", async (req) => {
+    const user = requireUser(req);
+    const { accountId, securityId } = parse(
+      z.object({ accountId: z.string().min(1).max(64), securityId: z.string().min(1).max(64) }),
+      req.params,
+    );
+    const body = parse(
+      z.object({
+        totalCents: z.number().int().min(0).max(100_000_000_000).optional(),
+        perShare: z
+          .string()
+          .regex(/^\d{1,9}(\.\d{1,6})?$/, "Enter a price like 12.34")
+          .optional(),
+        clear: z.boolean().optional(),
+      }),
+      req.body,
+    );
+    const input = body.clear
+      ? null
+      : body.totalCents !== undefined
+        ? { totalCents: body.totalCents }
+        : body.perShare !== undefined
+          ? { perShare: body.perShare }
+          : undefined;
+    if (input === undefined) throw badRequest("Enter what you paid");
+    if (!setHoldingCost(db, accountId, securityId, input))
+      throw badRequest("That account doesn't hold this");
+    audit(db, {
+      actorType: "user",
+      actorId: user.id,
+      action: "invest.cost",
+      entityType: "security",
+      entityId: securityId,
+      details: { accountId, cleared: input === null },
+    });
+    return { ok: true };
   });
 
   app.get("/api/invest/securities/:id/prices", async (req) => {

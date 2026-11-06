@@ -7,7 +7,7 @@ import {
   SECURITY_TYPE_LABELS,
 } from "@muny/shared";
 import { Link } from "@tanstack/react-router";
-import { ChevronRight, FileUp, Link2, X } from "lucide-react";
+import { ChevronRight, FileUp, Link2, Pencil, X } from "lucide-react";
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Donut, LineChart, type StackBand } from "../components/charts.js";
 import { Modal } from "../components/forms.js";
@@ -20,6 +20,7 @@ import {
   useInvestSummary,
   useInvestTxns,
   useSecurityPrices,
+  useSetHoldingCost,
   useWatchAdd,
   useWatchlist,
   useWatchRefresh,
@@ -312,6 +313,104 @@ function HoldingsTable({
   );
 }
 
+const COST_SOURCE: Record<string, string> = {
+  broker: "reported by your broker",
+  entered: "entered by you",
+  trades: "worked out from your trades",
+};
+
+/** One account's cost for a holding; add or change it when the broker doesn't report it. */
+function CostCell({
+  securityId,
+  a,
+}: {
+  securityId: string;
+  a: InvestPosition["accounts"][number];
+}) {
+  const save = useSetHoldingCost();
+  const [editing, setEditing] = useState(false);
+  const shares = Number(a.quantity);
+  const per = a.costBasisCents !== null && shares > 0 ? a.costBasisCents / 100 / shares : null;
+  const [text, setText] = useState(per === null ? "" : per.toFixed(2));
+  if (editing)
+    return (
+      <form
+        className="inline-flex items-center justify-end gap-1"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const v = text.trim().replace(/^\$/, "").replace(/,/g, "");
+          if (!/^\d{1,9}(\.\d{1,6})?$/.test(v)) return;
+          save.mutate(
+            { accountId: a.accountId, securityId, perShare: v },
+            { onSuccess: () => setEditing(false) },
+          );
+        }}
+      >
+        <span className="text-xs text-slate-500">$</span>
+        <input
+          aria-label="Average cost per share"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="per share"
+          inputMode="decimal"
+          className="w-20 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-right dark:border-slate-700 dark:bg-slate-950"
+        />
+        <Button type="submit" className="px-2 py-0.5 text-xs" disabled={save.isPending}>
+          Save
+        </Button>
+        <button
+          type="button"
+          onClick={() => setEditing(false)}
+          className="text-xs text-slate-500 hover:underline"
+        >
+          Cancel
+        </button>
+        {a.costSource === "entered" && (
+          <button
+            type="button"
+            onClick={() =>
+              save.mutate(
+                { accountId: a.accountId, securityId, clear: true },
+                { onSuccess: () => setEditing(false) },
+              )
+            }
+            className="text-xs text-red-600 hover:underline"
+          >
+            Clear
+          </button>
+        )}
+      </form>
+    );
+  if (a.costBasisCents === null)
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="inline-flex items-center gap-1 text-brand-600 hover:underline dark:text-brand-500"
+      >
+        <Pencil aria-hidden="true" className="size-3" /> Add cost
+      </button>
+    );
+  return (
+    <span className="inline-flex items-center justify-end gap-1">
+      <span title={a.costSource ? `Cost ${COST_SOURCE[a.costSource]}` : undefined}>
+        {formatMoney(a.costBasisCents)}
+        {a.costSource !== "broker" && <span className="text-slate-400">*</span>}
+      </span>
+      {a.costSource !== "broker" && (
+        <button
+          type="button"
+          aria-label="Change cost"
+          onClick={() => setEditing(true)}
+          className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+        >
+          <Pencil aria-hidden="true" className="size-3" />
+        </button>
+      )}
+    </span>
+  );
+}
+
 function HoldingRow({
   p,
   total,
@@ -449,8 +548,9 @@ function HoldingRow({
             </div>
             {p.costBasisCents === null && !cash && (
               <p className="mt-2 text-xs text-slate-500">
-                Your broker doesn't report what you paid for this holding, so it's left out of the
-                gain.
+                Your broker doesn't report what you paid for this holding, and your trade history
+                doesn't go back far enough to work it out. Add your average cost per share below to
+                see the gain.
               </p>
             )}
             {p.accounts.length > 0 && (
@@ -472,6 +572,7 @@ function HoldingRow({
                 <tr>
                   <th className="py-1 text-left font-medium">Account</th>
                   <th className="py-1 text-right font-medium">{cash ? "" : "Shares"}</th>
+                  <th className="py-1 text-right font-medium">{cash ? "" : "Cost"}</th>
                   <th className="py-1 text-right font-medium">Value</th>
                   <th className="py-1 text-right font-medium">Allocation</th>
                 </tr>
@@ -482,6 +583,9 @@ function HoldingRow({
                     <td className="py-1.5">{a.accountName}</td>
                     <td className="py-1.5 text-right font-mono tabular-nums">
                       {cash ? "" : fmtAmount(a.quantity, 4)}
+                    </td>
+                    <td className="py-1.5 text-right tabular-nums">
+                      {cash ? "" : <CostCell securityId={p.securityId} a={a} />}
                     </td>
                     <td className="py-1.5 text-right tabular-nums">{formatMoney(a.valueCents)}</td>
                     <td className="py-1.5 text-right tabular-nums">

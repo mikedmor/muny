@@ -52,6 +52,9 @@ export const INVEST_TXN_LABELS: Record<InvestTxnKind, string> = {
   other: "Other",
 };
 
+/** Where a holding's cost basis came from: the broker, you, or worked out from trades. */
+export type CostSource = "broker" | "entered" | "trades" | null;
+
 /** One security across all accounts (or one account, on its page). */
 export interface InvestPosition {
   securityId: string;
@@ -64,7 +67,14 @@ export interface InvestPosition {
   /** Null when any account holding it doesn't report cost. */
   costBasisCents: number | null;
   gainCents: number | null;
-  accounts: { accountId: string; accountName: string; quantity: string; valueCents: number }[];
+  accounts: {
+    accountId: string;
+    accountName: string;
+    quantity: string;
+    valueCents: number;
+    costBasisCents: number | null;
+    costSource: CostSource;
+  }[];
 }
 
 export interface InvestAccount {

@@ -185,6 +185,8 @@ export function fullExport(db: MunyDb) {
     rules: listRules(db),
     securities: db.select().from(schema.securities).all(),
     investmentHoldings: db.select().from(schema.investmentHoldings).all(),
+    holdingCosts: db.select().from(schema.holdingCosts).all(),
+    watchlist: db.select().from(schema.watchlist).all(),
     investmentTxns: db
       .select()
       .from(schema.investmentTxns)

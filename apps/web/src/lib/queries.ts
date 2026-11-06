@@ -819,3 +819,13 @@ export const useWatchRefresh = () =>
     () => api.post<{ refreshed: number }>("/api/invest/watchlist/refresh"),
     [investKeys.all],
   );
+
+export const useSetHoldingCost = () =>
+  useInvalidatingMutation(
+    (b: { accountId: string; securityId: string; perShare?: string; clear?: boolean }) =>
+      api.put(
+        `/api/invest/holdings/${encodeURIComponent(b.accountId)}/${encodeURIComponent(b.securityId)}/cost`,
+        b.clear ? { clear: true } : { perShare: b.perShare },
+      ),
+    [investKeys.all],
+  );
