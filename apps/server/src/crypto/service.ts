@@ -664,7 +664,7 @@ export function cryptoOverview(
   const hidden = hiddenAssets(db);
   const info = new Map(
     db
-      .select({ id: w.id, name: w.name, kind: w.kind, chain: w.chain })
+      .select({ id: w.id, name: w.name, kind: w.kind, chain: w.chain, archived: w.archived })
       .from(w)
       .all()
       .map((x) => [x.id, x]),
@@ -698,6 +698,9 @@ export function cryptoOverview(
       if (amount.startsWith("-")) {
         // Fiat deposits from a bank are often missing from exports; not a crypto problem.
         if (FIAT.has(asset)) continue;
+        // Rounding dust isn't missing history (the same rule as Reconcile and
+        // the transaction warnings, so the alert and Reconcile always agree).
+        if (toFixed(amount.slice(1)) < DUST_FIXED) continue;
         missingHistory.push({ asset, walletName: names.get(walletId) ?? "", amount });
         continue;
       }
