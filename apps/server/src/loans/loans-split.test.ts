@@ -143,3 +143,41 @@ describe("loans: mortgages and synced loans", () => {
     expect(d).toMatchObject({ source: "plaid", startBalanceCents: null, startDate: null });
   });
 });
+
+describe("loans: telling similar payments apart by due day", () => {
+  it("gives each payment to the loan whose amount and due day fit best", async () => {
+    const { client, pay, loans } = await setup();
+    for (const m of [3, 2, 1]) {
+      const d = new Date(`${localToday()}T00:00:00Z`);
+      d.setUTCDate(1);
+      d.setUTCMonth(d.getUTCMonth() - m);
+      const ym = d.toISOString().slice(0, 7);
+      await pay(`${ym}-05`, -17_180, "SEAVIEW RESORTS MTG");
+      await pay(`${ym}-17`, -17_331, "SEAVIEW RESORTS MTG");
+    }
+    const due = (day: string) => {
+      const d = new Date(`${localToday()}T00:00:00Z`);
+      d.setUTCMonth(d.getUTCMonth() + 1);
+      return `${d.toISOString().slice(0, 7)}-${day}`;
+    };
+    for (const [name, amount, day] of [
+      ["Seaview 1", 17_180, "04"],
+      ["Seaview 2", 17_331, "16"],
+    ] as const)
+      await client.post("/api/loans", {
+        name,
+        lender: "Seaview",
+        startBalanceCents: 1_000_000,
+        startDate: daysAgo(400),
+        aprBps: 0,
+        paymentMatch: "seaview",
+        paymentAmountCents: amount,
+        nextDueDate: due(day),
+      });
+    const list = await loans();
+    const one = list.find((l) => l.name === "Seaview 1");
+    const two = list.find((l) => l.name === "Seaview 2");
+    expect(one?.payments.map((p) => p.date.slice(8))).toEqual(["05", "05", "05"]);
+    expect(two?.payments.map((p) => p.date.slice(8))).toEqual(["17", "17", "17"]);
+  });
+});

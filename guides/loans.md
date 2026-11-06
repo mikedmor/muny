@@ -9,7 +9,9 @@
 
 ### Several loans with one lender
 
-- **Paid separately, each with its own amount** (for example three timeshare loans plus yearly dues, all under one name): give each loan the same payment words and its own **Only payments of about** amount. Payments of other amounts, such as the dues, aren't counted toward any of them.
+Loans with the same lender share one card on the Loans page, with a tab for each loan.
+
+- **Paid separately, each with its own amount** (for example three timeshare loans plus yearly dues, all under one name): give each loan the same payment words, its own **Only payments of about** amount and its **Next payment due** date. Muny counts payments made within about a week of each loan's due day, and when a payment could belong to two loans it goes to the closest match. Payments of other amounts, such as the dues, aren't counted toward any of them.
 - **One payment covering several loans** (common with student loans): give each loan the same payment words and no amount, plus its own monthly payment. Each payment is shared between them in proportion to their monthly payments.
 
 ## Reading a loan
@@ -31,10 +33,10 @@ For an asset with no loan linked (a car you own outright, say), set **Owed on it
 
 ## Automatic values (optional)
 
-On **Assets → Automatic values**, add your own keys:
+On **Assets → Settings**, add your own keys:
 
 - **Homes: APillow** (Zillow data, free plan 50 lookups a month, [apillow.co](https://apillow.co)). Give the home its address as Zillow shows it. **Look up value** fills in Zillow's estimate, plus beds, baths, square feet, lot, year built, last sale, property tax and the rent estimate. Zillow has no estimate for homes listed for sale; Muny says so and keeps your value.
-- **Vehicles: CarAPI.dev** (free plan 100 requests a month, [carapi.dev](https://carapi.dev)). Give the vehicle its year, make, model and mileage; **Look up value** fills in its US market value.
+- **Vehicles: CarAPI.dev** (free plan 100 requests a month, [carapi.dev](https://carapi.dev)). Give the vehicle its year, make, model and mileage (the make and model fields suggest names from NHTSA's public vehicle database, which only sees the make and year you type); **Look up value** fills in its US market value.
 
 After the first lookup, values over a month old are looked up again when you open Assets. Typing a value yourself takes over until you look it up again. Keys are stored encrypted and sent only to their service, which sees only the address (homes) or the year, make, model and mileage (vehicles).
 

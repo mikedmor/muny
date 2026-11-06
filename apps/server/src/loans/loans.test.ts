@@ -44,7 +44,9 @@ describe("loans", () => {
     const loan = r.loans[0];
     // 30 days at 7.30% on $10,000 is $60 of interest; $440 came off the balance.
     expect(loan).toMatchObject({ source: "manual", balanceCents: 956_000, aprBps: 730 });
-    expect(loan?.payments).toHaveLength(1);
+    // The earlier payment is history: listed, but before the start, so it doesn't change the balance.
+    expect(loan?.payments).toHaveLength(2);
+    expect(loan?.payments[1]).toMatchObject({ interestCents: null, principalCents: null });
     expect(loan?.payments[0]).toMatchObject({ interestCents: 6000, principalCents: 44_000 });
     expect(loan?.payoffMonths).toBeGreaterThan(12);
     expect(r.totalOwedCents).toBe(956_000);

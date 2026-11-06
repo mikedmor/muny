@@ -12,7 +12,7 @@ import { Pencil, Plus } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { LineChart } from "../components/charts.js";
 import { Modal } from "../components/forms.js";
-import { Alert, Button, Card, Field, PageHeader } from "../components/ui.js";
+import { Alert, Button, Card, cx, Field, PageHeader } from "../components/ui.js";
 import { api } from "../lib/api.js";
 import { keys } from "../lib/queries.js";
 
@@ -29,6 +29,14 @@ const toCents = (s: string) => {
 const fromCents = (c: number | null | undefined) => (c == null ? "" : (c / 100).toFixed(2));
 
 function AssetForm({ asset, onDone }: { asset?: Asset; onDone: () => void }) {
+  // Suggestions from NHTSA's public vehicle database, only while filling in a vehicle.
+  const [kindNow, setKindNow] = useState<AssetKind>(asset?.kind ?? "home");
+  const makes = useQuery({
+    queryKey: ["vehicle-makes"],
+    queryFn: () => api.get<string[]>("/api/assets/vehicle-makes"),
+    enabled: kindNow === "vehicle",
+    staleTime: Number.POSITIVE_INFINITY,
+  });
   const qc = useQueryClient();
   const [f, setF] = useState({
     name: asset?.name ?? "",
@@ -46,6 +54,18 @@ function AssetForm({ asset, onDone }: { asset?: Asset; onDone: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) =>
     setF((x) => ({ ...x, [k]: e.target.value }));
+  useEffect(() => setKindNow(f.kind), [f.kind]);
+  const knownMake = (makes.data ?? []).some((m) => m.toLowerCase() === f.make.trim().toLowerCase());
+  const year = /^\d{4}$/.test(f.year.trim()) ? Number(f.year) : null;
+  const models = useQuery({
+    queryKey: ["vehicle-models", f.make.trim().toLowerCase(), year],
+    queryFn: () =>
+      api.get<string[]>(
+        `/api/assets/vehicle-models?make=${encodeURIComponent(f.make.trim())}${year ? `&year=${year}` : ""}`,
+      ),
+    enabled: f.kind === "vehicle" && knownMake,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const value = toCents(f.value);
@@ -126,8 +146,32 @@ function AssetForm({ asset, onDone }: { asset?: Asset; onDone: () => void }) {
               inputMode="numeric"
               placeholder="2020"
             />
-            <Field label="Make" value={f.make} onChange={set("make")} placeholder="Honda" />
-            <Field label="Model" value={f.model} onChange={set("model")} placeholder="Civic" />
+            <Field
+              label="Make"
+              value={f.make}
+              onChange={set("make")}
+              placeholder="Honda"
+              list="vehicle-makes"
+              autoComplete="off"
+            />
+            <Field
+              label="Model"
+              value={f.model}
+              onChange={set("model")}
+              placeholder="Civic"
+              list="vehicle-models"
+              autoComplete="off"
+            />
+            <datalist id="vehicle-makes">
+              {(makes.data ?? []).map((m) => (
+                <option key={m} value={m} />
+              ))}
+            </datalist>
+            <datalist id="vehicle-models">
+              {(models.data ?? []).map((m) => (
+                <option key={m} value={m} />
+              ))}
+            </datalist>
             <Field
               label="Mileage"
               value={f.mileage}
@@ -596,9 +640,18 @@ function AssetCard({ asset }: { asset: Asset }) {
   );
 }
 
+const TABS = [
+  ["assets", "Assets"],
+  ["settings", "Settings"],
+] as const;
+type Tab = (typeof TABS)[number][0];
+
 export function AssetsPage() {
   const q = useQuery({ queryKey: assetsKey, queryFn: () => api.get<Asset[]>("/api/assets") });
   const [adding, setAdding] = useState(false);
+  const [tab, setTab] = useState<Tab>(() =>
+    window.location.hash === "#settings" ? "settings" : "assets",
+  );
   const list = q.data ?? [];
   const qc = useQueryClient();
   const refreshed = useRef(false);
@@ -624,8 +677,34 @@ export function AssetsPage() {
           </Button>
         }
       />
+      <div
+        role="tablist"
+        className="mb-6 flex gap-1 border-b border-slate-200 dark:border-slate-800"
+      >
+        {TABS.map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            role="tab"
+            aria-selected={tab === k}
+            onClick={() => {
+              setTab(k);
+              window.history.replaceState(null, "", `#${k}`);
+            }}
+            className={cx(
+              "-mb-px border-b-2 px-3 py-2 text-sm font-medium",
+              tab === k
+                ? "border-brand-600 text-brand-700 dark:text-brand-500"
+                : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {tab === "settings" && <ValuationKeys />}
       {q.error && <Alert>{q.error.message}</Alert>}
-      {q.data && list.length === 0 && (
+      {tab === "assets" && q.data && list.length === 0 && (
         <Card className="text-center">
           <h2 className="text-lg font-semibold">Your home, car and other things of value</h2>
           <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600 dark:text-slate-400">
@@ -634,7 +713,7 @@ export function AssetsPage() {
           </p>
         </Card>
       )}
-      {list.length > 0 && (
+      {tab === "assets" && list.length > 0 && (
         <div className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-3">
             {(
@@ -650,7 +729,6 @@ export function AssetsPage() {
               </Card>
             ))}
           </div>
-          <ValuationKeys />
           {list.map((a) => (
             <AssetCard key={a.accountId} asset={a} />
           ))}

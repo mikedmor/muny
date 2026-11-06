@@ -62,6 +62,14 @@ interface RawPayment {
 /** Near an amount: within a dollar or 1%. */
 const near = (a: number, b: number) => Math.abs(a - b) <= Math.max(100, Math.round(b * 0.01));
 
+/** Days of the month between two days, going around the month end (the 30th and the 2nd are 3 apart). */
+const dayGap = (a: number, b: number) => {
+  const d = Math.abs(a - b);
+  return Math.min(d, 31 - d);
+};
+/** Payments within this many days of the due day count (banks post a few days either side). */
+const DUE_WINDOW = 6;
+
 /** Payments toward a loan, oldest first (whole payments; sharing happens later). */
 function paymentsFor(
   db: Db,
@@ -131,7 +139,11 @@ function paymentsFor(
       )
       .all())
       add(r);
-  return [...out.values()].sort((x, y) => x.date.localeCompare(y.date));
+  const list = [...out.values()].sort((x, y) => x.date.localeCompare(y.date));
+  const due = d?.nextDueDate ? Number(d.nextDueDate.slice(8, 10)) : null;
+  if (!due) return list;
+  const onTime = list.filter((p) => dayGap(Number(p.date.slice(8, 10)), due) <= DUE_WINDOW);
+  return onTime.length ? onTime : list;
 }
 
 /** The usual payment: the middle of the last three. */
@@ -193,14 +205,47 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
   const year = today.slice(0, 4);
   const twoYearsAgo = addMonths(today, -24);
 
+  // Every loan's payments, then each payment that several loans could claim
+  // (one lender, similar amounts) goes to the closest fit by amount and due day.
+  const found = new Map<string, RawPayment[]>();
+  for (const a of accounts) {
+    const d = details.get(a.id);
+    const start =
+      d?.source === "manual" && d.startDate && d.startDate < twoYearsAgo
+        ? d.startDate
+        : twoYearsAgo;
+    found.set(a.id, paymentsFor(db, a.id, d, start));
+  }
+  const fit = (accountId: string, p: RawPayment) => {
+    const d = details.get(accountId);
+    const amount = d?.paymentAmountCents
+      ? Math.abs(p.amountCents - d.paymentAmountCents) / d.paymentAmountCents
+      : 0;
+    const day = d?.nextDueDate
+      ? dayGap(Number(p.date.slice(8, 10)), Number(d.nextDueDate.slice(8, 10))) / 31
+      : 0;
+    return amount + day;
+  };
+  const owner = new Map<string, string>();
+  for (const [accountId, list] of found)
+    for (const p of list) {
+      // Shared payments (no amount set) are split, not claimed.
+      if (!details.get(accountId)?.paymentAmountCents) continue;
+      const cur = owner.get(p.id);
+      if (!cur || fit(accountId, p) < fit(cur, p)) owner.set(p.id, accountId);
+    }
+  const claimedElsewhere = (paymentId: string, accountId: string) => {
+    const o = owner.get(paymentId);
+    return o !== undefined && o !== accountId && !!details.get(accountId)?.paymentAmountCents;
+  };
+
   const loans: Loan[] = accounts.map((a) => {
     const d = details.get(a.id);
     const connected = SYNCED.has(a.provider);
     const manual = !connected && d?.source === "manual";
     const startDate = manual ? (d?.startDate ?? null) : null;
-    const since = manual && startDate ? startDate : twoYearsAgo;
     const share = shared.get(a.id);
-    const whole = paymentsFor(db, a.id, d, since);
+    const whole = (found.get(a.id) ?? []).filter((p) => !claimedElsewhere(p.id, a.id));
     // This loan's part of each payment.
     const raw = whole.map((p) => ({
       ...p,
@@ -228,16 +273,23 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
     let splitEstimated = false;
 
     if (manual && d?.startBalanceCents != null && startDate) {
+      const counted = raw
+        .map((p, i) => ({ p, i }))
+        .filter(({ p }) => p.date >= startDate && p.amountCents - escrowOf(p.amountCents) > 0);
       const r = applyPayments(
         d.startBalanceCents,
         apr ?? 0,
         startDate,
-        raw.map((p) => ({ date: p.date, amountCents: p.amountCents - escrowOf(p.amountCents) })),
+        counted.map(({ p }) => ({
+          date: p.date,
+          amountCents: p.amountCents - escrowOf(p.amountCents),
+        })),
         today,
       );
       balance = r.balanceCents;
+      const byIndex = new Map(counted.map(({ i }, k) => [i, r.payments[k]]));
       rows = rows.map((p, i) => {
-        const x = r.payments[i];
+        const x = byIndex.get(i);
         return x ? { ...p, interestCents: x.interestCents, principalCents: x.principalCents } : p;
       });
     } else if (apr !== null && rows.length) {

@@ -11,7 +11,7 @@ import {
 } from "@muny/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ChevronDown, Download, Pencil, Plus } from "lucide-react";
+import { Download, Pencil, Plus } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { LineChart } from "../components/charts.js";
 import { Modal } from "../components/forms.js";
@@ -653,7 +653,7 @@ function Payments({ loan }: { loan: Loan }) {
   );
 }
 
-function LoanCard({ loan }: { loan: Loan }) {
+function LoanCard({ loan, embedded = false }: { loan: Loan; embedded?: boolean }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [fetching, setFetching] = useState<string | null>(null);
@@ -700,12 +700,12 @@ function LoanCard({ loan }: { loan: Loan }) {
     },
   ];
   const side = loan.property || loan.pmi;
-  // Mortgages (and loans tied to a home) get the full layout; others stay compact until opened.
+  // Mortgages (and loans tied to a home) get the full layout; others a compact one.
   const full = loan.kind === "mortgage" || !!side;
-  const [open, setOpen] = useState(full);
+  const Wrap = embedded ? "div" : Card;
 
   return (
-    <Card className={full ? "space-y-5" : "space-y-3"}>
+    <Wrap className={full ? "space-y-5" : "space-y-4"}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="flex flex-wrap items-center gap-2 text-lg font-semibold">
@@ -806,22 +806,7 @@ function LoanCard({ loan }: { loan: Loan }) {
         </p>
       )}
 
-      {!full && (
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={() => setOpen((o) => !o)}
-          className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline dark:text-brand-500"
-        >
-          <ChevronDown
-            aria-hidden="true"
-            className={cx("size-3.5 transition-transform", open && "rotate-180")}
-          />
-          {open ? "Hide payoff and payments" : `Payoff and payments (${loan.payments.length})`}
-        </button>
-      )}
-
-      {open && (
+      {full ? (
         <>
           <div className={cx("grid gap-4", side && "lg:grid-cols-2")}>
             <PayoffPlanner loan={loan} />
@@ -834,13 +819,94 @@ function LoanCard({ loan }: { loan: Loan }) {
           </div>
           <Payments loan={loan} />
         </>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <PayoffPlanner loan={loan} />
+          <Payments loan={loan} />
+        </div>
       )}
 
       <Modal open={editing} onClose={() => setEditing(false)} title={`Edit ${loan.name}`}>
         {editing && <LoanForm loan={loan} onDone={() => setEditing(false)} />}
       </Modal>
+    </Wrap>
+  );
+}
+
+/** Several loans from one lender (e.g. a timeshare's loans): one card, a tab per loan. */
+function LenderGroup({ lender, loans }: { lender: string; loans: Loan[] }) {
+  const [sel, setSel] = useState(loans[0]?.accountId ?? "");
+  const loan = loans.find((l) => l.accountId === sel) ?? loans[0];
+  if (!loan) return null;
+  const owed = loans.reduce((s, l) => s + l.balanceCents, 0);
+  const monthly = loans.reduce((s, l) => s + (l.monthlyPaymentCents ?? 0), 0);
+  return (
+    <Card className="space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-semibold">{lender}</h3>
+          <p className="text-xs text-slate-500">
+            {loans.length} loans · {formatMoney(monthly)} a month together
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-slate-500">Owed in all</p>
+          <p className="text-2xl font-semibold tabular-nums">{formatMoney(owed)}</p>
+        </div>
+      </div>
+      <div
+        role="tablist"
+        className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800"
+      >
+        {loans.map((l) => (
+          <button
+            key={l.accountId}
+            type="button"
+            role="tab"
+            aria-selected={l.accountId === loan.accountId}
+            onClick={() => setSel(l.accountId)}
+            className={cx(
+              "-mb-px border-b-2 px-3 py-2 text-left text-sm",
+              l.accountId === loan.accountId
+                ? "border-brand-600 font-medium text-brand-700 dark:text-brand-500"
+                : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200",
+            )}
+          >
+            {l.name}
+            <span className="block text-xs font-normal tabular-nums text-slate-500">
+              {formatMoney(l.balanceCents)}
+              {l.monthlyPaymentCents ? ` · ${formatMoney(l.monthlyPaymentCents)}/mo` : ""}
+            </span>
+          </button>
+        ))}
+      </div>
+      <LoanCard key={loan.accountId} loan={loan} embedded />
     </Card>
   );
+}
+
+/** Mortgages and lone loans get their own card; other lenders with several loans are grouped. */
+function groupLoans(
+  loans: Loan[],
+): ({ kind: "one"; loan: Loan } | { kind: "group"; lender: string; loans: Loan[] })[] {
+  const byLender = new Map<string, Loan[]>();
+  for (const l of loans) {
+    if (l.kind === "mortgage" || !l.lender) continue;
+    const k = l.lender.trim().toLowerCase();
+    byLender.set(k, [...(byLender.get(k) ?? []), l]);
+  }
+  const out: ReturnType<typeof groupLoans> = [];
+  const done = new Set<string>();
+  for (const l of loans) {
+    const k = l.lender?.trim().toLowerCase() ?? "";
+    const group = l.kind !== "mortgage" && k ? byLender.get(k) : undefined;
+    if (group && group.length > 1) {
+      if (done.has(k)) continue;
+      done.add(k);
+      out.push({ kind: "group", lender: l.lender ?? "", loans: group });
+    } else out.push({ kind: "one", loan: l });
+  }
+  return out;
 }
 
 export function LoansPage() {
@@ -886,9 +952,13 @@ export function LoansPage() {
               value={formatMoney(r.loans.reduce((s, l) => s + (l.interestThisYearCents ?? 0), 0))}
             />
           </div>
-          {r.loans.map((l) => (
-            <LoanCard key={l.accountId} loan={l} />
-          ))}
+          {groupLoans(r.loans).map((g) =>
+            g.kind === "one" ? (
+              <LoanCard key={g.loan.accountId} loan={g.loan} />
+            ) : (
+              <LenderGroup key={g.lender} lender={g.lender} loans={g.loans} />
+            ),
+          )}
         </div>
       )}
       <Modal open={adding} onClose={() => setAdding(false)} title="Add a loan">

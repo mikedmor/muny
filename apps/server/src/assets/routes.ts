@@ -15,6 +15,7 @@ import {
   ValuationError,
   valuationSettings,
 } from "./valuation.js";
+import { vehicleMakes, vehicleModels } from "./vehicles.js";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 const cents = z.number().int().min(0).max(100_000_000_000);
@@ -45,6 +46,33 @@ export function registerAssetRoutes(app: FastifyInstance, db: MunyDb, deps: Valu
   app.get("/api/assets", async (req) => {
     requireUser(req);
     return listAssets(db);
+  });
+
+  // --- Vehicle make and model suggestions (NHTSA, only while filling in a vehicle) --
+
+  app.get("/api/assets/vehicle-makes", async (req) => {
+    requireUser(req);
+    try {
+      return await vehicleMakes(deps.fetch);
+    } catch {
+      return [];
+    }
+  });
+
+  app.get("/api/assets/vehicle-models", async (req) => {
+    requireUser(req);
+    const q = parse(
+      z.object({
+        make: z.string().trim().min(1).max(40),
+        year: z.coerce.number().int().min(1900).max(2100).optional(),
+      }),
+      req.query,
+    );
+    try {
+      return await vehicleModels(q.make, q.year ?? null, deps.fetch);
+    } catch {
+      return [];
+    }
   });
 
   // --- Automatic values (opt-in, your own keys) --------------------------------
