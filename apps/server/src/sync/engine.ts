@@ -1,6 +1,6 @@
 import { cleanPayeeName } from "@muny/core";
 import { type MunyDb, newId, schema } from "@muny/db";
-import { and, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import type { Config } from "../config.js";
 import { computeHashes, findDuplicates } from "../import/service.js";
 import { upsertPayee } from "../ledger/transactions.js";
@@ -172,6 +172,12 @@ export function applySync(
         .run();
       linked.set(pa.ref, accountId);
       summary.accountsCreated++;
+    } else if (pa.mask) {
+      // Accounts linked before the provider shared a mask get it now (names stay as you set them).
+      tx.update(a)
+        .set({ mask: pa.mask })
+        .where(and(eq(a.id, accountId), isNull(a.mask)))
+        .run();
     }
     if (pa.balanceCents !== null) {
       tx.update(a)

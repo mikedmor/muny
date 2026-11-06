@@ -1,9 +1,12 @@
 import { type MunyDb, newId, schema } from "@muny/db";
 import {
+  ACCOUNT_ALERT_TYPES,
+  type AccountAlertSettings,
   ALERT_TYPES,
   CHANNEL_TYPES,
   type ChannelConfig,
   type ChannelType,
+  DEFAULT_ACCOUNT_ALERTS,
   type NotificationChannel,
   type NotificationList,
 } from "@muny/shared";
@@ -14,6 +17,7 @@ import { requireUser } from "../auth/plugin.js";
 import { audit } from "../lib/audit.js";
 import { decryptJson, encryptJson } from "../lib/crypto.js";
 import { badRequest, HttpError, notFound, parse } from "../lib/http.js";
+import { accountAlerts, setAccountAlerts } from "./accounts.js";
 import { channelSummary, parseChannelConfig } from "./channels.js";
 import {
   type AlertDeps,
@@ -142,9 +146,11 @@ export function registerAlertRoutes(app: FastifyInstance, db: MunyDb, deps: Aler
       );
       if (body.channelIds.some((id) => !known.has(id))) throw badRequest("Unknown channel");
     }
+    // Account alerts stay on; each account decides (Accounts page).
+    const perAccount = ACCOUNT_ALERT_TYPES.includes(type);
     db.update(schema.alertRules)
       .set({
-        ...(body.enabled !== undefined ? { enabled: body.enabled } : {}),
+        ...(body.enabled !== undefined && !perAccount ? { enabled: body.enabled } : {}),
         ...(body.params ? { params: { ...rule.params, ...body.params } } : {}),
         ...(body.channelIds ? { channelIds: body.channelIds } : {}),
       })
@@ -152,6 +158,47 @@ export function registerAlertRoutes(app: FastifyInstance, db: MunyDb, deps: Aler
       .run();
     log(user.id, "alert.rule_update", type, { enabled: body.enabled });
     return listRules(db).find((r) => r.type === type);
+  });
+
+  // --- Per-account alerts (Accounts page) -----------------------------------------
+
+  app.get("/api/account-alerts", async (req): Promise<Record<string, AccountAlertSettings>> => {
+    requireUser(req);
+    const set = accountAlerts(db);
+    return Object.fromEntries(
+      db
+        .select({ id: schema.accounts.id })
+        .from(schema.accounts)
+        .all()
+        .map((a) => {
+          const { since: _, ...s } = set.get(a.id) ?? { ...DEFAULT_ACCOUNT_ALERTS, since: null };
+          return [a.id, s];
+        }),
+    );
+  });
+
+  app.put("/api/account-alerts/:accountId", async (req) => {
+    const user = requireUser(req);
+    const { accountId } = parse(z.object({ accountId: z.string().min(1).max(64) }), req.params);
+    const cents = z.number().int().min(0).max(100_000_000_000).nullable();
+    const body = parse(
+      z.object({
+        lowBalanceCents: cents,
+        largeChargeCents: cents,
+        unusualCharge: z.boolean(),
+        duplicateCharge: z.boolean(),
+      }),
+      req.body,
+    );
+    const exists = db
+      .select({ id: schema.accounts.id })
+      .from(schema.accounts)
+      .where(eq(schema.accounts.id, accountId))
+      .get();
+    if (!exists) throw notFound("Account not found");
+    setAccountAlerts(db, accountId, body);
+    log(user.id, "alert.account_update", accountId);
+    return body;
   });
 
   /** Check now instead of waiting for the next 5-minute run. */

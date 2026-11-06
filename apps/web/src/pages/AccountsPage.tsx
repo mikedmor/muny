@@ -7,6 +7,7 @@ import {
   LIABILITY_TYPES,
 } from "@muny/shared";
 import { type FormEvent, useState } from "react";
+import { AccountAlertsButton, useAccountAlerts } from "../components/AccountAlerts.js";
 import { BankConnections } from "../components/BankConnections.js";
 import { Checkbox, Modal, MoneyField, SelectField } from "../components/forms.js";
 import { Alert, Button, Card, cx, Field, PageHeader } from "../components/ui.js";
@@ -43,6 +44,7 @@ function formatDate(iso: string | null) {
 
 export function AccountsPage() {
   const accounts = useAccounts();
+  const alerts = useAccountAlerts();
   const [editing, setEditing] = useState<Account | "new" | null>(null);
   const [showHidden, setShowHidden] = useState(false);
 
@@ -111,11 +113,14 @@ export function AccountsPage() {
                   </div>
                   <ul className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
                     {items.map((a) => (
-                      <li key={a.id}>
+                      <li
+                        key={a.id}
+                        className="flex items-center pr-2 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                      >
                         <button
                           type="button"
                           onClick={() => setEditing(a)}
-                          className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                          className="flex min-w-0 flex-1 items-center justify-between gap-4 py-3 pr-2 pl-4 text-left"
                         >
                           <div className="min-w-0">
                             <p className={cx("truncate font-medium", a.hidden && "text-slate-400")}>
@@ -132,6 +137,7 @@ export function AccountsPage() {
                           </div>
                           <Money cents={displayCents(a)} className="shrink-0 font-medium" />
                         </button>
+                        <AccountAlertsButton account={a} settings={alerts.data?.[a.id]} />
                       </li>
                     ))}
                   </ul>

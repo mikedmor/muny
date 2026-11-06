@@ -1,3 +1,4 @@
+import { schema } from "@muny/db";
 import type {
   Account,
   AlertRule,
@@ -5,9 +6,12 @@ import type {
   NotificationChannel,
   NotificationList,
 } from "@muny/shared";
+import { type AccountAlertSettings, DEFAULT_ACCOUNT_ALERTS } from "@muny/shared";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { localToday } from "../lib/dates.js";
 import { makeSignedInApp } from "../test-utils.js";
+import { moveAlertsToAccounts } from "./accounts.js";
 
 // Synthetic data only.
 
@@ -45,13 +49,41 @@ async function setup(opts: Parameters<typeof makeSignedInApp>[0] = {}) {
       categoryId: category ? cat(category) : null,
     });
   const run = async () => (await client.post("/api/alerts/run")).json<{ created: number }>();
+  const alertsOn = (accountId: string, patch: Partial<AccountAlertSettings>) =>
+    client.put(`/api/account-alerts/${accountId}`, { ...DEFAULT_ACCOUNT_ALERTS, ...patch });
   const list = async () => (await client.get("/api/notifications")).json<NotificationList>();
-  return { ...ctx, chk, card, add, run, list, cat };
+  return { ...ctx, chk, card, add, run, list, cat, alertsOn };
 }
 
 const today = localToday();
 
 describe("alerts", () => {
+  it("moves the old global settings onto each account once", async () => {
+    const { client, db, chk, card } = await setup();
+    await client.patch("/api/alerts/rules/low_balance", { params: { thresholdCents: 25_000 } });
+    await client.patch("/api/alerts/rules/large_transaction", { params: { minCents: 30_000 } });
+    await client.patch("/api/alerts/rules/duplicate_charge", { enabled: false });
+    db.update(schema.alertRules)
+      .set({ enabled: false })
+      .where(eq(schema.alertRules.type, "duplicate_charge"))
+      .run();
+    db.delete(schema.accountAlerts).run();
+    db.delete(schema.appSettings).where(eq(schema.appSettings.key, "alerts.perAccount")).run();
+    moveAlertsToAccounts(db);
+    const set = (await client.get("/api/account-alerts")).json<
+      Record<string, AccountAlertSettings>
+    >();
+    expect(set[chk.id]).toEqual({
+      lowBalanceCents: 25_000,
+      largeChargeCents: 30_000,
+      unusualCharge: true,
+      duplicateCharge: false,
+    });
+    // Low balance was for checking and savings only.
+    expect(set[card.id]?.lowBalanceCents).toBeNull();
+    expect(set[card.id]?.largeChargeCents).toBe(30_000);
+  });
+
   it("has every rule on by default with sensible thresholds", async () => {
     const { client } = await setup();
     const rules = (await client.get("/api/alerts/rules")).json<AlertRule[]>();
@@ -61,7 +93,8 @@ describe("alerts", () => {
   });
 
   it("alerts on a large charge once, and marks it read", async () => {
-    const { add, card, run, list, client } = await setup();
+    const { add, card, run, list, client, alertsOn } = await setup();
+    await alertsOn(card.id, { largeChargeCents: 50_000 });
     await add(card.id, today, -75_000, "BIG TV STORE");
     await add(card.id, today, -1_000, "CORNER CAFE");
     expect((await run()).created).toBe(1);
@@ -84,7 +117,8 @@ describe("alerts", () => {
   });
 
   it("flags low balances once per dip", async () => {
-    const { client, chk, run, list } = await setup();
+    const { client, chk, run, list, alertsOn } = await setup();
+    await alertsOn(chk.id, { lowBalanceCents: 10_000 });
     await client.patch(`/api/accounts/${chk.id}`, { balanceCents: 5_000 });
     await run();
     await run();
@@ -112,12 +146,12 @@ describe("alerts", () => {
     ]);
   });
 
-  it("doesn't replay history when a rule is turned on", async () => {
-    const { add, card, run, list, client } = await setup();
-    await client.patch("/api/alerts/rules/large_transaction", { enabled: false });
+  it("doesn't replay history when an account's alert is turned on", async () => {
+    const { add, card, run, list, alertsOn } = await setup();
     await add(card.id, today, -90_000, "OLD BIG THING");
     await run();
-    await client.patch("/api/alerts/rules/large_transaction", { enabled: true });
+    await new Promise((r) => setTimeout(r, 5));
+    await alertsOn(card.id, { largeChargeCents: 50_000 });
     await run();
     expect((await list()).items.some((n) => n.ruleType === "large_transaction")).toBe(false);
   });
@@ -145,6 +179,10 @@ describe("alerts", () => {
 
     expect((await client.post(`/api/alerts/channels/${chan.id}/test`)).statusCode).toBe(200);
     await client.patch("/api/alerts/rules/large_transaction", { channelIds: [chan.id] });
+    await client.put(`/api/account-alerts/${card.id}`, {
+      ...DEFAULT_ACCOUNT_ALERTS,
+      largeChargeCents: 50_000,
+    });
     await add(card.id, today, -60_000, "BIG TV STORE");
     await run();
 

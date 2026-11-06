@@ -1,11 +1,13 @@
-import type {
-  AlertParams,
-  AlertRule,
-  AlertType,
-  ChannelConfig,
-  ChannelType,
-  NotificationChannel,
+import {
+  ACCOUNT_ALERT_TYPES,
+  type AlertParams,
+  type AlertRule,
+  type AlertType,
+  type ChannelConfig,
+  type ChannelType,
+  type NotificationChannel,
 } from "@muny/shared";
+import { Link } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { Checkbox, MoneyField, SelectField } from "../../components/forms.js";
 import { Alert, Button, Card, Field } from "../../components/ui.js";
@@ -188,6 +190,7 @@ function RuleParams({ rule, save }: { rule: AlertRule; save: (params: AlertParam
 function Rules({ channels }: { channels: NotificationChannel[] }) {
   const rules = useAlertRules();
   const update = useUpdateAlertRule();
+  const accountRules = (rules.data ?? []).filter((r) => ACCOUNT_ALERT_TYPES.includes(r.type));
   return (
     <Card className="p-0">
       <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
@@ -206,48 +209,94 @@ function Rules({ channels }: { channels: NotificationChannel[] }) {
         </div>
       )}
       <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-        {rules.data?.map((r) => {
-          const meta = RULES[r.type];
-          return (
-            <li key={r.type} className="space-y-3 px-4 py-3">
-              <Checkbox
-                label={meta.label}
-                description={meta.description}
-                checked={r.enabled}
-                onChange={(enabled) => update.mutate({ type: r.type, enabled })}
-              />
-              {r.enabled && (
-                <div className="flex flex-wrap items-end gap-x-6 gap-y-3 pl-7">
-                  <RuleParams rule={r} save={(params) => update.mutate({ type: r.type, params })} />
-                  {channels.length > 0 && (
-                    <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-                      <legend className="sr-only">Also send to</legend>
-                      <span className="text-slate-600 dark:text-slate-400">Also send to</span>
-                      {channels.map((c) => (
-                        <label key={c.id} className="flex items-center gap-1.5">
-                          <input
-                            type="checkbox"
-                            className="size-4 accent-brand-600"
-                            checked={r.channelIds.includes(c.id)}
-                            onChange={(e) =>
-                              update.mutate({
-                                type: r.type,
-                                channelIds: e.target.checked
-                                  ? [...r.channelIds, c.id]
-                                  : r.channelIds.filter((id) => id !== c.id),
-                              })
-                            }
-                          />
-                          {c.name}
-                        </label>
-                      ))}
-                    </fieldset>
-                  )}
-                </div>
-              )}
-            </li>
-          );
-        })}
+        <li className="space-y-3 px-4 py-3">
+          <div>
+            <p className="text-sm font-medium">Account alerts</p>
+            <p className="text-sm text-slate-500">
+              Low balance, large charges, unusual charges and possible duplicates are set on each
+              account: click the bell next to an account on{" "}
+              <Link to="/accounts" className="text-brand-600 underline">
+                Accounts
+              </Link>
+              .
+            </p>
+          </div>
+          {channels.length > 0 && accountRules.length > 0 && (
+            <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+              <legend className="sr-only">Also send account alerts to</legend>
+              <span className="text-slate-600 dark:text-slate-400">Also send to</span>
+              {channels.map((c) => {
+                const on = accountRules.every((r) => r.channelIds.includes(c.id));
+                return (
+                  <label key={c.id} className="flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-brand-600"
+                      checked={on}
+                      onChange={(e) => {
+                        for (const r of accountRules)
+                          update.mutate({
+                            type: r.type,
+                            channelIds: e.target.checked
+                              ? [...new Set([...r.channelIds, c.id])]
+                              : r.channelIds.filter((id) => id !== c.id),
+                          });
+                      }}
+                    />
+                    {c.name}
+                  </label>
+                );
+              })}
+            </fieldset>
+          )}
+        </li>
+        {rules.data
+          ?.filter((r) => !ACCOUNT_ALERT_TYPES.includes(r.type))
+          .map((r) => {
+            const meta = RULES[r.type];
+            return (
+              <li key={r.type} className="space-y-3 px-4 py-3">
+                <Checkbox
+                  label={meta.label}
+                  description={meta.description}
+                  checked={r.enabled}
+                  onChange={(enabled) => update.mutate({ type: r.type, enabled })}
+                />
+                {r.enabled && (
+                  <div className="flex flex-wrap items-end gap-x-6 gap-y-3 pl-7">
+                    <RuleParams
+                      rule={r}
+                      save={(params) => update.mutate({ type: r.type, params })}
+                    />
+                    {channels.length > 0 && (
+                      <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                        <legend className="sr-only">Also send to</legend>
+                        <span className="text-slate-600 dark:text-slate-400">Also send to</span>
+                        {channels.map((c) => (
+                          <label key={c.id} className="flex items-center gap-1.5">
+                            <input
+                              type="checkbox"
+                              className="size-4 accent-brand-600"
+                              checked={r.channelIds.includes(c.id)}
+                              onChange={(e) =>
+                                update.mutate({
+                                  type: r.type,
+                                  channelIds: e.target.checked
+                                    ? [...r.channelIds, c.id]
+                                    : r.channelIds.filter((id) => id !== c.id),
+                                })
+                              }
+                            />
+                            {c.name}
+                          </label>
+                        ))}
+                      </fieldset>
+                    )}
+                  </div>
+                )}
+              </li>
+            );
+          })}
       </ul>
     </Card>
   );

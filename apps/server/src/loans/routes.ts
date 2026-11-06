@@ -76,7 +76,17 @@ const parts = z
   );
 const LenderPayments = z.object({
   lender: z.string().trim().min(1, "Name the lender").max(100),
-  payments: z.array(z.object({ paymentMatch: words, dueDay, parts })).max(12),
+  payments: z
+    .array(
+      z.object({
+        paymentMatch: words,
+        dueDay,
+        startDate: isoDate.nullable().optional(),
+        endDate: isoDate.nullable().optional(),
+        parts,
+      }),
+    )
+    .max(24),
 });
 const Batch = z.object({
   lender: z.string().trim().min(1, "Name the lender").max(100),

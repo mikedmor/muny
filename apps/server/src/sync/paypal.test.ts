@@ -110,7 +110,12 @@ describe("PayPal", () => {
       })
     ).json<LinkStart>();
     expect(start.accounts).toEqual([
-      expect.objectContaining({ ref: "PP-ACCOUNT", name: "PayPal", balanceCents: 4210 }),
+      expect.objectContaining({
+        ref: "PP-ACCOUNT",
+        name: "PayPal balance",
+        mask: "OUNT",
+        balanceCents: 4210,
+      }),
     ]);
     // Keys are stored encrypted.
     const row = db.select().from(schema.connections).all()[0];

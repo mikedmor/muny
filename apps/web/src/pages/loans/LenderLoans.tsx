@@ -9,7 +9,7 @@ import {
   type LoanKind,
 } from "@muny/shared";
 import { useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Copy, Pencil, Plus, Trash2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Modal } from "../../components/forms.js";
 import { Alert, Button, Field } from "../../components/ui.js";
@@ -50,10 +50,32 @@ interface PaymentDraft {
   key: string;
   dueDay: string;
   words: string;
+  /** YYYY-MM-DD or "": only payments from / until these dates. */
+  from: string;
+  until: string;
   /** Loan key → dollars typed. */
   parts: Record<string, string>;
 }
-const emptyPayment = (): PaymentDraft => ({ key: nextKey(), dueDay: "", words: "", parts: {} });
+const emptyPayment = (): PaymentDraft => ({
+  key: nextKey(),
+  dueDay: "",
+  words: "",
+  from: "",
+  until: "",
+  parts: {},
+});
+const shortDate = (iso: string) =>
+  new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+/** The day before a date (the old split ends when the new one starts). */
+const dayBefore = (iso: string) => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+};
 
 /** Parse drafts: payments with parts by loan key, or an error. */
 function parsePayments(
@@ -72,7 +94,15 @@ function parsePayments(
     const day = d.dueDay.trim() ? Number(d.dueDay) : null;
     if (day !== null && !(Number.isInteger(day) && day >= 1 && day <= 31))
       return { ok: false, error: `Payment ${i + 1}: the day is a number from 1 to 31.` };
-    payments.push({ dueDay: day, paymentMatch: d.words.trim() || null, parts });
+    if (d.from && d.until && d.until < d.from)
+      return { ok: false, error: `Payment ${i + 1}: "Until" is before "From".` };
+    payments.push({
+      dueDay: day,
+      paymentMatch: d.words.trim() || null,
+      startDate: d.from || null,
+      endDate: d.until || null,
+      parts,
+    });
   }
   return { ok: true, payments };
 }
@@ -115,16 +145,34 @@ function PaymentsEditor({
                   </span>
                 )}
               </span>
-              <button
-                type="button"
-                aria-label={`Remove payment ${i + 1}`}
-                onClick={() => onChange(value.filter((x) => x.key !== p.key))}
-                className="text-slate-400 hover:text-red-600"
-              >
-                <Trash2 aria-hidden="true" className="size-4" />
-              </button>
+              <span className="flex items-center gap-3">
+                <button
+                  type="button"
+                  title="The servicer changed how it splits this payment: keep this one for earlier payments and start a copy from a date"
+                  onClick={() => {
+                    const start = new Date().toISOString().slice(0, 10);
+                    const copy = { ...p, key: nextKey(), from: start, until: p.until };
+                    onChange(
+                      value.flatMap((x) =>
+                        x.key === p.key ? [{ ...x, until: dayBefore(start) }, copy] : [x],
+                      ),
+                    );
+                  }}
+                  className="inline-flex items-center gap-1 text-xs text-brand-600 hover:underline dark:text-brand-500"
+                >
+                  <Copy aria-hidden="true" className="size-3" /> Split changed
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Remove payment ${i + 1}`}
+                  onClick={() => onChange(value.filter((x) => x.key !== p.key))}
+                  className="text-slate-400 hover:text-red-600"
+                >
+                  <Trash2 aria-hidden="true" className="size-4" />
+                </button>
+              </span>
             </div>
-            <div className="grid gap-3 sm:grid-cols-[8rem_minmax(0,1fr)]">
+            <div className="grid gap-3 sm:grid-cols-[7rem_minmax(0,1fr)_9.5rem_9.5rem]">
               <Field
                 label="Day of the month"
                 value={p.dueDay}
@@ -137,6 +185,18 @@ function PaymentsEditor({
                 value={p.words}
                 onChange={(e) => set(p.key, { words: e.target.value })}
                 placeholder={words ?? "How it appears in checking"}
+              />
+              <Field
+                label="From"
+                type="date"
+                value={p.from}
+                onChange={(e) => set(p.key, { from: e.target.value })}
+              />
+              <Field
+                label="Until"
+                type="date"
+                value={p.until}
+                onChange={(e) => set(p.key, { until: e.target.value })}
               />
             </div>
             <div>
@@ -382,6 +442,8 @@ function LenderPaymentsForm({
       ? payments.map((p) => ({
           key: nextKey(),
           dueDay: p.dueDay ? String(p.dueDay) : "",
+          from: p.startDate ?? "",
+          until: p.endDate ?? "",
           words: p.paymentMatch ?? "",
           parts: Object.fromEntries(Object.entries(p.parts).map(([id, c]) => [id, fromCents(c)])),
         }))
@@ -406,7 +468,9 @@ function LenderPaymentsForm({
       <p className="text-sm text-slate-600 dark:text-slate-400">
         One entry per scheduled payment, with what it puts toward each loan. Muny finds each payment
         by its words, its total and the day, and splits it by these amounts. Loans in a payment here
-        get their payments only from these.
+        get their payments only from these. If your servicer changes how it splits a payment (say a
+        loan stops getting a share), click Split changed: the old split keeps the earlier payments,
+        and you set the new one from the date it changed.
       </p>
       <PaymentsEditor
         loans={loans.map((l) => ({ key: l.accountId, name: l.name }))}
@@ -480,6 +544,8 @@ export function LenderPaymentsStrip({
             <strong className="tabular-nums">{formatMoney(p.totalCents)}</strong>
             <span className="text-slate-500">
               {p.dueDay ? `around the ${ordinal(p.dueDay)}` : "any day"}
+              {p.startDate && ` · from ${shortDate(p.startDate)}`}
+              {p.endDate && ` · until ${shortDate(p.endDate)}`}
             </span>
             <span className="text-xs text-slate-500">
               {Object.entries(p.parts)

@@ -137,6 +137,9 @@ export interface LenderPayment {
   paymentMatch: string | null;
   /** Day of the month it's usually paid (null: any day). */
   dueDay: number | null;
+  /** Only payments from / until these dates (YYYY-MM-DD; null: open), when the split changed. */
+  startDate: string | null;
+  endDate: string | null;
   /** Each loan's part (loan account id → cents); the payment is about their total. */
   parts: Record<string, number>;
   totalCents: number;
@@ -148,6 +151,8 @@ export interface LenderPayment {
 export interface LenderPaymentInput {
   paymentMatch?: string | null;
   dueDay?: number | null;
+  startDate?: string | null;
+  endDate?: string | null;
   parts: Record<string, number>;
 }
 

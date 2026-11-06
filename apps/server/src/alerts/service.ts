@@ -12,6 +12,7 @@ import { and, desc, eq, gte, inArray, isNull } from "drizzle-orm";
 import { decryptJson } from "../lib/crypto.js";
 import { localToday } from "../lib/dates.js";
 import { verifySavings } from "../savings/service.js";
+import { moveAlertsToAccounts } from "./accounts.js";
 import { ChannelError, type OutboundMessage, sendToChannel } from "./channels.js";
 import { type Candidate, DEFAULT_PARAMS, evaluateRules } from "./evaluate.js";
 
@@ -37,6 +38,7 @@ export function ensureAlertRules(db: MunyDb) {
       .values({ id: newId(), type, enabled: true, params: DEFAULT_PARAMS[type], channelIds: [] })
       .run();
   }
+  moveAlertsToAccounts(db);
 }
 
 export function listRules(db: MunyDb): AlertRule[] {

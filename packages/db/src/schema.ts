@@ -452,6 +452,22 @@ export const alertRules = sqliteTable("alert_rules", {
   updatedAt: updatedAt(),
 });
 
+/**
+ * Alerts set on each account (Accounts page): low balance and large-charge
+ * thresholds (null = off), unusual and duplicate charges. No row = defaults
+ * (unusual and duplicate on, thresholds off).
+ */
+export const accountAlerts = sqliteTable("account_alerts", {
+  accountId: text()
+    .primaryKey()
+    .references(() => accounts.id, { onDelete: "cascade" }),
+  lowBalanceCents: integer(),
+  largeChargeCents: integer(),
+  unusualCharge: integer({ mode: "boolean" }).notNull().default(true),
+  duplicateCharge: integer({ mode: "boolean" }).notNull().default(true),
+  updatedAt: updatedAt(),
+});
+
 export const notificationChannels = sqliteTable("notification_channels", {
   id: text().primaryKey(),
   type: text({ enum: ["ntfy", "apprise", "smtp", "webhook"] }).notNull(),
@@ -873,6 +889,9 @@ export const lenderPayments = sqliteTable("lender_payments", {
   paymentMatch: text(),
   /** Day of the month it's usually paid (null: any day). */
   dueDay: integer(),
+  /** YYYY-MM-DD: only payments from / until these dates (the servicer changed the split). */
+  startDate: text(),
+  endDate: text(),
   /** Each loan's part of the payment, in cents (loan account id → cents). */
   parts: text({ mode: "json" }).$type<Record<string, number>>().notNull(),
   updatedAt: updatedAt(),

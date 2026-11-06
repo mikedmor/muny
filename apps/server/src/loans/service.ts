@@ -315,6 +315,8 @@ function lenderPaymentParts(
         const amount = -t.amountCents;
         const day = Number(t.date.slice(8, 10));
         if (t.date < since || (feeMin && amount >= feeMin) || !near(amount, total)) continue;
+        if ((row.startDate && t.date < row.startDate) || (row.endDate && t.date > row.endDate))
+          continue;
         if (row.dueDay && dayGap(day, row.dueDay) > DUE_WINDOW) continue;
         list.set(t.id, {
           id: t.id,
@@ -356,6 +358,8 @@ function lenderPaymentParts(
       lenderKey: row.lenderKey,
       paymentMatch: row.paymentMatch,
       dueDay: row.dueDay,
+      startDate: row.startDate,
+      endDate: row.endDate,
       parts: Object.fromEntries(parts),
       totalCents: total,
       foundCount: mine.length,
@@ -861,6 +865,8 @@ export function setLenderPayments(db: Db, lender: string, payments: LenderPaymen
         lenderKey,
         paymentMatch: p.paymentMatch?.trim() || null,
         dueDay: p.dueDay ?? null,
+        startDate: p.startDate ?? null,
+        endDate: p.endDate ?? null,
         parts,
       })
       .run();

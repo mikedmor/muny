@@ -164,7 +164,7 @@ export function TrialsTab() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-slate-500">
           Free trials don't show up in your bank until they turn into a charge. Add them here and
-          Muny reminds you a few days before they end (see Settings → Alerts).
+          Muny reminds you a few days before they end (see Alerts → Settings).
         </p>
         {!adding && <Button onClick={() => setAdding(true)}>Track a trial</Button>}
       </div>

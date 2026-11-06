@@ -1,7 +1,9 @@
 import type { AppNotification } from "@muny/shared";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
 import { useMarkRead, useNotifications, useRunAlerts } from "../lib/queries.js";
+import { AlertsSettings } from "./settings/AlertsSettings.js";
 
 const ICON: Record<string, string> = {
   low_balance: "🪫",
@@ -35,11 +37,24 @@ function dayKey(ms: number) {
   return d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
 }
 
+const TABS = [
+  ["alerts", "Alerts"],
+  ["settings", "Settings"],
+] as const;
+type Tab = (typeof TABS)[number][0];
+
 export function NotificationsPage() {
   const n = useNotifications();
   const read = useMarkRead();
   const run = useRunAlerts();
   const navigate = useNavigate();
+  const [tab, setTab] = useState<Tab>(() =>
+    window.location.hash === "#settings" ? "settings" : "alerts",
+  );
+  const show = (k: Tab) => {
+    setTab(k);
+    window.history.replaceState(null, "", `#${k}`);
+  };
   const items = n.data?.items ?? [];
   const groups = new Map<string, AppNotification[]>();
   for (const i of items)
@@ -73,10 +88,66 @@ export function NotificationsPage() {
           </div>
         }
       />
+      <div
+        role="tablist"
+        className="mb-6 flex gap-1 border-b border-slate-200 dark:border-slate-800"
+      >
+        {TABS.map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            role="tab"
+            aria-selected={tab === k}
+            onClick={() => show(k)}
+            className={cx(
+              "-mb-px border-b-2 px-3 py-2 text-sm font-medium",
+              tab === k
+                ? "border-brand-600 text-brand-700 dark:text-brand-500"
+                : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {tab === "settings" ? (
+        <AlertsSettings />
+      ) : (
+        <AlertList
+          n={n}
+          items={items}
+          groups={groups}
+          open={open}
+          onSettings={() => show("settings")}
+        />
+      )}
+    </>
+  );
+}
+
+function AlertList({
+  n,
+  items,
+  groups,
+  open,
+  onSettings,
+}: {
+  n: ReturnType<typeof useNotifications>;
+  items: AppNotification[];
+  groups: Map<string, AppNotification[]>;
+  open: (i: AppNotification) => void;
+  onSettings: () => void;
+}) {
+  return (
+    <>
       <p className="-mt-3 mb-4 text-sm text-slate-500">
         Muny checks every 5 minutes.{" "}
-        <Link to="/settings" hash="alerts" className="text-brand-600 underline">
+        <button type="button" onClick={onSettings} className="text-brand-600 underline">
           Choose which alerts you get and where
+        </button>
+        . Alerts for an account (low balance, large charges) are set with the bell next to it on{" "}
+        <Link to="/accounts" className="text-brand-600 underline">
+          Accounts
         </Link>
         .
       </p>

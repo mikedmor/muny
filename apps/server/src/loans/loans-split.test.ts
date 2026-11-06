@@ -315,4 +315,36 @@ describe("loans: telling similar payments apart by due day", () => {
       [7_539, 3],
     ]);
   });
+
+  it("uses the old split before the date it changed and the new one after", async () => {
+    const { client, pay, loans } = await setup();
+    const on = (monthsAgo: number, day: number) => {
+      const d = new Date(`${localToday()}T00:00:00Z`);
+      d.setUTCDate(1);
+      d.setUTCMonth(d.getUTCMonth() - monthsAgo);
+      return `${d.toISOString().slice(0, 8)}${String(day).padStart(2, "0")}`;
+    };
+    for (const m of [1, 2, 3, 4]) await pay(on(m, 28), -10_000, "DEPT EDUCATION");
+    await client.post("/api/loans/batch", {
+      lender: "Nelnet",
+      paymentMatch: "DEPT EDUCATION",
+      startDate: on(5, 1),
+      loans: ["AA", "AE"].map((name) => ({ name, startBalanceCents: 100_000, aprBps: 0 })),
+      payments: [],
+    });
+    const list = await loans();
+    const id = (n: string) => list.find((l) => l.name === n)?.accountId as string;
+    const res = await client.put("/api/loans/lender-payments", {
+      lender: "Nelnet",
+      payments: [
+        { dueDay: 28, endDate: on(2, 27), parts: { [id("AA")]: 6_000, [id("AE")]: 4_000 } },
+        { dueDay: 28, startDate: on(2, 28), parts: { [id("AA")]: 10_000 } },
+      ],
+    });
+    expect(res.statusCode).toBe(200);
+    const after = await loans();
+    const by = (n: string) => after.find((l) => l.name === n);
+    expect(by("AE")?.payments.map((p) => p.date)).toEqual([on(3, 28), on(4, 28)]);
+    expect(by("AA")?.payments.map((p) => p.amountCents)).toEqual([10_000, 10_000, 6_000, 6_000]);
+  });
 });

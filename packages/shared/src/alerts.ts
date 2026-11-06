@@ -14,6 +14,29 @@ export const ALERT_TYPES = [
 ] as const;
 export type AlertType = (typeof ALERT_TYPES)[number];
 
+/** Alerts set on each account (Accounts page), not globally. */
+export const ACCOUNT_ALERT_TYPES: readonly AlertType[] = [
+  "low_balance",
+  "large_transaction",
+  "unusual_charge",
+  "duplicate_charge",
+];
+
+/** An account's alerts: thresholds in cents (null = off). */
+export interface AccountAlertSettings {
+  lowBalanceCents: number | null;
+  largeChargeCents: number | null;
+  unusualCharge: boolean;
+  duplicateCharge: boolean;
+}
+
+export const DEFAULT_ACCOUNT_ALERTS: AccountAlertSettings = {
+  lowBalanceCents: null,
+  largeChargeCents: null,
+  unusualCharge: true,
+  duplicateCharge: true,
+};
+
 /** Parameters per alert type (all optional; defaults apply). */
 export interface AlertParams {
   /** low_balance: alert when a checking/savings balance drops below this. */

@@ -13,7 +13,6 @@ import {
   useUpdateCategory,
   useUpdateGroup,
 } from "../lib/queries.js";
-import { AlertsSettings } from "./settings/AlertsSettings.js";
 import { DataSettings } from "./settings/DataSettings.js";
 import { HouseholdSettings } from "./settings/HouseholdSettings.js";
 import { PayeesSettings } from "./settings/PayeesSettings.js";
@@ -25,7 +24,6 @@ const TABS = [
   ["categories", "Categories"],
   ["rules", "Rules"],
   ["merchants", "Merchants"],
-  ["alerts", "Alerts"],
   ["display", "Display"],
   ["data", "Data & backups"],
   ["household", "Household & account"],
@@ -76,7 +74,6 @@ export function SettingsPage() {
       {tab === "categories" && <CategoriesSettings />}
       {tab === "rules" && <RulesSettings />}
       {tab === "merchants" && <PayeesSettings />}
-      {tab === "alerts" && <AlertsSettings />}
       {tab === "data" && <DataSettings />}
       {tab === "display" && <DisplaySettings />}
       {tab === "household" && <HouseholdSettings />}

@@ -1,11 +1,17 @@
 import { cleanPayeeName } from "@muny/core";
 import { type MunyDb, schema } from "@muny/db";
-import { type AlertParams, type AlertType, formatMoney } from "@muny/shared";
+import {
+  type AlertParams,
+  type AlertType,
+  DEFAULT_ACCOUNT_ALERTS,
+  formatMoney,
+} from "@muny/shared";
 import { and, eq, gte, isNull, sql } from "drizzle-orm";
 import { budgetMonth } from "../budgets/service.js";
 import { listAccounts } from "../ledger/accounts.js";
 import { listSeries, merchantKey, upcoming } from "../recurring/service.js";
 import { listTrials } from "../trials/routes.js";
+import { accountAlerts } from "./accounts.js";
 
 /**
  * Turns alert rules into candidate notifications. Pure reads plus a small
@@ -75,6 +81,8 @@ interface Txn {
   raw: string;
   payee: string | null;
   key: string;
+  /** When Muny got it. */
+  createdAt: Date;
 }
 
 /** Spending-type transactions (no transfers, hidden, pending). */
@@ -89,6 +97,7 @@ function loadTxns(db: MunyDb, where: ReturnType<typeof and>): Txn[] {
       amountCents: t.amountCents,
       raw: t.rawDescription,
       payee: schema.payees.displayName,
+      createdAt: t.createdAt,
     })
     .from(t)
     .innerJoin(schema.accounts, eq(schema.accounts.id, t.accountId))
@@ -124,6 +133,14 @@ export function evaluateRules(
       ?.value as AlertState | undefined) ?? {}),
   };
   const t = schema.transactions;
+  // Each account's own alert settings.
+  const perAccount = accountAlerts(db);
+  const alertsOf = (accountId: string) => perAccount.get(accountId) ?? DEFAULT_ACCOUNT_ALERTS;
+  // Changing an account's alerts never replays what arrived before.
+  const afterChange = (x: Txn) => {
+    const s = perAccount.get(x.accountId)?.since;
+    return !s || x.createdAt.getTime() >= s.getTime();
+  };
 
   // Transactions that arrived recently and after the rule was enabled.
   const freshCache = new Map<number, Txn[]>();
@@ -144,9 +161,9 @@ export function evaluateRules(
     const p = { ...DEFAULT_PARAMS[rule.type], ...rule.params };
     switch (rule.type) {
       case "large_transaction": {
-        const min = p.minCents ?? 50_000;
         for (const x of fresh(rule.since)) {
-          if (x.amountCents > -min) continue;
+          const min = alertsOf(x.accountId).largeChargeCents;
+          if (min === null || x.amountCents > -min || !afterChange(x)) continue;
           out.push({
             type: rule.type,
             dedupeKey: `large:${x.id}`,
@@ -160,7 +177,9 @@ export function evaluateRules(
       }
       case "unusual_charge": {
         const mult = p.multiplier ?? 3;
-        const news = fresh(rule.since).filter((x) => x.amountCents < -2000);
+        const news = fresh(rule.since).filter(
+          (x) => x.amountCents < -2000 && alertsOf(x.accountId).unusualCharge && afterChange(x),
+        );
         if (!news.length) break;
         const history = loadTxns(
           db,
@@ -189,7 +208,9 @@ export function evaluateRules(
       }
       case "duplicate_charge": {
         const days = p.days ?? 3;
-        const news = fresh(rule.since).filter((x) => x.amountCents < 0);
+        const news = fresh(rule.since).filter(
+          (x) => x.amountCents < 0 && alertsOf(x.accountId).duplicateCharge && afterChange(x),
+        );
         if (!news.length) break;
         const recent = loadTxns(db, gte(t.postedDate, addDays(today, -(days + 10))));
         for (const x of news) {
@@ -215,11 +236,12 @@ export function evaluateRules(
         break;
       }
       case "low_balance": {
-        const threshold = p.thresholdCents ?? 10_000;
-        const ids = new Set(p.accountIds ?? []);
         for (const a of listAccounts(db)) {
-          if (a.hidden) continue;
-          if (ids.size ? !ids.has(a.id) : a.type !== "checking" && a.type !== "savings") continue;
+          const threshold = alertsOf(a.id).lowBalanceCents;
+          if (a.hidden || threshold === null) {
+            delete state.low[a.id];
+            continue;
+          }
           const low = a.balanceCents < threshold;
           if (low && !state.low[a.id]) {
             out.push({

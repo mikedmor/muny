@@ -10,11 +10,14 @@ Muny checks for alerts every 5 minutes:
 - charges after you cancelled something
 - banks that need you to log in again
 
-Every alert appears under **Alerts** in Muny (the bell). Turn alerts on or off and set thresholds in **Settings → Alerts**.
+Every alert appears under **Alerts** in Muny (the bell).
+
+- **Alerts for an account** (a low balance, large charges, unusual charges, possible duplicates) are set on each account: on **Accounts**, click the bell next to it. A ringing bell means a low-balance or large-charge alert is on. Unusual charges and possible duplicates are on for new accounts.
+- **Everything else** (bills, trials, budgets, price increases, charges after cancelling, banks needing attention) is on **Alerts → Settings**.
 
 ## Getting alerts on your phone or by email
 
-Add a **channel** in Settings → Alerts. Muny only contacts channels you add, and only sends the alert's title, a short description and a link, never account numbers or logins. Channel settings (URLs, tokens, passwords) are stored encrypted.
+Add a **channel** on Alerts → Settings, and tick it for the alerts you want sent there (one tick covers all account alerts). Muny only contacts channels you add, and only sends the alert's title, a short description and a link, never account numbers or logins. Channel settings (URLs, tokens, passwords) are stored encrypted.
 
 - **ntfy** (simplest phone push): install the ntfy app, subscribe to a long, hard-to-guess topic, and add that topic in Muny. Works with ntfy.sh or your own ntfy server.
 - **Apprise:** point Muny at an [Apprise API](https://github.com/caronc/apprise-api) URL to reach Discord, Telegram, Pushover, Slack and 100+ others.

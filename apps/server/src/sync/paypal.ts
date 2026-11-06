@@ -147,9 +147,10 @@ export class PayPalProvider implements Provider<PayPalCreds> {
       accounts: [
         {
           ref: r.account_id ?? "paypal",
-          name: "PayPal",
+          name: "PayPal balance",
           type: "checking",
-          mask: null,
+          // The last 4 of the PayPal account ID, to tell it apart like a bank account.
+          mask: r.account_id ? r.account_id.slice(-4) : null,
           currency: "USD",
           balanceCents: usd?.total_balance?.value ? cents(usd.total_balance.value) : null,
         },
