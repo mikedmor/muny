@@ -331,65 +331,64 @@ function LoanForm({ loan, onDone }: { loan?: Loan; onDone: () => void }) {
   );
 }
 
+/** Each loan's payoff at today's payment (shared by the facts row and the planner). */
+function basePlan(loan: Loan) {
+  const paying = loan.principalInterestCents ?? loan.monthlyPaymentCents;
+  if (loan.aprBps === null || !paying) return null;
+  return { paying, plan: payoff(loan.balanceCents, loan.aprBps, paying) };
+}
+
 function PayoffPlanner({ loan }: { loan: Loan }) {
   const [extra, setExtra] = useState(0);
-  const paying = loan.principalInterestCents ?? loan.monthlyPaymentCents;
-  if (loan.aprBps === null || !paying)
+  const base = basePlan(loan);
+  if (!base)
     return (
-      <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500 dark:bg-slate-800/40">
-        Add the interest rate and monthly payment (Edit details) to see when it's paid off and what
-        paying extra would save.
-      </p>
+      <Section title="Payoff">
+        <p className="text-sm text-slate-500">
+          Add the interest rate and monthly payment (Edit details) to see when it's paid off and
+          what paying extra would save.
+        </p>
+      </Section>
     );
-  const base = payoff(loan.balanceCents, loan.aprBps, paying);
-  const plan = payoff(loan.balanceCents, loan.aprBps, paying, extra * 100);
+  const plan = payoff(loan.balanceCents, loan.aprBps ?? 0, base.paying, extra * 100);
   const saved =
-    base.months !== null && plan.months !== null
-      ? base.totalInterestCents - plan.totalInterestCents
+    base.plan.months !== null && plan.months !== null
+      ? base.plan.totalInterestCents - plan.totalInterestCents
       : null;
   const step = plan.balances.length > 120 ? 3 : 1;
   const shown = plan.balances
     .map((b, m) => ({ b, m }))
     .filter((p) => p.m % step === 0 || p.m === plan.balances.length - 1);
   return (
-    <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-800/40">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-sm font-medium">Payoff</p>
-        <p className="text-sm">
-          {plan.months === null ? (
-            <span className="text-red-600">The payment doesn't cover the interest.</span>
-          ) : (
-            <>
-              Paid off <strong>{monthYear(addMonths(plan.months))}</strong>{" "}
-              <span className="text-slate-500">
-                ({monthsLabel(plan.months)}, {formatMoney(plan.totalInterestCents)} interest)
-              </span>
-            </>
-          )}
-        </p>
-      </div>
-      {loan.principalInterestCents !== null && (
-        <p className="mt-1 text-xs text-slate-500">
-          At the {formatMoney(loan.principalInterestCents)} principal and interest part of the
-          payment.
-        </p>
-      )}
+    <Section
+      title="Payoff"
+      aside={
+        plan.months === null ? (
+          <span className="text-red-600">The payment doesn't cover the interest</span>
+        ) : (
+          <span>
+            <strong>{monthYear(addMonths(plan.months))}</strong>{" "}
+            <span className="text-slate-500">
+              · {formatMoney(plan.totalInterestCents)} interest left
+            </span>
+          </span>
+        )
+      }
+    >
       {plan.balances.length > 2 && (
-        <div className="mt-2">
-          <LineChart
-            ariaLabel={`${loan.name} balance until paid off`}
-            height={160}
-            projectedFrom={1}
-            points={shown.map((p) => ({
-              date: String(p.m),
-              label: addMonths(p.m).toLocaleDateString(undefined, {
-                month: "short",
-                year: "2-digit",
-              }),
-              value: p.b,
-            }))}
-          />
-        </div>
+        <LineChart
+          ariaLabel={`${loan.name} balance until paid off`}
+          height={150}
+          projectedFrom={1}
+          points={shown.map((p) => ({
+            date: String(p.m),
+            label: addMonths(p.m).toLocaleDateString(undefined, {
+              month: "short",
+              year: "2-digit",
+            }),
+            value: p.b,
+          }))}
+        />
       )}
       <label className="mt-3 block">
         <span className="flex items-baseline justify-between text-sm">
@@ -399,20 +398,45 @@ function PayoffPlanner({ loan }: { loan: Loan }) {
         <input
           type="range"
           min={0}
-          max={Math.max(500, Math.round((paying / 100) * 2))}
+          max={Math.max(500, Math.round((base.paying / 100) * 2))}
           step={10}
           value={extra}
           onChange={(e) => setExtra(Number(e.target.value))}
           className="mt-1 w-full accent-brand-600"
         />
       </label>
-      {extra > 0 && base.months !== null && plan.months !== null && (
-        <p className="mt-1 text-sm text-emerald-700 dark:text-emerald-400">
-          {monthsLabel(base.months - plan.months)} sooner, {formatMoney(Math.max(0, saved ?? 0))}{" "}
-          less interest.
-        </p>
-      )}
-    </div>
+      <p className="mt-1 min-h-5 text-xs text-slate-500">
+        {extra > 0 && base.plan.months !== null && plan.months !== null ? (
+          <span className="text-sm text-emerald-700 dark:text-emerald-400">
+            {monthsLabel(base.plan.months - plan.months)} sooner,{" "}
+            {formatMoney(Math.max(0, saved ?? 0))} less interest.
+          </span>
+        ) : loan.principalInterestCents !== null ? (
+          `Projected at the ${formatMoney(loan.principalInterestCents)} principal and interest part of the payment.`
+        ) : null}
+      </p>
+    </Section>
+  );
+}
+
+/** A titled panel inside a loan card. */
+function Section({
+  title,
+  aside,
+  children,
+}: {
+  title: string;
+  aside?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2 text-sm">
+        <h4 className="font-semibold">{title}</h4>
+        {aside && <div className="text-sm">{aside}</div>}
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -422,51 +446,218 @@ function MortgageInsurance({ loan }: { loan: Loan }) {
   if (!p) return null;
   const toward = Math.min(100, (p.equityPct / 20) * 100);
   return (
-    <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
-      <p className="text-sm font-semibold">Mortgage insurance</p>
-      {p.monthlyCents !== null && (
-        <p className="mt-1 text-sm">
-          {formatMoney(p.monthlyCents)} monthly until you reach 20% equity
-        </p>
-      )}
-      <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
-        <span>0%</span>
-        <div className="h-3 flex-1 overflow-hidden rounded bg-slate-300 dark:bg-slate-600">
-          <div className="h-full bg-emerald-600" style={{ width: `${toward}%` }} />
+    <Section
+      title="Mortgage insurance"
+      aside={
+        p.monthlyCents !== null ? (
+          <span className="tabular-nums">{formatMoney(p.monthlyCents)}/mo</span>
+        ) : undefined
+      }
+    >
+      <div className="flex items-center gap-2 text-xs text-slate-500">
+        <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+          <div className="h-full rounded-full bg-emerald-500" style={{ width: `${toward}%` }} />
         </div>
-        <span>20%</span>
+        <span className="tabular-nums">{p.equityPct.toFixed(1)}% of 20% equity</span>
       </div>
-      <p className="mt-1 text-xs">Currently at {p.equityPct.toFixed(1)}%</p>
-      <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-800/50 dark:text-slate-300">
+      <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
         {p.equityPct >= 20 ? (
           <>You've reached 20% equity: you can ask your lender to cancel it.</>
         ) : (
           <>
-            Based on the original home value of{" "}
-            <strong>{formatMoney(loan.originalValueCents ?? 0)}</strong>, you can ask to cancel it
-            around <strong>{monthYear(p.requestDate)}</strong>
+            You can ask to cancel it around <strong>{monthYear(p.requestDate)}</strong>
             {p.autoEndDate && (
               <>
-                , and it ends on its own around <strong>{monthYear(p.autoEndDate)}</strong> (22%)
+                ; it ends on its own around <strong>{monthYear(p.autoEndDate)}</strong>
               </>
             )}
-            . Paying extra toward principal gets you there sooner.
+            .
           </>
         )}
       </p>
+      <p className="mt-1 text-xs text-slate-500">
+        Based on the original home value of {formatMoney(loan.originalValueCents ?? 0)}. Paying
+        extra toward principal gets you there sooner.
+      </p>
+    </Section>
+  );
+}
+
+/** The home this loan pays for: its value, your equity, and how much of it is borrowed. */
+function HomeEquity({ loan }: { loan: Loan }) {
+  const p = loan.property;
+  if (!p) return null;
+  const ltv = p.loanToValuePct;
+  return (
+    <Section
+      title="Home equity"
+      aside={
+        <Link to="/assets" className="text-brand-600 hover:underline dark:text-brand-500">
+          {p.name}
+        </Link>
+      }
+    >
+      <dl className="grid grid-cols-3 gap-3 text-sm">
+        <div>
+          <dt className="text-xs text-slate-500">Worth</dt>
+          <dd className="font-semibold tabular-nums">{formatMoney(p.valueCents)}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-slate-500">Your equity</dt>
+          <dd className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+            {formatMoney(p.equityCents)}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs text-slate-500">Loan-to-value</dt>
+          <dd className="font-semibold tabular-nums">
+            {ltv === null ? "—" : `${ltv.toFixed(0)}%`}
+          </dd>
+        </div>
+      </dl>
+      {ltv !== null && (
+        <div
+          className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-emerald-500"
+          title={`Owed ${Math.round(ltv)}%, yours ${Math.round(100 - ltv)}%`}
+        >
+          <div
+            className="h-full bg-slate-400 dark:bg-slate-500"
+            style={{ width: `${Math.min(100, ltv)}%` }}
+          />
+        </div>
+      )}
+      <p className="mt-1 flex justify-between text-xs text-slate-500">
+        <span>Owed</span>
+        <span>Yours</span>
+      </p>
+    </Section>
+  );
+}
+
+/** Where the latest payment went: principal, interest, escrow. */
+function LastPaymentSplit({ loan }: { loan: Loan }) {
+  const p = loan.payments[0];
+  if (!p || p.interestCents === null || p.principalCents === null) return null;
+  const parts = [
+    { label: "Principal", cents: p.principalCents, color: "bg-emerald-500" },
+    { label: "Interest", cents: p.interestCents, color: "bg-amber-500" },
+    ...(p.escrowCents ? [{ label: "Escrow", cents: p.escrowCents, color: "bg-slate-400" }] : []),
+  ];
+  const total = parts.reduce((s, x) => s + x.cents, 0) || 1;
+  return (
+    <div>
+      <p className="mb-1.5 text-xs text-slate-500">
+        Your last payment ({day(p.date)}){loan.splitEstimated ? ", estimated" : ""}
+      </p>
+      <div className="flex h-2.5 overflow-hidden rounded-full">
+        {parts.map((x) => (
+          <div key={x.label} className={x.color} style={{ width: `${(x.cents / total) * 100}%` }} />
+        ))}
+      </div>
+      <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+        {parts.map((x) => (
+          <li key={x.label} className="inline-flex items-center gap-1.5">
+            <span aria-hidden="true" className={cx("size-2 rounded-sm", x.color)} />
+            <span className="text-slate-500">{x.label}</span>
+            <span className="font-medium tabular-nums">{formatMoney(x.cents)}</span>
+          </li>
+        ))}
+      </ul>
     </div>
+  );
+}
+
+function Payments({ loan }: { loan: Loan }) {
+  const [showAll, setShowAll] = useState(false);
+  const payments = showAll ? loan.payments : loan.payments.slice(0, 6);
+  const split = loan.payments.some((p) => p.interestCents !== null);
+  const escrow = loan.principalInterestCents !== null;
+  const shared = loan.payments.some((p) => p.totalCents !== null);
+  return (
+    <Section
+      title={`Payments${loan.payments.length ? ` (${loan.payments.length})` : ""}`}
+      aside={
+        loan.splitEstimated ? (
+          <span className="text-xs text-slate-500">Interest and principal are estimates</span>
+        ) : undefined
+      }
+    >
+      {loan.payments.length === 0 ? (
+        <p className="text-sm text-slate-500">
+          {loan.paymentMatch
+            ? `No payments containing "${loan.paymentMatch}" found${loan.paymentAmountCents ? ` of about ${formatMoney(loan.paymentAmountCents)}` : ""}.`
+            : "No payments found. Add the words your payments use (Edit details) so Muny can find them."}
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[32rem] text-sm">
+            <thead className="text-xs text-slate-500">
+              <tr>
+                <th className="py-1.5 text-left font-medium">Date</th>
+                <th className="py-1.5 text-left font-medium">From</th>
+                <th className="py-1.5 text-right font-medium">Paid</th>
+                {split && <th className="py-1.5 text-right font-medium">Principal</th>}
+                {split && <th className="py-1.5 text-right font-medium">Interest</th>}
+                {escrow && <th className="py-1.5 text-right font-medium">Escrow</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {payments.map((p) => (
+                <tr key={p.transactionId}>
+                  <td className="py-2 whitespace-nowrap">{day(p.date)}</td>
+                  <td className="max-w-48 truncate py-2 text-slate-500" title={p.description}>
+                    {p.fromAccountName}
+                  </td>
+                  <td className="py-2 text-right font-medium tabular-nums">
+                    {formatMoney(p.amountCents)}
+                    {p.totalCents !== null && (
+                      <span className="block text-[11px] font-normal text-slate-500">
+                        of {formatMoney(p.totalCents)}
+                      </span>
+                    )}
+                  </td>
+                  {split && (
+                    <td className="py-2 text-right tabular-nums">{money(p.principalCents)}</td>
+                  )}
+                  {split && (
+                    <td className="py-2 text-right tabular-nums text-slate-500">
+                      {money(p.interestCents)}
+                    </td>
+                  )}
+                  {escrow && (
+                    <td className="py-2 text-right tabular-nums text-slate-500">
+                      {money(p.escrowCents)}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {loan.payments.length > 6 && (
+        <button
+          type="button"
+          onClick={() => setShowAll((v) => !v)}
+          className="mt-2 text-xs text-slate-500 underline"
+        >
+          {showAll ? "Show fewer" : `Show all ${loan.payments.length}`}
+        </button>
+      )}
+      {shared && (
+        <p className="mt-2 text-xs text-slate-500">
+          Shared with {loan.sharedWith.join(", ")}: "of" is the whole payment.
+        </p>
+      )}
+    </Section>
   );
 }
 
 function LoanCard({ loan }: { loan: Loan }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
-  const [showAll, setShowAll] = useState(false);
   const [fetching, setFetching] = useState<string | null>(null);
-  const payments = showAll ? loan.payments : loan.payments.slice(0, 6);
-  const tracked = loan.source === "manual" || loan.splitEstimated;
-  const shared = loan.payments.some((p) => p.totalCents !== null);
-  const mortgage = loan.principalInterestCents !== null;
+  const base = basePlan(loan);
 
   // Ask the lender (through Plaid) for the loan's terms.
   const getDetails = async () => {
@@ -487,40 +678,35 @@ function LoanCard({ loan }: { loan: Loan }) {
     }
   };
 
-  const stats: [string, string, string | null][] = [
-    ["Rate", pct(loan.aprBps), null],
-    [
-      "Payment",
-      loan.monthlyPaymentCents ? `${formatMoney(loan.monthlyPaymentCents)}/mo` : "—",
-      mortgage && loan.escrowCents !== null
-        ? `${formatMoney(loan.principalInterestCents ?? 0)} principal & interest + ${formatMoney(loan.escrowCents)} escrow`
-        : null,
-    ],
-    [
-      "Minimum",
-      money(loan.minimumPaymentCents),
-      loan.minimumPaymentCents === null ? "Not reported" : null,
-    ],
-    ["Next due", day(loan.nextDueDate), null],
-    [
-      "Interest this year",
-      money(loan.interestThisYearCents),
-      loan.splitEstimated ? "Estimated" : null,
-    ],
-    ["Interest left", money(loan.interestRemainingCents), null],
+  const minimumDiffers =
+    loan.minimumPaymentCents !== null && loan.minimumPaymentCents !== loan.monthlyPaymentCents;
+  const facts: { label: string; value: string; sub?: string | null }[] = [
+    { label: "Rate", value: pct(loan.aprBps) },
+    {
+      label: "Monthly payment",
+      value: money(loan.monthlyPaymentCents),
+      sub: minimumDiffers ? `Minimum ${formatMoney(loan.minimumPaymentCents ?? 0)}` : null,
+    },
+    { label: "Next due", value: day(loan.nextDueDate) },
+    {
+      label: "Paid off",
+      value: base?.plan.months != null ? monthYear(addMonths(base.plan.months)) : "—",
+      sub: base?.plan.months != null ? monthsLabel(base.plan.months) : null,
+    },
+    {
+      label: "Interest this year",
+      value: money(loan.interestThisYearCents),
+      sub: loan.splitEstimated ? "Estimated" : null,
+    },
   ];
+  const side = loan.property || loan.pmi;
 
   return (
-    <Card>
+    <Card className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold">{loan.name}</h3>
-          <p className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <span>
-              {[LOAN_KIND_LABELS[loan.kind], loan.lender, loan.mask && `••${loan.mask}`]
-                .filter(Boolean)
-                .join(" · ")}
-            </span>
+          <h3 className="flex flex-wrap items-center gap-2 text-lg font-semibold">
+            {loan.name}
             <span
               className={cx(
                 "rounded px-1.5 py-0.5 text-[10px] font-medium",
@@ -531,9 +717,15 @@ function LoanCard({ loan }: { loan: Loan }) {
             >
               {loan.connected ? "Synced" : "Tracked from your payments"}
             </span>
+          </h3>
+          <p className="text-xs text-slate-500">
+            {[LOAN_KIND_LABELS[loan.kind], loan.lender, loan.mask && `••${loan.mask}`]
+              .filter(Boolean)
+              .join(" · ")}
           </p>
         </div>
         <div className="text-right">
+          <p className="text-xs text-slate-500">Owed</p>
           <p className="text-2xl font-semibold tabular-nums">{formatMoney(loan.balanceCents)}</p>
           <span className="flex flex-wrap justify-end gap-3 text-xs">
             {loan.connectionId && loan.aprBps === null && (
@@ -557,127 +749,66 @@ function LoanCard({ loan }: { loan: Loan }) {
           </span>
         </div>
       </div>
+
       {loan.paidOffPct !== null && (
-        <div className="mt-3">
+        <div>
           <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
-            <div className="h-full bg-emerald-500" style={{ width: `${loan.paidOffPct}%` }} />
+            <div
+              className="h-full rounded-full bg-emerald-500"
+              style={{ width: `${loan.paidOffPct}%` }}
+            />
           </div>
-          <p className="mt-1 text-xs text-slate-500">
-            {Math.round(loan.paidOffPct)}% of {formatMoney(loan.originalPrincipalCents ?? 0)} paid
-            off
+          <p className="mt-1 flex justify-between text-xs text-slate-500">
+            <span>{Math.round(loan.paidOffPct)}% paid off</span>
+            <span className="tabular-nums">
+              {formatMoney(Math.max(0, (loan.originalPrincipalCents ?? 0) - loan.balanceCents))} of{" "}
+              {formatMoney(loan.originalPrincipalCents ?? 0)}
+            </span>
           </p>
         </div>
       )}
-      <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3 lg:grid-cols-6">
-        {stats.map(([k, v, sub]) => (
-          <div key={k}>
-            <dt className="text-xs text-slate-500">{k}</dt>
-            <dd className="font-medium tabular-nums">{v}</dd>
-            {sub && <dd className="text-xs text-slate-500">{sub}</dd>}
+
+      <dl className="grid grid-cols-2 divide-slate-200 overflow-hidden rounded-xl border border-slate-200 sm:grid-cols-3 lg:grid-cols-5 lg:divide-x dark:divide-slate-800 dark:border-slate-800">
+        {facts.map((f) => (
+          <div key={f.label} className="px-4 py-3">
+            <dt className="text-xs text-slate-500">{f.label}</dt>
+            <dd className="mt-0.5 font-semibold tabular-nums">{f.value}</dd>
+            {f.sub && <dd className="text-xs text-slate-500">{f.sub}</dd>}
           </div>
         ))}
       </dl>
-      {loan.property && (
-        <p className="mt-3 text-sm">
-          <Link
-            to="/assets"
-            className="font-medium text-brand-600 hover:underline dark:text-brand-500"
-          >
-            {loan.property.name}
-          </Link>{" "}
-          worth {formatMoney(loan.property.valueCents)} · your equity{" "}
-          <strong>{formatMoney(loan.property.equityCents)}</strong>
-          {loan.property.loanToValuePct !== null &&
-            ` · ${loan.property.loanToValuePct.toFixed(0)}% loan-to-value`}
-        </p>
+
+      {(loan.principalInterestCents !== null || loan.payments[0]?.interestCents != null) && (
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+          <LastPaymentSplit loan={loan} />
+          {loan.principalInterestCents !== null && loan.escrowCents !== null && (
+            <p className="text-xs text-slate-500 sm:text-right">
+              Each payment: {formatMoney(loan.principalInterestCents)} principal & interest +{" "}
+              {formatMoney(loan.escrowCents)} escrow
+            </p>
+          )}
+        </div>
       )}
+
       {loan.sharedWith.length > 0 && (
-        <p className="mt-2 text-xs text-slate-500">
+        <p className="text-xs text-slate-500">
           Payments are shared with {loan.sharedWith.join(", ")}; this loan's part is in proportion
           to its monthly payment.
         </p>
       )}
-      <div className="mt-5 grid gap-6 lg:grid-cols-2">
-        <div className="space-y-4">
-          <PayoffPlanner loan={loan} />
-          <MortgageInsurance loan={loan} />
-        </div>
-        <div>
-          <p className="mb-2 text-xs font-medium text-slate-500">
-            Payments
-            {loan.splitEstimated && " · interest and principal are estimates from today's balance"}
-          </p>
-          {loan.payments.length === 0 ? (
-            <p className="text-sm text-slate-500">
-              {loan.paymentMatch
-                ? `No payments containing "${loan.paymentMatch}" found${loan.paymentAmountCents ? ` of about ${formatMoney(loan.paymentAmountCents)}` : ""}.`
-                : "No payments found. Add the words your payments use (Edit details) so Muny can find them."}
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[30rem] text-sm">
-                <thead className="text-xs text-slate-500">
-                  <tr>
-                    <th className="py-1 text-left font-medium">Date</th>
-                    <th className="py-1 text-left font-medium">From</th>
-                    <th className="py-1 text-right font-medium">Paid</th>
-                    {mortgage && <th className="py-1 text-right font-medium">Escrow</th>}
-                    {tracked && (
-                      <>
-                        <th className="py-1 text-right font-medium">Interest</th>
-                        <th className="py-1 text-right font-medium">Principal</th>
-                      </>
-                    )}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {payments.map((p) => (
-                    <tr key={p.transactionId}>
-                      <td className="py-1.5 whitespace-nowrap">{day(p.date)}</td>
-                      <td className="max-w-40 truncate py-1.5 text-slate-500" title={p.description}>
-                        {p.fromAccountName}
-                      </td>
-                      <td className="py-1.5 text-right tabular-nums">
-                        {formatMoney(p.amountCents)}
-                        {p.totalCents !== null && (
-                          <span className="block text-[11px] text-slate-500">
-                            of {formatMoney(p.totalCents)}
-                          </span>
-                        )}
-                      </td>
-                      {mortgage && (
-                        <td className="py-1.5 text-right tabular-nums text-slate-500">
-                          {money(p.escrowCents)}
-                        </td>
-                      )}
-                      {tracked && (
-                        <>
-                          <td className="py-1.5 text-right tabular-nums text-slate-500">
-                            {money(p.interestCents)}
-                          </td>
-                          <td className="py-1.5 text-right tabular-nums">
-                            {money(p.principalCents)}
-                          </td>
-                        </>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {loan.payments.length > 6 && (
-            <button
-              type="button"
-              onClick={() => setShowAll((v) => !v)}
-              className="mt-2 text-xs text-slate-500 underline"
-            >
-              {showAll ? "Show fewer" : `Show all ${loan.payments.length}`}
-            </button>
-          )}
-          {shared && <p className="mt-2 text-xs text-slate-500">"of" is the whole payment.</p>}
-        </div>
+
+      <div className={cx("grid gap-4", side && "lg:grid-cols-2")}>
+        <PayoffPlanner loan={loan} />
+        {side && (
+          <div className="space-y-4">
+            <HomeEquity loan={loan} />
+            <MortgageInsurance loan={loan} />
+          </div>
+        )}
       </div>
+
+      <Payments loan={loan} />
+
       <Modal open={editing} onClose={() => setEditing(false)} title={`Edit ${loan.name}`}>
         {editing && <LoanForm loan={loan} onDone={() => setEditing(false)} />}
       </Modal>

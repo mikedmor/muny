@@ -132,6 +132,8 @@ export function splitBackward(
   balanceNowCents: number,
   aprBps: number,
   newestFirst: { date: string; amountCents: number }[],
+  /** Interest charged monthly at APR/12 (mortgages), not daily. */
+  monthly = false,
 ): { interestCents: number; principalCents: number }[] {
   let after = BigInt(Math.max(0, balanceNowCents));
   const out: { interestCents: number; principalCents: number }[] = [];
@@ -139,8 +141,8 @@ export function splitBackward(
     const older = newestFirst[i + 1];
     const days = older ? Math.max(1, Math.round(dayNum(p.date) - dayNum(older.date))) : 30;
     // interest = (after + payment - interest) × rate × days ⇒ solve for interest.
-    const k = BigInt(aprBps) * BigInt(days);
-    const den = 10000n * 365n;
+    const k = monthly ? BigInt(aprBps) : BigInt(aprBps) * BigInt(days);
+    const den = monthly ? 10000n * 12n : 10000n * 365n;
     const pay = BigInt(Math.max(0, p.amountCents));
     let interest = div((after + pay) * k, den + k);
     if (interest > pay) interest = pay;

@@ -60,3 +60,22 @@ describe("amortizedPayment and splitBackward", () => {
     expect(first?.interestCents).toBeGreaterThan(last?.interestCents ?? 0);
   });
 });
+
+describe("splitBackward (monthly interest)", () => {
+  it("charges a mortgage the same rate every month, whatever the days between", () => {
+    const rows = splitBackward(
+      32_427_105,
+      613,
+      [
+        { date: "2026-11-03", amountCents: 202_138 },
+        { date: "2026-10-02", amountCents: 202_138 },
+        { date: "2026-09-02", amountCents: 202_138 },
+      ],
+      true,
+    );
+    // About $1,657 of interest each month, shrinking slowly going forward.
+    for (const r of rows) expect(r.interestCents).toBeGreaterThan(165_000);
+    expect(rows[0]?.interestCents).toBeLessThan(rows[2]?.interestCents ?? 0);
+    expect((rows[2]?.interestCents ?? 0) - (rows[0]?.interestCents ?? 0)).toBeLessThan(500);
+  });
+});

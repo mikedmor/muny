@@ -244,6 +244,8 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
         balance,
         apr,
         newest.map((p) => ({ date: p.date, amountCents: p.amountCents - (p.escrowCents ?? 0) })),
+        // Mortgages charge interest monthly on the balance; other loans by the day.
+        d?.kind === "mortgage",
       );
       const byId = new Map(newest.map((p, i) => [p.transactionId, split[i]]));
       rows = rows.map((p) => {
