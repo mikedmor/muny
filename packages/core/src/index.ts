@@ -8,6 +8,7 @@ export * from "./crypto/evm.js";
 export * from "./crypto/hd.js";
 export * from "./crypto/koinly.js";
 export * from "./crypto/movements.js";
+export * from "./crypto/taxlots.js";
 export * from "./import/bank-csv.js";
 export * from "./import/csv.js";
 export * from "./import/dates.js";

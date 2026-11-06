@@ -19,6 +19,19 @@ export interface Cursor {
   balances: { asset: string; amount: string }[];
   /** Provider-specific positions (paging tokens, per-address counts…). */
   pos?: Record<string, string | number>;
+  /** NFTs the address holds (EVM chains), as of the last sync. */
+  nfts?: NftHeld[];
+}
+
+export interface NftHeld {
+  contract: string;
+  tokenId: string;
+  type: string;
+  name: string | null;
+  collection: string | null;
+  /** Image link (another site: shown only when the user asks). */
+  image: string | null;
+  amount: string;
 }
 
 export interface Fetched {
@@ -28,6 +41,8 @@ export interface Fetched {
   pos?: Cursor["pos"];
   /** Something worth telling the user that isn't an error (e.g. a closed account). */
   notice?: string;
+  /** NFTs held now (undefined: not looked up, keep what the cursor had). */
+  nfts?: NftHeld[];
 }
 
 export interface ChainCtx {

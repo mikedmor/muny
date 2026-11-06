@@ -6,6 +6,7 @@ import { CoinIcon, WalletIcon } from "../../components/coins.js";
 import { Alert, Button, Card, cx } from "../../components/ui.js";
 import { api } from "../../lib/api.js";
 import { useCryptoMutation, useCryptoOverview } from "../../lib/queries.js";
+import { FlowsStrip, MaturityView, NftsView, TaxOptimizationView } from "./CryptoTaxViews.js";
 import { agoTime, CryptoHeader, fmtAmount, fmtPrice } from "./common.js";
 
 /** Crypto dashboard: total value over time, movers, allocation and holdings (Koinly-style). */
@@ -15,7 +16,15 @@ const RANGES = [
   ["1Y", 366],
   ["YTD", -1],
   ["All", 0],
+  ["Custom", -2],
 ] as const;
+const TABS = [
+  ["overview", "Overview"],
+  ["nfts", "NFTs"],
+  ["tax", "Tax optimization"],
+  ["maturity", "Asset maturity"],
+] as const;
+const isoDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 const SLOTS = 7;
 const color = (i: number) => (i < SLOTS ? `var(--viz-series-${i + 1})` : "var(--viz-other)");
 
@@ -348,16 +357,26 @@ function RefreshStatus() {
 export function CryptoDashboard() {
   const o = useCryptoOverview();
   const [range, setRange] = useState<(typeof RANGES)[number][0]>("YTD");
+  const [tab, setTab] = useState<(typeof TABS)[number][0]>("overview");
+  const [custom, setCustom] = useState({
+    from: `${new Date().getFullYear()}-01-01`,
+    to: isoDay(Date.now()),
+  });
   const d = o.data;
 
-  const points = useMemo(() => {
-    const h = d?.history ?? [];
+  // The range as dates (for the chart and the flows below it).
+  const [rangeFrom, rangeTo] = useMemo((): [string, string] => {
+    if (range === "Custom") return [custom.from, custom.to];
     const [, days] = RANGES.find(([k]) => k === range) ?? RANGES[2];
-    let from = "";
-    if (days === -1) from = `${new Date().getFullYear()}-01-01`;
-    else if (days > 0) from = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
-    return h.filter((p) => p.date >= from);
-  }, [d, range]);
+    const today = isoDay(Date.now());
+    if (days === -1) return [`${new Date().getFullYear()}-01-01`, today];
+    if (days > 0) return [isoDay(Date.now() - days * 86_400_000), today];
+    return ["", today];
+  }, [range, custom]);
+  const points = useMemo(
+    () => (d?.history ?? []).filter((p) => p.date >= rangeFrom && p.date <= rangeTo),
+    [d, rangeFrom, rangeTo],
+  );
   const first = points[0]?.valueCents ?? 0;
   const last = d?.totalValueCents ?? 0;
   const changePct = first > 0 ? ((last - first) / first) * 100 : null;
@@ -398,6 +417,33 @@ export function CryptoDashboard() {
         </Card>
       )}
       {d && d.walletCount > 0 && (
+        <div
+          className="mb-4 flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800"
+          role="tablist"
+        >
+          {TABS.map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              aria-selected={tab === k}
+              onClick={() => setTab(k)}
+              className={cx(
+                "-mb-px border-b-2 px-3 py-2 text-sm",
+                tab === k
+                  ? "border-brand-600 font-semibold text-brand-700 dark:text-brand-500"
+                  : "border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      {d && d.walletCount > 0 && tab === "nfts" && <NftsView />}
+      {d && d.walletCount > 0 && tab === "tax" && <TaxOptimizationView />}
+      {d && d.walletCount > 0 && tab === "maturity" && <MaturityView />}
+      {d && d.walletCount > 0 && tab === "overview" && (
         <div className="space-y-6">
           {!d.pricesEnabled && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-500/40 bg-brand-50 px-4 py-3 text-sm dark:bg-brand-700/15">
@@ -448,7 +494,9 @@ export function CryptoDashboard() {
                         ? "this year"
                         : range === "All"
                           ? "since the start"
-                          : `over ${range}`}
+                          : range === "Custom"
+                            ? "over this range"
+                            : `over ${range}`}
                     </span>
                   </p>
                 )}
@@ -473,6 +521,31 @@ export function CryptoDashboard() {
                 ))}
               </fieldset>
             </div>
+            {range === "Custom" && (
+              <div className="mt-3 flex flex-wrap items-center justify-end gap-2 text-sm">
+                <input
+                  type="date"
+                  aria-label="From"
+                  value={custom.from}
+                  max={custom.to}
+                  onChange={(e) =>
+                    e.target.value && setCustom((c) => ({ ...c, from: e.target.value }))
+                  }
+                  className="rounded-lg border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
+                />
+                <span className="text-slate-500">to</span>
+                <input
+                  type="date"
+                  aria-label="To"
+                  value={custom.to}
+                  min={custom.from}
+                  onChange={(e) =>
+                    e.target.value && setCustom((c) => ({ ...c, to: e.target.value }))
+                  }
+                  className="rounded-lg border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
+                />
+              </div>
+            )}
             <div className="mt-4">
               {points.length > 1 ? (
                 <LineChart
@@ -495,9 +568,9 @@ export function CryptoDashboard() {
                 </p>
               )}
             </div>
-            <p className="mt-2 border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-slate-800">
-              Cost is first-in, first-out across all wallets. Realized gains and tax reports come
-              with the tax engine.
+            <FlowsStrip from={rangeFrom || undefined} to={rangeTo} />
+            <p className="mt-2 text-xs text-slate-500">
+              Cost is first-in, first-out across all wallets; long term means held more than a year.
               {d.pricesUpdatedAt &&
                 ` Prices updated ${new Date(d.pricesUpdatedAt).toLocaleString()}.`}
             </p>

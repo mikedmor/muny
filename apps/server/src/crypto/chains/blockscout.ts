@@ -12,7 +12,14 @@ import { schema } from "@muny/db";
 import { eq } from "drizzle-orm";
 import { decryptJson } from "../../lib/crypto.js";
 import { BLOCKSCOUT_KEY } from "../prices.js";
-import { type Adapter, type ChainCtx, type Cursor, SyncError, safeText } from "./ctx.js";
+import {
+  type Adapter,
+  type ChainCtx,
+  type Cursor,
+  type NftHeld,
+  SyncError,
+  safeText,
+} from "./ctx.js";
 
 /**
  * EVM chains through Blockscout's Etherscan-compatible account API. With a
@@ -83,6 +90,54 @@ export async function balanceChanges(ctx: ChainCtx): Promise<ChainBalanceChange[
     if (!next) return out;
   }
   throw new SyncError("Too much balance history to compare in one go");
+}
+
+interface NftPage {
+  items?: {
+    id?: string;
+    token_type?: string;
+    value?: string;
+    image_url?: string | null;
+    metadata?: { name?: string; image?: string } | null;
+    token?: { address_hash?: string; address?: string; name?: string | null; type?: string };
+  }[];
+  next_page_params?: Record<string, string | number> | null;
+}
+
+/** NFTs (ERC-721 / ERC-1155) the address holds now; null when the service can't say. */
+export async function heldNfts(ctx: ChainCtx): Promise<NftHeld[] | null> {
+  const { root, headers } = endpoint(ctx);
+  const out: NftHeld[] = [];
+  let next: Record<string, string | number> | null = null;
+  try {
+    for (let page = 0; page < 5; page++) {
+      const q = new URLSearchParams({ type: "ERC-721,ERC-1155" });
+      for (const [k, v] of Object.entries(next ?? {})) q.set(k, String(v));
+      const r: NftPage = await ctx.get<NftPage>(
+        `${root}/api/v2/addresses/${ctx.source}/nft?${q}`,
+        headers,
+      );
+      for (const i of r.items ?? []) {
+        const contract = (i.token?.address_hash ?? i.token?.address ?? "").toLowerCase();
+        if (!contract || !i.id) continue;
+        const image = i.image_url ?? i.metadata?.image ?? null;
+        out.push({
+          contract,
+          tokenId: String(i.id),
+          type: i.token_type ?? i.token?.type ?? "ERC-721",
+          name: i.metadata?.name?.slice(0, 200) ?? null,
+          collection: i.token?.name?.slice(0, 200) ?? null,
+          image: image && /^(https?|ipfs):\/\//i.test(image) ? image.slice(0, 1000) : null,
+          amount: i.value ?? "1",
+        });
+      }
+      next = r.next_page_params ?? null;
+      if (!next) break;
+    }
+    return out;
+  } catch {
+    return null;
+  }
 }
 
 export const blockscout: Adapter = async (ctx) => {
@@ -163,5 +218,11 @@ export const blockscout: Adapter = async (ctx) => {
     }
   for (const [asset, amount] of held20.toStrings())
     if (amount !== "0") balances.push({ asset, amount });
-  return { mapped: txns, height: Math.max(cursor?.height ?? 0, maxBlock), balances };
+  const nfts = await heldNfts(ctx);
+  return {
+    mapped: txns,
+    height: Math.max(cursor?.height ?? 0, maxBlock),
+    balances,
+    ...(nfts ? { nfts } : {}),
+  };
 };

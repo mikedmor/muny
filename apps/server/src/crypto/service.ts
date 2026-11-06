@@ -859,7 +859,7 @@ export function syncHistory(db: Db, walletId: string): import("@muny/shared").Cr
 type Daily = Map<string, { date: string; usd: string }[]>;
 
 /** Daily USD prices per asset, oldest first (all assets, or just these). */
-function loadDaily(db: Db, assets?: (string | null)[]): Daily {
+export function loadDaily(db: Db, assets?: (string | null)[]): Daily {
   const want = assets ? [...new Set(assets.filter((a): a is string => !!a))] : null;
   const daily: Daily = new Map();
   if (want && !want.length) return daily;
@@ -881,7 +881,7 @@ function loadDaily(db: Db, assets?: (string | null)[]): Daily {
 }
 
 /** The USD price of an asset on the day of `at` (or the closest day before). */
-function priceLookup(daily: Daily) {
+export function priceLookup(daily: Daily) {
   return (asset: string, at: number): string | null => {
     const list = daily.get(asset);
     if (!list?.length) return null;
@@ -1241,4 +1241,20 @@ export function markRemainingLost(
     coins++;
   }
   return { coins };
+}
+
+/** NFTs held in synced wallets (as of each wallet's last sync). */
+export function listNfts(db: Db): import("@muny/shared").CryptoNft[] {
+  const out: import("@muny/shared").CryptoNft[] = [];
+  for (const r of db.select().from(w).all()) {
+    const c = readCursor(r.syncCursor);
+    for (const n of c?.nfts ?? [])
+      out.push({
+        walletId: r.id,
+        walletName: r.name,
+        chain: r.chain,
+        ...n,
+      });
+  }
+  return out;
 }

@@ -13,10 +13,12 @@ import type {
   ConnectionSummary,
   CreateAccountInput,
   CreateTransactionInput,
+  CryptoNft,
   CryptoOverview,
   CryptoReconcile,
   CryptoSettings,
   CryptoSyncRun,
+  CryptoTaxReport,
   CryptoTxnPage,
   CryptoTxnQuery,
   CryptoUsage,
@@ -725,4 +727,23 @@ export const useCryptoTransferMatches = (id: string, enabled: boolean) =>
     queryKey: [...cryptoKeys.txns, "matches", id],
     queryFn: () => api.get<CryptoTransferMatch[]>(`/api/crypto/txns/${id}/matches`),
     enabled,
+  });
+
+/** The tax view (flows and realized gains for a range; holdings by term). */
+export const useCryptoTax = (from?: string, to?: string) => {
+  const p = new URLSearchParams();
+  if (from) p.set("from", from);
+  if (to) p.set("to", to);
+  return useQuery({
+    queryKey: [...cryptoKeys.all, "tax", from ?? "", to ?? ""],
+    queryFn: () => api.get<CryptoTaxReport>(`/api/crypto/tax?${p}`),
+    placeholderData: keepPreviousData,
+  });
+};
+
+/** NFTs in synced wallets. */
+export const useCryptoNfts = () =>
+  useQuery({
+    queryKey: [...cryptoKeys.all, "nfts"],
+    queryFn: () => api.get<CryptoNft[]>("/api/crypto/nfts"),
   });

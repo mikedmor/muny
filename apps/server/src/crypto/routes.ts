@@ -39,6 +39,7 @@ import {
   deleteTxn,
   importKoinly,
   linkAsTransfer,
+  listNfts,
   listTxns,
   listWallets,
   markNotDuplicate,
@@ -62,6 +63,7 @@ import {
   syncWallet,
   walletsDue,
 } from "./sync.js";
+import { cryptoTax } from "./tax.js";
 
 const IdParams = z.object({ id: z.string().min(1).max(64) });
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -323,6 +325,18 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
   });
 
   // --- Transactions ------------------------------------------------------------
+
+  /** NFTs in synced EVM wallets. */
+  app.get("/api/crypto/nfts", async () => listNfts(db));
+
+  /** Tax view: the range's flows and realized gains, the tax year by term, holdings by term. */
+  app.get("/api/crypto/tax", async (req) => {
+    const q = parse(z.object({ from: isoDate.optional(), to: isoDate.optional() }), req.query);
+    return cryptoTax(db, {
+      from: q.from ? Date.parse(`${q.from}T00:00:00Z`) : undefined,
+      to: q.to ? Date.parse(`${q.to}T23:59:59.999Z`) : undefined,
+    });
+  });
 
   app.get("/api/crypto/txns", async (req) => {
     const q = parse(

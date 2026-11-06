@@ -598,3 +598,62 @@ export function guessCryptoExchange(name: string): string | null {
   if (/trade\s*ogre/.test(n)) return "tradeogre";
   return null;
 }
+
+/** One lot still held: what it cost and when it was acquired (FIFO order). */
+export interface CryptoTaxLot {
+  acquiredAt: number;
+  amount: string;
+  costCents: number;
+  /** When it turns long term (held more than a year). */
+  longFrom: number;
+}
+
+/** The tax view: flows and realized gains for a range, and what's held by term. */
+export interface CryptoTaxReport {
+  from: number;
+  to: number;
+  /** Values in cents for the range (unknown values aren't counted). */
+  summary: {
+    inCents: number;
+    outCents: number;
+    incomeCents: number;
+    expensesCents: number;
+    feesCents: number;
+    realizedCents: number;
+  };
+  /** The tax year of the range's end: realized gains by term. */
+  year: number;
+  realized: {
+    short: { profitCents: number; lossCents: number };
+    long: { profitCents: number; lossCents: number };
+  };
+  assets: {
+    asset: string;
+    name: string;
+    amount: string;
+    priceUsd: string | null;
+    valueCents: number | null;
+    short: { amount: string; costCents: number; valueCents: number | null };
+    long: { amount: string; costCents: number; valueCents: number | null };
+    lots: CryptoTaxLot[];
+    /** Some lots have no known cost (missing purchase history or prices). */
+    missingCost: boolean;
+  }[];
+  /** Share of today's value that is long term, month by month for a year. */
+  maturity: { at: number; longPct: number }[];
+}
+
+/** An NFT held in one of your synced wallets. */
+export interface CryptoNft {
+  walletId: string;
+  walletName: string;
+  chain: string | null;
+  contract: string;
+  tokenId: string;
+  type: string;
+  name: string | null;
+  collection: string | null;
+  /** Image link on another site; load only when the user asks. */
+  image: string | null;
+  amount: string;
+}

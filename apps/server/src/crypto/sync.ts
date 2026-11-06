@@ -549,7 +549,9 @@ async function runSync(
   });
   if (added) pairTransfers(db);
   if (backfill) addToIdSetting(db, ADDRESSES_FILLED, wallet.id);
-  const next: Cursor = { height, balances, ...(pos ? { pos } : {}) };
+  const prevNfts = readCursor(wallet.syncCursor)?.nfts;
+  const nfts = fetched.nfts ?? prevNfts;
+  const next: Cursor = { height, balances, ...(pos ? { pos } : {}), ...(nfts ? { nfts } : {}) };
   db.update(w)
     .set({ syncCursor: JSON.stringify(next) })
     .where(eq(w.id, wallet.id))
