@@ -2,8 +2,11 @@ import { type MunyDb, newId, schema } from "@muny/db";
 import {
   amortizedPayment,
   applyPayments,
+  type CreateLenderLoansInput,
   type CreateLoanInput,
   type LenderFeeInput,
+  type LenderPayment,
+  type LenderPaymentInput,
   type Loan,
   type LoanDetailsInput,
   type LoanFee,
@@ -209,11 +212,16 @@ function usualPayment(list: { amountCents: number }[]): number | null {
  * Loans that share payments: the same payment words and no amount set. Each
  * gets a share of every payment, by its monthly payment (else equally).
  */
-function shares(details: Map<string, Details>, names: Map<string, string>) {
+function shares(
+  details: Map<string, Details>,
+  names: Map<string, string>,
+  /** Loans paid through a lender's payments (split by their parts instead). */
+  skip: Set<string> = new Set(),
+) {
   const groups = new Map<string, Details[]>();
   for (const d of details.values()) {
     const w = d.paymentMatch?.trim().toLowerCase();
-    if (!w || d.paymentAmountCents) continue;
+    if (!w || d.paymentAmountCents || skip.has(d.accountId)) continue;
     groups.set(w, [...(groups.get(w) ?? []), d]);
   }
   const out = new Map<string, { share: number; others: string[] }>();
@@ -237,6 +245,127 @@ function principalInterest(d: Details | undefined): number | null {
   return amortizedPayment(d.originalPrincipalCents, d.aprBps, d.termMonths);
 }
 
+/** The next date on any of these days of the month, from today. */
+function nextDayOn(days: number[], today: string): string | null {
+  const dates = days.map((day) => {
+    for (let m = 0; m < 2; m++) {
+      const base = addMonths(`${today.slice(0, 7)}-01`, m);
+      const last = new Date(
+        Date.UTC(Number(base.slice(0, 4)), Number(base.slice(5, 7)), 0),
+      ).getUTCDate();
+      const d = `${base.slice(0, 8)}${String(Math.min(day, last)).padStart(2, "0")}`;
+      if (d >= today) return d;
+    }
+    return null;
+  });
+  return dates.filter((d): d is string => !!d).sort()[0] ?? null;
+}
+
+type Acct = ReturnType<typeof listAccounts>[number];
+
+/** Lender payments (one payment, several loans): what each loan gets of each payment found. */
+function lenderPaymentParts(
+  db: Db,
+  accounts: Acct[],
+  details: Map<string, Details>,
+  keyOf: (a: Acct) => string | null,
+  feeOf: Map<string, { minCents: number }>,
+  since: string,
+) {
+  const rows = db.select().from(schema.lenderPayments).all();
+  const ids = new Set(accounts.map((a) => a.id));
+  const loans = new Set<string>();
+  const others = new Map<string, Set<string>>();
+  const monthly = new Map<string, number>();
+  const dueDays = new Map<string, number[]>();
+  const live = rows
+    .map((row) => {
+      const parts = Object.entries(row.parts ?? {}).filter(([id, c]) => ids.has(id) && c > 0);
+      return { row, parts, total: parts.reduce((t, [, c]) => t + c, 0) };
+    })
+    .filter((x) => x.parts.length && x.total > 0);
+  for (const { row, parts } of live)
+    for (const [id, c] of parts) {
+      loans.add(id);
+      monthly.set(id, (monthly.get(id) ?? 0) + c);
+      if (row.dueDay) dueDays.set(id, [...(dueDays.get(id) ?? []), row.dueDay]);
+      const o = others.get(id) ?? new Set<string>();
+      for (const [x] of parts) if (x !== id) o.add(x);
+      others.set(id, o);
+    }
+
+  // Candidates for each, and the best fit for each payment.
+  const cands = new Map<string, RawPayment[]>();
+  const owner = new Map<string, { id: string; fit: number }>();
+  for (const { row, parts, total } of live) {
+    const words = row.paymentMatch?.trim()
+      ? [row.paymentMatch.trim()]
+      : [
+          ...new Set(
+            accounts
+              .filter((a) => keyOf(a) === row.lenderKey || parts.some(([id]) => id === a.id))
+              .map((a) => details.get(a.id)?.paymentMatch?.trim().toLowerCase())
+              .filter((w): w is string => !!w),
+          ),
+        ];
+    const feeMin = feeOf.get(row.lenderKey)?.minCents ?? null;
+    const list = new Map<string, RawPayment>();
+    for (const w of words)
+      for (const t of byWords(db, w)) {
+        const amount = -t.amountCents;
+        const day = Number(t.date.slice(8, 10));
+        if (t.date < since || (feeMin && amount >= feeMin) || !near(amount, total)) continue;
+        if (row.dueDay && dayGap(day, row.dueDay) > DUE_WINDOW) continue;
+        list.set(t.id, {
+          id: t.id,
+          date: t.date,
+          amountCents: amount,
+          description: t.description,
+          fromAccountName: t.mask ? `${t.from} ••${t.mask}` : t.from,
+        });
+      }
+    cands.set(row.id, [...list.values()]);
+    for (const p of list.values()) {
+      const fit =
+        Math.abs(p.amountCents - total) / total +
+        (row.dueDay ? dayGap(Number(p.date.slice(8, 10)), row.dueDay) / 31 : 0);
+      const cur = owner.get(p.id);
+      if (!cur || fit < cur.fit) owner.set(p.id, { id: row.id, fit });
+    }
+  }
+
+  // Split each payment by the parts (the last loan takes the rounding).
+  const out = new Map<string, (RawPayment & { total: number })[]>();
+  const claimed = new Set<string>();
+  const list: LenderPayment[] = [];
+  for (const { row, parts, total } of live) {
+    const mine = (cands.get(row.id) ?? [])
+      .filter((p) => owner.get(p.id)?.id === row.id)
+      .sort((x, y) => x.date.localeCompare(y.date));
+    for (const p of mine) {
+      claimed.add(p.id);
+      let left = p.amountCents;
+      parts.forEach(([id, c], i) => {
+        const part = i === parts.length - 1 ? left : Math.round((p.amountCents * c) / total);
+        left -= part;
+        out.set(id, [...(out.get(id) ?? []), { ...p, amountCents: part, total: p.amountCents }]);
+      });
+    }
+    list.push({
+      id: row.id,
+      lenderKey: row.lenderKey,
+      paymentMatch: row.paymentMatch,
+      dueDay: row.dueDay,
+      parts: Object.fromEntries(parts),
+      totalCents: total,
+      foundCount: mine.length,
+      lastDate: mine.at(-1)?.date ?? null,
+    });
+  }
+  for (const v of out.values()) v.sort((x, y) => x.date.localeCompare(y.date));
+  return { loans, others, monthly, dueDays, parts: out, claimed, list };
+}
+
 export function loansReport(db: Db, today = localToday()): LoansReport {
   const all = listAccounts(db);
   const accounts = all.filter((a) => a.type === "loan" && !a.hidden);
@@ -251,13 +380,18 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
       .all()
       .map((r) => [r.id, r.connectionId]),
   );
-  const shared = shares(details, new Map(accounts.map((a) => [a.id, a.name])));
   const year = today.slice(0, 4);
   const twoYearsAgo = addMonths(today, -24);
   const feeRows = db.select().from(schema.lenderFees).all();
   const feeOf = new Map(feeRows.map((f) => [f.lenderKey, f]));
   const keyOf = (a: (typeof accounts)[number]) =>
     lenderKeyOf(details.get(a.id)?.lender ?? a.institutionName);
+  const nameOf = new Map(accounts.map((a) => [a.id, a.name]));
+
+  // Payments covering several of a lender's loans: each found payment goes to the
+  // best-fitting one (amount, then day), then is split across its loans by their parts.
+  const sched = lenderPaymentParts(db, accounts, details, keyOf, feeOf, twoYearsAgo);
+  const shared = shares(details, nameOf, sched.loans);
 
   // Every loan's payments, then each payment that several loans could claim
   // (one lender, similar amounts) goes to the closest fit by amount and due day.
@@ -301,16 +435,22 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
     const manual = !connected && d?.source === "manual";
     const startDate = manual ? (d?.startDate ?? null) : null;
     const share = shared.get(a.id);
-    const whole = (found.get(a.id) ?? []).filter((p) => !claimedElsewhere(p.id, a.id));
+    const viaLender = sched.loans.has(a.id);
+    const whole = (found.get(a.id) ?? []).filter(
+      (p) => !claimedElsewhere(p.id, a.id) && !sched.claimed.has(p.id),
+    );
     // This loan's part of each payment.
-    const raw = whole.map((p) => ({
-      ...p,
-      total: share ? p.amountCents : null,
-      amountCents: share ? Math.round(p.amountCents * share.share) : p.amountCents,
-    }));
+    const raw: (RawPayment & { total: number | null })[] = viaLender
+      ? (sched.parts.get(a.id) ?? [])
+      : whole.map((p) => ({
+          ...p,
+          total: share ? p.amountCents : null,
+          amountCents: share ? Math.round(p.amountCents * share.share) : p.amountCents,
+        }));
     const apr = d?.aprBps ?? null;
     const pi = d?.kind === "mortgage" ? principalInterest(d) : null;
-    const monthly = d?.monthlyPaymentCents ?? usualPayment(raw);
+    const monthly =
+      d?.monthlyPaymentCents ?? (viaLender ? (sched.monthly.get(a.id) ?? null) : usualPayment(raw));
     const escrowOf = (amount: number) => (pi !== null ? Math.max(0, amount - pi) : 0);
 
     let balance = Math.abs(a.balanceCents);
@@ -432,7 +572,10 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
       minimumPaymentCents: d?.minimumPaymentCents ?? null,
       principalInterestCents: pi,
       escrowCents: pi !== null && monthly !== null ? Math.max(0, monthly - pi) : null,
-      nextDueDate: d?.nextDueDate ?? (last ? addMonths(last.date, 1) : null),
+      nextDueDate:
+        d?.nextDueDate ??
+        nextDayOn(sched.dueDays.get(a.id) ?? [], today) ??
+        (last ? addMonths(last.date, 1) : null),
       originalPrincipalCents: d?.originalPrincipalCents ?? null,
       originationDate: d?.originationDate ?? null,
       termMonths: d?.termMonths ?? null,
@@ -444,7 +587,9 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
       originalValueCents: d?.originalValueCents ?? null,
       pmiMonthlyCents: d?.pmiMonthlyCents ?? null,
       propertyAccountId: d?.propertyAccountId ?? null,
-      sharedWith: share?.others ?? [],
+      sharedWith: viaLender
+        ? [...(sched.others.get(a.id) ?? [])].map((id) => nameOf.get(id) ?? "")
+        : (share?.others ?? []),
       splitEstimated,
       paidOffPct:
         d?.originalPrincipalCents && d.originalPrincipalCents > 0
@@ -491,6 +636,7 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
         }
       : null,
     loans: loans.sort((a, b) => b.balanceCents - a.balanceCents),
+    lenderPayments: sched.list,
     lenderFees: feeRows.map((f) => {
       // The fee's own words, else the words of the lender's loans.
       const words = f.paymentMatch?.trim()
@@ -689,4 +835,76 @@ export function removeLenderFee(db: Db, lender: string): boolean {
     .run().changes;
   refreshManualLoans(db);
   return n > 0;
+}
+
+/** Replace a lender's payments (each covering several of its loans). */
+export function setLenderPayments(db: Db, lender: string, payments: LenderPaymentInput[]) {
+  const lenderKey = lenderKeyOf(lender);
+  if (!lenderKey) throw new Error("Name the lender");
+  const loanIds = new Set(
+    db
+      .select({ id: schema.accounts.id })
+      .from(schema.accounts)
+      .where(eq(schema.accounts.type, "loan"))
+      .all()
+      .map((a) => a.id),
+  );
+  db.delete(schema.lenderPayments).where(eq(schema.lenderPayments.lenderKey, lenderKey)).run();
+  for (const p of payments) {
+    const parts = Object.fromEntries(
+      Object.entries(p.parts).filter(([id, c]) => loanIds.has(id) && c > 0),
+    );
+    if (!Object.keys(parts).length) continue;
+    db.insert(schema.lenderPayments)
+      .values({
+        id: newId(),
+        lenderKey,
+        paymentMatch: p.paymentMatch?.trim() || null,
+        dueDay: p.dueDay ?? null,
+        parts,
+      })
+      .run();
+  }
+  refreshManualLoans(db);
+}
+
+/** Several loans from one lender at once, and the payments that cover them. */
+export function createLenderLoans(
+  db: Db,
+  input: CreateLenderLoansInput,
+  today = localToday(),
+): string[] {
+  const ids = input.loans.map((l, i) => {
+    const monthly = input.payments.reduce((t, p) => t + (p.parts[String(i)] ?? 0), 0);
+    return createManualLoan(
+      db,
+      {
+        name: l.name,
+        kind: input.kind ?? "other",
+        lender: input.lender.trim(),
+        paymentMatch: input.paymentMatch?.trim() || null,
+        startBalanceCents: l.startBalanceCents,
+        startDate: input.startDate ?? today,
+        aprBps: l.aprBps ?? null,
+        nextDueDate: l.nextDueDate ?? null,
+        monthlyPaymentCents: monthly || null,
+      },
+      today,
+    );
+  });
+  if (input.payments.length)
+    setLenderPayments(
+      db,
+      input.lender,
+      input.payments.map((p) => ({
+        paymentMatch: p.paymentMatch,
+        dueDay: p.dueDay,
+        parts: Object.fromEntries(
+          Object.entries(p.parts)
+            .map(([i, c]) => [ids[Number(i)] ?? "", c] as const)
+            .filter(([id]) => id),
+        ),
+      })),
+    );
+  return ids;
 }

@@ -149,6 +149,7 @@ export function Modal({
   title,
   children,
   bare,
+  wide,
 }: {
   open: boolean;
   onClose: () => void;
@@ -156,6 +157,8 @@ export function Modal({
   children: ReactNode;
   /** Wide, with no built-in title bar or padding: the content draws its own. */
   bare?: boolean;
+  /** Wider, for forms with tables (keeps the title bar; scrolls when tall). */
+  wide?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -176,7 +179,11 @@ export function Modal({
       aria-label={title}
       className={cx(
         "m-auto w-[calc(100%-2rem)] border border-slate-200 bg-white p-0 text-slate-900 shadow-xl backdrop:bg-slate-900/50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100",
-        bare ? "max-w-3xl overflow-hidden rounded-2xl" : "max-w-lg rounded-xl",
+        bare
+          ? "max-w-3xl overflow-hidden rounded-2xl"
+          : wide
+            ? "max-h-[calc(100vh-2rem)] max-w-3xl overflow-y-auto rounded-xl"
+            : "max-w-lg rounded-xl",
       )}
     >
       {open && bare && children}

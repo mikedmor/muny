@@ -3,6 +3,7 @@ import {
   formatMoney,
   type LenderFee,
   type LenderFeeInput,
+  type LenderPayment,
   LOAN_KIND_LABELS,
   LOAN_KINDS,
   type Loan,
@@ -21,6 +22,7 @@ import { Alert, Button, Card, cx, Field, PageHeader } from "../components/ui.js"
 import { api } from "../lib/api.js";
 import { openPlaidLink } from "../lib/bankWidgets.js";
 import { keys, linkApi } from "../lib/queries.js";
+import { LenderLoansForm, LenderPaymentsStrip } from "./loans/LenderLoans.js";
 import { PayoffPlan } from "./loans/PayoffPlan.js";
 
 /** Loans: what you owe, the terms, when each is paid off, and what paying extra would do (D-040, D-042). */
@@ -864,9 +866,12 @@ function LoanCard({
   loan,
   embedded = false,
   fee,
+  viaLender = false,
 }: {
   loan: Loan;
   embedded?: boolean;
+  /** Paid through the lender's payments (split by set parts). */
+  viaLender?: boolean;
   /** The lender's yearly fee (lone loans; a lender's group card shows it once). */
   fee?: LenderFee;
 }) {
@@ -1029,8 +1034,9 @@ function LoanCard({
 
       {loan.sharedWith.length > 0 && (
         <p className="text-xs text-slate-500">
-          Payments are shared with {loan.sharedWith.join(", ")}; this loan's part is in proportion
-          to its monthly payment.
+          {viaLender
+            ? `Paid together with ${loan.sharedWith.join(", ")}: this loan's part of each payment is set under Payments on the lender's card.`
+            : `Payments are shared with ${loan.sharedWith.join(", ")}; this loan's part is in proportion to its monthly payment.`}
         </p>
       )}
 
@@ -1085,10 +1091,13 @@ function LenderGroup({
   lender,
   loans,
   fee,
+  payments,
 }: {
   lender: string;
   loans: Loan[];
   fee: LenderFee | undefined;
+  /** Payments covering several of these loans. */
+  payments: LenderPayment[];
 }) {
   const [sel, setSel] = useState(loans[0]?.accountId ?? "");
   const loan = loans.find((l) => l.accountId === sel) ?? loans[0];
@@ -1135,7 +1144,13 @@ function LenderGroup({
           </button>
         ))}
       </div>
-      <LoanCard key={loan.accountId} loan={loan} embedded />
+      <LoanCard
+        key={loan.accountId}
+        loan={loan}
+        embedded
+        viaLender={payments.some((p) => loan.accountId in p.parts)}
+      />
+      <LenderPaymentsStrip lender={lender} loans={loans} payments={payments} />
       <FeeStrip
         lender={lender}
         fee={fee}
@@ -1179,6 +1194,7 @@ type Tab = (typeof TABS)[number][0];
 export function LoansPage() {
   const q = useQuery({ queryKey: loansKey, queryFn: () => api.get<LoansReport>("/api/loans") });
   const [adding, setAdding] = useState(false);
+  const [addMode, setAddMode] = useState<"one" | "several">("one");
   const [tab, setTab] = useState<Tab>(() => (window.location.hash === "#plan" ? "plan" : "loans"));
   const r = q.data;
   const feeFor = (lender: string | null) =>
@@ -1259,13 +1275,52 @@ export function LoansPage() {
                 lender={g.lender}
                 loans={g.loans}
                 fee={feeFor(g.lender)}
+                payments={(r.lenderPayments ?? []).filter(
+                  (x) => x.lenderKey === g.lender.trim().toLowerCase(),
+                )}
               />
             ),
           )}
         </div>
       )}
-      <Modal open={adding} onClose={() => setAdding(false)} title="Add a loan">
-        {adding && <LoanForm onDone={() => setAdding(false)} />}
+      <Modal
+        open={adding}
+        onClose={() => setAdding(false)}
+        title={addMode === "several" ? "Add loans from one lender" : "Add a loan"}
+        wide={addMode === "several"}
+      >
+        {adding && (
+          <>
+            <div className="mb-4 inline-flex rounded-lg border border-slate-200 p-0.5 text-sm dark:border-slate-800">
+              {(
+                [
+                  ["one", "One loan"],
+                  ["several", "Several from one lender"],
+                ] as const
+              ).map(([k, label]) => (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={addMode === k}
+                  onClick={() => setAddMode(k)}
+                  className={cx(
+                    "rounded-md px-3 py-1",
+                    addMode === k
+                      ? "bg-brand-600 text-white"
+                      : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {addMode === "one" ? (
+              <LoanForm onDone={() => setAdding(false)} />
+            ) : (
+              <LenderLoansForm onDone={() => setAdding(false)} />
+            )}
+          </>
+        )}
       </Modal>
     </>
   );

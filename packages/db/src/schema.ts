@@ -860,6 +860,25 @@ export const securityLogos = sqliteTable("security_logos", {
 });
 
 /**
+ * A payment that covers several of a lender's loans (e.g. one student loan
+ * payment applied across groups AA-AD): payments with the words, of about
+ * the parts' total, around the due day, are split across the loans by their
+ * parts. A loan in one gets its payments only from these.
+ */
+export const lenderPayments = sqliteTable("lender_payments", {
+  id: text().primaryKey(),
+  /** The lender's name, trimmed and lowercased (how loans are grouped). */
+  lenderKey: text().notNull(),
+  /** Words in the payment (null: the lender's loans' words). */
+  paymentMatch: text(),
+  /** Day of the month it's usually paid (null: any day). */
+  dueDay: integer(),
+  /** Each loan's part of the payment, in cents (loan account id → cents). */
+  parts: text({ mode: "json" }).$type<Record<string, number>>().notNull(),
+  updatedAt: updatedAt(),
+});
+
+/**
  * A lender's yearly fee (e.g. timeshare maintenance dues), one per lender:
  * payments of at least minCents with the words (else the lender's loans'
  * words). Listed on the lender's card and never counted as loan payments.

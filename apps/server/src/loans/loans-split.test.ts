@@ -272,4 +272,47 @@ describe("loans: telling similar payments apart by due day", () => {
     expect(loan?.payments.every((p) => (p.interestCents ?? 0) > 10_000)).toBe(true);
     expect(loan?.splitEstimated).toBe(true);
   });
+
+  it("splits a lender's payments across the loans each one covers", async () => {
+    const { client, pay, loans } = await setup();
+    const on = (monthsAgo: number, day: number) => {
+      const d = new Date(`${localToday()}T00:00:00Z`);
+      d.setUTCDate(1);
+      d.setUTCMonth(d.getUTCMonth() - monthsAgo);
+      return `${d.toISOString().slice(0, 8)}${String(day).padStart(2, "0")}`;
+    };
+    for (const m of [1, 2, 3]) {
+      await pay(on(m, 28), -22_461, "DEPT EDUCATION STUDENT LN");
+      await pay(on(m, 15), -7_539, "DEPT EDUCATION STUDENT LN");
+    }
+    const res = await client.post("/api/loans/batch", {
+      lender: "Nelnet",
+      kind: "student",
+      paymentMatch: "DEPT EDUCATION",
+      startDate: on(4, 1),
+      loans: ["AA", "AB", "AC", "AD", "AE"].map((name) => ({
+        name,
+        startBalanceCents: 500_000,
+        aprBps: 0,
+      })),
+      payments: [
+        { dueDay: 28, parts: { "0": 4_224, "1": 1_838, "2": 4_537, "3": 11_862 } },
+        { dueDay: 15, parts: { "2": 2_086, "3": 5_453 } },
+      ],
+    });
+    expect(res.statusCode).toBe(200);
+    const report = (await client.get("/api/loans")).json<LoansReport>();
+    const by = (n: string) => report.loans.find((l) => l.name === n);
+    expect(by("AA")?.payments.map((p) => p.amountCents)).toEqual([4_224, 4_224, 4_224]);
+    expect(by("AC")?.payments).toHaveLength(6);
+    expect(by("AC")?.monthlyPaymentCents).toBe(4_537 + 2_086);
+    expect(by("AC")?.balanceCents).toBe(500_000 - 3 * (4_537 + 2_086));
+    expect(by("AE")?.payments).toHaveLength(0);
+    expect(by("AA")?.payments[0]?.totalCents).toBe(22_461);
+    expect(by("AA")?.sharedWith).toEqual(["AB", "AC", "AD"]);
+    expect(report.lenderPayments.map((p) => [p.totalCents, p.foundCount])).toEqual([
+      [22_461, 3],
+      [7_539, 3],
+    ]);
+  });
 });

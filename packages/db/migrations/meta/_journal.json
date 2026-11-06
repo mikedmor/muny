@@ -225,6 +225,13 @@
       "when": 1793981740655,
       "tag": "0031_lender_fees",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1793983874170,
+      "tag": "0032_lender_payments",
+      "breakpoints": true
     }
   ]
 }

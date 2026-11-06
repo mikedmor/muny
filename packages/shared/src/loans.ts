@@ -129,6 +129,50 @@ export interface LenderFee {
   fees: LoanFee[];
 }
 
+/** A payment covering several of a lender's loans, split by each loan's part. */
+export interface LenderPayment {
+  id: string;
+  lenderKey: string;
+  /** Words in the payment (null: the lender's loans' words). */
+  paymentMatch: string | null;
+  /** Day of the month it's usually paid (null: any day). */
+  dueDay: number | null;
+  /** Each loan's part (loan account id → cents); the payment is about their total. */
+  parts: Record<string, number>;
+  totalCents: number;
+  /** Payments found for it (two years), and the latest. */
+  foundCount: number;
+  lastDate: string | null;
+}
+
+export interface LenderPaymentInput {
+  paymentMatch?: string | null;
+  dueDay?: number | null;
+  parts: Record<string, number>;
+}
+
+/** Several loans from one lender at once, with the payments that cover them. */
+export interface CreateLenderLoansInput {
+  lender: string;
+  kind?: LoanKind;
+  /** Words in the payments (shared by the loans). */
+  paymentMatch?: string | null;
+  /** The date the balances are from. */
+  startDate?: string | null;
+  loans: {
+    name: string;
+    startBalanceCents: number;
+    aprBps?: number | null;
+    nextDueDate?: string | null;
+  }[];
+  /** Payments covering them: parts by the loan's index in `loans`. */
+  payments: {
+    paymentMatch?: string | null;
+    dueDay?: number | null;
+    parts: Record<string, number>;
+  }[];
+}
+
 export interface LenderFeeInput {
   lender: string;
   paymentMatch?: string | null;
@@ -142,6 +186,7 @@ export interface LoansReport {
   nextDue: { accountId: string; name: string; date: string; amountCents: number | null } | null;
   loans: Loan[];
   lenderFees: LenderFee[];
+  lenderPayments: LenderPayment[];
 }
 
 export interface LoanDetailsInput {

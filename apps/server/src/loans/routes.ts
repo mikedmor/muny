@@ -7,10 +7,12 @@ import { requireUser } from "../auth/plugin.js";
 import { audit } from "../lib/audit.js";
 import { notFound, parse } from "../lib/http.js";
 import {
+  createLenderLoans,
   createManualLoan,
   loansReport,
   removeLenderFee,
   setLenderFee,
+  setLenderPayments,
   updateLoan,
 } from "./service.js";
 
@@ -64,6 +66,37 @@ function readPlan(db: MunyDb): LoanPlanSettings {
   return { ...DEFAULT_LOAN_PLAN, ...((row?.value ?? {}) as Partial<LoanPlanSettings>) };
 }
 
+const dueDay = z.number().int().min(1).max(31).nullable().optional();
+const words = z.string().trim().max(80).nullable().optional();
+const parts = z
+  .record(z.string().min(1).max(64), cents.min(1))
+  .refine(
+    (p) => Object.keys(p).length >= 1 && Object.keys(p).length <= 30,
+    "Give each payment its loans",
+  );
+const LenderPayments = z.object({
+  lender: z.string().trim().min(1, "Name the lender").max(100),
+  payments: z.array(z.object({ paymentMatch: words, dueDay, parts })).max(12),
+});
+const Batch = z.object({
+  lender: z.string().trim().min(1, "Name the lender").max(100),
+  kind: z.enum(LOAN_KINDS).optional(),
+  paymentMatch: words,
+  startDate: isoDate.nullable().optional(),
+  loans: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1, "Name each loan").max(100),
+        startBalanceCents: cents,
+        aprBps: z.number().int().min(0).max(10_000).nullable().optional(),
+        nextDueDate: isoDate.nullable().optional(),
+      }),
+    )
+    .min(1)
+    .max(30),
+  payments: z.array(z.object({ paymentMatch: words, dueDay, parts })).max(12),
+});
+
 const Create = Details.extend({
   name: z.string().trim().min(1, "Name the loan").max(100),
   startBalanceCents: cents,
@@ -108,6 +141,24 @@ export function registerLoanRoutes(app: FastifyInstance, db: MunyDb) {
       .run();
     log(user.id, "loan.plan.update");
     return value;
+  });
+
+  // Several loans from one lender, and the payments that cover them.
+  app.post("/api/loans/batch", async (req) => {
+    const user = requireUser(req);
+    const body = parse(Batch, req.body);
+    const ids = db.transaction((tx) => createLenderLoans(tx as unknown as MunyDb, body));
+    for (const id of ids) log(user.id, "loan.create", id, { kind: body.kind });
+    return { accountIds: ids };
+  });
+
+  // A lender's payments, each covering several of its loans (replaces them all).
+  app.put("/api/loans/lender-payments", async (req) => {
+    const user = requireUser(req);
+    const body = parse(LenderPayments, req.body);
+    db.transaction((tx) => setLenderPayments(tx as unknown as MunyDb, body.lender, body.payments));
+    log(user.id, "loan.lender_payments.set", body.lender.toLowerCase());
+    return { ok: true };
   });
 
   // A lender's yearly fee (dues, maintenance): one per lender.
