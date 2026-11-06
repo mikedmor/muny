@@ -118,7 +118,9 @@ describe("use the blockchain's version", () => {
       relinked: 1,
       kept: [{ txnId: "ghost", asset: "REP", amount: "2", direction: "in" }],
     });
-    expect((await report()).wallets.find((x) => x.walletId === hot.id)).toBeUndefined();
+    // ETH adds up; only the kept REP row (which the chain doesn't list) is left to decide.
+    const left = (await report()).wallets.find((x) => x.walletId === hot.id);
+    expect(left?.mismatches.map((m) => m.asset)).toEqual(["REP"]);
     const page = (await client.get(`/api/crypto/txns?walletId=${hot.id}`)).json<CryptoTxnPage>();
     expect(page.items.find((x) => x.type === "transfer")).toMatchObject({
       transferWalletName: "Coinbase",
@@ -156,6 +158,8 @@ describe("use the blockchain's version", () => {
     ).toMatchObject({
       description: "From the pool",
     });
-    expect((await report()).wallets.find((x) => x.walletId === hot.id)).toBeUndefined();
+    expect(
+      (await report()).wallets.find((x) => x.walletId === hot.id)?.mismatches.map((m) => m.asset),
+    ).toEqual(["REP"]);
   });
 });

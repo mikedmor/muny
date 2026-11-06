@@ -275,6 +275,40 @@ const SYNCABLE = new Set<string>([
 
 type MismatchT = Report["wallets"][number]["mismatches"][number];
 
+/** Earlier Reconcile fixes moved this coin here: they're the likely cause. */
+function UndoFixes({ walletId, m }: { walletId: string; m: MismatchT }) {
+  const undo = useCryptoMutation(() =>
+    api.post("/api/crypto/reconcile/undo", { walletId, txnIds: m.fixes.map((f) => f.txnId) }),
+  );
+  return (
+    <div className="space-y-2 rounded-lg border border-amber-200 px-3 py-2 dark:border-amber-900">
+      <p>
+        <span className="font-medium">
+          Earlier Reconcile {m.fixes.length === 1 ? "fix" : "fixes"} moved {m.asset} here.
+        </span>{" "}
+        If {m.fixes.length === 1 ? "it was" : "they were"} wrong (for example a coin linked into a
+        wallet on another blockchain), undo {m.fixes.length === 1 ? "it" : "them"}; the rows
+        {m.fixes.length === 1 ? " it" : " they"} linked go back to plain deposits or withdrawals.
+      </p>
+      <ul className="text-slate-600 dark:text-slate-300">
+        {m.fixes.map((f) => (
+          <li key={f.txnId}>
+            {dayLabel(f.at)}: {f.amount.startsWith("-") ? "−" : "+"}
+            {fmtAmount(f.amount.replace(/^-/, ""), 8)} {m.asset}{" "}
+            <span className="text-xs text-slate-500">
+              ({f.description.replace(/^Added in Reconcile: /, "")})
+            </span>
+          </li>
+        ))}
+      </ul>
+      <Button variant="secondary" disabled={undo.isPending} onClick={() => undo.mutate(undefined)}>
+        Undo {m.fixes.length === 1 ? "this fix" : `these ${m.fixes.length} fixes`}
+      </Button>
+      {undo.error && <p className="text-xs text-red-600">{undo.error.message}</p>}
+    </div>
+  );
+}
+
 /**
  * Siacoin sends the import doesn't have: a move between the wallet's own
  * addresses looks the same as a payment, so the user says which.
@@ -521,6 +555,7 @@ function Mismatch({
           </Button>
         </div>
       )}
+      {more && m.fixes.length > 0 && <UndoFixes walletId={walletId} m={m} />}
       {chainKey === "sc" && (
         <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
           <p>

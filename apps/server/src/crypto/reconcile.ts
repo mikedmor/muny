@@ -58,6 +58,17 @@ const DUP_WINDOW = 2 * DAY;
 const LINK_WINDOW = 120 * DAY;
 
 /** Rows of a synced wallet that repeat an imported (or manual) row. */
+/**
+ * The same trade, recorded on different days: an exchange may date a buy when
+ * it completed (a bank purchase took days), an export when it was placed. The
+ * same pair and exactly the same amount received within 10 days.
+ */
+const TRADE_SAME_SQL = (i: string, s: string) =>
+  sql.raw(`${s}.type = 'trade' and ${i}.type = 'trade'
+    and ${i}.received_asset = ${s}.received_asset and ${i}.sent_asset = ${s}.sent_asset
+    and cast(${i}.received_amount as real) = cast(${s}.received_amount as real)
+    and abs(${i}.at - ${s}.at) <= ${10 * DAY}`);
+
 function duplicateSyncRows(db: MunyDb | Tx, walletId: string): string[] {
   return db
     .all<{ id: string }>(sql`
@@ -72,6 +83,7 @@ function duplicateSyncRows(db: MunyDb | Tx, walletId: string): string[] {
             and ${closeAmountsSql("i.received_amount", "s.received_amount")})
           or (s.sent_asset is not null and i.sent_asset = s.sent_asset
             and ${closeAmountsSql("i.sent_amount", "s.sent_amount")})))
+        or (${TRADE_SAME_SQL("i", "s")})
       )`)
     .map((r) => r.id);
 }
@@ -194,8 +206,21 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
     const mismatches: CryptoReconcile["wallets"][number]["mismatches"] = [];
     const chain = x.sourceEnc ? readCursor(x.syncCursor)?.balances : null;
     // An archived wallet (lost access, closed) is expected to differ from its chain.
+    const unlisted =
+      chain && x.status === "ok" && !x.archived
+        ? [...computed]
+            .filter(
+              ([asset, bal]) =>
+                !chain.some((c) => c.asset === asset) &&
+                !hidden.has(asset) &&
+                !FIAT.has(asset) &&
+                !bal.startsWith("-") &&
+                toFixed(bal) >= DUST,
+            )
+            .map(([asset]) => ({ asset, amount: "0" }))
+        : [];
     if (chain && x.status === "ok" && !x.archived)
-      for (const c of chain) {
+      for (const c of [...chain, ...unlisted]) {
         if (hidden.has(c.asset)) continue;
         const mine = computed.get(c.asset) ?? "0";
         if (normDec(mine) === normDec(c.amount)) continue;
@@ -227,6 +252,23 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
             x.lastError && isZeroDec(c.amount) && !diff.startsWith("-")
               ? closedAccount(x.id, c.asset, diff)
               : null,
+          fixes: rows
+            .filter(
+              (r) =>
+                r.walletId === x.id &&
+                r.source === "manual" &&
+                (r.sentAsset === c.asset || r.receivedAsset === c.asset) &&
+                /^(Added in Reconcile|Opening balance \(added in Reconcile)/.test(
+                  r.description ?? "",
+                ),
+            )
+            .map((r) => ({
+              txnId: r.id,
+              at: r.at,
+              amount:
+                r.receivedAsset === c.asset ? (r.receivedAmount as string) : `-${r.sentAmount}`,
+              description: r.description ?? "",
+            })),
         });
       }
     const dupes = x.sourceEnc ? duplicateSyncRows(db, x.id) : [];

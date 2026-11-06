@@ -106,4 +106,41 @@ describe("reconcile safety", () => {
       .get();
     expect(arrive).toMatchObject({ type: "deposit", transferPairId: null });
   });
+
+  it("flags a coin the chain doesn't list, and undoes the fix that put it there", async () => {
+    const { client, db } = await setup();
+    const add = async (name: string) =>
+      (await client.post("/api/crypto/wallets", { name, kind: "manual" })).json<CryptoWallet>();
+    const eth = await add("Exodus ETH");
+    const btc = await add("Exodus BTC");
+    row(db, "out", btc.id, { type: "withdrawal", sentAsset: "BTC", sentAmount: "0.05" });
+    // An earlier fix linked that BTC withdrawal into the Ethereum wallet.
+    await client.post("/api/crypto/reconcile/link", { walletId: eth.id, txnId: "out" });
+    // The Ethereum wallet syncs (here: a chain with nothing, i.e. no BTC listed).
+    await client.put(`/api/crypto/wallets/${eth.id}/source`, { chain: "xlm", source: XLM });
+    for (let i = 0; i < 100; i++) {
+      const ws = (await client.get("/api/crypto/wallets")).json<CryptoWallet[]>();
+      if (ws.find((x) => x.id === eth.id)?.status !== "never") break;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    db.update(schema.cryptoWallets)
+      .set({ lastError: null })
+      .where(eq(schema.cryptoWallets.id, eth.id))
+      .run();
+    const r = (await client.get("/api/crypto/reconcile")).json<CryptoReconcile>();
+    const m = r.wallets
+      .find((x) => x.walletId === eth.id)
+      ?.mismatches.find((x) => x.asset === "BTC");
+    expect(m).toMatchObject({
+      onChain: "0",
+      computed: "0.05",
+      fixes: [expect.objectContaining({ amount: "0.05" })],
+    });
+    await client.post("/api/crypto/reconcile/undo", {
+      walletId: eth.id,
+      txnIds: m?.fixes.map((f) => f.txnId),
+    });
+    const page = (await client.get(`/api/crypto/txns?walletId=${btc.id}`)).json<CryptoTxnPage>();
+    expect(page.items[0]).toMatchObject({ id: "out", type: "withdrawal" });
+  });
 });

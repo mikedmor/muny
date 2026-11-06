@@ -173,6 +173,20 @@ function coveredByImport(db: Db, walletId: string, s: SyncedTxn): boolean {
          and ${closeAmountsSql(am, `'${amount.replace(/[^0-9.]/g, "")}'`)}`);
   // A trade: either side may be rounded or net of fees differently; the other
   // side usually matches exactly.
+  // The same trade dated days apart (completed vs. placed): same pair, exact amount.
+  if (
+    s.type === "trade" &&
+    s.sentAsset &&
+    s.receivedAsset &&
+    s.receivedAmount &&
+    db.get(sql`
+      select 1 from crypto_txns
+       where wallet_id = ${walletId} and source <> 'sync' and type = 'trade'
+         and sent_asset = ${s.sentAsset} and received_asset = ${s.receivedAsset}
+         and cast(received_amount as real) = cast(${s.receivedAmount} as real)
+         and abs(at - ${s.at}) <= ${10 * 86_400_000}`)
+  )
+    return true;
   if (s.type === "trade")
     return (
       (!!s.sentAsset &&

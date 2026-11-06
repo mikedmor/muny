@@ -310,6 +310,57 @@ describe("Coinbase alongside a Koinly import", () => {
   });
 });
 
+describe("Coinbase buy dated when it completed", () => {
+  it("matches the imported buy dated when it was placed, days earlier", async () => {
+    const { privateKey } = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+    const pem = privateKey.export({ type: "sec1", format: "pem" }).toString();
+    const fake = (async (url: string) => {
+      const p = new URL(url).pathname;
+      const page = (data: unknown[]) => Response.json({ data, pagination: { next_uri: null } });
+      if (p === "/v2/accounts")
+        return page([
+          {
+            id: "a-btc",
+            currency: { code: "BTC" },
+            balance: { amount: "0.01652", currency: "BTC" },
+            created_at: "2014-01-01T00:00:00Z",
+            updated_at: "2014-03-05T00:00:00Z",
+          },
+        ]);
+      if (p === "/v2/accounts/a-btc/transactions")
+        return page([
+          {
+            id: "b",
+            type: "buy",
+            status: "completed",
+            amount: { amount: "0.01652", currency: "BTC" },
+            native_amount: { amount: "10.00", currency: "USD" },
+            created_at: "2014-03-04T16:24:29Z",
+            buy: { id: "b1" },
+          },
+        ]);
+      return page([]);
+    }) as unknown as typeof fetch;
+    const { db, wallet, connect, rows } = await setup(fake);
+    db.insert(schema.cryptoTxns)
+      .values({
+        id: "k",
+        walletId: wallet.id,
+        at: Date.UTC(2014, 1, 26, 18, 30),
+        externalId: "koinly:k",
+        source: "import",
+        type: "trade",
+        sentAsset: "USD",
+        sentAmount: "9.75",
+        receivedAsset: "BTC",
+        receivedAmount: "0.01652",
+      })
+      .run();
+    expect((await connect("coinbase", "organizations/o/apiKeys/k", pem)).status).toBe("ok");
+    expect((await rows()).map((t) => t.id)).toEqual(["k"]);
+  });
+});
+
 describe("Gemini", () => {
   it("signs the payload and maps trades and transfers", async () => {
     const secret = "gemini-secret";

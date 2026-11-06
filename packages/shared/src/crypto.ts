@@ -433,6 +433,8 @@ export interface CryptoReconcile {
         lastAt: number;
         suggestions: CryptoTransferSuggestion[];
       } | null;
+      /** Earlier Reconcile fixes in this wallet that moved this coin (undo them if wrong). */
+      fixes: { txnId: string; at: number; amount: string; description: string }[];
     }[];
     /** Synced transactions that repeat imported ones. */
     duplicates: number;
