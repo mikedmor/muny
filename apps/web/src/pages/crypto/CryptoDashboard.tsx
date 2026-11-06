@@ -42,7 +42,7 @@ const isoDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 const SLOTS = 7;
 const color = (i: number) => (i < SLOTS ? `var(--viz-series-${i + 1})` : "var(--viz-other)");
 
-function Pct({ v }: { v: number | null }) {
+export function Pct({ v }: { v: number | null }) {
   if (v === null) return <span className="text-slate-400">—</span>;
   const up = v >= 0;
   return (
@@ -55,7 +55,7 @@ function Pct({ v }: { v: number | null }) {
 }
 
 /** A tiny trend line from daily closes (display only; green up, red down). */
-function Sparkline({
+export function Sparkline({
   values,
   width = 96,
   height = 28,

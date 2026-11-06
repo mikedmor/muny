@@ -8,6 +8,12 @@ import { audit } from "../lib/audit.js";
 import { badRequest, parse } from "../lib/http.js";
 import { backfillInvestHistory, type HistoryDeps } from "./history.js";
 import { importInvestFile, investSummary, listInvestTxns, previewInvestImport } from "./service.js";
+import {
+  addToWatchlist,
+  listWatchlist,
+  refreshWatchlist,
+  removeFromWatchlist,
+} from "./watchlist.js";
 
 const Content = z.string().min(1, "The file is empty").max(20_000_000);
 const PreviewBody = z.object({ content: Content });
@@ -61,6 +67,51 @@ export function registerInvestRoutes(app: FastifyInstance, db: MunyDb, deps: His
       if (e instanceof BudgetError) throw badRequest(e.message);
       throw e;
     }
+  });
+
+  // --- Watch list -----------------------------------------------------------
+
+  app.get("/api/invest/watchlist", async (req) => {
+    requireUser(req);
+    return listWatchlist(db);
+  });
+
+  app.post("/api/invest/watchlist", async (req) => {
+    const user = requireUser(req);
+    const { symbol } = parse(z.object({ symbol: z.string().trim().min(1).max(12) }), req.body);
+    try {
+      const id = await addToWatchlist(db, deps, symbol);
+      audit(db, {
+        actorType: "user",
+        actorId: user.id,
+        action: "invest.watch.add",
+        entityType: "security",
+        entityId: id,
+      });
+      return { securityId: id };
+    } catch (e) {
+      throw badRequest(e instanceof Error ? e.message : "Couldn't add it");
+    }
+  });
+
+  app.delete("/api/invest/watchlist/:id", async (req) => {
+    const user = requireUser(req);
+    const { id } = parse(z.object({ id: z.string().min(1).max(64) }), req.params);
+    removeFromWatchlist(db, id);
+    audit(db, {
+      actorType: "user",
+      actorId: user.id,
+      action: "invest.watch.remove",
+      entityType: "security",
+      entityId: id,
+    });
+    return { ok: true };
+  });
+
+  /** Called by the page when the list is stale: at most once a day. */
+  app.post("/api/invest/watchlist/refresh", async (req) => {
+    requireUser(req);
+    return refreshWatchlist(db, deps);
   });
 
   app.get("/api/invest/securities/:id/prices", async (req) => {

@@ -46,6 +46,12 @@ These values are estimates and are marked as such under the chart. They're only 
 
 Expanding a holding in the Holdings table shows its price history.
 
+## Watch list
+
+The **Watch list** on the Stocks page follows tickers you're interested in, whether you own them or not. Type a ticker (like NVDA) and press **Watch**. Each row shows the latest price with its change over a day, a month and a year, plus a three-month trend. If you also hold that ticker, the row says how much.
+
+Watch list prices come from Yahoo Finance: a year of daily closes when you add a ticker, then an update at most once a day when you open Stocks. Only the ticker symbol is sent.
+
 ## Reading the page
 
 - **Unrealized gain** uses the cost basis your broker reports. Positions without a reported cost (for example shares transferred in from another broker) are left out of the gain and listed under it.

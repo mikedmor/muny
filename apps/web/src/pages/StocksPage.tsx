@@ -7,8 +7,8 @@ import {
   SECURITY_TYPE_LABELS,
 } from "@muny/shared";
 import { Link } from "@tanstack/react-router";
-import { ChevronRight, FileUp, Link2 } from "lucide-react";
-import { type ChangeEvent, useMemo, useState } from "react";
+import { ChevronRight, FileUp, Link2, X } from "lucide-react";
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Donut, LineChart, type StackBand, StackLegend } from "../components/charts.js";
 import { Modal } from "../components/forms.js";
 import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
@@ -20,8 +20,13 @@ import {
   useInvestSummary,
   useInvestTxns,
   useSecurityPrices,
+  useWatchAdd,
+  useWatchlist,
+  useWatchRefresh,
+  useWatchRemove,
 } from "../lib/queries.js";
 import { assignColors, OTHER_COLOR, seriesColor } from "../lib/series.js";
+import { Pct, Sparkline } from "./crypto/CryptoDashboard.js";
 import { fmtAmount } from "./crypto/common.js";
 
 const RANGES = [
@@ -501,6 +506,139 @@ function HoldingRow({
   );
 }
 
+/** Tickers you follow, owned or not, with their recent moves. */
+function WatchList() {
+  const list = useWatchlist();
+  const add = useWatchAdd();
+  const remove = useWatchRemove();
+  const refresh = useWatchRefresh();
+  const [symbol, setSymbol] = useState("");
+  const stale = list.data?.stale;
+  // Prices refresh at most once a day, when the page is opened.
+  const tried = useRef(false);
+  const { mutate: refreshNow } = refresh;
+  useEffect(() => {
+    if (stale && !tried.current) {
+      tried.current = true;
+      refreshNow();
+    }
+  }, [stale, refreshNow]);
+  const items = list.data?.items ?? [];
+  const usd = (n: number) =>
+    `${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: n < 1 ? 4 : 2 })}`;
+  return (
+    <Card className="p-0">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+        <h2 className="font-semibold">Watch list</h2>
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (symbol.trim()) add.mutate(symbol.trim(), { onSuccess: () => setSymbol("") });
+          }}
+        >
+          <input
+            aria-label="Ticker to watch"
+            value={symbol}
+            onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+            placeholder="Ticker, e.g. NVDA"
+            maxLength={12}
+            className="w-36 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm uppercase placeholder:normal-case dark:border-slate-700 dark:bg-slate-950"
+          />
+          <Button type="submit" className="px-3 py-1 text-sm" disabled={add.isPending}>
+            {add.isPending ? "Adding…" : "Watch"}
+          </Button>
+        </form>
+      </div>
+      {add.error && (
+        <div className="px-4 pt-3">
+          <Alert>{add.error.message}</Alert>
+        </div>
+      )}
+      {items.length === 0 ? (
+        <p className="px-4 py-6 text-sm text-slate-500">
+          Follow stocks you're interested in, even ones you don't own. Prices update once a day from
+          Yahoo Finance (only the ticker is sent).
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[34rem] text-sm">
+            <thead className="text-left text-xs text-slate-500">
+              <tr>
+                <th className="px-4 py-2 font-medium">Ticker</th>
+                <th className="px-2 py-2 text-right font-medium">Price</th>
+                <th className="px-2 py-2 text-right font-medium">Day</th>
+                <th className="hidden px-2 py-2 text-right font-medium sm:table-cell">1 month</th>
+                <th className="hidden px-2 py-2 text-right font-medium md:table-cell">1 year</th>
+                <th className="hidden px-2 py-2 text-right font-medium lg:table-cell">3 months</th>
+                <th className="w-10" />
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((w) => (
+                <tr key={w.securityId} className="border-t border-slate-100 dark:border-slate-800">
+                  <td className="px-4 py-2.5">
+                    <span className="flex items-center gap-3">
+                      <MerchantAvatar name={w.symbol} size="sm" />
+                      <span className="min-w-0">
+                        <span className="block font-semibold">
+                          {w.symbol}
+                          {w.ownedValueCents !== null && (
+                            <span className="ml-2 rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-medium text-brand-700 dark:bg-brand-700/20 dark:text-brand-500">
+                              You own {formatMoney(w.ownedValueCents)}
+                            </span>
+                          )}
+                        </span>
+                        <span className="block max-w-56 truncate text-xs text-slate-500">
+                          {w.name}
+                        </span>
+                      </span>
+                    </span>
+                  </td>
+                  <td className="px-2 text-right font-medium tabular-nums">
+                    {w.price ? usd(Number(w.price)) : "—"}
+                    {w.priceDate && (
+                      <span className="block text-[11px] font-normal text-slate-500">
+                        {shortDate(w.priceDate)}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-2 text-right">
+                    <Pct v={w.change1dPct} />
+                  </td>
+                  <td className="hidden px-2 text-right sm:table-cell">
+                    <Pct v={w.change1mPct} />
+                  </td>
+                  <td className="hidden px-2 text-right md:table-cell">
+                    <Pct v={w.change1yPct} />
+                  </td>
+                  <td className="hidden px-2 lg:table-cell">
+                    <span className="flex justify-end">
+                      <Sparkline values={w.spark} />
+                    </span>
+                  </td>
+                  <td className="pr-3 text-right">
+                    <button
+                      type="button"
+                      aria-label={`Stop watching ${w.symbol}`}
+                      title="Remove from the watch list"
+                      disabled={remove.isPending}
+                      onClick={() => remove.mutate(w.securityId)}
+                      className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                    >
+                      <X aria-hidden="true" className="size-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function Activity({ accounts }: { accounts: { id: string; name: string }[] }) {
   const [accountId, setAccountId] = useState("");
   const txns = useInvestTxns(accountId || undefined);
@@ -881,6 +1019,8 @@ export function StocksPage() {
               ))}
             </ul>
           </Card>
+
+          <WatchList />
 
           <Activity accounts={s.accounts} />
         </div>

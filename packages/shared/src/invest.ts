@@ -163,3 +163,21 @@ export interface InvestImportResult {
   added: number;
   duplicates: number;
 }
+
+/** A ticker on the watch list (owned or not). Percentages are for display only. */
+export interface WatchItem {
+  securityId: string;
+  symbol: string;
+  name: string;
+  type: SecurityKind;
+  /** Latest close or price (decimal string). */
+  price: string | null;
+  priceDate: string | null;
+  change1dPct: number | null;
+  change1mPct: number | null;
+  change1yPct: number | null;
+  /** About three months of closes, oldest first. */
+  spark: number[];
+  /** What you hold of it across accounts, if any. */
+  ownedValueCents: number | null;
+}

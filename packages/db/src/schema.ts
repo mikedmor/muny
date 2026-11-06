@@ -817,3 +817,11 @@ export const securityPrices = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.securityId, t.date] })],
 );
+
+/** Securities to keep an eye on, owned or not (Stocks → Watch list). */
+export const watchlist = sqliteTable("watchlist", {
+  securityId: text()
+    .primaryKey()
+    .references(() => securities.id, { onDelete: "cascade" }),
+  addedAt: createdAt(),
+});

@@ -61,6 +61,7 @@ import type {
   UpdateAccountInput,
   UpdateRecurringInput,
   UpdateTransactionInput,
+  WatchItem,
 } from "@muny/shared";
 import {
   keepPreviousData,
@@ -794,3 +795,27 @@ export const useSecurityPrices = (securityId: string | null) =>
     queryFn: () => api.get<SecurityPricePoint[]>(`/api/invest/securities/${securityId}/prices`),
     enabled: !!securityId,
   });
+
+export const useWatchlist = () =>
+  useQuery({
+    queryKey: [...investKeys.all, "watchlist"],
+    queryFn: () => api.get<{ items: WatchItem[]; stale: boolean }>("/api/invest/watchlist"),
+  });
+
+export const useWatchAdd = () =>
+  useInvalidatingMutation(
+    (symbol: string) => api.post<{ securityId: string }>("/api/invest/watchlist", { symbol }),
+    [investKeys.all],
+  );
+
+export const useWatchRemove = () =>
+  useInvalidatingMutation(
+    (id: string) => api.delete(`/api/invest/watchlist/${encodeURIComponent(id)}`),
+    [investKeys.all],
+  );
+
+export const useWatchRefresh = () =>
+  useInvalidatingMutation(
+    () => api.post<{ refreshed: number }>("/api/invest/watchlist/refresh"),
+    [investKeys.all],
+  );
