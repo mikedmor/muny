@@ -4,7 +4,7 @@
  * - Built assets (/assets/*, hashed filenames) are cached on first use.
  * - Pages are network-first, falling back to the cached app shell offline.
  */
-const CACHE = "muny-shell-v2";
+const CACHE = "muny-shell-v3";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

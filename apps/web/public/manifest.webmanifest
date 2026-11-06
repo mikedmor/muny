@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "Muny",
   "short_name": "Muny",
   "description": "Self-hosted personal finance and subscription manager",
@@ -6,7 +6,7 @@
   "scope": "/",
   "display": "standalone",
   "background_color": "#f8fafc",
-  "theme_color": "#0f766e",
+  "theme_color": "#020d22",
   "icons": [
     {
       "src": "/icons/icon-192.png",

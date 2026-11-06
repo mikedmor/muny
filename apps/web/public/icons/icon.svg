@@ -1,17 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1254 1254">
   <title>Muny</title>
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#14b8a6"/>
-      <stop offset="1" stop-color="#0f766e"/>
-    </linearGradient>
-    <linearGradient id="coin" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#fde68a"/>
-      <stop offset="1" stop-color="#f59e0b"/>
-    </linearGradient>
-  </defs>
-  <rect width="512" height="512" fill="url(#bg)"/>
-  <path d="M146 372V170l110 128 110-128v202" fill="none" stroke="#fff" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="256" cy="196" r="36" fill="url(#coin)"/>
-  <circle cx="256" cy="196" r="21" fill="none" stroke="#b45309" stroke-opacity=".35" stroke-width="6"/>
+  <rect width="1254" height="1254" fill="#020d22"/>
+  <path d="M275 286h137l215 239 218-239h135v341H851V475L627 720 402 473v435H275z" fill="#fff"/>
+  <g fill="#10efb0">
+    <path d="M515 908V805a16 16 0 0 1 16-16h99a16 16 0 0 1 16 16v103z"/>
+    <path d="M683 908V752a16 16 0 0 1 16-16h99a16 16 0 0 1 16 16v156z"/>
+    <path d="M851 908V681a16 16 0 0 1 16-16h97a16 16 0 0 1 16 16v227z"/>
+  </g>
 </svg>
