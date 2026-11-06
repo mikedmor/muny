@@ -145,6 +145,8 @@ export const balanceSnapshots = sqliteTable(
     /** YYYY-MM-DD */
     date: text().notNull(),
     balanceCents: integer().notNull(),
+    /** Worked out (e.g. investments rebuilt from trades and past prices), not reported. */
+    estimated: integer({ mode: "boolean" }).notNull().default(false),
   },
   (t) => [primaryKey({ columns: [t.accountId, t.date] })],
 );

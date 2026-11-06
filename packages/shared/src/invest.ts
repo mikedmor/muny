@@ -99,6 +99,23 @@ export interface InvestSummary {
   history: { date: string; valueCents: number }[];
   /** Dividends and interest received in the last 12 months. */
   incomeLast12Cents: number;
+  /** History before this date is estimated (rebuilt from trades and past closes). */
+  estimatedUntil: string | null;
+}
+
+export interface InvestBackfillResult {
+  accounts: number;
+  /** Tickers whose past closes were fetched. */
+  tickers: number;
+  /** Tickers no price history was found for. */
+  missing: string[];
+  from: string | null;
+  points: number;
+}
+
+export interface SecurityPricePoint {
+  date: string;
+  close: string;
 }
 
 export interface InvestTxn {

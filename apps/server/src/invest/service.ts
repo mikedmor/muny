@@ -180,6 +180,9 @@ export function investSummary(db: Db, today = localToday()): InvestSummary {
       .sort((a, b) => b.valueCents - a.valueCents),
     history,
     incomeLast12Cents: Number(income),
+    estimatedUntil: snaps
+      .filter((x) => x.estimated)
+      .reduce<string | null>((m, x) => (m && m > x.date ? m : x.date), null),
   };
 }
 
@@ -359,7 +362,7 @@ export function setHoldings(
     .values({ accountId, date: asOf, balanceCents: total })
     .onConflictDoUpdate({
       target: [schema.balanceSnapshots.accountId, schema.balanceSnapshots.date],
-      set: { balanceCents: total },
+      set: { balanceCents: total, estimated: false },
     })
     .run();
   return merged.size;

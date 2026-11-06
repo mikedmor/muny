@@ -152,7 +152,7 @@ export function registerAccountRoutes(app: FastifyInstance, db: MunyDb) {
           .values({ accountId: id, date: localToday(), balanceCents })
           .onConflictDoUpdate({
             target: [schema.balanceSnapshots.accountId, schema.balanceSnapshots.date],
-            set: { balanceCents },
+            set: { balanceCents, estimated: false },
           })
           .run();
       }

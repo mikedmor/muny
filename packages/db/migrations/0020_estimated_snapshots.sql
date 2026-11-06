@@ -1,0 +1,1 @@
+ALTER TABLE `balance_snapshots` ADD `estimated` integer DEFAULT false NOT NULL;

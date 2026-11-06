@@ -34,6 +34,18 @@ Other brokers' CSV exports usually work too: Muny finds the header row and recog
 
 Menu names change from time to time. If the path above doesn't match, look for "Download", "Export" or a CSV icon on the positions or history page.
 
+## Filling in past values
+
+The "Value over time" chart starts when you first connect or import an account. To see further back, press **Fill in history** under the chart. Muny then:
+
+1. Fetches each ticker's daily closing prices back to your first trade from Yahoo Finance. It sends only ticker symbols, once per ticker; money market funds and options aren't looked up.
+2. Works out how many shares and how much cash each account held on every day, starting from what it holds today and undoing each trade (stock splits included).
+3. Values each day at that day's close.
+
+These values are estimates and are marked as such under the chart. They're only as complete as your trade history: Plaid provides up to two years, and older trades can be added with your broker's history export. Shares you held before the earliest trade are counted all the way back. From the day an account was first connected or imported, the chart shows the values your broker reported.
+
+Expanding a holding in the Holdings table shows its price history.
+
 ## Reading the page
 
 - **Unrealized gain** uses the cost basis your broker reports. Positions without a reported cost (for example shares transferred in from another broker) are left out of the gain and listed under it.

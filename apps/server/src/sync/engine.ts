@@ -175,7 +175,7 @@ export function applySync(
         .values({ accountId, date: today, balanceCents: pa.balanceCents })
         .onConflictDoUpdate({
           target: [schema.balanceSnapshots.accountId, schema.balanceSnapshots.date],
-          set: { balanceCents: pa.balanceCents },
+          set: { balanceCents: pa.balanceCents, estimated: false },
         })
         .run();
     }

@@ -14,8 +14,157 @@ import { Donut, LineChart } from "../components/charts.js";
 import { Modal } from "../components/forms.js";
 import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
 import { api } from "../lib/api.js";
-import { useInvestImport, useInvestSummary, useInvestTxns } from "../lib/queries.js";
+import {
+  useInvestBackfill,
+  useInvestImport,
+  useInvestSummary,
+  useInvestTxns,
+  useSecurityPrices,
+} from "../lib/queries.js";
 import { fmtAmount } from "./crypto/common.js";
+
+const RANGES = [
+  ["1M", 31],
+  ["3M", 92],
+  ["1Y", 366],
+  ["All", 0],
+] as const;
+
+const shortDate = (d: string, withYear = false) =>
+  new Date(`${d}T00:00:00`).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(withYear ? { year: "numeric" } : {}),
+  });
+
+/** Keep a long daily series light: every point for a year or less, else weekly. */
+function thin<T extends { date: string }>(list: T[]): T[] {
+  if (list.length <= 400) return list;
+  return list.filter(
+    (p, i) => i === list.length - 1 || new Date(`${p.date}T00:00:00Z`).getUTCDay() === 5,
+  );
+}
+
+function ValueChart({
+  history,
+  estimatedUntil,
+}: {
+  history: { date: string; valueCents: number }[];
+  estimatedUntil: string | null;
+}) {
+  const [range, setRange] = useState<(typeof RANGES)[number][0]>("All");
+  const backfill = useInvestBackfill();
+  const days = RANGES.find((r) => r[0] === range)?.[1] ?? 0;
+  const cutoff = days ? new Date(Date.now() - days * 86400000).toISOString().slice(0, 10) : "";
+  const shown = thin(history.filter((p) => p.date >= cutoff));
+  const first = shown[0];
+  const last = shown[shown.length - 1];
+  const change = first && last ? last.valueCents - first.valueCents : null;
+  const res = backfill.data;
+  return (
+    <Card>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="font-semibold">Value over time</h2>
+          {change !== null && shown.length >= 2 && (
+            <p className="text-xs text-slate-500">
+              <Gain cents={change} base={first?.valueCents || null} /> since{" "}
+              {shortDate(first?.date ?? "", true)}
+            </p>
+          )}
+        </div>
+        <fieldset className="m-0 flex items-center gap-1 border-0 p-0">
+          <legend className="sr-only">Range</legend>
+          {RANGES.map(([r]) => (
+            <button
+              key={r}
+              type="button"
+              aria-pressed={range === r}
+              onClick={() => setRange(r)}
+              className={cx(
+                "rounded-md px-2 py-1 text-xs font-medium",
+                range === r
+                  ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                  : "text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800",
+              )}
+            >
+              {r}
+            </button>
+          ))}
+        </fieldset>
+      </div>
+      {shown.length >= 2 ? (
+        <LineChart
+          ariaLabel="Portfolio value over time"
+          height={220}
+          points={shown.map((p) => ({
+            date: p.date,
+            label: shortDate(p.date, days === 0 || days > 92),
+            value: p.valueCents,
+          }))}
+        />
+      ) : (
+        <p className="py-10 text-center text-sm text-slate-500">
+          Not enough history yet. Fill it in from your trades and past prices below.
+        </p>
+      )}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-slate-800">
+        <span>
+          {estimatedUntil
+            ? `Up to ${shortDate(estimatedUntil, true)} the values are estimated from your trades and each day's closing prices; after that they're what your broker reported.`
+            : "Fill in history: Muny works out each day's value from your trades and closing prices. It sends only ticker symbols to Yahoo Finance, once."}
+        </span>
+        <Button
+          variant="secondary"
+          className="px-2.5 py-1 text-xs"
+          disabled={backfill.isPending}
+          onClick={() => backfill.mutate()}
+        >
+          {backfill.isPending
+            ? "Filling in…"
+            : estimatedUntil
+              ? "Update history"
+              : "Fill in history"}
+        </Button>
+      </div>
+      {backfill.error && <Alert>{backfill.error.message}</Alert>}
+      {res && (
+        <p role="status" className="mt-2 text-xs text-slate-500">
+          {res.accounts
+            ? `Filled in ${res.accounts} account${res.accounts === 1 ? "" : "s"} from ${res.from ? shortDate(res.from, true) : "the first trade"}.`
+            : "Nothing to fill in: no trades found. Import or sync your account history first."}
+          {res.missing.length > 0 && ` No past prices for ${res.missing.join(", ")}.`}
+        </p>
+      )}
+    </Card>
+  );
+}
+
+/** A holding's daily closes since it was first priced. */
+function PriceChart({ securityId, symbol }: { securityId: string; symbol: string }) {
+  const prices = useSecurityPrices(securityId);
+  const list = thin(
+    (prices.data ?? []).map((p) => ({ ...p, valueCents: Math.round(Number(p.close) * 100) })),
+  );
+  if (prices.isLoading) return <p className="py-4 text-xs text-slate-500">Loading prices…</p>;
+  if (list.length < 2)
+    return (
+      <p className="py-4 text-xs text-slate-500">
+        No price history for {symbol} yet. Use "Fill in history" on the chart above.
+      </p>
+    );
+  return (
+    <LineChart
+      ariaLabel={`${symbol} closing price`}
+      height={160}
+      points={list.map((p) => ({
+        date: p.date,
+        label: shortDate(p.date, true),
+        value: p.valueCents,
+      }))}
+    />
+  );
+}
 
 /** Each kind keeps its color whatever else is held. */
 const KIND_COLOR: Record<SecurityKind, string> = {
@@ -204,6 +353,13 @@ function HoldingRow({
             <td colSpan={3} />
           </tr>
         ))}
+      {open && !cash && (
+        <tr className="bg-slate-50/60 dark:bg-slate-800/30">
+          <td colSpan={7} className="px-4 pb-3">
+            <PriceChart securityId={p.securityId} symbol={p.symbol} />
+          </td>
+        </tr>
+      )}
     </>
   );
 }
@@ -468,27 +624,7 @@ export function StocksPage() {
           </div>
 
           <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-            <Card>
-              <h2 className="mb-3 font-semibold">Value over time</h2>
-              {s.history.length >= 2 ? (
-                <LineChart
-                  ariaLabel="Portfolio value over time"
-                  height={220}
-                  points={s.history.map((p) => ({
-                    date: p.date,
-                    label: new Date(`${p.date}T00:00:00`).toLocaleDateString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                    }),
-                    value: p.valueCents,
-                  }))}
-                />
-              ) : (
-                <p className="py-10 text-center text-sm text-slate-500">
-                  The chart fills in as your holdings are updated over time.
-                </p>
-              )}
-            </Card>
+            <ValueChart history={s.history} estimatedUntil={s.estimatedUntil} />
             <Card>
               <h2 className="mb-3 font-semibold">Allocation</h2>
               <div className="flex flex-col items-center gap-4">

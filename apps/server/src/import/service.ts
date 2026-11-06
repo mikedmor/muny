@@ -435,7 +435,7 @@ function applyStatementBalance(tx: Tx, accountId: string, cents: number, asOf: s
     .values({ accountId, date: asOf, balanceCents: cents })
     .onConflictDoUpdate({
       target: [schema.balanceSnapshots.accountId, schema.balanceSnapshots.date],
-      set: { balanceCents: cents },
+      set: { balanceCents: cents, estimated: false },
     })
     .run();
 }

@@ -123,7 +123,7 @@ export async function buildApp({
   registerCategoryRoutes(app, db);
   registerTransactionRoutes(app, db);
   registerImportRoutes(app, db);
-  registerInvestRoutes(app, db);
+  registerInvestRoutes(app, db, { fetch: priceFetch });
   registerPayeeRoutes(app, db);
   registerRuleRoutes(app, db);
   registerExportRoutes(app, db);

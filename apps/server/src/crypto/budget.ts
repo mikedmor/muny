@@ -26,9 +26,12 @@ export type BudgetProvider =
   | "coinbase"
   | "kraken"
   | "gemini"
-  | "binanceus";
+  | "binanceus"
+  | "yahoo";
 
 export const LIMITS: Record<BudgetProvider, { day: number; month: number; label: string }> = {
+  // Stock price history (one request per ticker per backfill); no published quota.
+  yahoo: { day: 200, month: 1000, label: "Yahoo Finance stock prices" },
   // No published key-less quota; stay polite.
   defillama: { day: 300, month: 6000, label: "DefiLlama prices" },
   // Free Demo plan: 10,000 calls a month, 30 a minute.

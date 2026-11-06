@@ -29,6 +29,7 @@ import type {
   InfraCost,
   InfraInput,
   Interval,
+  InvestBackfillResult,
   InvestImportResult,
   InvestSummary,
   InvestTxn,
@@ -46,6 +47,7 @@ import type {
   Saving,
   SavingInput,
   SavingsSummary,
+  SecurityPricePoint,
   SetBudgetInput,
   SplitInput,
   SyncConfigStatus,
@@ -779,3 +781,16 @@ export const useInvestImport = () =>
       api.post<InvestImportResult>("/api/invest/import/commit", b),
     [investKeys.all, keys.accounts, keys.overview, keys.reports],
   );
+
+export const useInvestBackfill = () =>
+  useInvalidatingMutation(
+    () => api.post<InvestBackfillResult>("/api/invest/history/backfill"),
+    [investKeys.all, keys.overview, keys.reports],
+  );
+
+export const useSecurityPrices = (securityId: string | null) =>
+  useQuery({
+    queryKey: [...investKeys.all, "prices", securityId ?? ""],
+    queryFn: () => api.get<SecurityPricePoint[]>(`/api/invest/securities/${securityId}/prices`),
+    enabled: !!securityId,
+  });

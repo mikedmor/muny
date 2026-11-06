@@ -141,6 +141,13 @@
       "when": 1793941419250,
       "tag": "0019_investments",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1793945950694,
+      "tag": "0020_estimated_snapshots",
+      "breakpoints": true
     }
   ]
 }
