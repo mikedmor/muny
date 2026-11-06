@@ -77,21 +77,49 @@ export const stellar: Adapter = async (ctx) => {
     throw new SyncError("Too many transactions to sync in one go");
   };
 
+  /** The account's balances now, or null when Stellar doesn't have the account. */
+  const readBalances = async () => {
+    const acct = await ctx
+      .get<{ balances?: { balance: string; asset_type: string; asset_code?: string }[] }>(
+        `${base}/accounts/${me}`,
+      )
+      .catch((err) => {
+        if (err instanceof SyncError && /HTTP 404/.test(err.message)) return null;
+        throw err;
+      });
+    if (!acct) return null;
+    const out = [];
+    for (const b of acct.balances ?? []) {
+      const a = assetOf(b.asset_type, b.asset_code);
+      if (a && normDec(b.balance) !== "0") out.push({ asset: a, amount: normDec(b.balance) });
+    }
+    return out;
+  };
+
   let effects: Effect[];
   try {
     effects = await all<Effect>("effects", "effects");
   } catch (err) {
-    // Horizon has no history for accounts that were closed (merged into another)
-    // or never funded. That's not a sync failure.
-    if (err instanceof SyncError && /HTTP 404/.test(err.message))
+    if (!(err instanceof SyncError && /HTTP 404/.test(err.message))) throw err;
+    // No history: the public server doesn't keep old history for every account,
+    // so ask for the account itself before calling it closed.
+    const now = await readBalances();
+    if (now)
       return {
         mapped: [],
         height: ctx.cursor?.height ?? 0,
-        balances: [{ asset: "XLM", amount: "0" }],
+        balances: now.length ? now : [{ asset: "XLM", amount: "0" }],
         notice:
-          "Stellar has no history for this account: it was closed (merged into another account) or never funded. If you moved its XLM elsewhere, import that history or add the wallet that received it.",
+          "Stellar's public server no longer keeps this account's history, so its transactions come from your import; Muny still checks the balance.",
       };
-    throw err;
+    // Closed (merged into another account) or never funded. Not a sync failure.
+    return {
+      mapped: [],
+      height: ctx.cursor?.height ?? 0,
+      balances: [{ asset: "XLM", amount: "0" }],
+      notice:
+        "Stellar has no history for this account: it was closed (merged into another account) or never funded. If you moved its XLM elsewhere, import that history or add the wallet that received it.",
+    };
   }
   const txs = await all<Tx>("transactions", "txs");
 
@@ -142,18 +170,6 @@ export const stellar: Adapter = async (ctx) => {
   }
 
   // A merged (closed) account has no balances left.
-  const acct = await ctx
-    .get<{ balances?: { balance: string; asset_type: string; asset_code?: string }[] }>(
-      `${base}/accounts/${me}`,
-    )
-    .catch((err) => {
-      if (err instanceof SyncError && /HTTP 404/.test(err.message)) return { balances: [] };
-      throw err;
-    });
-  const balances = [];
-  for (const b of acct.balances ?? []) {
-    const a = assetOf(b.asset_type, b.asset_code);
-    if (a && normDec(b.balance) !== "0") balances.push({ asset: a, amount: normDec(b.balance) });
-  }
+  const balances = (await readBalances()) ?? [];
   return { mapped, height, balances, pos };
 };

@@ -206,8 +206,9 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
     const mismatches: CryptoReconcile["wallets"][number]["mismatches"] = [];
     const chain = x.sourceEnc ? readCursor(x.syncCursor)?.balances : null;
     // An archived wallet (lost access, closed) is expected to differ from its chain.
+    // Only when the service could read the wallet (a notice means it couldn't, fully).
     const unlisted =
-      chain && x.status === "ok" && !x.archived
+      chain && x.status === "ok" && !x.archived && !x.lastError
         ? [...computed]
             .filter(
               ([asset, bal]) =>

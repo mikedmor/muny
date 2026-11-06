@@ -89,4 +89,35 @@ describe("a closed account", () => {
     const page = (await client.get(`/api/crypto/txns?walletId=${xlm.id}`)).json<CryptoTxnPage>();
     expect(page.items[0]).toMatchObject({ type: "withdrawal", sentAmount: "205.5", at });
   });
+
+  it("isn't called closed when only the history is gone: the balance is still read", async () => {
+    const noHistory = (async (url: string) => {
+      const p = new URL(url).pathname;
+      if (p.endsWith("/effects") || p.endsWith("/transactions"))
+        return new Response("not found", { status: 404 });
+      return Response.json({ balances: [{ asset_type: "native", balance: "1.0000001" }] });
+    }) as unknown as typeof fetch;
+    const app = await makeSignedInApp({
+      priceFetch: noHistory,
+      env: { MUNY_SECRET_KEY: randomBytes(32).toString("base64") },
+    });
+    const w = (
+      await app.client.post("/api/crypto/wallets", {
+        name: "Exodus XLM",
+        kind: "blockchain",
+        chain: "xlm",
+        source: XLM,
+      })
+    ).json<CryptoWallet>();
+    let done: CryptoWallet | undefined;
+    for (let i = 0; i < 100; i++) {
+      done = (await app.client.get("/api/crypto/wallets"))
+        .json<CryptoWallet[]>()
+        .find((x) => x.id === w.id);
+      if (done?.status !== "never" && !done?.syncing) break;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    expect(done).toMatchObject({ status: "ok", onChain: [{ asset: "XLM", amount: "1.0000001" }] });
+    expect(done?.lastError).toMatch(/no longer keeps this account's history/);
+  });
 });
