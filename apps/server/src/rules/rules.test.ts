@@ -104,6 +104,38 @@ describe("payees", () => {
 });
 
 describe("rules", () => {
+  it("previews matches before actions are chosen, and lists a transaction's rules", async () => {
+    const { client, cat } = await setup();
+    await importCsv(client);
+    const pre = (
+      await client.post("/api/rules/preview", {
+        match: "all",
+        conditions: [{ field: "description", op: "contains", value: "corner cafe" }],
+        actions: [],
+        limit: 50,
+      })
+    ).json<RulePreview>();
+    expect(pre.matched).toBe(2);
+    expect(pre.sample).toHaveLength(2);
+
+    const rule = (
+      await client.post("/api/rules", {
+        name: "Cafe",
+        match: "all",
+        conditions: [{ field: "description", op: "contains", value: "corner cafe" }],
+        actions: [{ type: "setCategory", categoryId: cat("Coffee") }],
+      })
+    ).json<Rule>();
+    const list = await txns(client);
+    const cafe = list.find((t) => t.rawDescription.includes("CORNER CAFE"));
+    const other = list.find((t) => t.rawDescription.includes("STREAMFLIX"));
+    const forCafe = (await client.get(`/api/transactions/${cafe?.id}/rules`)).json<
+      (Rule & { matchedCount: number })[]
+    >();
+    expect(forCafe).toEqual([expect.objectContaining({ id: rule.id, matchedCount: 2 })]);
+    expect((await client.get(`/api/transactions/${other?.id}/rules`)).json()).toEqual([]);
+  });
+
   it("validates definitions", async () => {
     const { client } = await setup();
     const bad = await client.post("/api/rules", {

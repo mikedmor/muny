@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
+import { saveDocument } from "../documents/service.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, notFound, parse } from "../lib/http.js";
 import {
@@ -140,7 +141,12 @@ const Create = Details.extend({
   startBalanceCents: cents,
 });
 
-export function registerLoanRoutes(app: FastifyInstance, db: MunyDb) {
+export function registerLoanRoutes(
+  app: FastifyInstance,
+  db: MunyDb,
+  /** For keeping imported statements encrypted (Documents). */
+  secret?: Buffer,
+) {
   const log = (userId: string, action: string, entityId?: string, details?: unknown) =>
     audit(db, {
       actorType: "user",
@@ -227,9 +233,24 @@ export function registerLoanRoutes(app: FastifyInstance, db: MunyDb) {
         lender: z.string().trim().min(1).max(100),
         statement: Statement,
         mapping: z.record(z.string().max(4), z.string().min(1).max(64)),
+        /** The PDF, to keep under Documents. */
+        pdfBase64: z.string().min(10).max(14_000_000).optional(),
+        fileName: z.string().trim().max(200).optional(),
       }),
       req.body,
     );
+    if (body.pdfBase64) {
+      const bytes = Buffer.from(body.pdfBase64, "base64");
+      if (bytes.subarray(0, 4).toString("latin1") === "%PDF")
+        saveDocument(db, secret, {
+          name: body.fileName || `${body.lender} statement ${body.statement.statementDate}.pdf`,
+          mime: "application/pdf",
+          bytes,
+          kind: "loan_statement",
+          lender: body.lender,
+          documentDate: body.statement.statementDate,
+        });
+    }
     const ids = db.transaction((tx) =>
       applyStatement(tx as unknown as MunyDb, body.lender, body.statement, body.mapping),
     );

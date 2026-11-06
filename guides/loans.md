@@ -21,9 +21,12 @@ Loans with the same lender share one card on the Loans page, with a tab for each
 
 ### Student loan statements
 
-Federal student loan servicers send PDF statements with a table for each loan group. On the lender's card, click **Import a statement** and choose the PDF. Muny shows what it read for each group (rate, what you owe, the regular payment, the due date, and what was applied since the last statement) and which loan it belongs to; pick another loan, **Add as a new loan** or **Skip**, then **Update loans**.
+Federal student loan servicers send PDF statements with a table for each loan group. On the lender's card, click **Import statements** and choose one or more PDFs, from any months. Muny lists each statement it read and, for each group, its rate, what you owe, the regular payment and the due date, with the loan it belongs to; pick another loan, **Add as a new loan** or **Skip**, then update.
 
-Each loan then counts from the statement date, and the payments up to it show exactly as the servicer applied them (interest and principal), including a group that got nothing. Payments after the statement are found in your bank and split as set under **Payments** until the next statement. If you get more than one statement a month (one per due date), import each. The PDF is read on your Muny server and isn't kept.
+- Statements are applied oldest first. Each one records exactly what the servicer applied to each group since the previous statement (interest and principal, including a group that got nothing) and what you owed that day, so importing this year's statements makes the payment history and balance history exact.
+- Only the newest statement sets a loan's balance, rate, payment and due date; the loan counts on from its date. Payments after it are found in your bank and split as set under **Payments** until the next statement.
+- If you get more than one statement a month (one per due date), import them all.
+- Each PDF is kept under **Insights → Documents**.
 
 ## Reading a loan
 

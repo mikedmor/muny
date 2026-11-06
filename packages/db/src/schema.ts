@@ -916,9 +916,39 @@ export const loanStatementPayments = sqliteTable(
     amountCents: integer().notNull(),
     interestCents: integer().notNull(),
     principalCents: integer().notNull(),
+    /** What you owed on the statement date (principal plus interest built up). */
+    balanceCents: integer(),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("loan_statement_payments_uq").on(t.accountId, t.statementDate)],
+);
+
+/**
+ * Documents you keep in Muny (Insights → Documents): loan statements saved
+ * when imported, and files you upload. Encrypted with MUNY_SECRET_KEY when
+ * it's set. Never logged.
+ */
+export const documents = sqliteTable(
+  "documents",
+  {
+    id: text().primaryKey(),
+    kind: text({ enum: ["loan_statement", "other"] })
+      .notNull()
+      .default("other"),
+    name: text().notNull(),
+    mime: text().notNull(),
+    sizeBytes: integer().notNull(),
+    /** SHA-256 of the file, so the same file is kept once. */
+    sha256: text().notNull(),
+    /** Loan statements: the lender and the statement date. */
+    lender: text(),
+    documentDate: text(),
+    notes: text(),
+    encrypted: integer({ mode: "boolean" }).notNull().default(false),
+    data: blob({ mode: "buffer" }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("documents_sha256_uq").on(t.sha256)],
 );
 
 /**

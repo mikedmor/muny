@@ -53,6 +53,11 @@ export interface Rule extends RuleDefinition {
   priority: number;
 }
 
+/** A rule, with how many transactions it matches. */
+export interface RuleWithCount extends Rule {
+  matchedCount: number;
+}
+
 export interface RuleInput extends RuleDefinition {
   name: string;
   enabled?: boolean;
@@ -61,6 +66,8 @@ export interface RuleInput extends RuleDefinition {
 export interface RulePreviewRequest extends RuleDefinition {
   /** Also change transactions whose category/payee you set by hand. */
   includeEdited?: boolean;
+  /** How many matching transactions to list (default 10). */
+  limit?: number;
 }
 
 export interface RulePreview {

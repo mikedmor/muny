@@ -1,10 +1,11 @@
-import { applyRules, type RuleFacts, type RuleTarget } from "@muny/core";
+import { applyRules, type RuleFacts, type RuleTarget, ruleMatches } from "@muny/core";
 import { type MunyDb, newId, schema } from "@muny/db";
 import {
   AMOUNT_OPS,
   type Rule,
   type RuleDefinition,
   type RulePreview,
+  type RuleWithCount,
   TEXT_OPS,
 } from "@muny/shared";
 import { asc, eq, inArray, sql } from "drizzle-orm";
@@ -227,14 +228,26 @@ export function evaluateRules(
   return { matched, plans, skippedEdited };
 }
 
-export function previewOf(e: Evaluation): RulePreview {
+/** The enabled and disabled rules whose conditions match one transaction, with how many each matches. */
+export function rulesForTransaction(db: Db, transactionId: string): RuleWithCount[] | null {
+  const c = loadCandidates(db, [transactionId])[0];
+  if (!c) return null;
+  return listRules(db)
+    .filter((r) => ruleMatches(r, c.facts))
+    .map((r) => ({
+      ...r,
+      matchedCount: evaluateRules(db, [r], { includeEdited: true }).matched.length,
+    }));
+}
+
+export function previewOf(e: Evaluation, limit = 10): RulePreview {
   return {
     matched: e.matched.length,
     wouldChange: e.plans.length,
     skippedEdited: e.skippedEdited,
     sample: [...e.matched]
       .sort((a, b) => b.postedDate.localeCompare(a.postedDate))
-      .slice(0, 10)
+      .slice(0, limit)
       .map((c) => ({
         id: c.id,
         postedDate: c.postedDate,

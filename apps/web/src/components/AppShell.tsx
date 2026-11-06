@@ -9,6 +9,7 @@ import {
   ChartPie,
   ChevronsUpDown,
   Code,
+  FolderOpen,
   HandCoins,
   House,
   Import,
@@ -61,6 +62,7 @@ const NAV: { label?: string; items: { to: string; label: string; icon: LucideIco
     items: [
       { to: "/reports", label: "Reports", icon: ChartColumn },
       { to: "/taxes", label: "Taxes", icon: Receipt },
+      { to: "/documents", label: "Documents", icon: FolderOpen },
     ],
   },
 ];

@@ -30,7 +30,7 @@ function makePdf(cells: { x: number; y: number; t: string }[]): Uint8Array {
   return new TextEncoder().encode(out);
 }
 
-function statementPdf() {
+function statementPdf(date = "10/6/2026", paidXA = "$150.00", principalXA = "$600.00") {
   const cells: { x: number; y: number; t: string }[] = [];
   let y = 760;
   const line = (label: string, ...values: string[]) => {
@@ -40,7 +40,7 @@ function statementPdf() {
     });
     y -= 14;
   };
-  line("Statement Date", "", "10/6/2026");
+  line("Statement Date", "", date);
   line("Current Balance", "", "$1,010.00");
   line("Last Payment (Effective 9/28/2026)", "", "$150.00");
   y -= 20;
@@ -53,10 +53,10 @@ function statementPdf() {
   line("Accrued Interest on 10/6/2026", "$1.00", "$9.00");
   line("Estimated Interest* on 10/28/2026", "$3.00", "$12.00");
   line("Regular Monthly Payment Amount", "$100.00", "$50.00");
-  line("Outstanding Principal Balance* on", "$600.00", "$400.00");
+  line("Outstanding Principal Balance* on", principalXA, "$400.00");
   line("Loan Term (payments remaining)", "12", "17");
   line("Payment Summary:");
-  line("Total Amount Paid Since Last Statement", "$150.00", "$0.00");
+  line("Total Amount Paid Since Last Statement", paidXA, "$0.00");
   line("Applied to Interest", "$4.00", "$0.00");
   line("Applied to Principal", "$146.00", "$0.00");
   line("Billing Details:");
@@ -128,6 +128,32 @@ describe("loan statements", () => {
     });
     expect(xb?.startBalanceCents).toBe(40_900);
     expect(xb?.payments).toHaveLength(0);
+
+    // An older statement adds history but doesn't move the balance back.
+    const older = (
+      await client.post("/api/loans/statements/preview", {
+        lender: "Servicer",
+        pdfBase64: Buffer.from(statementPdf("9/6/2026", "$150.00", "$746.00")).toString("base64"),
+      })
+    ).json<LoanStatementPreview>();
+    expect(older.matches.XB).not.toBe("new");
+    await client.post("/api/loans/statements/apply", {
+      lender: "Servicer",
+      statement: older.statement,
+      mapping: older.matches,
+      pdfBase64: Buffer.from(statementPdf("9/6/2026", "$150.00", "$746.00")).toString("base64"),
+      fileName: "september.pdf",
+    });
+    const after = (await client.get("/api/loans")).json<LoansReport>().loans;
+    const xa2 = after.find((l) => l.name === "Group XA");
+    expect(xa2?.startDate).toBe("2026-10-06");
+    expect(xa2?.startBalanceCents).toBe(60_100);
+    expect(xa2?.payments.filter((p) => p.description === "From your statement")).toHaveLength(2);
+    // Kept under Documents, once.
+    const docs = (await client.get("/api/documents")).json<{ name: string; kind: string }[]>();
+    expect(docs).toEqual([
+      expect.objectContaining({ name: "september.pdf", kind: "loan_statement" }),
+    ]);
 
     // Not a PDF.
     const bad = await client.post("/api/loans/statements/preview", {

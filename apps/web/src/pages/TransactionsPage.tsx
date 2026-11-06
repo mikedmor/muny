@@ -3,16 +3,20 @@ import {
   INTERVAL_LABELS,
   INTERVALS,
   type Interval,
+  type RuleWithCount,
   type Transaction,
   type TransactionQuery,
   toDecimalString,
 } from "@muny/shared";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import {
   CalendarDays,
   ChevronDown,
+  ChevronRight,
   EyeOff,
   type LucideIcon,
+  Plus,
   Repeat,
   Split,
   Tag,
@@ -20,15 +24,17 @@ import {
   Wand2,
   X,
 } from "lucide-react";
-import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { CategorySelect } from "../components/CategorySelect.js";
 import { Modal, MoneyField, SelectField } from "../components/forms.js";
-import { type RuleDraft, RuleEditor } from "../components/RuleEditor.js";
+import { CreateRuleDialog, RulesAppliedDialog } from "../components/RuleDialogs.js";
+import type { RuleDraft } from "../components/RuleEditor.js";
 import { Alert, Button, Card, cx, Field, PageHeader } from "../components/ui.js";
-import { ApiError } from "../lib/api.js";
+import { ApiError, api } from "../lib/api.js";
 import {
   useAccounts,
   useBulkUpdate,
+  useCategories,
   useCreateRecurring,
   useCreateTransaction,
   useDeleteTransaction,
@@ -121,6 +127,29 @@ export function TransactionsPage() {
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState<Transaction | "new" | null>(null);
+  // After a category change: offer a rule for transactions like it.
+  const categories = useCategories();
+  const [offer, setOffer] = useState<{ txn: Transaction; categoryId: string } | null>(null);
+  const [ruleFromOffer, setRuleFromOffer] = useState<RuleDraft | null>(null);
+  const offerRule = useCallback((txn: Transaction, categoryId: string | null) => {
+    setOffer(categoryId ? { txn, categoryId } : null);
+  }, []);
+  const dismissOffer = useCallback(() => setOffer(null), []);
+  const offerName = offer
+    ? categories.data?.flatMap((g) => g.categories).find((c) => c.id === offer.categoryId)?.name
+    : undefined;
+  const offerNode =
+    offer && offerName ? (
+      <RuleOffer
+        key={`${offer.txn.id}:${offer.categoryId}`}
+        categoryName={offerName}
+        onDismiss={dismissOffer}
+        onRule={() => {
+          setRuleFromOffer(ruleDraftFor(offer.txn, offer.categoryId));
+          setOffer(null);
+        }}
+      />
+    ) : null;
 
   // Clear selection when the result set changes.
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset on query change only
@@ -282,6 +311,7 @@ export function TransactionsPage() {
                   selected={selected.has(t.id)}
                   onToggle={() => toggle(t.id)}
                   onOpen={() => setOpen(t)}
+                  onCategoryChanged={offerRule}
                 />
               ))}
             </ul>
@@ -313,10 +343,73 @@ export function TransactionsPage() {
             key={open.id}
             txn={items.find((t) => t.id === open.id) ?? open}
             onDone={() => setOpen(null)}
+            onCategoryChanged={offerRule}
+            offer={offerNode}
           />
         )}
       </Modal>
+      {!(open && open !== "new") && offerNode}
+      <CreateRuleDialog
+        open={!!ruleFromOffer}
+        onClose={() => setRuleFromOffer(null)}
+        initial={ruleFromOffer}
+      />
     </>
+  );
+}
+
+/** A new rule for transactions like this one (name contains it; the category, when set). */
+export function ruleDraftFor(txn: Transaction, categoryId: string | null): RuleDraft {
+  return {
+    name: txn.payeeName ?? txn.description,
+    match: "all",
+    conditions: [
+      txn.payeeName
+        ? { field: "payee", op: "contains", value: txn.payeeName }
+        : { field: "description", op: "contains", value: txn.rawDescription },
+    ],
+    actions: categoryId ? [{ type: "setCategory", categoryId }] : [],
+  };
+}
+
+/** Bottom right after a category change: "Changed category to X  + Rule". */
+function RuleOffer({
+  categoryName,
+  onRule,
+  onDismiss,
+}: {
+  categoryName: string;
+  onRule: () => void;
+  onDismiss: () => void;
+}) {
+  useEffect(() => {
+    const id = setTimeout(onDismiss, 9000);
+    return () => clearTimeout(id);
+  }, [onDismiss]);
+  return (
+    <div
+      role="status"
+      className="fixed right-4 bottom-4 z-50 flex items-center gap-3 rounded-xl bg-white py-2.5 pr-2.5 pl-4 text-sm shadow-lg ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-700"
+    >
+      <span className="font-medium text-emerald-700 dark:text-emerald-400">
+        Changed category to {categoryName}
+      </span>
+      <button
+        type="button"
+        onClick={onRule}
+        className="inline-flex items-center gap-1 rounded-full border border-slate-900 px-3 py-1 text-xs font-medium hover:bg-slate-100 dark:border-slate-200 dark:hover:bg-slate-800"
+      >
+        <Plus aria-hidden="true" className="size-3.5" /> Rule
+      </button>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Dismiss"
+        className="text-slate-400 hover:text-slate-700"
+      >
+        <X aria-hidden="true" className="size-4" />
+      </button>
+    </div>
   );
 }
 
@@ -325,11 +418,13 @@ function TransactionRow({
   selected,
   onToggle,
   onOpen,
+  onCategoryChanged,
 }: {
   txn: Transaction;
   selected: boolean;
   onToggle: () => void;
   onOpen: () => void;
+  onCategoryChanged: (txn: Transaction, categoryId: string | null) => void;
 }) {
   const update = useUpdateTransaction();
   const isSplit = txn.splits.length > 0;
@@ -374,7 +469,10 @@ function TransactionRow({
           <CategorySelect
             aria-label={`Category for ${txn.description}`}
             value={txn.categoryId}
-            onChange={(categoryId) => update.mutate({ id: txn.id, categoryId })}
+            onChange={(categoryId) => {
+              update.mutate({ id: txn.id, categoryId });
+              onCategoryChanged(txn, categoryId);
+            }}
             className={cx(
               "w-full truncate rounded-md border border-transparent bg-transparent px-1 py-1 text-xs hover:border-slate-300 dark:hover:border-slate-700",
               !txn.categoryId && "text-amber-600",
@@ -698,7 +796,18 @@ function RecurringAction({ txn }: { txn: Transaction }) {
 }
 
 /** Edits save as you go: switches and pickers at once, text when you leave the field. */
-function TransactionDetail({ txn, onDone }: { txn: Transaction; onDone: () => void }) {
+function TransactionDetail({
+  txn,
+  onDone,
+  onCategoryChanged,
+  offer,
+}: {
+  txn: Transaction;
+  onDone: () => void;
+  onCategoryChanged: (txn: Transaction, categoryId: string | null) => void;
+  /** The "make a rule?" offer, shown inside this dialog while it's open. */
+  offer: ReactNode;
+}) {
   const update = useUpdateTransaction();
   const remove = useDeleteTransaction();
   const notTransfer = useNotTransfer();
@@ -711,11 +820,15 @@ function TransactionDetail({ txn, onDone }: { txn: Transaction; onDone: () => vo
   const [hidden, setHidden] = useState(txn.hidden);
   const [postedDate, setDate] = useState(txn.postedDate);
   const [amount, setAmount] = useState<number | null>(txn.amountCents);
-  const [panel, setPanel] = useState<"split" | "rule" | null>(
-    txn.splits.length > 0 ? "split" : null,
-  );
+  const [panel, setPanel] = useState<"split" | null>(txn.splits.length > 0 ? "split" : null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [ruleDraft, setRuleDraft] = useState<RuleDraft | null>(null);
+  const [creatingRule, setCreatingRule] = useState<RuleDraft | null>(null);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const txnRules = useQuery({
+    queryKey: ["rules", "for", txn.id],
+    queryFn: () => api.get<RuleWithCount[]>(`/api/transactions/${txn.id}/rules`),
+  });
+  const ruleCount = txnRules.data?.length ?? 0;
   const [saved, setSaved] = useState(false);
 
   const patch = (input: Omit<Parameters<typeof update.mutate>[0], "id">) =>
@@ -728,20 +841,6 @@ function TransactionDetail({ txn, onDone }: { txn: Transaction; onDone: () => vo
 
   const isSplit = txn.splits.length > 0;
   const shownAmount = txn.manual && amount !== null ? amount : txn.amountCents;
-
-  const openRule = () => {
-    setRuleDraft({
-      name: txn.payeeName ?? txn.description,
-      match: "all",
-      conditions: [
-        txn.payeeName
-          ? { field: "payee", op: "equals", value: txn.payeeName }
-          : { field: "description", op: "contains", value: txn.rawDescription },
-      ],
-      actions: [{ type: "setCategory", categoryId: categoryId ?? "" }],
-    });
-    setPanel(panel === "rule" ? null : "rule");
-  };
 
   return (
     <div className="flex max-h-[calc(100dvh-2rem)] flex-col">
@@ -844,6 +943,7 @@ function TransactionDetail({ txn, onDone }: { txn: Transaction; onDone: () => vo
                 onChange={(id) => {
                   setCategoryId(id);
                   patch({ categoryId: id });
+                  onCategoryChanged(txn, id);
                 }}
                 className={cx(
                   "max-w-full rounded-full border border-slate-200 bg-slate-50 py-1 pr-3 pl-1.5 text-sm hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700",
@@ -932,17 +1032,23 @@ function TransactionDetail({ txn, onDone }: { txn: Transaction; onDone: () => vo
               />
               <ActionRow
                 icon={Wand2}
-                title="Create rule"
-                subtitle="For transactions like this"
-                onClick={openRule}
+                title={ruleCount ? "Rules" : "Add rule"}
+                subtitle={
+                  ruleCount
+                    ? ruleCount === 1
+                      ? "Active"
+                      : `${ruleCount} active`
+                    : "For transactions like this"
+                }
+                onClick={() =>
+                  ruleCount ? setRulesOpen(true) : setCreatingRule(ruleDraftFor(txn, categoryId))
+                }
                 trailing={
-                  <ChevronDown
-                    aria-hidden="true"
-                    className={cx(
-                      "mt-0.5 size-4 text-slate-400 transition-transform",
-                      panel === "rule" && "rotate-180",
-                    )}
-                  />
+                  ruleCount ? (
+                    <ChevronRight aria-hidden="true" className="mt-0.5 size-4 text-slate-400" />
+                  ) : (
+                    <Plus aria-hidden="true" className="mt-0.5 size-4 text-slate-400" />
+                  )
                 }
               />
               <ActionRow
@@ -980,12 +1086,6 @@ function TransactionDetail({ txn, onDone }: { txn: Transaction; onDone: () => vo
             <SplitEditor txn={txn} onCancel={() => setPanel(null)} />
           </div>
         )}
-        {panel === "rule" && ruleDraft && (
-          <div className="border-t border-slate-200 p-6 dark:border-slate-800">
-            <h3 className="mb-3 text-sm font-semibold">New rule</h3>
-            <RuleEditor initial={ruleDraft} onDone={() => setPanel(null)} />
-          </div>
-        )}
 
         {/* Footer: where it came from */}
         <div className="space-y-1.5 bg-slate-50 px-6 py-4 text-center font-mono text-xs dark:bg-slate-950/60">
@@ -997,6 +1097,18 @@ function TransactionDetail({ txn, onDone }: { txn: Transaction; onDone: () => vo
           <p className="break-words text-slate-500 uppercase">{txn.rawDescription}</p>
         </div>
       </div>
+      {offer}
+      <RulesAppliedDialog
+        open={rulesOpen}
+        onClose={() => setRulesOpen(false)}
+        transactionId={txn.id}
+        newDraft={ruleDraftFor(txn, categoryId)}
+      />
+      <CreateRuleDialog
+        open={!!creatingRule}
+        onClose={() => setCreatingRule(null)}
+        initial={creatingRule}
+      />
     </div>
   );
 }

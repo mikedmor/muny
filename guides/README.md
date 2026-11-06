@@ -12,6 +12,7 @@ How to install, set up and use Muny.
 | [Stocks](stocks.md)              | Tracking brokerage accounts, holdings and dividends                   |
 | [Savings](savings.md)            | Savings accounts (interest, rate, projections) and money saved        |
 | [Crypto](crypto.md)              | Wallets, exchanges, prices, cost basis and tax reports                |
+| [Rules and documents](rules-and-documents.md) | Rules for transactions, and keeping statements and other files |
 | [Alerts](alerts.md)              | Alert rules and notification channels (ntfy, Apprise, email, webhook) |
 | [Backups and export](backups.md) | Automatic backups, restoring, and exporting your data                 |
 

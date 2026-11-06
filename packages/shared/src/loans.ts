@@ -339,3 +339,17 @@ export interface LoanStatementPreview {
   statement: LoanStatement;
   matches: Record<string, string>;
 }
+
+/** A document kept in Muny (Insights → Documents). */
+export interface DocumentInfo {
+  id: string;
+  kind: "loan_statement" | "other";
+  name: string;
+  mime: string;
+  sizeBytes: number;
+  lender: string | null;
+  /** Loan statements: the statement date. */
+  documentDate: string | null;
+  notes: string | null;
+  createdAt: number;
+}

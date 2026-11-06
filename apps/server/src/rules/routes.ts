@@ -5,7 +5,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
 import { audit } from "../lib/audit.js";
-import { parse } from "../lib/http.js";
+import { notFound, parse } from "../lib/http.js";
 import { rescanRecurring } from "../recurring/service.js";
 import {
   applyPlans,
@@ -15,6 +15,7 @@ import {
   getRule,
   listRules,
   previewOf,
+  rulesForTransaction,
   storeDefinition,
   validateReferences,
 } from "./service.js";
@@ -32,7 +33,12 @@ const UpdateBody = z
     actions: DefinitionSchema.shape.actions.optional(),
   })
   .refine((b) => Object.keys(b).length > 0, "Nothing to update");
-const PreviewBody = DefinitionSchema.extend({ includeEdited: z.boolean().optional() });
+// Previews can leave out the actions (what a rule would match, before choosing what it does).
+const PreviewBody = DefinitionSchema.extend({
+  actions: DefinitionSchema.shape.actions.element.array().max(10),
+  includeEdited: z.boolean().optional(),
+  limit: z.number().int().min(1).max(200).optional(),
+});
 const ApplyBody = z.object({ includeEdited: z.boolean().optional() });
 const MoveBody = z.object({ direction: z.enum(["up", "down"]) });
 
@@ -117,7 +123,16 @@ export function registerRuleRoutes(app: FastifyInstance, db: MunyDb) {
   app.post("/api/rules/preview", async (req) => {
     const body = parse(PreviewBody, req.body);
     validateReferences(db, body);
-    return previewOf(evaluateRules(db, [body], { includeEdited: body.includeEdited }));
+    return previewOf(evaluateRules(db, [body], { includeEdited: body.includeEdited }), body.limit);
+  });
+
+  /** The rules that match a transaction (enabled or not), for its Rules panel. */
+  app.get("/api/transactions/:id/rules", async (req) => {
+    requireUser(req);
+    const { id } = parse(IdParams, req.params);
+    const list = rulesForTransaction(db, id);
+    if (!list) throw notFound("Transaction not found");
+    return list;
   });
 
   /** Apply one rule to existing transactions. */

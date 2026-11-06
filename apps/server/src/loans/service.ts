@@ -402,11 +402,17 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
   const stmtRows = new Map<string, (typeof schema.loanStatementPayments.$inferSelect)[]>();
   for (const x of db.select().from(schema.loanStatementPayments).all())
     stmtRows.set(x.accountId, [...(stmtRows.get(x.accountId) ?? []), x]);
-  const lastStatement = (id: string) =>
-    (stmtRows.get(id) ?? []).reduce<string | null>(
-      (m, x) => (!m || x.statementDate > m ? x.statementDate : m),
-      null,
+  /** Is this date covered by one of the loan's statements (since its previous one)? */
+  const coveredByStatement = (id: string, date: string) => {
+    const list = [...(stmtRows.get(id) ?? [])].sort((x, y) =>
+      x.statementDate.localeCompare(y.statementDate),
     );
+    return list.some((x, i) => {
+      // The first statement covers about a month before it.
+      const from = list[i - 1]?.statementDate ?? addMonths(x.statementDate, -1);
+      return date > from && date <= x.statementDate;
+    });
+  };
   const shared = shares(details, nameOf, sched.loans);
 
   // Every loan's payments, then each payment that several loans could claim
@@ -456,8 +462,7 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
       (p) => !claimedElsewhere(p.id, a.id) && !sched.claimed.has(p.id),
     );
     // This loan's part of each payment.
-    // Payments up to the latest statement come from the statement instead (exact).
-    const stmtUntil = lastStatement(a.id);
+    // Payments in periods your statements cover come from them instead (exact).
     const raw: (RawPayment & { total: number | null })[] = (
       viaLender
         ? (sched.parts.get(a.id) ?? [])
@@ -466,7 +471,7 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
             total: share ? p.amountCents : null,
             amountCents: share ? Math.round(p.amountCents * share.share) : p.amountCents,
           }))
-    ).filter((p) => !stmtUntil || p.date > stmtUntil);
+    ).filter((p) => !coveredByStatement(a.id, p.date));
     const apr = d?.aprBps ?? null;
     const pi = d?.kind === "mortgage" ? principalInterest(d) : null;
     const monthly =
@@ -552,17 +557,19 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
     }
     rows = [
       ...rows,
-      ...(stmtRows.get(a.id) ?? []).map((x) => ({
-        transactionId: `stmt:${x.id}`,
-        date: x.date,
-        amountCents: x.amountCents,
-        totalCents: null,
-        escrowCents: null,
-        interestCents: x.interestCents,
-        principalCents: x.principalCents,
-        description: "From your statement",
-        fromAccountName: "From your statement",
-      })),
+      ...(stmtRows.get(a.id) ?? [])
+        .filter((x) => x.amountCents > 0)
+        .map((x) => ({
+          transactionId: `stmt:${x.id}`,
+          date: x.date,
+          amountCents: x.amountCents,
+          totalCents: null,
+          escrowCents: null,
+          interestCents: x.interestCents,
+          principalCents: x.principalCents,
+          description: "From your statement",
+          fromAccountName: "From your statement",
+        })),
     ].sort((x, y) => x.date.localeCompare(y.date));
     const paidInterest = rows.filter((p) => p.date.startsWith(year) && p.interestCents !== null);
     if (paidInterest.length)
@@ -997,6 +1004,19 @@ export function applyStatement(
       startDate: statement.statementDate,
     };
     const clean = Object.fromEntries(Object.entries(terms).filter(([, v]) => v !== null));
+    // An older statement (history) doesn't move the balance or terms back.
+    const newest =
+      target === "new" ||
+      !db
+        .select({ d: schema.loanStatementPayments.statementDate })
+        .from(schema.loanStatementPayments)
+        .where(
+          and(
+            eq(schema.loanStatementPayments.accountId, target),
+            sql`${schema.loanStatementPayments.statementDate} > ${statement.statementDate}`,
+          ),
+        )
+        .get();
     let id = target;
     if (target === "new") {
       id = createManualLoan(db, {
@@ -1004,13 +1024,24 @@ export function applyStatement(
         name: `Group ${g.name}`,
         startBalanceCents: owed,
       });
-    } else if (!updateLoan(db, target, clean)) continue;
-    if (g.paidCents && g.paidCents > 0) {
+    } else if (newest) {
+      if (!updateLoan(db, target, clean)) continue;
+    } else if (
+      !db
+        .select({ id: schema.accounts.id })
+        .from(schema.accounts)
+        .where(and(eq(schema.accounts.id, target), eq(schema.accounts.type, "loan")))
+        .get()
+    )
+      continue;
+    {
+      const paid = Math.max(0, g.paidCents ?? 0);
       const row = {
         date: statement.lastPayment?.date ?? statement.statementDate,
-        amountCents: g.paidCents,
-        interestCents: g.paidInterestCents ?? 0,
-        principalCents: g.paidPrincipalCents ?? g.paidCents - (g.paidInterestCents ?? 0),
+        amountCents: paid,
+        interestCents: paid ? (g.paidInterestCents ?? 0) : 0,
+        principalCents: paid ? (g.paidPrincipalCents ?? paid - (g.paidInterestCents ?? 0)) : 0,
+        balanceCents: owed,
       };
       db.insert(schema.loanStatementPayments)
         .values({ id: newId(), accountId: id, statementDate: statement.statementDate, ...row })
@@ -1020,6 +1051,14 @@ export function applyStatement(
             schema.loanStatementPayments.statementDate,
           ],
           set: row,
+        })
+        .run();
+      // What you owed that day, for the loan's history (net worth, charts).
+      db.insert(schema.balanceSnapshots)
+        .values({ accountId: id, date: statement.statementDate, balanceCents: -owed })
+        .onConflictDoUpdate({
+          target: [schema.balanceSnapshots.accountId, schema.balanceSnapshots.date],
+          set: { balanceCents: -owed, estimated: false },
         })
         .run();
     }
