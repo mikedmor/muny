@@ -15,6 +15,7 @@ import { applyMerchantMemory } from "../ledger/memory.js";
 import { applyLoanTerms, refreshManualLoans } from "../loans/service.js";
 import { rescanRecurring } from "../recurring/service.js";
 import { runRulesOn } from "../rules/service.js";
+import { type PayPalCreds, PayPalProvider } from "./paypal.js";
 import { type PlaidCreds, PlaidProvider } from "./plaid.js";
 import { type TellerCreds, TellerProvider } from "./teller.js";
 import {
@@ -31,12 +32,15 @@ type Connection = typeof schema.connections.$inferSelect;
 export interface Providers {
   plaid?: PlaidProvider;
   teller?: TellerProvider;
+  /** Always available: each PayPal connection brings its own keys. */
+  paypal?: PayPalProvider;
 }
 
 export function makeProviders(config: Config): Providers {
   return {
     ...(config.plaid && { plaid: new PlaidProvider(config.plaid) }),
     ...(config.teller && { teller: new TellerProvider(config.teller) }),
+    paypal: new PayPalProvider(),
   };
 }
 
@@ -45,7 +49,7 @@ export interface SyncDeps {
   providers: Providers;
 }
 
-export type AnyCreds = PlaidCreds | TellerCreds;
+export type AnyCreds = PlaidCreds | TellerCreds | PayPalCreds;
 
 export function providerFor(deps: SyncDeps, provider: string): Provider<AnyCreds> {
   if (provider === "plaid") {
@@ -64,6 +68,8 @@ export function providerFor(deps: SyncDeps, provider: string): Provider<AnyCreds
       );
     return deps.providers.teller as Provider<AnyCreds>;
   }
+  if (provider === "paypal")
+    return (deps.providers.paypal ?? new PayPalProvider()) as Provider<AnyCreds>;
   throw new ProviderError("config", `"${provider}" connections don't sync`);
 }
 

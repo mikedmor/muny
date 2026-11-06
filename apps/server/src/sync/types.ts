@@ -111,7 +111,7 @@ export interface InvestmentSync {
 }
 
 export interface Provider<Creds> {
-  readonly id: "plaid" | "teller";
+  readonly id: "plaid" | "teller" | "paypal";
   getAccounts(creds: Creds): Promise<ConnectionInfo>;
   syncTransactions(creds: Creds, cursor: string | null): Promise<SyncResult>;
   /**

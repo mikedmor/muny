@@ -44,6 +44,19 @@ Muny syncs every 6 hours (`MUNY_SYNC_INTERVAL_HOURS`; `0` turns it off), and you
    TELLER_KEY_PATH=/data/teller/private_key.pem
    ```
 
+## PayPal
+
+PayPal connects through PayPal's own API with keys you create, separate from Plaid. Muny only reads your balance and activity.
+
+1. Your PayPal account must be a **business** account. Switching a personal account is free in PayPal's settings, and keeps your balance and history.
+2. Sign in at [developer.paypal.com](https://developer.paypal.com/dashboard/applications/live), open **Apps & Credentials**, choose **Live** and **Create App**.
+3. In the app's features, turn on **Transaction Search** and save. It can take a few hours before PayPal lets the app read your activity.
+4. On **Accounts → Bank connections**, click **Connect PayPal** and paste the app's Client ID and Secret.
+
+The first sync reads up to three years of activity. Amounts are net of PayPal's fees, and only US dollar activity is kept. Purchases you paid for with PayPal Credit show up in the activity, but PayPal Credit's own balance isn't available through this API.
+
+Without a business account, download your activity instead (PayPal → Activity → Statements → **Download**, as CSV) and add it on **Import**; Muny recognises PayPal's format, and importing again only adds what's new.
+
 ## Connecting
 
 On **Accounts → Bank connections**, click **Connect**. After you log in to your bank, choose where each bank account goes. **Link it to an account you already have** (for example one from a Rocket Money import) to keep its history: transactions you already imported are matched instead of duplicated. From then on the account shows the bank's reported balance.

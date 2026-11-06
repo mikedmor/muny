@@ -42,7 +42,7 @@ export interface Account {
   hidden: boolean;
   excludeFromReports: boolean;
   sortOrder: number;
-  provider: "manual" | "file" | "plaid" | "teller" | "simplefin";
+  provider: "manual" | "file" | "plaid" | "teller" | "paypal" | "simplefin";
   transactionCount: number;
   lastTransactionDate: string | null;
 }

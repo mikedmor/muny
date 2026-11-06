@@ -77,7 +77,7 @@ export const sessions = sqliteTable(
 
 export const connections = sqliteTable("connections", {
   id: text().primaryKey(),
-  provider: text({ enum: ["manual", "file", "plaid", "teller", "simplefin"] }).notNull(),
+  provider: text({ enum: ["manual", "file", "plaid", "teller", "paypal", "simplefin"] }).notNull(),
   institutionName: text(),
   /** Provider-side id (Plaid item_id, Teller enrollment id...). */
   providerRef: text(),

@@ -174,6 +174,7 @@ export function BankConnections() {
   const disconnect = useDisconnect();
   const [linking, setLinking] = useState<LinkStart | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [paypal, setPaypal] = useState<{ connectionId?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const c = cfg.data;
@@ -256,6 +257,14 @@ export function BankConnections() {
               {busy === "brokerage" ? "Opening…" : "Connect a brokerage"}
             </Button>
           )}
+          <Button
+            variant="secondary"
+            disabled={busy !== null}
+            title="Your PayPal activity through PayPal's own API (business accounts)"
+            onClick={() => setPaypal({})}
+          >
+            Connect PayPal
+          </Button>
           {teller && (
             <Button variant="secondary" disabled={busy !== null} onClick={() => connectTeller()}>
               {busy === "teller" ? "Opening…" : plaid ? "Connect with Teller" : "Connect a bank"}
@@ -268,6 +277,18 @@ export function BankConnections() {
         <PlaidLogins logins={c.plaid.logins} />
       )}
       {!plaid && !teller && <SetupHelp cfg={c} />}
+      <Modal open={paypal !== null} onClose={() => setPaypal(null)} title="Connect PayPal">
+        {paypal && (
+          <PayPalForm
+            connectionId={paypal.connectionId}
+            onDone={(start) => {
+              setPaypal(null);
+              if (start && !paypal.connectionId) setLinking(start);
+              void qc.invalidateQueries({ queryKey: keys.connections });
+            }}
+          />
+        )}
+      </Modal>
       {(plaid || teller) && !c.secretKey && (
         <Alert>
           MUNY_SECRET_KEY isn't set, so bank logins can't be stored. Add it to .env and redeploy.
@@ -286,7 +307,12 @@ export function BankConnections() {
                 <p className="font-medium">
                   {conn.institutionName ?? "Bank"}{" "}
                   <span className="text-xs font-normal text-slate-500">
-                    via {conn.provider === "plaid" ? "Plaid" : "Teller"}
+                    via{" "}
+                    {conn.provider === "plaid"
+                      ? "Plaid"
+                      : conn.provider === "paypal"
+                        ? "PayPal API"
+                        : "Teller"}
                   </span>
                 </p>
                 <p className="text-xs text-slate-500">
@@ -307,10 +333,18 @@ export function BankConnections() {
                   <Button
                     disabled={busy !== null}
                     onClick={() =>
-                      conn.provider === "plaid" ? fixPlaid(conn) : connectTeller(conn)
+                      conn.provider === "plaid"
+                        ? fixPlaid(conn)
+                        : conn.provider === "paypal"
+                          ? setPaypal({ connectionId: conn.id })
+                          : connectTeller(conn)
                     }
                   >
-                    {busy === conn.id ? "Opening…" : "Log in again"}
+                    {busy === conn.id
+                      ? "Opening…"
+                      : conn.provider === "paypal"
+                        ? "Update keys"
+                        : "Log in again"}
                   </Button>
                 ) : (
                   <Button
@@ -486,5 +520,105 @@ function PlaidLogins({ logins }: { logins: { used: number; limit: number; custom
         unless you say otherwise.
       </span>
     </div>
+  );
+}
+
+/** Your PayPal REST app's keys (read-only activity), with how to make them. */
+function PayPalForm({
+  connectionId,
+  onDone,
+}: {
+  connectionId?: string;
+  onDone: (start: LinkStart | null) => void;
+}) {
+  const [clientId, setClientId] = useState("");
+  const [secret, setSecret] = useState("");
+  const [sandbox, setSandbox] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const start = await api.post<LinkStart>("/api/connections/paypal", {
+        clientId,
+        clientSecret: secret,
+        env: sandbox ? "sandbox" : "live",
+        ...(connectionId ? { connectionId } : {}),
+      });
+      onDone(start);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't connect");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form onSubmit={submit} className="space-y-4 text-sm" noValidate>
+      <ol className="list-decimal space-y-1 pl-5 text-slate-600 dark:text-slate-400">
+        <li>
+          Your PayPal account must be a <strong>business</strong> account (switching is free in
+          PayPal's settings).
+        </li>
+        <li>
+          Sign in at{" "}
+          <a
+            href="https://developer.paypal.com/dashboard/applications/live"
+            target="_blank"
+            rel="noreferrer"
+            className="text-brand-600 underline"
+          >
+            developer.paypal.com
+          </a>{" "}
+          → Apps &amp; Credentials → <strong>Live</strong> → Create App.
+        </li>
+        <li>
+          In the app's features, turn on <strong>Transaction Search</strong> and save. It can take a
+          few hours before PayPal lets the app read your activity.
+        </li>
+        <li>Copy the app's Client ID and Secret here.</li>
+      </ol>
+      <p className="text-xs text-slate-500">
+        Muny only reads your balance and activity; it never sends money. The keys are stored
+        encrypted and sent only to PayPal. PayPal Credit purchases show in your activity; PayPal
+        Credit's own balance isn't available this way.
+      </p>
+      {error && <Alert>{error}</Alert>}
+      <label className="block">
+        <span className="font-medium">Client ID</span>
+        <input
+          value={clientId}
+          onChange={(e) => setClientId(e.target.value)}
+          autoComplete="off"
+          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
+        />
+      </label>
+      <label className="block">
+        <span className="font-medium">Secret</span>
+        <input
+          type="password"
+          value={secret}
+          onChange={(e) => setSecret(e.target.value)}
+          autoComplete="off"
+          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
+        />
+      </label>
+      <label className="flex items-center gap-2 text-xs text-slate-500">
+        <input type="checkbox" checked={sandbox} onChange={(e) => setSandbox(e.target.checked)} />
+        These are sandbox (test) keys
+      </label>
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" onClick={() => onDone(null)}>
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          disabled={busy || clientId.trim().length < 10 || secret.trim().length < 10}
+        >
+          {busy ? "Checking…" : connectionId ? "Update keys" : "Connect"}
+        </Button>
+      </div>
+    </form>
   );
 }

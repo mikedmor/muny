@@ -16,6 +16,7 @@ import {
   sealCreds,
   syncConnection,
 } from "./engine.js";
+import { type PayPalCreds, PayPalProvider } from "./paypal.js";
 import type { PlaidCreds } from "./plaid.js";
 import type { TellerCreds } from "./teller.js";
 import { type ConnectionInfo, ProviderError } from "./types.js";
@@ -51,7 +52,7 @@ export function registerSyncRoutes(app: FastifyInstance, db: MunyDb, deps: SyncD
 
   const getConn = (id: string) => {
     const conn = db.select().from(c).where(eq(c.id, id)).get();
-    if (!conn || (conn.provider !== "plaid" && conn.provider !== "teller"))
+    if (!conn || !["plaid", "teller", "paypal"].includes(conn.provider))
       throw notFound("Connection not found");
     return conn;
   };
@@ -81,7 +82,7 @@ export function registerSyncRoutes(app: FastifyInstance, db: MunyDb, deps: SyncD
   };
 
   const createConnection = (
-    provider: "plaid" | "teller",
+    provider: "plaid" | "teller" | "paypal",
     creds: AnyCreds,
     info: ConnectionInfo,
   ) => {
@@ -139,7 +140,7 @@ export function registerSyncRoutes(app: FastifyInstance, db: MunyDb, deps: SyncD
     const conns = db
       .select()
       .from(c)
-      .where(inArray(c.provider, ["plaid", "teller"]))
+      .where(inArray(c.provider, ["plaid", "teller", "paypal"]))
       .orderBy(c.createdAt)
       .all();
     const accounts = listAccounts(db);
@@ -149,7 +150,7 @@ export function registerSyncRoutes(app: FastifyInstance, db: MunyDb, deps: SyncD
       .all();
     return conns.map((x) => ({
       id: x.id,
-      provider: x.provider as "plaid" | "teller",
+      provider: x.provider as "plaid" | "teller" | "paypal",
       institutionName: x.institutionName,
       status: x.status,
       lastSyncAt: x.lastSyncAt ? x.lastSyncAt.getTime() : null,
@@ -218,6 +219,49 @@ export function registerSyncRoutes(app: FastifyInstance, db: MunyDb, deps: SyncD
   // --- Teller ----------------------------------------------------------------
 
   /** Teller Connect hands the browser an access token; store it server-side. */
+  // --- PayPal (your own REST app's keys; read-only) -----------------------------
+
+  app.post("/api/connections/paypal", async (req) => {
+    const user = requireUser(req);
+    const body = parse(
+      z.object({
+        clientId: z.string().trim().min(10, "Paste the app's client ID").max(200),
+        clientSecret: z.string().trim().min(10, "Paste the app's secret").max(200),
+        env: z.enum(["live", "sandbox"]).default("live"),
+        connectionId: z.string().max(64).optional(),
+      }),
+      req.body,
+    );
+    const paypal = deps.providers.paypal ?? new PayPalProvider();
+    const creds: PayPalCreds = {
+      clientId: body.clientId,
+      clientSecret: body.clientSecret,
+      env: body.env,
+    };
+    try {
+      const info = await paypal.getAccounts(creds);
+      if (body.connectionId) {
+        // New keys for an existing connection.
+        const conn = getConn(body.connectionId);
+        db.update(c)
+          .set({ credentialsEnc: sealCreds(deps.config, creds), status: "active", lastError: null })
+          .where(eq(c.id, conn.id))
+          .run();
+        log(user.id, "connection.reauth", conn.id);
+        return {
+          connectionId: conn.id,
+          institutionName: "PayPal",
+          accounts: linkable(info, conn.id),
+        };
+      }
+      const id = createConnection("paypal", creds, info);
+      log(user.id, "connection.create", id, { provider: "paypal" });
+      return { connectionId: id, institutionName: "PayPal", accounts: linkable(info, id) };
+    } catch (e) {
+      asHttp(e);
+    }
+  });
+
   app.post("/api/connections/teller/enroll", async (req) => {
     const user = requireUser(req);
     const body = parse(
