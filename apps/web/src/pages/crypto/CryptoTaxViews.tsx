@@ -1,9 +1,10 @@
 import { type CryptoTaxReport, formatMoney } from "@muny/shared";
+import { Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { CoinIcon, WalletIcon } from "../../components/coins.js";
 import { Card, cx } from "../../components/ui.js";
-import { useCryptoNfts, useCryptoTax } from "../../lib/queries.js";
-import { fmtAmount } from "./common.js";
+import { useCryptoNfts, useCryptoSettings, useCryptoTax } from "../../lib/queries.js";
+import { DismissButton, fmtAmount, useDismissed } from "./common.js";
 
 /**
  * The dashboard's other views (Koinly-style): the range's money flows, NFTs,
@@ -72,29 +73,12 @@ const EXPLORER: Record<string, string> = {
   polygon: "https://polygon.blockscout.com",
   gnosis: "https://gnosis.blockscout.com",
 };
-const SHOW_IMAGES = "muny.crypto.nftImages";
-
 export function NftsView() {
   const q = useCryptoNfts();
-  const [images, setImages] = useState(() => {
-    try {
-      return localStorage.getItem(SHOW_IMAGES) === "1";
-    } catch {
-      return false;
-    }
-  });
-  const toggle = () => {
-    setImages((v) => {
-      try {
-        localStorage.setItem(SHOW_IMAGES, v ? "0" : "1");
-      } catch {
-        // Private window: just for this visit.
-      }
-      return !v;
-    });
-  };
+  const settings = useCryptoSettings();
+  const images = !!settings.data?.nftImages;
+  const [dismissed, dismiss] = useDismissed("nftImagesOff");
   const list = q.data ?? [];
-  const img = (u: string) => u.replace(/^ipfs:\/\//i, "https://ipfs.io/ipfs/");
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -103,17 +87,19 @@ export function NftsView() {
           Gnosis), as of each wallet&apos;s last sync. Domains (e.g. Unstoppable Domains) are NFTs
           too: if yours lives on Polygon, add the same address as a Polygon wallet.
         </p>
-        {list.some((n) => n.image) && (
-          <button
-            type="button"
-            onClick={toggle}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700"
-            title="Images are on other sites (often IPFS); loading them tells those sites your IP address."
-          >
-            {images ? "Hide images" : "Show images"}
-          </button>
-        )}
       </div>
+      {!images && !dismissed && list.some((n) => n.image) && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm dark:border-slate-700 dark:bg-slate-900">
+          <span>
+            NFT images are off: they live on other sites. Turn them on in{" "}
+            <Link to="/crypto/settings" className="text-brand-600 underline">
+              Crypto settings
+            </Link>
+            ; your Muny server then fetches them for you.
+          </span>
+          <DismissButton onClick={dismiss} />
+        </div>
+      )}
       {q.isSuccess && list.length === 0 && (
         <Card className="py-10 text-center text-sm text-slate-500">
           No NFTs found yet. They appear after a sync of an Ethereum-style wallet that holds them.
@@ -127,7 +113,7 @@ export function NftsView() {
               <div className="flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800">
                 {images && n.image ? (
                   <img
-                    src={img(n.image)}
+                    src={`/api/crypto/nft-image?${new URLSearchParams({ w: n.walletId, c: n.contract, t: n.tokenId })}`}
                     alt={n.name ?? "NFT"}
                     loading="lazy"
                     referrerPolicy="no-referrer"

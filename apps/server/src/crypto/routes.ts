@@ -8,6 +8,7 @@ import { requireUser } from "../auth/plugin.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, notFound, parse } from "../lib/http.js";
 import { usage } from "./budget.js";
+import { fetchNftImage, NftImageError } from "./nft-image.js";
 import {
   getCryptoSettings,
   type PriceDeps,
@@ -343,6 +344,36 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
 
   /** NFTs in synced EVM wallets. */
   app.get("/api/crypto/nfts", async () => listNfts(db));
+
+  /** An NFT's image, fetched by the server (opt-in; see nft-image.ts for the safeguards). */
+  app.get("/api/crypto/nft-image", async (req, reply) => {
+    const q = parse(
+      z.object({
+        w: z.string().min(1).max(64),
+        c: z.string().min(1).max(100),
+        t: z.string().min(1).max(100),
+      }),
+      req.query,
+    );
+    try {
+      const img = await fetchNftImage(db, { walletId: q.w, contract: q.c, tokenId: q.t });
+      return (
+        reply
+          .header("content-type", img.type)
+          .header("cache-control", "private, max-age=86400")
+          .header("x-content-type-options", "nosniff")
+          // An SVG opened on its own can't run anything.
+          .header(
+            "content-security-policy",
+            "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+          )
+          .send(img.body)
+      );
+    } catch (err) {
+      if (err instanceof NftImageError) return reply.code(err.status).send({ error: err.message });
+      throw err;
+    }
+  });
 
   /** Tax view: the range's flows and realized gains, the tax year by term, holdings by term. */
   app.get("/api/crypto/tax", async (req) => {
@@ -844,6 +875,9 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
         apiKey: z.string().trim().max(200).nullable().optional(),
         blockscoutKey: z.string().trim().max(200).nullable().optional(),
         hiddenAssets: z.array(asset).max(500).optional(),
+        costMethod: z.enum(["fifo", "lifo", "hifo"]).optional(),
+        nftImages: z.boolean().optional(),
+        ignored: z.array(z.string().max(200)).max(1000).optional(),
         servers: z
           .partialRecord(
             chainKey,

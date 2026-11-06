@@ -27,6 +27,57 @@ export function CryptoSettings() {
       {d && (
         <div className="max-w-3xl space-y-6">
           <Card className="space-y-3">
+            <h2 className="font-semibold">Cost basis and taxes</h2>
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium">Which coins count as sold first</legend>
+              {(
+                [
+                  [
+                    "fifo",
+                    "First in, first out (FIFO)",
+                    "Your oldest coins go first. The usual default.",
+                  ],
+                  ["lifo", "Last in, first out (LIFO)", "Your newest coins go first."],
+                  [
+                    "hifo",
+                    "Highest cost first (HIFO)",
+                    "The coins that cost the most go first, which usually means the smallest taxable gains.",
+                  ],
+                ] as const
+              ).map(([k, label, help]) => (
+                <label key={k} className="flex items-start gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="costMethod"
+                    className="mt-1"
+                    checked={d.costMethod === k}
+                    onChange={() => save.mutate({ costMethod: k })}
+                  />
+                  <span>
+                    <span className="font-medium">{label}</span>
+                    <span className="block text-xs text-slate-500">{help}</span>
+                  </span>
+                </label>
+              ))}
+              <p className="text-xs text-slate-500">
+                It changes cost basis, gains, the cost line, tax optimization and asset maturity. To
+                match Koinly, pick the method in Koinly&apos;s tax settings. Long term means held
+                more than a year.
+              </p>
+            </fieldset>
+          </Card>
+
+          <Card className="space-y-3">
+            <h2 className="font-semibold">NFTs</h2>
+            <Checkbox
+              label="Show NFT images"
+              description="NFT images live on other sites (often IPFS). When on, your Muny server fetches them for you, so those sites see your server rather than your browser. Only links stored for your own NFTs are fetched, never addresses inside your network."
+              checked={d.nftImages}
+              onChange={(nftImages) => save.mutate({ nftImages })}
+            />
+          </Card>
+
+          <Card className="space-y-3">
             <h2 className="font-semibold">Prices</h2>
             <Checkbox
               label="Get crypto prices"

@@ -237,6 +237,7 @@ function WalletIssues({ w }: { w: Report["wallets"][number] }) {
               <Link to="/crypto/wallets" className="self-center text-sm text-brand-600 underline">
                 Import older history instead
               </Link>
+              <IgnoreButton itemKey={m.key} />
             </div>
           </div>
         ),
@@ -274,6 +275,72 @@ const SYNCABLE = new Set<string>([
 ]);
 
 type MismatchT = Report["wallets"][number]["mismatches"][number];
+
+/** Ignore one item (stored on the server; it comes back if its amount changes). */
+function IgnoreButton({ itemKey }: { itemKey: string }) {
+  const settings = useCryptoSettings();
+  const save = useCryptoMutation((ignored: string[]) =>
+    api.put("/api/crypto/settings", { ignored }),
+  );
+  const cur = settings.data?.ignored ?? [];
+  return (
+    <button
+      type="button"
+      disabled={save.isPending || !settings.data}
+      onClick={() => save.mutate([...cur.filter((k) => k !== itemKey), itemKey])}
+      title="Stop flagging this (it comes back if the amount changes)"
+      className="text-xs text-slate-500 hover:text-slate-700 hover:underline dark:hover:text-slate-300"
+    >
+      Ignore
+    </button>
+  );
+}
+
+/** What you chose to ignore, with a way back. */
+function IgnoredList({ items }: { items: Report["ignored"] }) {
+  const [open, setOpen] = useState(false);
+  const settings = useCryptoSettings();
+  const save = useCryptoMutation((ignored: string[]) =>
+    api.put("/api/crypto/settings", { ignored }),
+  );
+  if (!items.length) return null;
+  const cur = settings.data?.ignored ?? [];
+  return (
+    <Card className="space-y-2 text-sm">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="text-slate-500 hover:underline"
+      >
+        {items.length} ignored {items.length === 1 ? "item" : "items"} ·{" "}
+        <span className="text-brand-600">{open ? "Hide" : "Show"}</span>
+      </button>
+      {open && (
+        <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+          {items.map((i) => (
+            <li key={i.key} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
+              <span>
+                <span className="font-medium">{i.walletName}</span>: {i.asset}{" "}
+                {i.kind === "missing"
+                  ? `${fmtAmount(i.amount, 8)} more left than arrived`
+                  : `${fmtAmount(i.amount.replace(/^-/, ""), 8)} ${i.amount.startsWith("-") ? "less" : "more"} than reported`}
+              </span>
+              <button
+                type="button"
+                disabled={save.isPending}
+                onClick={() => save.mutate(cur.filter((k) => k !== i.key))}
+                className="text-xs text-brand-600 hover:underline"
+              >
+                Stop ignoring
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
 
 /** Earlier Reconcile fixes moved this coin here: they're the likely cause. */
 function UndoFixes({ walletId, m }: { walletId: string; m: MismatchT }) {
@@ -529,6 +596,9 @@ function Mismatch({
   return (
     <div className="space-y-2 text-sm">
       <p>
+        <span className="float-right">
+          <IgnoreButton itemKey={m.key} />
+        </span>
         <span className="font-medium">
           {m.asset}: {exchange ? "the exchange reports" : "the blockchain shows"}{" "}
           {fmtAmount(m.onChain, 8)}, Muny has {fmtAmount(m.computed, 8)}
@@ -896,6 +966,7 @@ export function CryptoReconcile() {
         {d?.wallets.map((w) => (
           <WalletIssues key={w.walletId} w={w} />
         ))}
+        {d && <IgnoredList items={d.ignored} />}
         <Unpriced />
       </div>
     </>

@@ -114,6 +114,11 @@ export function taxLedger(
     valueAt: (asset: string, amount: string, at: number) => number | null;
     /** Moments (ascending) to report the total cost of everything held at (the cost line). */
     snapshots?: number[];
+    /**
+     * Which lot goes first: oldest (FIFO, the default), newest (LIFO), or the
+     * one that cost the most per coin (HIFO).
+     */
+    method?: "fifo" | "lifo" | "hifo";
   },
 ): { lots: Map<string, TaxLot[]>; gains: Gain[]; flows: Flow[]; costAt: number[] } {
   const lots = new Map<string, TaxLot[]>();
@@ -150,17 +155,32 @@ export function taxLedger(
     lots.set(asset, q);
   };
 
-  /** Take `amount` out of the pool, oldest lots first; returns the pieces taken. */
+  /** The lot to take from next, by the chosen method. */
+  const pick = (q: TaxLot[]): number => {
+    if (opts.method === "lifo") return q.length - 1;
+    if (opts.method !== "hifo") return 0;
+    let best = 0;
+    for (let i = 1; i < q.length; i++) {
+      const a = q[i] as TaxLot;
+      const b = q[best] as TaxLot;
+      // Cost per coin, compared without division: a.cost/a.amount > b.cost/b.amount.
+      if (a.cost * b.amount > b.cost * a.amount) best = i;
+    }
+    return best;
+  };
+
+  /** Take `amount` out of the pool by the chosen method; returns the pieces taken. */
   const take = (asset: string, amount: bigint) => {
     const q = lots.get(asset) ?? [];
     const pieces: { amount: bigint; cost: bigint; acquiredAt: number; known: boolean }[] = [];
     let left = amount;
     while (left > 0n && q.length) {
-      const lot = q[0] as TaxLot;
+      const i = pick(q);
+      const lot = q[i] as TaxLot;
       if (lot.amount <= left) {
         pieces.push({ ...lot });
         left -= lot.amount;
-        q.shift();
+        q.splice(i, 1);
       } else {
         const cost = (lot.cost * left) / lot.amount;
         pieces.push({ amount: left, cost, acquiredAt: lot.acquiredAt, known: lot.known });

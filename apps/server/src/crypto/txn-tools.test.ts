@@ -231,4 +231,32 @@ describe("transaction tools", () => {
     const ok = await client.patch("/api/crypto/txns/got", { receivedAmount: "245" });
     expect(ok.statusCode).toBe(200);
   });
+
+  it("ignores a Reconcile item until its amount changes", async () => {
+    const { client, db, exodus } = await setup();
+    const report = async () =>
+      (await client.get("/api/crypto/reconcile")).json<import("@muny/shared").CryptoReconcile>();
+    const item = (await report()).wallets.find((x) => x.walletId === exodus.id)?.missing[0];
+    expect(item?.asset).toBe("XLM");
+    await client.put("/api/crypto/settings", { ignored: [item?.key] });
+    const after = await report();
+    expect(after.wallets.find((x) => x.walletId === exodus.id)).toBeUndefined();
+    expect(after.ignored).toEqual([expect.objectContaining({ asset: "XLM", kind: "missing" })]);
+    // A different shortfall shows again.
+    db.insert(schema.cryptoTxns)
+      .values({
+        id: "more",
+        walletId: exodus.id,
+        at: T + 3_600_000,
+        externalId: "koinly:more",
+        source: "import",
+        type: "withdrawal",
+        sentAsset: "XLM",
+        sentAmount: "1",
+      })
+      .run();
+    expect((await report()).wallets.find((x) => x.walletId === exodus.id)?.missing[0]?.asset).toBe(
+      "XLM",
+    );
+  });
 });

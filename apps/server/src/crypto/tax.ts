@@ -42,6 +42,7 @@ export function cryptoTax(db: MunyDb, range: { from?: number; to?: number }): Cr
     rows.map((r) => ({ ...r, paired: !!r.pair })),
     {
       skip: FIAT,
+      method: getCryptoSettings(db).costMethod,
       valueAt: (asset, amount, at) => {
         const usd = priceOn(asset, at);
         return usd ? valueCents(amount, usd) : null;

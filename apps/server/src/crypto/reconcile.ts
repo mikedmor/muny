@@ -10,7 +10,7 @@ import {
   toFixed,
 } from "@muny/core";
 import { type MunyDb, newId, schema } from "@muny/db";
-import type { CryptoReconcile, CryptoTransferSuggestion } from "@muny/shared";
+import { type CryptoReconcile, type CryptoTransferSuggestion, reconcileKey } from "@muny/shared";
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { decryptJson } from "../lib/crypto.js";
 import { balanceChanges, type ChainBalanceChange } from "./chains/blockscout.js";
@@ -90,6 +90,8 @@ function duplicateSyncRows(db: MunyDb | Tx, walletId: string): string[] {
 
 export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): CryptoReconcile {
   const hidden = new Set(getCryptoSettings(db).hiddenAssets);
+  const ignoredKeys = new Set(getCryptoSettings(db).ignored);
+  const ignored: CryptoReconcile["ignored"] = [];
   const wallets = db.select().from(w).orderBy(w.name).all();
   const names = new Map(wallets.map((x) => [x.id, x.name]));
 
@@ -195,7 +197,19 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
             ),
         )
         .map((r) => r.id);
+      const missingKey = reconcileKey("missing", x.id, asset, deficit);
+      if (ignoredKeys.has(missingKey)) {
+        ignored.push({
+          key: missingKey,
+          walletName: x.name,
+          asset,
+          kind: "missing",
+          amount: deficit,
+        });
+        continue;
+      }
       missing.push({
+        key: missingKey,
         asset,
         deficit,
         firstAt,
@@ -229,7 +243,19 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
         const diff = subDec(mine, c.amount);
         // Rounding between exports and the chain or exchange, not a real gap.
         if (toFixed(diff.replace(/^-/, "")) < DUST) continue;
+        const mismatchKey = reconcileKey("mismatch", x.id, c.asset, diff);
+        if (ignoredKeys.has(mismatchKey)) {
+          ignored.push({
+            key: mismatchKey,
+            walletName: x.name,
+            asset: c.asset,
+            kind: "mismatch",
+            amount: diff,
+          });
+          continue;
+        }
         mismatches.push({
+          key: mismatchKey,
           asset: c.asset,
           onChain: c.amount,
           computed: mine,
@@ -533,7 +559,7 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
       .slice(0, 3);
   }
 
-  return { sameAddress, wallets: report };
+  return { ignored, sameAddress, wallets: report };
 }
 
 // --- Fixes --------------------------------------------------------------------

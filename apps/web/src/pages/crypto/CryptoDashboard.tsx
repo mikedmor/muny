@@ -7,7 +7,14 @@ import { Alert, Button, Card, cx } from "../../components/ui.js";
 import { api } from "../../lib/api.js";
 import { useCryptoMutation, useCryptoOverview, useCryptoTax } from "../../lib/queries.js";
 import { FlowsStrip, MaturityView, NftsView, TaxOptimizationView } from "./CryptoTaxViews.js";
-import { agoTime, CryptoHeader, fmtAmount, fmtPrice } from "./common.js";
+import {
+  agoTime,
+  CryptoHeader,
+  DismissButton,
+  fmtAmount,
+  fmtPrice,
+  useDismissed,
+} from "./common.js";
 
 /** Crypto dashboard: total value over time, movers, allocation and holdings (Koinly-style). */
 
@@ -467,6 +474,10 @@ export function CryptoDashboard() {
   const [range, setRange] = useState<(typeof RANGES)[number][0]>("YTD");
   const [tab, setTab] = useState<(typeof TABS)[number][0]>("overview");
   const [sort, setSort] = useState<HoldingSort>({ key: "value", desc: true });
+  const [pricesGone, dismissPrices] = useDismissed("pricesOff");
+  const [missingGone, dismissMissing] = useDismissed(
+    `missingHistory.${o.data?.missingHistory.length ?? 0}`,
+  );
   const [custom, setCustom] = useState({
     from: `${new Date().getFullYear()}-01-01`,
     to: isoDay(Date.now()),
@@ -554,31 +565,37 @@ export function CryptoDashboard() {
       {d && d.walletCount > 0 && tab === "maturity" && <MaturityView />}
       {d && d.walletCount > 0 && tab === "overview" && (
         <div className="space-y-6">
-          {!d.pricesEnabled && (
+          {!d.pricesEnabled && !pricesGone && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-500/40 bg-brand-50 px-4 py-3 text-sm dark:bg-brand-700/15">
               <span>
                 Values need prices. Turn on crypto prices to see what your crypto is worth (Muny
                 only sends coin names like “bitcoin”, never balances or addresses).
               </span>
-              <Link
-                to="/crypto/settings"
-                className="font-medium text-brand-700 underline dark:text-brand-500"
-              >
-                Price settings
-              </Link>
+              <span className="flex items-center gap-2">
+                <Link
+                  to="/crypto/settings"
+                  className="font-medium text-brand-700 underline dark:text-brand-500"
+                >
+                  Price settings
+                </Link>
+                <DismissButton onClick={dismissPrices} />
+              </span>
             </div>
           )}
           {/* Only what needs fixing: coins without a price are listed in Reconcile. */}
-          {d.missingHistory.length > 0 && (
+          {d.missingHistory.length > 0 && !missingGone && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
               <span>
                 {d.missingHistory.length} wallet{" "}
                 {d.missingHistory.length === 1 ? "balance is" : "balances are"} missing history.
                 Values may be off until that's sorted out.
               </span>
-              <Link to="/crypto/reconcile" className="font-medium underline">
-                Review and fix
-              </Link>
+              <span className="flex items-center gap-2">
+                <Link to="/crypto/reconcile" className="font-medium underline">
+                  Review and fix
+                </Link>
+                <DismissButton onClick={dismissMissing} />
+              </span>
             </div>
           )}
 

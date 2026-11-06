@@ -161,4 +161,56 @@ describe("tax ledger", () => {
     expect(isLongTerm(D(2024, 1, 1), D(2025, 1, 1))).toBe(false);
     expect(isLongTerm(D(2024, 1, 1), D(2025, 1, 2))).toBe(true);
   });
+
+  it("HIFO sells the costliest coins first; LIFO the newest", () => {
+    const txns: TaxTxn[] = [
+      {
+        ...base,
+        at: D(2021, 1, 1),
+        type: "trade",
+        sentAsset: "USD",
+        sentAmount: "100",
+        receivedAsset: "ETH",
+        receivedAmount: "1",
+        valueCents: 10_000,
+      },
+      {
+        ...base,
+        at: D(2021, 6, 1),
+        type: "trade",
+        sentAsset: "USD",
+        sentAmount: "400",
+        receivedAsset: "ETH",
+        receivedAmount: "1",
+        valueCents: 40_000,
+      },
+      {
+        ...base,
+        at: D(2022, 1, 1),
+        type: "trade",
+        sentAsset: "USD",
+        sentAmount: "300",
+        receivedAsset: "ETH",
+        receivedAmount: "1",
+        valueCents: 30_000,
+      },
+      {
+        ...base,
+        at: D(2022, 2, 1),
+        type: "trade",
+        sentAsset: "ETH",
+        sentAmount: "1",
+        receivedAsset: "USD",
+        receivedAmount: "350",
+        valueCents: 35_000,
+      },
+    ];
+    const left = (method: "fifo" | "lifo" | "hifo") =>
+      (taxLedger(txns, { skip, valueAt: noPrice, method }).lots.get("ETH") ?? []).map((l) =>
+        Number(l.cost),
+      );
+    expect(left("fifo")).toEqual([40_000, 30_000]);
+    expect(left("lifo")).toEqual([10_000, 40_000]);
+    expect(left("hifo")).toEqual([10_000, 30_000]);
+  });
 });

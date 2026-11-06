@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { PageHeader } from "../../components/ui.js";
 
 /** Shared bits for the Crypto pages (tabs, number formatting). */
@@ -169,4 +170,45 @@ export function guessChain(
     .map((w) => COIN_CHAIN[w])
     .find(Boolean);
   return fromName ?? (feeAsset ? (COIN_CHAIN[feeAsset] ?? null) : null);
+}
+
+/**
+ * A banner the viewer can dismiss (remembered in this browser). Include what
+ * the banner says in the key (e.g. a count) so a new situation shows again.
+ */
+export function useDismissed(key: string): [boolean, () => void] {
+  const k = `muny.dismissed.${key}`;
+  // Dismissed in this visit (also when the browser won't store it).
+  const [mem, setMem] = useState<Set<string>>(() => new Set());
+  let stored = false;
+  try {
+    stored = localStorage.getItem(k) === "1";
+  } catch {
+    // Storage blocked: only this visit counts.
+  }
+  return [
+    stored || mem.has(k),
+    () => {
+      setMem((m) => new Set(m).add(k));
+      try {
+        localStorage.setItem(k, "1");
+      } catch {
+        // Private window: dismissed for this visit only.
+      }
+    },
+  ];
+}
+
+export function DismissButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Dismiss"
+      title="Dismiss"
+      className="rounded px-1.5 text-lg leading-none opacity-60 hover:opacity-100"
+    >
+      ×
+    </button>
+  );
 }

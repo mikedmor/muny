@@ -3,7 +3,6 @@ import {
   addDec,
   assetName,
   FIAT,
-  fifoCostBasis,
   fromFixed,
   isZeroDec,
   normDec,
@@ -26,7 +25,7 @@ import type {
   CryptoWallet,
   CryptoWalletKind,
 } from "@muny/shared";
-import { guessCryptoExchange } from "@muny/shared";
+import { guessCryptoExchange, reconcileKey } from "@muny/shared";
 import { and, desc, eq, gte, inArray, lte, or, type SQL, sql } from "drizzle-orm";
 import { normHash, normHashSql, ROUNDING_TEXT } from "./match.js";
 import { getCryptoSettings } from "./prices.js";
@@ -637,11 +636,14 @@ export function cryptoOverview(
   const daily = loadDaily(db);
   const priceOn = priceLookup(daily);
 
-  const cost = fifoCostBasis(
+  // What held coins cost, by the chosen method (the same engine as gains and taxes).
+  const costMethod = getCryptoSettings(db as MunyDb).costMethod;
+  const ledger = taxLedger(
     db
       .select({
         at: t.at,
         type: t.type,
+        label: t.label,
         sentAsset: t.sentAsset,
         sentAmount: t.sentAmount,
         receivedAsset: t.receivedAsset,
@@ -649,6 +651,7 @@ export function cryptoOverview(
         feeAsset: t.feeAsset,
         feeAmount: t.feeAmount,
         valueCents: t.valueCents,
+        feeValueCents: t.feeValueCents,
         pair: t.transferPairId,
       })
       .from(t)
@@ -656,14 +659,26 @@ export function cryptoOverview(
       .map((r) => ({ ...r, paired: !!r.pair })),
     {
       skip: FIAT,
+      method: costMethod,
       valueAt: (asset, amount, at) => {
         const usd = priceOn(asset, at);
         return usd ? valueCents(amount, usd) : null;
       },
     },
   );
+  const cost = new Map(
+    [...ledger.lots].map(([asset, q]) => [
+      asset,
+      {
+        amount: q.reduce((s, l) => s + l.amount, 0n),
+        costCents: Number(q.reduce((s, l) => s + l.cost, 0n)),
+        missing: q.some((l) => !l.known),
+      },
+    ]),
+  );
   const prices = latestPrices(db);
   const hidden = hiddenAssets(db);
+  const ignoredKeys = new Set(getCryptoSettings(db as MunyDb).ignored);
   const info = new Map(
     db
       .select({ id: w.id, name: w.name, kind: w.kind, chain: w.chain, archived: w.archived })
@@ -703,6 +718,8 @@ export function cryptoOverview(
         // Rounding dust isn't missing history (the same rule as Reconcile and
         // the transaction warnings, so the alert and Reconcile always agree).
         if (toFixed(amount.slice(1)) < DUST_FIXED) continue;
+        if (ignoredKeys.has(reconcileKey("missing", walletId, asset, normDec(amount.slice(1)))))
+          continue;
         missingHistory.push({ asset, walletName: names.get(walletId) ?? "", amount });
         continue;
       }
@@ -808,6 +825,7 @@ export function cryptoOverview(
       .map((r) => ({ ...r, paired: !!r.pair })),
     {
       skip: new Set([...FIAT, ...hidden]),
+      method: costMethod,
       valueAt: (asset, amount, at) => {
         const usd = priceOn(asset, at);
         return usd ? valueCents(amount, usd) : null;

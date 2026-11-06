@@ -257,6 +257,12 @@ export interface CryptoSettings {
   hiddenAssets: string[];
   /** A Blockscout API key is saved (write-only). */
   hasBlockscoutKey: boolean;
+  /** Which coins count as sold first (cost basis, gains): Koinly lets you pick too. */
+  costMethod: "fifo" | "lifo" | "hifo";
+  /** Load NFT images (through this server, so their hosts don't see you). */
+  nftImages: boolean;
+  /** Reconcile items you chose to ignore (they also leave the dashboard). */
+  ignored: string[];
 }
 
 /** Requests used against a free provider budget. */
@@ -384,7 +390,23 @@ export interface CryptoTransferSuggestion {
 }
 
 /** Why balances are off, per wallet, with what Muny can do about it. */
+/** The key that ignores one Reconcile item, until its amount changes. */
+export const reconcileKey = (
+  kind: "missing" | "mismatch",
+  walletId: string,
+  asset: string,
+  amount: string,
+) => `${kind}:${walletId}:${asset}:${amount}`;
+
 export interface CryptoReconcile {
+  /** Items you chose to ignore (Reconcile can list them again). */
+  ignored: {
+    key: string;
+    walletName: string;
+    asset: string;
+    kind: "missing" | "mismatch";
+    amount: string;
+  }[];
   /** Several wallets syncing the same address (everything counted again). */
   sameAddress: {
     chain: string;
@@ -399,6 +421,8 @@ export interface CryptoReconcile {
     synced: boolean;
     /** More left than arrived: earlier deposits are missing. */
     missing: {
+      /** Ignore key (stays ignored until the amount changes). */
+      key: string;
       asset: string;
       deficit: string;
       /** When the balance first went below zero. */
@@ -409,6 +433,8 @@ export interface CryptoReconcile {
     }[];
     /** On-chain balance vs. what the transactions add up to. */
     mismatches: {
+      /** Ignore key (stays ignored until the difference changes). */
+      key: string;
       asset: string;
       onChain: string;
       computed: string;

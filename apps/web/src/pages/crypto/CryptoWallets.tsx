@@ -18,6 +18,7 @@ import { Alert, Button, Card, cx, Field } from "../../components/ui.js";
 import { api } from "../../lib/api.js";
 import { useCryptoMutation, useCryptoWallets } from "../../lib/queries.js";
 import { ago, agoTime, CryptoHeader, dayLabel, fmtAmount } from "./common.js";
+import { Receive } from "./ReceiveDialog.js";
 
 /** Wallets & exchanges, Koinly-style: balance, transactions, status; add or import. */
 
@@ -454,12 +455,15 @@ export function ConnectWallet({ w, onDone }: { w: CryptoWallet; onDone: () => vo
 export function mismatches(w: CryptoWallet): string[] {
   if (!w.onChain || w.syncing) return [];
   const mine = new Map(w.balances.map((b) => [b.asset, b.amount]));
+  // Cash (USD…) isn't synced (bank deposits aren't in exchange history), as in Reconcile.
+  const cash = new Set(["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "CHF", "SGD"]);
   const norm = (x: string | undefined) =>
     (x ?? "0").replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
   // Differences under 0.000001 are rounding between exports and exchanges.
   return w.onChain
     .filter(
       (c) =>
+        !cash.has(c.asset) &&
         norm(mine.get(c.asset)) !== norm(c.amount) &&
         Math.abs(Number(mine.get(c.asset) ?? 0) - Number(c.amount)) >= 0.000001,
     )
@@ -524,6 +528,7 @@ function WalletRow({
   );
   const del = useCryptoMutation(() => api.delete(`/api/crypto/wallets/${w.id}`));
   const [open, setOpen] = useState(false);
+  const [receiving, setReceiving] = useState(false);
   return (
     <li
       className={cx(
@@ -637,6 +642,16 @@ function WalletRow({
             </span>
           </Button>
         ) : null}
+        {w.sourceHint && w.chain && (
+          <Button
+            variant="ghost"
+            onClick={() => setReceiving(true)}
+            aria-label={`Receive into ${w.name}`}
+            title="Receive: address and QR code"
+          >
+            ⤓
+          </Button>
+        )}
         {w.kind !== "exchange" && (
           <Button
             variant="ghost"
@@ -662,6 +677,9 @@ function WalletRow({
           🗑
         </Button>
       </span>
+      <Modal open={receiving} onClose={() => setReceiving(false)} title={`Receive into ${w.name}`}>
+        {receiving && <Receive id={w.id} />}
+      </Modal>
       {open && (
         <div id={`coins-${w.id}`} className="col-span-full mt-2">
           <table className="w-full text-sm sm:ml-12 sm:w-[calc(100%-3rem)] sm:max-w-xl">
