@@ -467,7 +467,7 @@ export function CryptoDashboard() {
                     `${d.missingHistory.length} wallet balances are missing history`,
                   d.pricesEnabled &&
                     d.unpricedAssets.length > 0 &&
-                    `${d.unpricedAssets.length} coins have no price`,
+                    `${d.unpricedAssets.length} ${d.unpricedAssets.length === 1 ? "coin has" : "coins have"} no price (${d.unpricedAssets.slice(0, 6).join(", ")}${d.unpricedAssets.length > 6 ? "…" : ""}), so they count as $0`,
                 ]
                   .filter(Boolean)
                   .join(" · ")}

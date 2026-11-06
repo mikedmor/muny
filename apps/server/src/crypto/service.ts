@@ -812,7 +812,10 @@ export function cryptoOverview(
 
   return {
     totalValueCents: total,
-    unpricedAssets: holdings.filter((h) => h.price === null).map((h) => h.asset),
+    // Rounding dust (under 0.000001) isn't worth a price warning.
+    unpricedAssets: holdings
+      .filter((h) => h.price === null && toFixed(h.amount) >= DUST_FIXED)
+      .map((h) => h.asset),
     missingHistory,
     holdings,
     history,

@@ -869,6 +869,7 @@ function Unpriced() {
 
 export function CryptoReconcile() {
   const r = useCryptoReconcile();
+  const o = useCryptoOverview();
   const d = r.data;
   // Opened from a wallet's Troubleshoot button: bring its card into view once loaded.
   useEffect(() => {
@@ -885,6 +886,8 @@ export function CryptoReconcile() {
           <Card className="text-center text-sm text-slate-600 dark:text-slate-300">
             Everything adds up: no duplicates, no missing history, and synced wallets match the
             blockchain.
+            {(o.data?.unpricedAssets.length ?? 0) > 0 &&
+              " Some coins have no price yet, though: see below."}
           </Card>
         )}
         {d?.sameAddress.map((g) => (
