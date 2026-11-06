@@ -13,13 +13,13 @@ Most brokers offer two exports, and Muny reads both:
 
 On **Stocks → Import**, choose the file. Muny shows which broker and accounts it found, and which Muny account each one goes into: an existing one (matched by the last digits of the account number), a new one, or skip. Importing the same file again only adds what's new.
 
-| Broker                 | Positions                                                    | History                                                     |
-| ---------------------- | ------------------------------------------------------------ | ----------------------------------------------------------- |
-| **Fidelity**           | Accounts & Trade → Portfolio → Positions → Download          | Accounts & Trade → Portfolio → Activity & Orders → Download |
-| **Schwab**             | Accounts → Positions → Export                                | Accounts → History → Export                                 |
-| **Vanguard**           | Holdings and transactions download as one CSV file (both)     |                                                             |
-| **Robinhood**          | (not offered)                                                | Account → Reports and statements → Reports → Account activity |
-| **Webull**             | (not offered)                                                | Orders → Order history → Export                             |
+| Broker        | Positions                                                 | History                                                       |
+| ------------- | --------------------------------------------------------- | ------------------------------------------------------------- |
+| **Fidelity**  | Accounts & Trade → Portfolio → Positions → Download       | Accounts & Trade → Portfolio → Activity & Orders → Download   |
+| **Schwab**    | Accounts → Positions → Export                             | Accounts → History → Export                                   |
+| **Vanguard**  | Holdings and transactions download as one CSV file (both) |                                                               |
+| **Robinhood** | (not offered)                                             | Account → Reports and statements → Reports → Account activity |
+| **Webull**    | (not offered)                                             | Orders → Order history → Export                               |
 
 Other brokers' CSV exports usually work too: Muny finds the header row and recognises columns by their usual names (date, action, symbol, quantity, price, amount). If a file isn't recognised, Muny says so and imports nothing.
 

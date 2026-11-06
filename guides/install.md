@@ -79,14 +79,14 @@ Then open `http://NAS_IP:8420`. The folder looks like this:
 
 Settings are environment variables in `.env`. They're only read at startup, so recreate the container after changing them (`docker compose up -d`).
 
-| Variable                     | Default          | Meaning                                                                 |
-| ---------------------------- | ---------------- | ----------------------------------------------------------------------- |
+| Variable                     | Default          | Meaning                                                                |
+| ---------------------------- | ---------------- | ---------------------------------------------------------------------- |
 | `MUNY_SECRET_KEY`            | (required)       | Encrypts stored credentials. Generate once, keep a copy safe.          |
 | `MUNY_PUBLIC_URL`            | none             | Muny's address, used for links in alerts (e.g. `https://muny.example`) |
-| `MUNY_SYNC_INTERVAL_HOURS`   | `6`              | How often bank sync runs; `0` turns it off                              |
-| `MUNY_BACKUP_DIR`            | `<data>/backups` | Where backups are written                                               |
-| `MUNY_BACKUP_KEEP`           | `14`             | How many backups to keep                                                |
-| `MUNY_BACKUP_INTERVAL_HOURS` | `24`             | Hours between backups; `0` turns automatic backups off                  |
+| `MUNY_SYNC_INTERVAL_HOURS`   | `6`              | How often bank sync runs; `0` turns it off                             |
+| `MUNY_BACKUP_DIR`            | `<data>/backups` | Where backups are written                                              |
+| `MUNY_BACKUP_KEEP`           | `14`             | How many backups to keep                                               |
+| `MUNY_BACKUP_INTERVAL_HOURS` | `24`             | Hours between backups; `0` turns automatic backups off                 |
 
 Bank sync keys are covered in [Bank sync](bank-sync.md).
 

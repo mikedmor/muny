@@ -447,7 +447,7 @@ export function StocksPage() {
             >
               <Gain cents={s.gainCents} base={s.costBasisCents} />
             </Tile>
-            <Tile label="Cash" sub={pct(s.cashCents, s.valueCents) + " of the portfolio"}>
+            <Tile label="Cash" sub={`${pct(s.cashCents, s.valueCents)} of the portfolio`}>
               {formatMoney(s.cashCents)}
             </Tile>
             <Tile label="Dividends & interest" sub="Last 12 months">

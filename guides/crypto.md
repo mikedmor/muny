@@ -19,18 +19,18 @@ Wallet sync is opt-in per wallet. On Crypto → Wallets, add a wallet with its p
 
 Pick the coin, or just paste the address and Muny recognises the format:
 
-| Coin                                                                 | Service                                                                  |
-| -------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| Bitcoin, Litecoin                                                    | mempool.space, litecoinspace.org (no key)                                |
-| Dogecoin                                                             | BlockCypher (no key)                                                     |
-| Ethereum, Base, Optimism, Arbitrum One, Polygon PoS, Gnosis + tokens | Blockscout (no key; an optional free key raises the limits)             |
-| Cardano (ADA)                                                        | Koios (no key); a stake address covers the whole wallet                  |
-| Algorand (ALGO) + tokens                                             | AlgoNode (no key)                                                        |
-| Stellar (XLM) + tokens                                               | Horizon (no key)                                                         |
-| Cosmos Hub (ATOM)                                                    | A public REST node                                                       |
-| TRON (TRX) + tokens                                                  | TronGrid (no key)                                                        |
-| Siacoin (SC)                                                         | SiaScan (no key); paste several addresses separated by commas            |
-| Zcash (transparent)                                                  | A Blockbook server you set in Crypto → Settings → Servers                |
+| Coin                                                                 | Service                                                       |
+| -------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Bitcoin, Litecoin                                                    | mempool.space, litecoinspace.org (no key)                     |
+| Dogecoin                                                             | BlockCypher (no key)                                          |
+| Ethereum, Base, Optimism, Arbitrum One, Polygon PoS, Gnosis + tokens | Blockscout (no key; an optional free key raises the limits)   |
+| Cardano (ADA)                                                        | Koios (no key); a stake address covers the whole wallet       |
+| Algorand (ALGO) + tokens                                             | AlgoNode (no key)                                             |
+| Stellar (XLM) + tokens                                               | Horizon (no key)                                              |
+| Cosmos Hub (ATOM)                                                    | A public REST node                                            |
+| TRON (TRX) + tokens                                                  | TronGrid (no key)                                             |
+| Siacoin (SC)                                                         | SiaScan (no key); paste several addresses separated by commas |
+| Zcash (transparent)                                                  | A Blockbook server you set in Crypto → Settings → Servers     |
 
 For Bitcoin, Litecoin and Dogecoin, paste the wallet's **xpub/ypub/zpub** instead of one address: Muny works out the addresses itself and looks up only those, never the key. **Never paste a seed phrase or private key** into Muny or anywhere else.
 
