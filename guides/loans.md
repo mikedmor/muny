@@ -12,7 +12,7 @@
 Loans with the same lender share one card on the Loans page, with a tab for each loan.
 
 - **Paid separately, each with its own amount** (for example three timeshare loans plus yearly dues, all under one name): give each loan the same payment words, its own **Only payments of about** amount and its **Next payment due** date. Muny counts payments made within about a week of each loan's due day, and when a payment could belong to two loans it goes to the closest match. Payments of other amounts, such as the dues, aren't counted toward any of them.
-- **A yearly fee** (timeshare maintenance, dues): set **Yearly fee of at least** (for example 2,200.00). Payments with the loan's words of at least that much are listed on the card as the yearly fee (the last one, when the next is likely, and how much to set aside each month) and aren't counted as loan payments. The amount can change from year to year.
+- **A yearly fee** (timeshare maintenance, dues) belongs to the lender, not to one loan. On the lender's card click **Add a yearly fee** (a lone loan has a **Yearly fee** link next to **Edit details**). Enter the smallest it's likely to be (for example 2,200.00), the words in the fee payments if they differ from the loans' words, and the next due date if you know it. The card shows the last fee, the next one (your due date, else a year after the last), and how much to set aside each month. Fee payments are never counted toward the lender's loans, and the amount can change from year to year.
 - **When a payment changes:** enter the new amount in **Only payments of about**. Muny keeps counting earlier payments of the old amount, so the history stays with the loan; the old amounts are listed under the field, where you can remove one.
 - **One payment covering several loans** (common with student loans): give each loan the same payment words and no amount, plus its own monthly payment. Each payment is shared between them in proportion to their monthly payments.
 
@@ -39,6 +39,8 @@ On **Assets → Settings**, add your own keys:
 
 - **Homes: APillow** (Zillow data, free plan 50 lookups a month, [apillow.co](https://apillow.co)). Give the home its address as Zillow shows it. **Look up value** fills in Zillow's estimate, plus beds, baths, square feet, lot, year built, last sale, property tax and the rent estimate. Zillow has no estimate for homes listed for sale; Muny says so and keeps your value.
 - **Vehicles: CarAPI.dev** (free plan 100 requests a month, [carapi.dev](https://carapi.dev)). Give the vehicle its year, make, model and mileage (the make and model fields suggest names from NHTSA's public vehicle database, which only sees the make and year you type); **Look up value** fills in its US market value.
+
+**Request limits** on the same tab shows how many requests each service has had today and this month. Muny stops before its own cap, which sits under each free plan (45 home lookups and 95 vehicle lookups a month).
 
 After the first lookup, values over a month old are looked up again when you open Assets. Typing a value yourself takes over until you look it up again. Keys are stored encrypted and sent only to their service, which sees only the address (homes) or the year, make, model and mileage (vehicles).
 

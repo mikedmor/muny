@@ -4,6 +4,7 @@ import {
   type Asset,
   type AssetKind,
   type AssetValuationSettings,
+  type CryptoUsage,
   formatMoney,
 } from "@muny/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -395,80 +396,130 @@ function ValuationKeys() {
     },
   ];
   return (
-    <Card>
-      <h2 className="font-semibold">Automatic values</h2>
-      <p className="mt-1 text-xs text-slate-500">
-        Optional: with your own keys, Muny looks values up when you ask, then about once a month.
-        Keys are stored encrypted and sent only to their service.
-      </p>
-      {error && <Alert>{error}</Alert>}
-      <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
-        {rows.map((r) => {
-          const on = settings.data?.[r.id] ?? false;
-          return (
-            <li
-              key={r.id}
-              className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
-            >
-              <span>
-                <span className="font-medium">{r.name}</span>
-                <span className="block text-xs text-slate-500">{r.help}</span>
-              </span>
-              {editing === r.id ? (
-                <form
-                  className="flex items-center gap-1"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (key.trim()) void save(r.id, key.trim());
-                  }}
-                >
-                  <input
-                    type="password"
-                    aria-label={`${r.name} key`}
-                    value={key}
-                    onChange={(e) => setKey(e.target.value)}
-                    autoComplete="off"
-                    className="w-56 rounded border border-slate-300 bg-white px-2 py-1 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
-                  />
-                  <Button type="submit" className="px-2 py-1 text-xs">
-                    Save
-                  </Button>
-                  <button
-                    type="button"
-                    onClick={() => setEditing(null)}
-                    className="text-xs text-slate-500"
+    <div className="space-y-6">
+      <Card>
+        <h2 className="font-semibold">Automatic values</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          Optional: with your own keys, Muny looks values up when you ask, then about once a month.
+          Keys are stored encrypted and sent only to their service.
+        </p>
+        {error && <Alert>{error}</Alert>}
+        <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
+          {rows.map((r) => {
+            const on = settings.data?.[r.id] ?? false;
+            return (
+              <li
+                key={r.id}
+                className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+              >
+                <span>
+                  <span className="font-medium">{r.name}</span>
+                  <span className="block text-xs text-slate-500">{r.help}</span>
+                </span>
+                {editing === r.id ? (
+                  <form
+                    className="flex items-center gap-1"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (key.trim()) void save(r.id, key.trim());
+                    }}
                   >
-                    Cancel
-                  </button>
-                </form>
-              ) : (
-                <span className="flex items-center gap-3 text-xs">
-                  <span
-                    className={on ? "text-emerald-700 dark:text-emerald-400" : "text-slate-500"}
-                  >
-                    {on ? "Key added" : "Off"}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setEditing(r.id)}
-                    className="text-brand-600 hover:underline dark:text-brand-500"
-                  >
-                    {on ? "Replace key" : "Add key"}
-                  </button>
-                  {on && (
+                    <input
+                      type="password"
+                      aria-label={`${r.name} key`}
+                      value={key}
+                      onChange={(e) => setKey(e.target.value)}
+                      autoComplete="off"
+                      className="w-56 rounded border border-slate-300 bg-white px-2 py-1 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
+                    />
+                    <Button type="submit" className="px-2 py-1 text-xs">
+                      Save
+                    </Button>
                     <button
                       type="button"
-                      onClick={() => void save(r.id, null)}
-                      className="text-red-600 hover:underline"
+                      onClick={() => setEditing(null)}
+                      className="text-xs text-slate-500"
                     >
-                      Remove
+                      Cancel
                     </button>
-                  )}
-                </span>
-              )}
-            </li>
-          );
-        })}
+                  </form>
+                ) : (
+                  <span className="flex items-center gap-3 text-xs">
+                    <span
+                      className={on ? "text-emerald-700 dark:text-emerald-400" : "text-slate-500"}
+                    >
+                      {on ? "Key added" : "Off"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setEditing(r.id)}
+                      className="text-brand-600 hover:underline dark:text-brand-500"
+                    >
+                      {on ? "Replace key" : "Add key"}
+                    </button>
+                    {on && (
+                      <button
+                        type="button"
+                        onClick={() => void save(r.id, null)}
+                        className="text-red-600 hover:underline"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </Card>
+      <UsageCard usage={settings.data?.usage ?? []} />
+    </div>
+  );
+}
+
+/** What each free plan allows, next to Muny's own cap (which stays under it). */
+const PLAN_NOTES: Record<string, string> = {
+  apillow: "Free plan: 50 homes a month. Each lookup is one home.",
+  apillowpoll: "Checking for a lookup's result, at most one every 15 seconds (5 a minute allowed).",
+  carapi: "Free plan: 100 requests a month. Each lookup is one request.",
+  nhtsa: "Public, no key. Make and model names while you fill in a vehicle, kept for a month.",
+};
+
+function UsageCard({ usage }: { usage: CryptoUsage[] }) {
+  return (
+    <Card className="space-y-3">
+      <h2 className="font-semibold">Request limits</h2>
+      <p className="text-sm text-slate-500">
+        Muny counts every request to these services and stops before its cap, which sits under each
+        free plan, so looking values up often can&apos;t run you past your plan. Counts reset each
+        day and each month.
+      </p>
+      <ul className="space-y-3 text-sm">
+        {usage.map((u) => (
+          <li key={u.provider}>
+            <span className="flex flex-wrap justify-between gap-x-3">
+              <span>{u.label}</span>
+              <span className="tabular-nums text-slate-500">
+                {u.today} / {u.dayLimit} today · {u.month} / {u.monthLimit} this month
+              </span>
+            </span>
+            <span
+              className="mt-1 block h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"
+              aria-hidden
+            >
+              <span
+                className="block h-full rounded-full bg-brand-600"
+                style={{
+                  width: `${Math.min(100, (Math.max(u.today / u.dayLimit, u.month / u.monthLimit) || 0) * 100)}%`,
+                }}
+              />
+            </span>
+            {PLAN_NOTES[u.provider] && (
+              <span className="mt-1 block text-xs text-slate-500">{PLAN_NOTES[u.provider]}</span>
+            )}
+          </li>
+        ))}
       </ul>
     </Card>
   );

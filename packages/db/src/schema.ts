@@ -860,6 +860,22 @@ export const securityLogos = sqliteTable("security_logos", {
 });
 
 /**
+ * A lender's yearly fee (e.g. timeshare maintenance dues), one per lender:
+ * payments of at least minCents with the words (else the lender's loans'
+ * words). Listed on the lender's card and never counted as loan payments.
+ */
+export const lenderFees = sqliteTable("lender_fees", {
+  /** The lender's name, trimmed and lowercased (how loans are grouped). */
+  lenderKey: text().primaryKey(),
+  lender: text().notNull(),
+  paymentMatch: text(),
+  minCents: integer().notNull(),
+  /** YYYY-MM-DD, when known. */
+  nextDueDate: text(),
+  updatedAt: updatedAt(),
+});
+
+/**
  * Loan details (Loans page). Loan accounts are `accounts` rows of type
  * "loan"; this holds their terms. From Plaid Liabilities when available, else
  * entered by you. A manual loan's balance is worked out from your payments
@@ -894,8 +910,6 @@ export const loanDetails = sqliteTable("loan_details", {
   paymentAmountCents: integer(),
   /** Earlier "payments of about" amounts (the payment changed): still matched, so history stays put. */
   pastPaymentAmounts: text({ mode: "json" }).$type<number[]>(),
-  /** A yearly fee (e.g. timeshare dues): payments with the same words of at least this much. */
-  feeMinCents: integer(),
   /** The lowest payment due (Plaid Liabilities or entered). */
   minimumPaymentCents: integer(),
   /** Mortgages: the home's original value (the lower of price and appraisal), for mortgage insurance. */

@@ -30,16 +30,22 @@ export type BudgetProvider =
   | "yahoo"
   | "logos"
   | "apillow"
-  | "carapi";
+  | "apillowpoll"
+  | "carapi"
+  | "nhtsa";
 
 export const LIMITS: Record<BudgetProvider, { day: number; month: number; label: string }> = {
   // Stock price history (one request per ticker per backfill); no published quota.
   yahoo: { day: 300, month: 4000, label: "Yahoo Finance stock prices" },
   // Company logos: one or two requests per ticker, once.
   logos: { day: 200, month: 1000, label: "Company logos" },
-  // Your own keys. APillow counts each property returned (free: 50 a month); polls are requests too.
-  apillow: { day: 40, month: 300, label: "APillow home values" },
+  // Your own keys. APillow counts each property looked up (free: 50 a month); checking
+  // for the result is a request (5 a minute) but not a lookup.
+  apillow: { day: 10, month: 45, label: "APillow home lookups" },
+  apillowpoll: { day: 120, month: 600, label: "APillow result checks" },
   carapi: { day: 20, month: 95, label: "CarAPI vehicle values" },
+  // NHTSA vPIC (public, no key): make and model names, cached a month.
+  nhtsa: { day: 200, month: 2000, label: "NHTSA vehicle names" },
   // No published key-less quota; stay polite.
   defillama: { day: 300, month: 6000, label: "DefiLlama prices" },
   // Free Demo plan: 10,000 calls a month, 30 a minute.

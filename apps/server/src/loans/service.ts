@@ -3,6 +3,7 @@ import {
   amortizedPayment,
   applyPayments,
   type CreateLoanInput,
+  type LenderFeeInput,
   type Loan,
   type LoanDetailsInput,
   type LoanFee,
@@ -104,19 +105,30 @@ function byWords(db: Db, words: string | null | undefined) {
     .all();
 }
 
-/** A loan's yearly fee payments (same words, at least the fee amount), newest first. */
-function feesFor(db: Db, d: Details | undefined, since: string): LoanFee[] {
-  if (!d?.feeMinCents) return [];
-  const min = d.feeMinCents;
-  return byWords(db, d.paymentMatch)
-    .filter((r) => r.date >= since && -r.amountCents >= min)
-    .map((r) => ({
-      transactionId: r.id,
-      date: r.date,
-      amountCents: -r.amountCents,
-      fromAccountName: r.mask ? `${r.from} ••${r.mask}` : r.from,
-    }))
-    .sort((x, y) => y.date.localeCompare(x.date));
+/** A lender's yearly fee payments (any of the words, at least the fee amount), newest first. */
+function feesFor(db: Db, words: string[], min: number, since: string): LoanFee[] {
+  const out = new Map<string, LoanFee>();
+  for (const w of words)
+    for (const r of byWords(db, w))
+      if (r.date >= since && -r.amountCents >= min)
+        out.set(r.id, {
+          transactionId: r.id,
+          date: r.date,
+          amountCents: -r.amountCents,
+          fromAccountName: r.mask ? `${r.from} ••${r.mask}` : r.from,
+        });
+  return [...out.values()].sort((x, y) => y.date.localeCompare(x.date));
+}
+
+/** How loans are grouped by lender (and a lender's fee is found). */
+export const lenderKeyOf = (name: string | null | undefined) => name?.trim().toLowerCase() || null;
+
+/** The next fee date: the entered one rolled forward a year at a time, else a year after the last. */
+function expectedFeeDate(entered: string | null, last: string | undefined, today: string) {
+  let d = entered ?? (last ? addMonths(last, 12) : null);
+  // A due date that's passed: the one after it (the fee was likely paid then).
+  while (entered && d && d < today) d = addMonths(d, 12);
+  return d;
 }
 
 /** Payments toward a loan, oldest first (whole payments; sharing happens later). */
@@ -125,6 +137,8 @@ function paymentsFor(
   accountId: string,
   d: Details | undefined,
   since: string,
+  /** The lender's yearly fee: payments of at least this much aren't loan payments. */
+  feeMin: number | null = null,
 ): RawPayment[] {
   const t = schema.transactions;
   const a = schema.accounts;
@@ -146,7 +160,7 @@ function paymentsFor(
     if (r.date < since || r.amountCents >= 0) return;
     const amount = -r.amountCents;
     // The yearly fee isn't a loan payment.
-    if (d?.feeMinCents && amount >= d.feeMinCents) return;
+    if (feeMin && amount >= feeMin) return;
     const amounts = amountsOf(d);
     if (amounts.length && !amounts.some((x) => near(amount, x))) return;
     out.set(r.id, {
@@ -240,6 +254,10 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
   const shared = shares(details, new Map(accounts.map((a) => [a.id, a.name])));
   const year = today.slice(0, 4);
   const twoYearsAgo = addMonths(today, -24);
+  const feeRows = db.select().from(schema.lenderFees).all();
+  const feeOf = new Map(feeRows.map((f) => [f.lenderKey, f]));
+  const keyOf = (a: (typeof accounts)[number]) =>
+    lenderKeyOf(details.get(a.id)?.lender ?? a.institutionName);
 
   // Every loan's payments, then each payment that several loans could claim
   // (one lender, similar amounts) goes to the closest fit by amount and due day.
@@ -250,7 +268,8 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
       d?.source === "manual" && d.startDate && d.startDate < twoYearsAgo
         ? d.startDate
         : twoYearsAgo;
-    found.set(a.id, paymentsFor(db, a.id, d, start));
+    const k = keyOf(a);
+    found.set(a.id, paymentsFor(db, a.id, d, start, (k && feeOf.get(k)?.minCents) || null));
   }
   const fit = (accountId: string, p: RawPayment) => {
     const d = details.get(accountId);
@@ -420,8 +439,6 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
       paymentMatch: d?.paymentMatch ?? null,
       paymentAmountCents: d?.paymentAmountCents ?? null,
       pastPaymentAmounts: d?.pastPaymentAmounts ?? [],
-      feeMinCents: d?.feeMinCents ?? null,
-      fees: feesFor(db, d, twoYearsAgo),
       startBalanceCents: manual ? (d?.startBalanceCents ?? null) : null,
       startDate,
       originalValueCents: d?.originalValueCents ?? null,
@@ -474,6 +491,29 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
         }
       : null,
     loans: loans.sort((a, b) => b.balanceCents - a.balanceCents),
+    lenderFees: feeRows.map((f) => {
+      // The fee's own words, else the words of the lender's loans.
+      const words = f.paymentMatch?.trim()
+        ? [f.paymentMatch.trim()]
+        : [
+            ...new Set(
+              accounts
+                .filter((a) => keyOf(a) === f.lenderKey)
+                .map((a) => details.get(a.id)?.paymentMatch?.trim().toLowerCase())
+                .filter((w): w is string => !!w),
+            ),
+          ];
+      const fees = feesFor(db, words, f.minCents, twoYearsAgo);
+      return {
+        lenderKey: f.lenderKey,
+        lender: f.lender,
+        paymentMatch: f.paymentMatch,
+        minCents: f.minCents,
+        nextDueDate: f.nextDueDate,
+        expectedDate: expectedFeeDate(f.nextDueDate, fees[0]?.date, today),
+        fees,
+      };
+    }),
   };
 }
 
@@ -617,4 +657,36 @@ export function applyLoanTerms(db: Db, connectionId: string, terms: LoanTerms[])
       })
       .run();
   }
+}
+
+/** Set (or replace) a lender's yearly fee. */
+export function setLenderFee(db: Db, input: LenderFeeInput) {
+  const lenderKey = lenderKeyOf(input.lender);
+  if (!lenderKey) throw new Error("Name the lender");
+  const row = {
+    lender: input.lender.trim(),
+    paymentMatch: input.paymentMatch?.trim() || null,
+    minCents: input.minCents,
+    nextDueDate: input.nextDueDate ?? null,
+  };
+  db.insert(schema.lenderFees)
+    .values({ lenderKey, ...row })
+    .onConflictDoUpdate({
+      target: schema.lenderFees.lenderKey,
+      set: { ...row, updatedAt: new Date() },
+    })
+    .run();
+  refreshManualLoans(db);
+  return lenderKey;
+}
+
+export function removeLenderFee(db: Db, lender: string): boolean {
+  const lenderKey = lenderKeyOf(lender);
+  if (!lenderKey) return false;
+  const n = db
+    .delete(schema.lenderFees)
+    .where(eq(schema.lenderFees.lenderKey, lenderKey))
+    .run().changes;
+  refreshManualLoans(db);
+  return n > 0;
 }

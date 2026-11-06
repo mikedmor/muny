@@ -3,7 +3,7 @@ import { ASSET_KINDS } from "@muny/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
-import { BudgetError } from "../crypto/budget.js";
+import { BudgetError, budgeted } from "../crypto/budget.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, HttpError, notFound, parse } from "../lib/http.js";
 import { createAsset, listAssets, updateAsset } from "./service.js";
@@ -53,7 +53,7 @@ export function registerAssetRoutes(app: FastifyInstance, db: MunyDb, deps: Valu
   app.get("/api/assets/vehicle-makes", async (req) => {
     requireUser(req);
     try {
-      return await vehicleMakes(deps.fetch);
+      return await vehicleMakes(budgeted(db, "nhtsa", deps.fetch));
     } catch {
       return [];
     }
@@ -69,7 +69,7 @@ export function registerAssetRoutes(app: FastifyInstance, db: MunyDb, deps: Valu
       req.query,
     );
     try {
-      return await vehicleModels(q.make, q.year ?? null, deps.fetch);
+      return await vehicleModels(q.make, q.year ?? null, budgeted(db, "nhtsa", deps.fetch));
     } catch {
       return [];
     }

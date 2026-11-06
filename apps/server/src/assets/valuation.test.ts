@@ -81,10 +81,14 @@ describe("automatic asset values", () => {
 
     await client.put("/api/assets/valuation/apillow", { key: "apillow-key-123" });
     await client.put("/api/assets/valuation/carapi", { key: "carapi-key-123" });
-    expect((await client.get("/api/assets/valuation")).json<AssetValuationSettings>()).toEqual({
-      apillow: true,
-      carapi: true,
-    });
+    const settings = (await client.get("/api/assets/valuation")).json<AssetValuationSettings>();
+    expect(settings).toMatchObject({ apillow: true, carapi: true });
+    expect(settings.usage.map((u) => u.provider)).toEqual([
+      "apillow",
+      "apillowpoll",
+      "carapi",
+      "nhtsa",
+    ]);
     // Stored encrypted.
     const stored = JSON.stringify(db.select().from(schema.appSettings).all());
     expect(stored).not.toContain("apillow-key-123");

@@ -1,7 +1,7 @@
 import { type MunyDb, schema } from "@muny/db";
 import type { AssetDetails, AssetValuationSettings } from "@muny/shared";
 import { eq } from "drizzle-orm";
-import { spend } from "../crypto/budget.js";
+import { spend, usage } from "../crypto/budget.js";
 import { decryptJson, encryptJson } from "../lib/crypto.js";
 import { localToday } from "../lib/dates.js";
 
@@ -46,9 +46,16 @@ function readKeys(db: MunyDb, secret: Buffer | undefined): Keys {
   }
 }
 
+/** The services Assets uses, for its request counts. */
+const ASSET_SERVICES = new Set(["apillow", "apillowpoll", "carapi", "nhtsa"]);
+
 export function valuationSettings(db: MunyDb, secret: Buffer | undefined): AssetValuationSettings {
   const k = readKeys(db, secret);
-  return { apillow: !!k.apillow, carapi: !!k.carapi };
+  return {
+    apillow: !!k.apillow,
+    carapi: !!k.carapi,
+    usage: usage(db).filter((u) => ASSET_SERVICES.has(u.provider)),
+  };
 }
 
 /** Set or remove (null) a service's key. */
@@ -115,7 +122,7 @@ export async function apillowLookup(
   for (let i = 0; i < 6 && body.status !== "complete" && body.status !== "failed"; i++) {
     if (!job.job_id) break;
     await sleep(deps.pollMs ?? 15_000);
-    spend(db, "apillow");
+    spend(db, "apillowpoll");
     const r = await f(`${APILLOW}/v1/results/${encodeURIComponent(job.job_id)}`, {
       headers,
       signal: AbortSignal.timeout(30_000),

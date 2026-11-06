@@ -218,6 +218,13 @@
       "when": 1793980667514,
       "tag": "0030_loan_fees",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1793981740655,
+      "tag": "0031_lender_fees",
+      "breakpoints": true
     }
   ]
 }

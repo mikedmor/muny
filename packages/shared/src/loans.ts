@@ -1,3 +1,5 @@
+import type { CryptoUsage } from "./crypto.js";
+
 /** Loans (D-040, D-042). Money is integer cents; rates are hundredths of a percent (649 = 6.49%). */
 
 export const LOAN_KINDS = [
@@ -74,10 +76,6 @@ export interface Loan {
   paymentAmountCents: number | null;
   /** Earlier payment amounts still matched (the payment changed). */
   pastPaymentAmounts: number[];
-  /** Yearly fee: payments with the same words of at least this much. */
-  feeMinCents: number | null;
-  /** Those fee payments, newest first (two years). */
-  fees: LoanFee[];
   startBalanceCents: number | null;
   startDate: string | null;
   originalValueCents: number | null;
@@ -114,11 +112,36 @@ export interface Loan {
   } | null;
 }
 
+/** A lender's yearly fee (dues, maintenance): one per lender, not per loan. */
+export interface LenderFee {
+  /** The lender's name, trimmed and lowercased (how loans are grouped). */
+  lenderKey: string;
+  lender: string;
+  /** Words in the fee payments (null: the lender's loans' words). */
+  paymentMatch: string | null;
+  /** Payments of at least this much are the fee. */
+  minCents: number;
+  /** As entered (null when not known). */
+  nextDueDate: string | null;
+  /** The next one expected: the entered date (rolled to this year or next), else a year after the last. */
+  expectedDate: string | null;
+  /** Fee payments found, newest first (two years). */
+  fees: LoanFee[];
+}
+
+export interface LenderFeeInput {
+  lender: string;
+  paymentMatch?: string | null;
+  minCents: number;
+  nextDueDate?: string | null;
+}
+
 export interface LoansReport {
   totalOwedCents: number;
   monthlyPaymentsCents: number;
   nextDue: { accountId: string; name: string; date: string; amountCents: number | null } | null;
   loans: Loan[];
+  lenderFees: LenderFee[];
 }
 
 export interface LoanDetailsInput {
@@ -134,7 +157,6 @@ export interface LoanDetailsInput {
   paymentMatch?: string | null;
   paymentAmountCents?: number | null;
   pastPaymentAmounts?: number[] | null;
-  feeMinCents?: number | null;
   /** Manual loans: what you owed on startDate. */
   startBalanceCents?: number | null;
   startDate?: string | null;
@@ -212,6 +234,8 @@ export interface AssetDetails {
 export interface AssetValuationSettings {
   apillow: boolean;
   carapi: boolean;
+  /** Requests so far against Muny's caps (which sit under each service's free plan). */
+  usage: CryptoUsage[];
 }
 
 export interface AssetInput {

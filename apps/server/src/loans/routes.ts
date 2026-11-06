@@ -5,7 +5,13 @@ import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
 import { audit } from "../lib/audit.js";
 import { notFound, parse } from "../lib/http.js";
-import { createManualLoan, loansReport, updateLoan } from "./service.js";
+import {
+  createManualLoan,
+  loansReport,
+  removeLenderFee,
+  setLenderFee,
+  updateLoan,
+} from "./service.js";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 const cents = z.number().int().min(0).max(100_000_000_000);
@@ -23,11 +29,16 @@ const Details = z.object({
   startDate: isoDate.nullable().optional(),
   paymentAmountCents: cents.nullable().optional(),
   pastPaymentAmounts: z.array(cents).max(12).nullable().optional(),
-  feeMinCents: cents.nullable().optional(),
   minimumPaymentCents: cents.nullable().optional(),
   originalValueCents: cents.nullable().optional(),
   pmiMonthlyCents: cents.nullable().optional(),
   propertyAccountId: z.string().max(64).nullable().optional(),
+});
+const Fee = z.object({
+  lender: z.string().trim().min(1, "Name the lender").max(100),
+  paymentMatch: z.string().trim().max(80).nullable().optional(),
+  minCents: cents.min(1, "Enter the fee amount"),
+  nextDueDate: isoDate.nullable().optional(),
 });
 const Create = Details.extend({
   name: z.string().trim().min(1, "Name the loan").max(100),
@@ -56,6 +67,24 @@ export function registerLoanRoutes(app: FastifyInstance, db: MunyDb) {
     const id = db.transaction((tx) => createManualLoan(tx as unknown as MunyDb, body));
     log(user.id, "loan.create", id, { kind: body.kind });
     return { accountId: id };
+  });
+
+  // A lender's yearly fee (dues, maintenance): one per lender.
+  app.put("/api/loans/lender-fees", async (req) => {
+    const user = requireUser(req);
+    const body = parse(Fee, req.body);
+    const key = db.transaction((tx) => setLenderFee(tx as unknown as MunyDb, body));
+    log(user.id, "loan.lender_fee.set", key);
+    return { ok: true };
+  });
+
+  app.delete("/api/loans/lender-fees", async (req) => {
+    const user = requireUser(req);
+    const { lender } = parse(z.object({ lender: z.string().trim().min(1).max(100) }), req.query);
+    if (!db.transaction((tx) => removeLenderFee(tx as unknown as MunyDb, lender)))
+      throw notFound("No yearly fee for that lender");
+    log(user.id, "loan.lender_fee.remove", lender.toLowerCase());
+    return { ok: true };
   });
 
   app.patch("/api/loans/:accountId", async (req) => {
