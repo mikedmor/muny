@@ -169,7 +169,7 @@ export function monthlyReport(db: Db, fromMonth: string, toMonth: string): Month
  * value history (balance snapshots), else their current value.
  */
 /** Balances as of a past date: walk transactions back from today, or use snapshots. */
-function balanceHistory(db: Db, includeExcluded = false) {
+export function balanceHistory(db: Db, includeExcluded = false) {
   const accounts = listAccounts(db).filter((a) => includeExcluded || !a.excludeFromReports);
   const t = schema.transactions;
   const txns = db

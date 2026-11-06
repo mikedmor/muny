@@ -9,6 +9,7 @@ How to install, set up and use Muny.
 | [Bank sync](bank-sync.md)        | Connecting banks automatically through your own Plaid or Teller keys  |
 | [Importing files](importing.md)  | Rocket Money, bank CSV/OFX, brokerage and Koinly exports              |
 | [Stocks](stocks.md)              | Tracking brokerage accounts, holdings and dividends                   |
+| [Savings](savings.md)            | Savings accounts (interest, rate, projections) and money saved        |
 | [Crypto](crypto.md)              | Wallets, exchanges, prices, cost basis and tax reports                |
 | [Alerts](alerts.md)              | Alert rules and notification channels (ntfy, Apprise, email, webhook) |
 | [Backups and export](backups.md) | Automatic backups, restoring, and exporting your data                 |

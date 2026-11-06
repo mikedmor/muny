@@ -126,3 +126,43 @@ export interface SavingsSummary {
   /** diy - infra */
   diyNetMonthlyCents: number;
 }
+
+/** One month of a savings account (display and projection inputs). */
+export interface SavingsAccountMonth {
+  /** YYYY-MM */
+  month: string;
+  /** Balance at the end of the month (or today, for this month). */
+  balanceCents: number;
+  interestCents: number;
+  /** Money in that wasn't interest. */
+  depositsCents: number;
+  /** Money out (negative). */
+  withdrawalsCents: number;
+}
+
+export interface SavingsAccountInfo {
+  id: string;
+  name: string;
+  institutionName: string | null;
+  mask: string | null;
+  balanceCents: number;
+  /** The APY you entered (hundredths of a percent: 435 = 4.35%). */
+  apyBps: number | null;
+  /** The rate actually earned over the last year (interest over the average balance). */
+  earnedApyBps: number | null;
+  interest: { last30Cents: number; ytdCents: number; last12Cents: number; allTimeCents: number };
+  lastInterestDate: string | null;
+  /** Average net money added per month over the last 12 months (not counting interest). */
+  avgMonthlyContributionCents: number;
+  /** The last 24 months, oldest first. */
+  months: SavingsAccountMonth[];
+}
+
+export interface SavingsAccountsReport {
+  totalBalanceCents: number;
+  interestYtdCents: number;
+  interest12Cents: number;
+  /** Balance-weighted rate across accounts (entered APY, else earned), hundredths of a percent. */
+  blendedApyBps: number | null;
+  accounts: SavingsAccountInfo[];
+}

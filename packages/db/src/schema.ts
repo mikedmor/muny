@@ -123,6 +123,8 @@ export const accounts = sqliteTable(
     /** Latest provider-reported balance (cents). History lives in balance_snapshots. */
     currentBalanceCents: integer(),
     hidden: integer({ mode: "boolean" }).notNull().default(false),
+    /** Advertised interest rate you entered (APY in hundredths of a percent: 435 = 4.35%). */
+    apyBps: integer(),
     /** Excluded from budgets/reports (e.g. a business account). */
     excludeFromReports: integer({ mode: "boolean" }).notNull().default(false),
     sortOrder: integer().notNull().default(0),

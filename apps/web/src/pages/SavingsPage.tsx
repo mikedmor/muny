@@ -29,6 +29,7 @@ import {
   useSavingsSummary,
   useUpdateSaving,
 } from "../lib/queries.js";
+import { SavingsAccountsTab } from "./SavingsAccounts.js";
 
 const today = () => new Date().toLocaleDateString("en-CA");
 const nice = (iso: string) =>
@@ -668,7 +669,8 @@ function CostsTab() {
 // ---------------------------------------------------------------------------
 
 const TABS = [
-  ["savings", "Savings"],
+  ["accounts", "Savings accounts"],
+  ["savings", "Money saved"],
   ["alternatives", "Self-host alternatives"],
   ["costs", "Self-hosting costs"],
 ] as const;
@@ -676,7 +678,7 @@ type Tab = (typeof TABS)[number][0];
 
 export function SavingsPage() {
   const fromHash = () =>
-    (TABS.find(([k]) => `#${k}` === window.location.hash)?.[0] ?? "savings") as Tab;
+    (TABS.find(([k]) => `#${k}` === window.location.hash)?.[0] ?? "accounts") as Tab;
   const [tab, setTab] = useState<Tab>(fromHash);
   useEffect(() => {
     const on = () => setTab(fromHash());
@@ -712,6 +714,7 @@ export function SavingsPage() {
         ))}
       </div>
       <div className="max-w-6xl">
+        {tab === "accounts" && <SavingsAccountsTab />}
         {tab === "savings" && <SavingsTab />}
         {tab === "alternatives" && <AlternativesTab />}
         {tab === "costs" && <CostsTab />}

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, notFound, parse } from "../lib/http.js";
+import { savingsAccountsReport, setAccountApy } from "./accounts.js";
 import {
   alternativeSuggestions,
   createSaving,
@@ -74,6 +75,20 @@ export function registerSavingsRoutes(app: FastifyInstance, db: MunyDb) {
       entityId,
       details,
     });
+
+  app.get("/api/savings/accounts", async () => savingsAccountsReport(db));
+
+  app.put("/api/savings/accounts/:id/apy", async (req) => {
+    const user = requireUser(req);
+    const { id } = parse(IdParams, req.params);
+    const { apyBps } = parse(
+      z.object({ apyBps: z.number().int().min(0).max(5000).nullable() }),
+      req.body,
+    );
+    if (!setAccountApy(db, id, apyBps)) throw notFound("Savings account not found");
+    log(user.id, "savings.apy", id, { apyBps });
+    return { ok: true };
+  });
 
   app.get("/api/savings", async () => listSavings(db));
   app.get("/api/savings/summary", async () => savingsSummary(db));
