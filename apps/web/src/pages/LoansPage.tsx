@@ -24,6 +24,7 @@ import { openPlaidLink } from "../lib/bankWidgets.js";
 import { keys, linkApi } from "../lib/queries.js";
 import { LenderLoansForm, LenderPaymentsStrip } from "./loans/LenderLoans.js";
 import { PayoffPlan } from "./loans/PayoffPlan.js";
+import { StatementImportButton } from "./loans/StatementImport.js";
 
 /** Loans: what you owe, the terms, when each is paid off, and what paying extra would do (D-040, D-042). */
 
@@ -972,6 +973,9 @@ function LoanCard({
             >
               <Pencil aria-hidden="true" className="size-3" /> Edit details
             </button>
+            {!embedded && loan.kind === "student" && !loan.connected && loan.lender && (
+              <StatementImportButton lender={loan.lender} loans={[loan]} />
+            )}
             {canAddFee && (
               <button
                 type="button"
@@ -1116,6 +1120,9 @@ function LenderGroup({
         <div className="text-right">
           <p className="text-xs text-slate-500">Owed in all</p>
           <p className="text-2xl font-semibold tabular-nums">{formatMoney(owed)}</p>
+          {loans.some((l) => l.kind === "student" && !l.connected) && (
+            <StatementImportButton lender={lender} loans={loans} />
+          )}
         </div>
       </div>
       <div

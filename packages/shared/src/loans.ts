@@ -303,3 +303,39 @@ export interface AssetInput {
   mileage?: number | null;
   vin?: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Loan statements (PDF import): each group's exact figures from the servicer.
+// ---------------------------------------------------------------------------
+
+export interface LoanStatementGroup {
+  /** The servicer's group code, e.g. "AC". */
+  name: string;
+  aprBps: number | null;
+  originalPrincipalCents: number | null;
+  firstDisbursed: string | null;
+  /** Principal owed (as of the statement). */
+  principalCents: number | null;
+  /** Interest built up but not yet paid, on the statement date. */
+  accruedInterestCents: number | null;
+  monthlyPaymentCents: number | null;
+  paymentsLeft: number | null;
+  /** Applied to it since the last statement. */
+  paidCents: number | null;
+  paidInterestCents: number | null;
+  paidPrincipalCents: number | null;
+  amountDueCents: number | null;
+  dueDate: string | null;
+}
+
+export interface LoanStatement {
+  statementDate: string;
+  lastPayment: { date: string; amountCents: number } | null;
+  groups: LoanStatementGroup[];
+}
+
+/** A statement read, with the loan each group most likely is ("new" = add it). */
+export interface LoanStatementPreview {
+  statement: LoanStatement;
+  matches: Record<string, string>;
+}

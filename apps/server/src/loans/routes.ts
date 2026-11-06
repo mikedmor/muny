@@ -5,11 +5,13 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
 import { audit } from "../lib/audit.js";
-import { notFound, parse } from "../lib/http.js";
+import { badRequest, notFound, parse } from "../lib/http.js";
 import {
+  applyStatement,
   createLenderLoans,
   createManualLoan,
   loansReport,
+  previewStatement,
   removeLenderFee,
   setLenderFee,
   setLenderPayments,
@@ -107,6 +109,32 @@ const Batch = z.object({
   payments: z.array(z.object({ paymentMatch: words, dueDay, parts })).max(12),
 });
 
+const money = z.number().int().min(-100_000_000_000).max(100_000_000_000).nullable();
+const Statement = z.object({
+  statementDate: isoDate,
+  lastPayment: z.object({ date: isoDate, amountCents: cents }).nullable(),
+  groups: z
+    .array(
+      z.object({
+        name: z.string().regex(/^[A-Z0-9]{1,4}$/),
+        aprBps: z.number().int().min(0).max(10_000).nullable(),
+        originalPrincipalCents: money,
+        firstDisbursed: isoDate.nullable(),
+        principalCents: money,
+        accruedInterestCents: money,
+        monthlyPaymentCents: money,
+        paymentsLeft: z.number().int().min(0).max(1000).nullable(),
+        paidCents: money,
+        paidInterestCents: money,
+        paidPrincipalCents: money,
+        amountDueCents: money,
+        dueDate: isoDate.nullable(),
+      }),
+    )
+    .min(1)
+    .max(30),
+});
+
 const Create = Details.extend({
   name: z.string().trim().min(1, "Name the loan").max(100),
   startBalanceCents: cents,
@@ -169,6 +197,47 @@ export function registerLoanRoutes(app: FastifyInstance, db: MunyDb) {
     db.transaction((tx) => setLenderPayments(tx as unknown as MunyDb, body.lender, body.payments));
     log(user.id, "loan.lender_payments.set", body.lender.toLowerCase());
     return { ok: true };
+  });
+
+  // Statements (PDF): read one, then bring the lender's loans in line with it.
+  // The PDF is read in memory only; nothing of it is stored or logged.
+  app.post("/api/loans/statements/preview", async (req) => {
+    requireUser(req);
+    const body = parse(
+      z.object({
+        lender: z.string().trim().min(1).max(100),
+        pdfBase64: z.string().min(10).max(14_000_000, "The PDF is too large (10 MB max)"),
+      }),
+      req.body,
+    );
+    const bytes = new Uint8Array(Buffer.from(body.pdfBase64, "base64"));
+    if (bytes[0] !== 0x25 || bytes[1] !== 0x50) throw badRequest("That isn't a PDF.");
+    const preview = await previewStatement(db, body.lender, bytes);
+    if (!preview)
+      throw badRequest(
+        "Couldn't read loan groups from that PDF. It needs the statement's account snapshot page.",
+      );
+    return preview;
+  });
+
+  app.post("/api/loans/statements/apply", async (req) => {
+    const user = requireUser(req);
+    const body = parse(
+      z.object({
+        lender: z.string().trim().min(1).max(100),
+        statement: Statement,
+        mapping: z.record(z.string().max(4), z.string().min(1).max(64)),
+      }),
+      req.body,
+    );
+    const ids = db.transaction((tx) =>
+      applyStatement(tx as unknown as MunyDb, body.lender, body.statement, body.mapping),
+    );
+    log(user.id, "loan.statement.apply", body.lender.toLowerCase(), {
+      statementDate: body.statement.statementDate,
+      loans: ids.length,
+    });
+    return { accountIds: ids };
   });
 
   // A lender's yearly fee (dues, maintenance): one per lender.

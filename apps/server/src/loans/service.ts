@@ -12,6 +12,8 @@ import {
   type LoanFee,
   type LoanKind,
   type LoanPaymentRow,
+  type LoanStatement,
+  type LoanStatementPreview,
   type LoansReport,
   payoff,
   splitBackward,
@@ -20,6 +22,7 @@ import { and, eq, inArray, lt, ne, sql } from "drizzle-orm";
 import { listAccounts } from "../ledger/accounts.js";
 import { localToday } from "../lib/dates.js";
 import type { LoanTerms } from "../sync/types.js";
+import { parseLoanStatement, pdfLines } from "./statements.js";
 
 /**
  * Loans (D-040, D-042). Every loan account gets a card: what you owe, the
@@ -395,6 +398,15 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
   // Payments covering several of a lender's loans: each found payment goes to the
   // best-fitting one (amount, then day), then is split across its loans by their parts.
   const sched = lenderPaymentParts(db, accounts, details, keyOf, feeOf, twoYearsAgo);
+  // What statements say was applied to each loan (exact), and the latest statement date.
+  const stmtRows = new Map<string, (typeof schema.loanStatementPayments.$inferSelect)[]>();
+  for (const x of db.select().from(schema.loanStatementPayments).all())
+    stmtRows.set(x.accountId, [...(stmtRows.get(x.accountId) ?? []), x]);
+  const lastStatement = (id: string) =>
+    (stmtRows.get(id) ?? []).reduce<string | null>(
+      (m, x) => (!m || x.statementDate > m ? x.statementDate : m),
+      null,
+    );
   const shared = shares(details, nameOf, sched.loans);
 
   // Every loan's payments, then each payment that several loans could claim
@@ -444,13 +456,17 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
       (p) => !claimedElsewhere(p.id, a.id) && !sched.claimed.has(p.id),
     );
     // This loan's part of each payment.
-    const raw: (RawPayment & { total: number | null })[] = viaLender
-      ? (sched.parts.get(a.id) ?? [])
-      : whole.map((p) => ({
-          ...p,
-          total: share ? p.amountCents : null,
-          amountCents: share ? Math.round(p.amountCents * share.share) : p.amountCents,
-        }));
+    // Payments up to the latest statement come from the statement instead (exact).
+    const stmtUntil = lastStatement(a.id);
+    const raw: (RawPayment & { total: number | null })[] = (
+      viaLender
+        ? (sched.parts.get(a.id) ?? [])
+        : whole.map((p) => ({
+            ...p,
+            total: share ? p.amountCents : null,
+            amountCents: share ? Math.round(p.amountCents * share.share) : p.amountCents,
+          }))
+    ).filter((p) => !stmtUntil || p.date > stmtUntil);
     const apr = d?.aprBps ?? null;
     const pi = d?.kind === "mortgage" ? principalInterest(d) : null;
     const monthly =
@@ -534,6 +550,20 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
       });
       splitEstimated = true;
     }
+    rows = [
+      ...rows,
+      ...(stmtRows.get(a.id) ?? []).map((x) => ({
+        transactionId: `stmt:${x.id}`,
+        date: x.date,
+        amountCents: x.amountCents,
+        totalCents: null,
+        escrowCents: null,
+        interestCents: x.interestCents,
+        principalCents: x.principalCents,
+        description: "From your statement",
+        fromAccountName: "From your statement",
+      })),
+    ].sort((x, y) => x.date.localeCompare(y.date));
     const paidInterest = rows.filter((p) => p.date.startsWith(year) && p.interestCents !== null);
     if (paidInterest.length)
       interestThisYear = paidInterest.reduce((s, p) => s + (p.interestCents ?? 0), 0);
@@ -559,7 +589,7 @@ export function loansReport(db: Db, today = localToday()): LoansReport {
       };
     }
     const prop = d?.propertyAccountId ? all.find((x) => x.id === d.propertyAccountId) : undefined;
-    const last = raw.at(-1);
+    const last = rows.at(-1);
     return {
       accountId: a.id,
       name: a.name,
@@ -913,4 +943,88 @@ export function createLenderLoans(
       })),
     );
   return ids;
+}
+
+/** Read a statement PDF and guess which of the lender's loans each group is. */
+export async function previewStatement(
+  db: Db,
+  lender: string,
+  pdf: Uint8Array,
+): Promise<LoanStatementPreview | null> {
+  let statement: LoanStatement | null = null;
+  try {
+    statement = parseLoanStatement(await pdfLines(pdf));
+  } catch {
+    return null;
+  }
+  if (!statement) return null;
+  const key = lenderKeyOf(lender);
+  const loans = loansReport(db).loans.filter((l) => lenderKeyOf(l.lender) === key);
+  const matches: Record<string, string> = {};
+  for (const g of statement.groups) {
+    const code = new RegExp(`(^|[^A-Z0-9])${g.name}([^A-Z0-9]|$)`, "i");
+    matches[g.name] = loans.find((l) => code.test(l.name))?.accountId ?? "new";
+  }
+  return { statement, matches };
+}
+
+/**
+ * Bring each loan in line with the statement: rate, regular payment, due date,
+ * original amount, and what you owe on the statement date (principal plus
+ * interest built up), from which Muny keeps counting. What was applied since
+ * the last statement is kept as an exact payment. "new" adds the group as a loan.
+ */
+export function applyStatement(
+  db: Db,
+  lender: string,
+  statement: LoanStatement,
+  mapping: Record<string, string>,
+): string[] {
+  const touched: string[] = [];
+  for (const g of statement.groups) {
+    const target = mapping[g.name];
+    if (!target || target === "skip") continue;
+    const owed = (g.principalCents ?? 0) + (g.accruedInterestCents ?? 0);
+    const terms = {
+      kind: "student" as const,
+      lender: lender.trim(),
+      aprBps: g.aprBps,
+      monthlyPaymentCents: g.monthlyPaymentCents,
+      nextDueDate: g.dueDate,
+      originalPrincipalCents: g.originalPrincipalCents,
+      originationDate: g.firstDisbursed,
+      startBalanceCents: owed,
+      startDate: statement.statementDate,
+    };
+    const clean = Object.fromEntries(Object.entries(terms).filter(([, v]) => v !== null));
+    let id = target;
+    if (target === "new") {
+      id = createManualLoan(db, {
+        ...clean,
+        name: `Group ${g.name}`,
+        startBalanceCents: owed,
+      });
+    } else if (!updateLoan(db, target, clean)) continue;
+    if (g.paidCents && g.paidCents > 0) {
+      const row = {
+        date: statement.lastPayment?.date ?? statement.statementDate,
+        amountCents: g.paidCents,
+        interestCents: g.paidInterestCents ?? 0,
+        principalCents: g.paidPrincipalCents ?? g.paidCents - (g.paidInterestCents ?? 0),
+      };
+      db.insert(schema.loanStatementPayments)
+        .values({ id: newId(), accountId: id, statementDate: statement.statementDate, ...row })
+        .onConflictDoUpdate({
+          target: [
+            schema.loanStatementPayments.accountId,
+            schema.loanStatementPayments.statementDate,
+          ],
+          set: row,
+        })
+        .run();
+    }
+    touched.push(id);
+  }
+  refreshManualLoans(db);
+  return touched;
 }

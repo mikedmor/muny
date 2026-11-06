@@ -898,6 +898,30 @@ export const lenderPayments = sqliteTable("lender_payments", {
 });
 
 /**
+ * What a loan statement says was applied to a loan since the last statement
+ * (exact interest and principal). Shown in place of Muny's estimates for the
+ * payments up to the statement date. One per loan and statement.
+ */
+export const loanStatementPayments = sqliteTable(
+  "loan_statement_payments",
+  {
+    id: text().primaryKey(),
+    accountId: text()
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    /** YYYY-MM-DD: the statement it came from. */
+    statementDate: text().notNull(),
+    /** YYYY-MM-DD: the last payment's effective date. */
+    date: text().notNull(),
+    amountCents: integer().notNull(),
+    interestCents: integer().notNull(),
+    principalCents: integer().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("loan_statement_payments_uq").on(t.accountId, t.statementDate)],
+);
+
+/**
  * A lender's yearly fee (e.g. timeshare maintenance dues), one per lender:
  * payments of at least minCents with the words (else the lender's loans'
  * words). Listed on the lender's card and never counted as loan payments.
