@@ -205,4 +205,30 @@ describe("transaction tools", () => {
       .run();
     expect((await client.delete("/api/crypto/txns/s1")).statusCode).toBe(400);
   });
+
+  it("edits a transaction's date and amounts; its type follows", async () => {
+    const { client, list } = await setup();
+    const at = Date.UTC(2021, 5, 1, 9, 30);
+    const res = await client.patch("/api/crypto/txns/buy", {
+      at,
+      sentAsset: "USD",
+      sentAmount: "50",
+      receivedAsset: "XLM",
+      receivedAmount: "230.7",
+      valueCents: 5000,
+    });
+    expect(res.statusCode).toBe(200);
+    expect((await list("")).items.find((x) => x.id === "buy")).toMatchObject({
+      at,
+      type: "trade",
+      sentAmount: "50",
+      valueCents: 5000,
+    });
+    // One side of a transfer can't take on the other side's amounts.
+    await client.post("/api/crypto/txns/got/link", { otherId: "send" });
+    const bad = await client.patch("/api/crypto/txns/got", { sentAsset: "XLM", sentAmount: "1" });
+    expect(bad.statusCode).toBe(400);
+    const ok = await client.patch("/api/crypto/txns/got", { receivedAmount: "245" });
+    expect(ok.statusCode).toBe(200);
+  });
 });

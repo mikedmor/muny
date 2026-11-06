@@ -155,4 +155,18 @@ describe("a closed account", () => {
     // Dated just after the wallet's last transaction (the deposit added above).
     expect(page.items[0]?.at).toBe(at + 1000);
   });
+
+  it("dates a balance adjustment when asked (not today)", async () => {
+    const { client, xlm } = await setup();
+    const at = Date.UTC(2021, 3, 1, 12);
+    await client.post("/api/crypto/reconcile/adjust", {
+      walletId: xlm.id,
+      asset: "XLM",
+      amount: "1",
+      staking: false,
+      at,
+    });
+    const page = (await client.get(`/api/crypto/txns?walletId=${xlm.id}`)).json<CryptoTxnPage>();
+    expect(page.items.find((x) => x.receivedAmount === "1")).toMatchObject({ type: "deposit", at });
+  });
 });

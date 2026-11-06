@@ -452,12 +452,24 @@ function Mismatch({
   const remove = useCryptoMutation(() =>
     api.post("/api/crypto/reconcile/remove", { walletId, txnIds: m.extra.map((e) => e.txnId) }),
   );
+  // Adjustments are dated (default: when this coin last moved here, not today).
+  const [adjustOn, setAdjustOn] = useState(() =>
+    new Date(m.lastActivityAt ?? Date.now()).toISOString().slice(0, 10),
+  );
+  const adjustAt = () => {
+    const day = Date.parse(`${adjustOn}T12:00:00Z`);
+    // On the day of the last activity: just after it, so earlier balances stay.
+    return m.lastActivityAt && new Date(m.lastActivityAt).toISOString().slice(0, 10) === adjustOn
+      ? m.lastActivityAt + 1000
+      : day;
+  };
   const adjust = useCryptoMutation((staking: boolean) =>
     api.post("/api/crypto/reconcile/adjust", {
       walletId,
       asset: m.asset,
       amount: m.diff.replace(/^-/, ""),
       staking,
+      at: adjustAt(),
     }),
   );
   const adjustOut = useCryptoMutation((out: "fee" | "sent") =>
@@ -467,7 +479,20 @@ function Mismatch({
       amount: m.diff.replace(/^-/, ""),
       staking: false,
       out,
+      at: adjustAt(),
     }),
+  );
+  const dateField = (
+    <label className="flex items-center gap-1 text-xs text-slate-500">
+      on
+      <input
+        type="date"
+        aria-label="Date of the adjustment"
+        value={adjustOn}
+        onChange={(e) => e.target.value && setAdjustOn(e.target.value)}
+        className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+      />
+    </label>
   );
   // Small enough to be a network fee the history missed (well under 1% and under 0.01 of a coin).
   const feeSized =
@@ -661,7 +686,8 @@ function Mismatch({
             Or record the difference so the balance matches (one row marked &quot;Added in
             Reconcile&quot;; delete it to undo).
           </p>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {dateField}
             {feeSized && (
               <Button
                 variant="secondary"
@@ -684,12 +710,13 @@ function Mismatch({
       {!more && (
         <div className="space-y-2">
           <p className="text-slate-500">
-            Some history is missing: the blockchain service may not keep old transactions, or
-            deposits came before this address was synced.{" "}
+            Some history is missing: the blockchain service or exchange may not keep old
+            transactions, or deposits came before this address was synced.{" "}
             {m.staking && "For a staking wallet this is usually rewards that were never recorded. "}
             You can add the difference so the balance matches.
           </p>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {dateField}
             {m.staking && (
               <Button
                 variant="secondary"

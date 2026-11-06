@@ -222,7 +222,8 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
         : [];
     if (chain && x.status === "ok" && !x.archived)
       for (const c of [...chain, ...unlisted]) {
-        if (hidden.has(c.asset)) continue;
+        // Cash (USD…) isn't synced (bank deposits aren't in exchange history).
+        if (hidden.has(c.asset) || FIAT.has(c.asset)) continue;
         const mine = computed.get(c.asset) ?? "0";
         if (normDec(mine) === normDec(c.amount)) continue;
         const diff = subDec(mine, c.amount);
@@ -253,6 +254,19 @@ export function reconcileReport(db: MunyDb, secretKey: Buffer | undefined): Cryp
             x.lastError && isZeroDec(c.amount) && !diff.startsWith("-")
               ? closedAccount(x.id, c.asset, diff)
               : null,
+          // When this coin last moved here: where an adjustment belongs.
+          lastActivityAt:
+            rows
+              .filter(
+                (r) =>
+                  r.walletId === x.id &&
+                  (r.sentAsset === c.asset ||
+                    r.receivedAsset === c.asset ||
+                    r.feeAsset === c.asset),
+              )
+              .at(-1)?.at ??
+            rows.filter((r) => r.walletId === x.id).at(-1)?.at ??
+            null,
           fixes: rows
             .filter(
               (r) =>
@@ -1007,6 +1021,8 @@ export function addAdjustment(
     staking: boolean;
     /** Muny has more than the chain: "fee" (a network fee the history missed) or "out". */
     out?: "fee" | "sent";
+    /** When it happened (default: just after the wallet's last transaction, or now). */
+    at?: number;
   },
 ) {
   const id = newId();
@@ -1023,7 +1039,7 @@ export function addAdjustment(
       .values({
         id,
         walletId: input.walletId,
-        at: last ? last + 1000 : Date.now(),
+        at: input.at ?? (last ? last + 1000 : Date.now()),
         type: "withdrawal",
         ...(input.out === "fee"
           ? { feeAsset: input.asset, feeAmount: normDec(input.amount) }
@@ -1042,7 +1058,7 @@ export function addAdjustment(
     .values({
       id,
       walletId: input.walletId,
-      at: Date.now(),
+      at: input.at ?? Date.now(),
       type: "deposit",
       label: input.staking ? "staking" : null,
       receivedAsset: input.asset,

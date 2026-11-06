@@ -502,6 +502,17 @@ describe("Binance US", () => {
         case "/api/v3/account":
           return Response.json({ balances: [{ asset: "BTC", free: "0.4995", locked: "0" }] });
         case "/sapi/v1/capital/deposit/hisrec":
+          // Like Binance: a range over 90 days returns nothing.
+          if (
+            Number(u.searchParams.get("endTime")) - Number(u.searchParams.get("startTime")) >
+            90 * 86_400_000
+          )
+            return Response.json([]);
+          if (
+            Number(u.searchParams.get("endTime")) < 1_600_000_000_000 ||
+            Number(u.searchParams.get("startTime")) > 1_600_000_000_000
+          )
+            return Response.json([]);
           return Response.json([
             { amount: "1", coin: "BTC", status: 1, txId: "tx1", insertTime: 1_600_000_000_000 },
           ]);

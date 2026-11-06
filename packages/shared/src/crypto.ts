@@ -433,6 +433,8 @@ export interface CryptoReconcile {
         lastAt: number;
         suggestions: CryptoTransferSuggestion[];
       } | null;
+      /** When this coin last moved in the wallet (a sensible date for an adjustment). */
+      lastActivityAt: number | null;
       /** Earlier Reconcile fixes in this wallet that moved this coin (undo them if wrong). */
       fixes: { txnId: string; at: number; amount: string; description: string }[];
     }[];

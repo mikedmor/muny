@@ -37,6 +37,7 @@ import {
   createWallet,
   cryptoOverview,
   deleteTxn,
+  editTxn,
   importKoinly,
   linkAsTransfer,
   listNfts,
@@ -422,9 +423,28 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
       z.object({
         label: z.string().trim().max(30).nullable().optional(),
         description: z.string().trim().max(500).nullable().optional(),
+        at: z.number().int().min(946_684_800_000).max(4_102_444_800_000).optional(),
+        sentAsset: asset.nullable().optional(),
+        sentAmount: amount.nullable().optional(),
+        receivedAsset: asset.nullable().optional(),
+        receivedAmount: amount.nullable().optional(),
+        feeAsset: asset.nullable().optional(),
+        feeAmount: amount.nullable().optional(),
+        valueCents: z.number().int().min(0).max(1e13).nullable().optional(),
       }),
       req.body,
     );
+    const { label, description, ...money } = body;
+    if (Object.keys(money).length)
+      try {
+        editTxn(db, id, money);
+      } catch (err) {
+        throw badRequest(err instanceof Error ? err.message : "Couldn't change it");
+      }
+    if (label === undefined && description === undefined) {
+      log(user.id, "crypto.txn_edit", id);
+      return { ok: true };
+    }
     const n = db
       .update(schema.cryptoTxns)
       .set({
@@ -585,6 +605,7 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
         amount,
         staking: z.boolean(),
         out: z.enum(["fee", "sent"]).optional(),
+        at: z.number().int().positive().optional(),
       }),
       req.body,
     );

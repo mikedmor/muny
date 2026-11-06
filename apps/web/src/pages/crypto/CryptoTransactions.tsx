@@ -391,6 +391,110 @@ function MarkTransfer({ t, onDone }: { t: CryptoTxn; onDone: () => void }) {
   );
 }
 
+/** Local date-time for an input, and back. */
+const toLocalInput = (ms: number) => {
+  const d = new Date(ms);
+  return new Date(ms - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 19);
+};
+
+/**
+ * Edit a transaction: date, amounts, coins, fee, USD value. One side of a
+ * transfer between your wallets edits only its own side.
+ */
+function EditTxn({ t, onDone }: { t: CryptoTxn; onDone: () => void }) {
+  const paired = !!t.transferPairId;
+  const out = !!t.sentAmount;
+  const [at, setAt] = useState(toLocalInput(t.at));
+  const [sent, setSent] = useState({ amount: t.sentAmount ?? "", asset: t.sentAsset ?? "" });
+  const [recv, setRecv] = useState({
+    amount: t.receivedAmount ?? "",
+    asset: t.receivedAsset ?? "",
+  });
+  const [fee, setFee] = useState({ amount: t.feeAmount ?? "", asset: t.feeAsset ?? "" });
+  const [usd, setUsd] = useState(t.valueCents !== null ? (t.valueCents / 100).toFixed(2) : "");
+  const save = useCryptoMutation((body: object) => api.patch(`/api/crypto/txns/${t.id}`, body));
+  const pair = (
+    label: string,
+    v: { amount: string; asset: string },
+    set: (x: { amount: string; asset: string }) => void,
+  ) => (
+    <div className="grid grid-cols-[minmax(0,1fr)_6rem] gap-2">
+      <Field
+        label={label}
+        inputMode="decimal"
+        value={v.amount}
+        onChange={(e) => set({ ...v, amount: e.target.value.replace(/[^0-9.]/g, "") })}
+      />
+      <Field
+        label="Coin"
+        value={v.asset}
+        onChange={(e) => set({ ...v, asset: e.target.value.toUpperCase().trim() })}
+      />
+    </div>
+  );
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    const n = (x: { amount: string; asset: string }) =>
+      x.amount && x.asset ? { amount: x.amount, asset: x.asset } : { amount: null, asset: null };
+    const sv = n(sent);
+    const rv = n(recv);
+    const fv = n(fee);
+    save.mutate(
+      {
+        at: new Date(at).getTime(),
+        ...(!paired || out ? { sentAmount: sv.amount, sentAsset: sv.asset } : {}),
+        ...(!paired || !out ? { receivedAmount: rv.amount, receivedAsset: rv.asset } : {}),
+        feeAmount: fv.amount,
+        feeAsset: fv.asset,
+        // Dollars → integer cents (string math, no floats).
+        valueCents: usd
+          ? Number(usd.split(".")[0] || "0") * 100 +
+            Number((usd.split(".")[1] ?? "").padEnd(2, "0").slice(0, 2))
+          : null,
+      },
+      { onSuccess: onDone },
+    );
+  };
+  return (
+    <form
+      onSubmit={submit}
+      className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700"
+      noValidate
+    >
+      <Field
+        label="Date & time"
+        type="datetime-local"
+        step={1}
+        value={at}
+        onChange={(e) => setAt(e.target.value)}
+      />
+      {(!paired || out) && pair("Sent", sent, setSent)}
+      {(!paired || !out) && pair("Received", recv, setRecv)}
+      {pair("Fee", fee, setFee)}
+      <Field
+        label="Value then (USD)"
+        inputMode="decimal"
+        value={usd}
+        onChange={(e) => setUsd(e.target.value.replace(/[^0-9.]/g, ""))}
+      />
+      <p className="text-xs text-slate-500">
+        {paired
+          ? "This is one side of a transfer between your wallets: edit this wallet's side here, the other side in its wallet."
+          : "Sent and received makes it a trade; only received, a deposit; only sent (or a fee), a withdrawal."}
+      </p>
+      {save.error && <p className="text-xs text-red-600">{save.error.message}</p>}
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" onClick={onDone}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={save.isPending}>
+          Save
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 /** Expanded row: where it came from and went, amounts per wallet, value, fee, notes. */
 function Details({
   t,
@@ -403,6 +507,7 @@ function Details({
   link: string | null;
   heading: string;
 }) {
+  const [editing, setEditing] = useState(false);
   const [notes, setNotes] = useState(t.description ?? "");
   const saveNotes = useCryptoMutation((d: string) =>
     api.patch(`/api/crypto/txns/${t.id}`, { description: d || null }),
@@ -479,6 +584,17 @@ function Details({
             </dd>
           </div>
         </dl>
+        {editing ? (
+          <EditTxn t={t} onDone={() => setEditing(false)} />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="text-xs text-brand-600 hover:underline"
+          >
+            ✎ Edit date, amounts or fee
+          </button>
+        )}
         <label className="block">
           <span className="text-xs text-slate-500">Notes</span>
           <textarea

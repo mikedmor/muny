@@ -120,6 +120,13 @@
       "when": 1793924869791,
       "tag": "0016_crypto_coinbase_tickers",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1793931057150,
+      "tag": "0017_crypto_binance_resync",
+      "breakpoints": true
     }
   ]
 }

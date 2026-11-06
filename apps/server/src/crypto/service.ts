@@ -6,6 +6,7 @@ import {
   fifoCostBasis,
   fromFixed,
   isZeroDec,
+  normDec,
   type ParsedCryptoTxn,
   parseAnyKoinlyCsv,
   subDec,
@@ -1257,4 +1258,67 @@ export function listNfts(db: Db): import("@muny/shared").CryptoNft[] {
       });
   }
   return out;
+}
+
+export interface TxnEdit {
+  at?: number;
+  sentAsset?: string | null;
+  sentAmount?: string | null;
+  receivedAsset?: string | null;
+  receivedAmount?: string | null;
+  feeAsset?: string | null;
+  feeAmount?: string | null;
+  valueCents?: number | null;
+}
+
+/**
+ * Change a transaction's date, amounts, coins, fee or USD value. Its type
+ * follows: sent and received is a trade, received a deposit, sent (or only a
+ * fee) a withdrawal. One side of a transfer between your wallets keeps its
+ * link: only its own side, fee and date change.
+ */
+export function editTxn(db: Db, id: string, e: TxnEdit) {
+  const r = db.select().from(t).where(eq(t.id, id)).get();
+  if (!r) throw new Error("Transaction not found");
+  const next = { ...r, ...e };
+  const has = (asset: string | null | undefined, amount: string | null | undefined) =>
+    !!asset && !!amount && !isZeroDec(amount);
+  if (r.transferPairId) {
+    const out = !!r.sentAsset;
+    if (out ? e.receivedAsset || e.receivedAmount : e.sentAsset || e.sentAmount)
+      throw new Error(
+        "This is one side of a transfer: edit this wallet's side (or unlink it first)",
+      );
+    if (out ? !has(next.sentAsset, next.sentAmount) : !has(next.receivedAsset, next.receivedAmount))
+      throw new Error("A transfer needs an amount");
+  }
+  const sent = has(next.sentAsset, next.sentAmount);
+  const got = has(next.receivedAsset, next.receivedAmount);
+  const fee = has(next.feeAsset, next.feeAmount);
+  if (!sent && !got && !fee) throw new Error("Enter what was sent, received or paid as a fee");
+  const type = r.transferPairId
+    ? "transfer"
+    : sent && got
+      ? "trade"
+      : got
+        ? "deposit"
+        : "withdrawal";
+  db.update(t)
+    .set({
+      at: next.at,
+      type,
+      sentAsset: sent ? next.sentAsset : null,
+      sentAmount: sent ? normDec(next.sentAmount as string) : null,
+      receivedAsset: got ? next.receivedAsset : null,
+      receivedAmount: got ? normDec(next.receivedAmount as string) : null,
+      feeAsset: fee ? next.feeAsset : null,
+      feeAmount: fee ? normDec(next.feeAmount as string) : null,
+      valueCents: next.valueCents,
+      // A tag that no longer fits (income on a withdrawal…) goes.
+      ...(type === "trade" || type === "transfer" ? { label: null } : {}),
+      userModified: true,
+    })
+    .where(eq(t.id, id))
+    .run();
+  return { ok: true, type };
 }

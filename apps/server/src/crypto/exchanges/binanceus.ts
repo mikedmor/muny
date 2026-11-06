@@ -92,12 +92,15 @@ export const binanceus: ExchangeAdapter = async (ctx) => {
   );
 
   // Deposits and withdrawals, coin by coin (whole range first; 90-day windows if refused).
+  // Binance answers a longer range with just part of it (no error), so history
+  // is always asked for in windows of at most 90 days.
+  const windows = () => {
+    const out: [number, number][] = [];
+    for (let from = start; from < now; from += WINDOW)
+      out.push([from, Math.min(now, from + WINDOW)]);
+    return out;
+  };
   const ranged = async <T>(path: string, coin: string): Promise<T[]> => {
-    try {
-      return await call<T[]>(path, { coin, startTime: start, endTime: now, limit: 1000 });
-    } catch (err) {
-      if (!(err instanceof BinanceError)) throw err;
-    }
     const out: T[] = [];
     for (let from = start; from < now; from += WINDOW) {
       out.push(
@@ -216,63 +219,78 @@ export const binanceus: ExchangeAdapter = async (ctx) => {
     ["/sapi/v1/ocbs/orders", "dataList", "buys and sells with card or bank"],
     ["/sapi/v1/otc/orders", "rows", "conversions"],
   ] as const) {
-    for (let page = 1; ; page++) {
-      const res = await optional(what, () =>
-        call<Record<string, unknown>>(path, { startTime: start, endTime: now, page, limit: 100 }),
-      );
-      const rows = (res?.[list] as Record<string, string | number>[] | undefined) ?? [];
-      for (const r of rows) {
-        if (/fail|cancel|expire|pending|process|reject/i.test(String(r.orderStatus ?? "")))
-          continue;
-        const d = new Deltas()
-          .add(String(r.fromCoin).toUpperCase(), normDec(String(r.fromAmount)), -1)
-          .add(String(r.toCoin).toUpperCase(), normDec(String(r.toAmount)));
-        add({
-          externalId: `binanceus:o:${r.orderId}`,
-          at: Number(r.createTime),
-          txHash: null,
-          deltas: d.toStrings(),
-          fee:
-            r.feeAmount && !isZeroDec(String(r.feeAmount))
-              ? { asset: String(r.feeCoin).toUpperCase(), amount: normDec(String(r.feeAmount)) }
-              : null,
-        });
+    for (const [wFrom, wTo] of windows())
+      for (let page = 1; ; page++) {
+        const res = await optional(what, () =>
+          call<Record<string, unknown>>(path, { startTime: wFrom, endTime: wTo, page, limit: 100 }),
+        );
+        const rows = (res?.[list] as Record<string, string | number>[] | undefined) ?? [];
+        for (const r of rows) {
+          if (/fail|cancel|expire|pending|process|reject/i.test(String(r.orderStatus ?? "")))
+            continue;
+          const d = new Deltas()
+            .add(String(r.fromCoin).toUpperCase(), normDec(String(r.fromAmount)), -1)
+            .add(String(r.toCoin).toUpperCase(), normDec(String(r.toAmount)));
+          add({
+            externalId: `binanceus:o:${r.orderId}`,
+            at: Number(r.createTime),
+            txHash: null,
+            deltas: d.toStrings(),
+            fee:
+              r.feeAmount && !isZeroDec(String(r.feeAmount))
+                ? { asset: String(r.feeCoin).toUpperCase(), amount: normDec(String(r.feeAmount)) }
+                : null,
+          });
+        }
+        if (rows.length < 100) break;
+        await ctx.pause(250);
       }
-      if (rows.length < 100) break;
-      await ctx.pause(250);
-    }
   }
 
   // Staking rewards and distributions (airdrops, rebates).
-  for (let page = 1; ; page++) {
-    const res = await optional("staking rewards", () =>
-      call<{ data?: { asset: string; amount: string; time: number; tranId: number | string }[] }>(
-        "/sapi/v1/staking/stakingRewardsHistory",
-        { startTime: start, endTime: now, page, limit: 500 },
-      ),
+  for (const [wFrom, wTo] of windows())
+    for (let page = 1; ; page++) {
+      const res = await optional("staking rewards", () =>
+        call<{ data?: { asset: string; amount: string; time: number; tranId: number | string }[] }>(
+          "/sapi/v1/staking/stakingRewardsHistory",
+          { startTime: wFrom, endTime: wTo, page, limit: 500 },
+        ),
+      );
+      const rows = res?.data ?? [];
+      for (const r of rows)
+        add({
+          externalId: `binanceus:s:${r.tranId}`,
+          at: r.time,
+          txHash: null,
+          deltas: new Deltas().add(r.asset.toUpperCase(), normDec(r.amount)).toStrings(),
+          label: "staking",
+        });
+      if (rows.length < 500) break;
+    }
+  const dist: {
+    rows: {
+      asset: string;
+      amount: string;
+      divTime: number;
+      tranId: number | string;
+      category?: string;
+    }[];
+  } = { rows: [] };
+  for (const [wFrom, wTo] of windows()) {
+    const part = await optional("distributions", () =>
+      call<{
+        rows?: {
+          asset: string;
+          amount: string;
+          divTime: number;
+          tranId: number | string;
+          category?: string;
+        }[];
+      }>("/sapi/v1/asset/assetDistributionHistory", { startTime: wFrom, endTime: wTo, limit: 500 }),
     );
-    const rows = res?.data ?? [];
-    for (const r of rows)
-      add({
-        externalId: `binanceus:s:${r.tranId}`,
-        at: r.time,
-        txHash: null,
-        deltas: new Deltas().add(r.asset.toUpperCase(), normDec(r.amount)).toStrings(),
-        label: "staking",
-      });
-    if (rows.length < 500) break;
+    dist.rows.push(...(part?.rows ?? []));
+    await ctx.pause(250);
   }
-  const dist = await optional("distributions", () =>
-    call<{
-      rows?: {
-        asset: string;
-        amount: string;
-        divTime: number;
-        tranId: number | string;
-        category?: string;
-      }[];
-    }>("/sapi/v1/asset/assetDistributionHistory", { startTime: start, endTime: now, limit: 500 }),
-  );
   for (const r of dist?.rows ?? [])
     add({
       externalId: `binanceus:d:${r.tranId}`,
@@ -289,7 +307,7 @@ export const binanceus: ExchangeAdapter = async (ctx) => {
     pos,
     ...(notes.length
       ? {
-          notice: `Binance US didn't answer for ${notes.slice(0, 4).join(", ")}${notes.length > 4 ? "…" : ""}; those aren't included.`,
+          notice: `Binance US didn't answer for ${[...new Set(notes)].slice(0, 4).join(", ")}${notes.length > 4 ? "…" : ""}; those aren't included.`,
         }
       : {}),
   };
