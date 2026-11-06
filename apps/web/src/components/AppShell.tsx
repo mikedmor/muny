@@ -1,25 +1,70 @@
 import type { CurrentUser } from "@muny/shared";
 import { Link, Outlet } from "@tanstack/react-router";
+import {
+  ArrowLeftRight,
+  Bell,
+  Bitcoin,
+  ChartColumn,
+  ChartPie,
+  ChevronsUpDown,
+  Code,
+  Import,
+  Landmark,
+  LayoutDashboard,
+  LogOut,
+  type LucideIcon,
+  Menu,
+  PiggyBank,
+  Receipt,
+  Repeat,
+  Settings,
+  Target,
+  X,
+} from "lucide-react";
 import { useState } from "react";
 import { useLogout, useMeta } from "../lib/auth.js";
 import { useNotifications } from "../lib/queries.js";
 import { cx } from "./ui.js";
 
-const NAV = [
-  { to: "/", label: "Overview", icon: "◎" },
-  { to: "/alerts", label: "Alerts", icon: "🔔" },
-  { to: "/transactions", label: "Transactions", icon: "≡" },
-  { to: "/recurring", label: "Recurring", icon: "↻" },
-  { to: "/spending", label: "Spending", icon: "◑" },
-  { to: "/budgets", label: "Budgets", icon: "◔" },
-  { to: "/reports", label: "Reports", icon: "▤" },
-  { to: "/taxes", label: "Taxes", icon: "🧾" },
-  { to: "/accounts", label: "Accounts", icon: "▣" },
-  { to: "/crypto", label: "Crypto", icon: "🪙" },
-  { to: "/savings", label: "Savings", icon: "💰" },
-  { to: "/import", label: "Import", icon: "⇪" },
-  { to: "/settings", label: "Settings", icon: "⚙" },
-] as const;
+/** The menu, in groups. Icons: Lucide (ISC license), drawn at one size and weight. */
+const NAV: { label?: string; items: { to: string; label: string; icon: LucideIcon }[] }[] = [
+  {
+    items: [
+      { to: "/", label: "Overview", icon: LayoutDashboard },
+      { to: "/alerts", label: "Alerts", icon: Bell },
+    ],
+  },
+  {
+    label: "Money",
+    items: [
+      { to: "/transactions", label: "Transactions", icon: ArrowLeftRight },
+      { to: "/recurring", label: "Recurring", icon: Repeat },
+      { to: "/spending", label: "Spending", icon: ChartPie },
+      { to: "/budgets", label: "Budgets", icon: Target },
+      { to: "/accounts", label: "Accounts", icon: Landmark },
+    ],
+  },
+  {
+    label: "Wealth",
+    items: [
+      { to: "/crypto", label: "Crypto", icon: Bitcoin },
+      { to: "/savings", label: "Savings", icon: PiggyBank },
+    ],
+  },
+  {
+    label: "Insights",
+    items: [
+      { to: "/reports", label: "Reports", icon: ChartColumn },
+      { to: "/taxes", label: "Taxes", icon: Receipt },
+    ],
+  },
+  {
+    items: [
+      { to: "/import", label: "Import", icon: Import },
+      { to: "/settings", label: "Settings", icon: Settings },
+    ],
+  },
+];
 
 function UnreadBadge({ count }: { count: number }) {
   if (!count) return null;
@@ -34,69 +79,147 @@ function UnreadBadge({ count }: { count: number }) {
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const unread = useNotifications().data?.unread ?? 0;
   return (
-    <nav className="flex flex-col gap-1">
-      {NAV.map((item) => (
-        <Link
-          key={item.to}
-          to={item.to}
-          onClick={onNavigate}
-          activeOptions={{ exact: item.to === "/" }}
-          className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-          activeProps={{
-            className: "!bg-brand-50 !text-brand-700 dark:!bg-brand-700/20 dark:!text-brand-500",
-          }}
-        >
-          <span aria-hidden className="w-4 text-center">
-            {item.icon}
-          </span>
-          {item.label}
-          {item.to === "/alerts" && <UnreadBadge count={unread} />}
-        </Link>
+    <nav className="flex flex-col gap-4" aria-label="Main">
+      {NAV.map((group, g) => (
+        <div key={group.label ?? `g${g}`} className="flex flex-col gap-0.5">
+          {group.label && (
+            <p className="px-3 pb-1 text-[11px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
+              {group.label}
+            </p>
+          )}
+          {group.items.map((item) => (
+            <Link
+              key={item.to}
+              to={item.to}
+              onClick={onNavigate}
+              activeOptions={{ exact: item.to === "/" }}
+              className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+              activeProps={{
+                className:
+                  "!bg-brand-50 !text-brand-700 dark:!bg-brand-700/20 dark:!text-brand-500",
+              }}
+            >
+              <item.icon aria-hidden="true" className="size-4 shrink-0" strokeWidth={2} />
+              {item.label}
+              {item.to === "/alerts" && <UnreadBadge count={unread} />}
+            </Link>
+          ))}
+        </div>
       ))}
     </nav>
+  );
+}
+
+const initials = (user: CurrentUser) => {
+  const name = (user.displayName ?? "").trim();
+  const parts = name ? name.split(/\s+/) : [user.email.split("@")[0] ?? "?"];
+  const first = parts[0]?.[0] ?? "?";
+  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : "";
+  return (first + last).toUpperCase();
+};
+
+/** The account card at the bottom of the menu: who's signed in, with a small menu. */
+function UserBox({ user, onNavigate }: { user: CurrentUser; onNavigate?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const logout = useLogout();
+  const meta = useMeta();
+  return (
+    <div className="relative border-t border-slate-200 pt-3 dark:border-slate-800">
+      {open && (
+        <>
+          <button
+            type="button"
+            aria-label="Close the account menu"
+            className="fixed inset-0 z-10 cursor-default"
+            onClick={() => setOpen(false)}
+          />
+          <div
+            role="menu"
+            className="absolute right-0 bottom-full left-0 z-20 mb-2 rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+          >
+            <Link
+              to="/settings"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onNavigate?.();
+              }}
+              className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              <Settings aria-hidden="true" className="size-4" /> Settings
+            </Link>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => logout.mutate()}
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-red-600 hover:bg-slate-100 dark:text-red-400 dark:hover:bg-slate-800"
+            >
+              <LogOut aria-hidden="true" className="size-4" /> Sign out
+            </button>
+          </div>
+        </>
+      )}
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800"
+      >
+        <span
+          aria-hidden="true"
+          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-600 text-xs font-semibold text-white"
+        >
+          {initials(user)}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium">
+            {user.displayName ?? user.email}
+          </span>
+          {user.displayName && (
+            <span className="block truncate text-xs text-slate-500">{user.email}</span>
+          )}
+        </span>
+        <ChevronsUpDown aria-hidden="true" className="size-4 shrink-0 text-slate-400" />
+      </button>
+      <p className="mt-2 flex items-center gap-1.5 px-2 text-[11px] text-slate-400 dark:text-slate-500">
+        <span>Muny{meta.data ? ` v${meta.data.version}` : ""}</span>
+        <span aria-hidden="true">·</span>
+        <span>AGPL-3.0</span>
+        {meta.data && (
+          <>
+            <span aria-hidden="true">·</span>
+            <a
+              href={meta.data.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 hover:text-slate-600 dark:hover:text-slate-300"
+            >
+              <Code aria-hidden="true" className="size-3" /> Source
+            </a>
+          </>
+        )}
+      </p>
+    </div>
   );
 }
 
 export function AppShell({ user }: { user: CurrentUser }) {
   const [open, setOpen] = useState(false);
   const unread = useNotifications().data?.unread ?? 0;
-  const logout = useLogout();
-  const meta = useMeta();
-
-  const userBox = (
-    <div className="border-t border-slate-200 pt-3 dark:border-slate-800">
-      <p className="truncate px-3 text-sm font-medium">{user.displayName ?? user.email}</p>
-      {user.displayName && <p className="truncate px-3 text-xs text-slate-500">{user.email}</p>}
-      <button
-        type="button"
-        onClick={() => logout.mutate()}
-        className="mt-2 w-full rounded-lg px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-      >
-        Sign out
-      </button>
-      <p className="mt-2 px-3 text-[11px] text-slate-400">
-        Muny {meta.data ? `v${meta.data.version}` : ""} · AGPL-3.0 ·{" "}
-        {meta.data && (
-          <a href={meta.data.sourceUrl} target="_blank" rel="noreferrer" className="underline">
-            Source
-          </a>
-        )}
-      </p>
-    </div>
-  );
 
   return (
     <div className="min-h-dvh bg-slate-50 text-slate-900 md:flex dark:bg-slate-950 dark:text-slate-100">
       {/* Desktop sidebar */}
       <aside className="hidden w-60 shrink-0 flex-col justify-between border-r border-slate-200 bg-white p-4 md:sticky md:top-0 md:flex md:h-dvh dark:border-slate-800 dark:bg-slate-900">
-        <div>
+        <div className="min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <Link to="/" className="mb-6 flex items-center gap-2 px-3">
             <img src="/favicon.svg" alt="" className="size-7" />
             <span className="text-lg font-semibold">Muny</span>
           </Link>
           <NavLinks />
         </div>
-        {userBox}
+        <UserBox user={user} />
       </aside>
 
       {/* Mobile top bar */}
@@ -110,9 +233,9 @@ export function AppShell({ user }: { user: CurrentUser }) {
             to="/alerts"
             onClick={() => setOpen(false)}
             aria-label={unread ? `Alerts, ${unread} unread` : "Alerts"}
-            className="relative rounded-lg px-2.5 py-1 text-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="relative rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
           >
-            <span aria-hidden="true">🔔</span>
+            <Bell aria-hidden="true" className="size-5" />
             {unread > 0 && (
               <span
                 aria-hidden="true"
@@ -127,20 +250,24 @@ export function AppShell({ user }: { user: CurrentUser }) {
             aria-label={open ? "Close menu" : "Open menu"}
             aria-expanded={open}
             onClick={() => setOpen((o) => !o)}
-            className="rounded-lg px-3 py-1 text-xl hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
           >
-            {open ? "✕" : "☰"}
+            {open ? (
+              <X aria-hidden="true" className="size-5" />
+            ) : (
+              <Menu aria-hidden="true" className="size-5" />
+            )}
           </button>
         </div>
       </header>
       <div
         className={cx(
-          "fixed inset-x-0 top-[57px] bottom-0 z-10 flex flex-col justify-between bg-white p-4 md:hidden dark:bg-slate-900",
+          "fixed inset-x-0 top-[57px] bottom-0 z-10 flex flex-col justify-between overflow-y-auto bg-white p-4 md:hidden dark:bg-slate-900",
           !open && "hidden",
         )}
       >
         <NavLinks onNavigate={() => setOpen(false)} />
-        {userBox}
+        <UserBox user={user} onNavigate={() => setOpen(false)} />
       </div>
 
       <main className="mx-auto w-full min-w-0 max-w-[200rem] flex-1 px-4 py-6 md:px-8 md:py-8">
