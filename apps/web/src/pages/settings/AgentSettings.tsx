@@ -227,10 +227,11 @@ export function AgentSettings() {
       <div>
         <h2 className="text-lg font-semibold">AI assistants</h2>
         <p className="text-sm text-slate-500">
-          Let an assistant like Claude read your finances and build cards and themes, over MCP. Muny
-          calls no AI service itself: you choose what connects, and each token only reaches what you
-          tick here. Assistants can't move money or change financial data. Every call shows up under
-          Activity.
+          Let an assistant like Claude read your finances, build cards and themes, and suggest
+          changes, over MCP. Muny calls no AI service itself: you choose what connects, and each
+          token only reaches what you tick here. Assistants can't move money, and changes to
+          financial data wait in your inbox under Alerts until you approve them. Every call shows up
+          under Activity.
         </p>
       </div>
 

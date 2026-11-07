@@ -570,8 +570,11 @@ describe("building cards and themes", () => {
     ).toBe(true);
   });
 
-  it("has no tool that changes financial data", () => {
-    for (const tool of TOOLS.filter((x) => x.write)) expect(tool.scope).toBe("write:dashboard");
+  it("applies only display settings directly", async () => {
+    const { token, call } = await setup();
+    const t = await token(READ_ALL.concat("write:dashboard"));
+    expect(TOOLS.filter((x) => x.write && x.scope === "write:dashboard").length).toBeGreaterThan(0);
+    expect((await call(t.token, "categorize_transactions", {})).statusCode).toBe(403);
   });
 });
 

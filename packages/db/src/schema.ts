@@ -89,6 +89,33 @@ export const apiTokens = sqliteTable("api_tokens", {
   createdAt: createdAt(),
 });
 
+/** Changes an assistant has suggested. Nothing happens unless a person approves. */
+export const agentProposals = sqliteTable(
+  "agent_proposals",
+  {
+    id: text().primaryKey(),
+    tokenId: text().references(() => apiTokens.id, { onDelete: "set null" }),
+    /** Kept so the inbox still says who asked after a token is gone. */
+    tokenName: text().notNull(),
+    tool: text().notNull(),
+    input: text({ mode: "json" }).notNull(),
+    /** Written by Muny from the data. */
+    summary: text().notNull(),
+    /** The assistant's own words, shown as such. */
+    reason: text(),
+    changes: text({ mode: "json" }).notNull(),
+    warnings: text({ mode: "json" }).notNull(),
+    status: text({ enum: ["pending", "approved", "rejected", "expired", "failed"] })
+      .notNull()
+      .default("pending"),
+    result: text(),
+    decidedBy: text().references(() => users.id, { onDelete: "set null" }),
+    decidedAt: integer({ mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("agent_proposals_status_idx").on(t.status, t.createdAt)],
+);
+
 // ---------------------------------------------------------------------------
 // Connections & accounts
 // ---------------------------------------------------------------------------

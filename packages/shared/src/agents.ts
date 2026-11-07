@@ -1,7 +1,7 @@
 /**
  * What an AI assistant or script may do, set per token. Reads are split by how
- * sensitive they are. The only writes so far are to how things look (cards, themes,
- * layout), never to financial data.
+ * sensitive they are. Writes to how things look (cards, themes, layout) apply
+ * directly. Writes to financial data only ever suggest: a person approves each one.
  */
 
 export const AGENT_SCOPES = [
@@ -10,6 +10,10 @@ export const AGENT_SCOPES = [
   "read:accounts",
   "read:debts",
   "write:dashboard",
+  "write:annotations",
+  "write:rules",
+  "write:setup",
+  "write:plans",
 ] as const;
 export type AgentScope = (typeof AGENT_SCOPES)[number];
 
@@ -36,6 +40,24 @@ export const AGENT_SCOPE_INFO: Record<AgentScope, { label: string; description: 
     label: "Build cards and themes",
     description:
       "Create and change Overview cards and themes, and arrange your Overview. Can't change any financial data.",
+  },
+  "write:annotations": {
+    label: "Suggest categories, tags and notes",
+    description:
+      "Suggest categorizing and tagging transactions, adding notes, and confirming or ignoring recurring charges. Nothing changes unless you approve it.",
+  },
+  "write:rules": {
+    label: "Suggest rules",
+    description: "Suggest rules for transactions. Nothing changes unless you approve it.",
+  },
+  "write:setup": {
+    label: "Suggest budgets",
+    description: "Suggest monthly budgets. Nothing changes unless you approve it.",
+  },
+  "write:plans": {
+    label: "Suggest savings and replacement plans",
+    description:
+      "Suggest recording savings and plans to replace paid services. Nothing changes unless you approve it.",
   },
 };
 
@@ -68,4 +90,41 @@ export interface AgentActivity {
   action: string;
   ok: boolean;
   dryRun: boolean;
+}
+
+/** One thing an approved proposal would change. */
+export interface ProposalChange {
+  label: string;
+  from?: string | null;
+  to?: string | null;
+}
+
+export type ProposalStatus = "pending" | "approved" | "rejected" | "expired" | "failed";
+
+export interface AgentProposal {
+  id: string;
+  tool: string;
+  tokenName: string;
+  status: ProposalStatus;
+  /** Written by Muny from the data. */
+  summary: string;
+  /** The assistant's own words. */
+  reason: string | null;
+  changes: ProposalChange[];
+  warnings: string[];
+  createdAt: number;
+  decidedAt: number | null;
+  /** What happened, once decided. */
+  result: string | null;
+}
+
+export interface ProposalList {
+  pending: AgentProposal[];
+  recent: AgentProposal[];
+}
+
+export interface ProposalDecision {
+  id: string;
+  status: ProposalStatus;
+  result: string | null;
 }

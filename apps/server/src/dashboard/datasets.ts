@@ -114,6 +114,7 @@ function transactions(db: MunyDb, range: Range): DataRow[] {
       const isSpending = reported && !pairedUncategorized && (kind === "expense" || !kind);
       const isIncome = reported && kind === "income";
       out.push({
+        id: r.id,
         date: r.date,
         amount: part.amountCents,
         spending: isSpending ? -part.amountCents : 0,

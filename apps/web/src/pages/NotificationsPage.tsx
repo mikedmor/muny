@@ -1,8 +1,9 @@
 import type { AppNotification } from "@muny/shared";
-import { Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
 import { useMarkRead, useNotifications, useRunAlerts } from "../lib/queries.js";
+import { InboxTab, useProposals } from "./InboxTab.js";
 import { AlertsSettings } from "./settings/AlertsSettings.js";
 
 const ICON: Record<string, string> = {
@@ -16,6 +17,7 @@ const ICON: Record<string, string> = {
   charged_after_cancel: "🚫",
   connection_error: "🔌",
   trial_ending: "⏳",
+  agent_proposal: "📥",
 };
 
 function when(ms: number) {
@@ -39,6 +41,7 @@ function dayKey(ms: number) {
 
 const TABS = [
   ["alerts", "Alerts"],
+  ["inbox", "Inbox"],
   ["settings", "Settings"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
@@ -48,9 +51,15 @@ export function NotificationsPage() {
   const read = useMarkRead();
   const run = useRunAlerts();
   const navigate = useNavigate();
+  const proposals = useProposals();
+  const waiting = proposals.data?.pending.length ?? 0;
+  const hash: string = useLocation({ select: (l): string => l.hash });
   const [tab, setTab] = useState<Tab>(() =>
-    window.location.hash === "#settings" ? "settings" : "alerts",
+    hash === "settings" ? "settings" : hash === "inbox" ? "inbox" : "alerts",
   );
+  useEffect(() => {
+    if (hash === "inbox" || hash === "settings" || hash === "alerts") setTab(hash);
+  }, [hash]);
   const show = (k: Tab) => {
     setTab(k);
     window.history.replaceState(null, "", `#${k}`);
@@ -62,7 +71,10 @@ export function NotificationsPage() {
 
   const open = (i: AppNotification) => {
     if (!i.readAt) read.mutate([i.id]);
-    if (i.link) void navigate({ to: i.link });
+    if (i.link) {
+      const [to, linkHash] = i.link.split("#");
+      void navigate({ to, ...(linkHash ? { hash: linkHash } : {}) });
+    }
   };
 
   return (
@@ -107,11 +119,19 @@ export function NotificationsPage() {
             )}
           >
             {label}
+            {k === "inbox" && waiting > 0 && (
+              <span className="ml-1.5 rounded-full bg-brand-600 px-1.5 py-0.5 text-[10px] font-semibold text-on-brand tabular-nums">
+                {waiting}
+                <span className="sr-only"> waiting</span>
+              </span>
+            )}
           </button>
         ))}
       </div>
       {tab === "settings" ? (
         <AlertsSettings />
+      ) : tab === "inbox" ? (
+        <InboxTab />
       ) : (
         <AlertList
           n={n}

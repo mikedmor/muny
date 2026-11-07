@@ -66,6 +66,25 @@ const InfraBody = z
     { message: "Enter watts and price for power, or an amount and how often for other costs" },
   );
 
+/** Start a replacement plan. */
+export function createDiy(db: MunyDb, body: z.infer<typeof DiyBody>): string {
+  const id = newId();
+  db.insert(schema.diyProjects)
+    .values({
+      id,
+      serviceName: body.serviceName,
+      seriesId: body.seriesId ?? null,
+      alternative: body.alternative,
+      status: body.status ?? "idea",
+      effort: body.effort ?? null,
+      runningMonthlyCents: body.runningMonthlyCents ?? 0,
+      notes: body.notes || null,
+    })
+    .run();
+  onDiyStatus(db, id);
+  return id;
+}
+
 export function registerSavingsRoutes(app: FastifyInstance, db: MunyDb) {
   const log = (userId: string, action: string, entityId?: string, details?: unknown) =>
     audit(db, {
@@ -225,20 +244,7 @@ export function registerSavingsRoutes(app: FastifyInstance, db: MunyDb) {
   app.post("/api/diy", async (req, reply) => {
     const user = requireUser(req);
     const body = parse(DiyBody, req.body);
-    const id = newId();
-    db.insert(schema.diyProjects)
-      .values({
-        id,
-        serviceName: body.serviceName,
-        seriesId: body.seriesId ?? null,
-        alternative: body.alternative,
-        status: body.status ?? "idea",
-        effort: body.effort ?? null,
-        runningMonthlyCents: body.runningMonthlyCents ?? 0,
-        notes: body.notes || null,
-      })
-      .run();
-    onDiyStatus(db, id);
+    const id = createDiy(db, body);
     log(user.id, "diy.create", id);
     reply.code(201);
     return listDiy(db).find((p) => p.id === id);

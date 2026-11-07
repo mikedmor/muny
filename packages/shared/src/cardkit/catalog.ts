@@ -73,6 +73,7 @@ export const DATASETS: DatasetInfo[] = [
       "Every transaction, with split transactions as one row per part. Hidden transactions are left out.",
     dateField: "date",
     fields: [
+      text("id", "Transaction id"),
       date("date", "Date"),
       money("amount", "Amount", "Signed: money out is negative."),
       money(

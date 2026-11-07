@@ -53,6 +53,10 @@ const RULES: Record<AlertType, { label: string; description: string }> = {
     label: "Charged after cancelling",
     description: "Something you marked cancelled charged you again.",
   },
+  agent_proposal: {
+    label: "An assistant suggests a change",
+    description: "When changes are waiting in your inbox. It says only that something is waiting.",
+  },
   trial_ending: {
     label: "Free trial ending",
     description: "A free trial you are tracking is about to turn into a charge.",

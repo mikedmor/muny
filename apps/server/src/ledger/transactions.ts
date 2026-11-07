@@ -415,6 +415,44 @@ function assertCategoryExists(db: MunyDb, categoryId: string | null | undefined)
 // Routes
 // ---------------------------------------------------------------------------
 
+/** Change many transactions at once, as the app's own bulk edit does. */
+export function bulkUpdateTransactions(
+  db: MunyDb,
+  ids: string[],
+  set: { categoryId?: string | null; hidden?: boolean; addTag?: string },
+): number {
+  return db.transaction((tx) => {
+    const update: Partial<typeof t.$inferInsert> = {};
+    if (set.categoryId !== undefined) {
+      update.categoryId = set.categoryId;
+      update.userModified = true;
+    }
+    if (set.hidden !== undefined) update.hidden = set.hidden;
+    let n = 0;
+    if (Object.keys(update).length) {
+      n = tx.update(t).set(update).where(inArray(t.id, ids)).run().changes;
+      if (set.categoryId !== undefined) {
+        rememberCategory(tx, ids, set.categoryId);
+        // Explicit recategorization replaces any splits.
+        tx.delete(schema.transactionSplits)
+          .where(inArray(schema.transactionSplits.transactionId, ids))
+          .run();
+      }
+    }
+    if (set.addTag) {
+      const tagId = upsertTag(tx, set.addTag);
+      for (const txnId of ids) {
+        tx.insert(schema.transactionTags)
+          .values({ transactionId: txnId, tagId })
+          .onConflictDoNothing()
+          .run();
+      }
+      n = Math.max(n, ids.length);
+    }
+    return n;
+  });
+}
+
 export function registerTransactionRoutes(app: FastifyInstance, db: MunyDb) {
   const log = (userId: string, action: string, entityId: string | undefined, details?: unknown) =>
     audit(db, {
@@ -561,36 +599,7 @@ export function registerTransactionRoutes(app: FastifyInstance, db: MunyDb) {
     const user = requireUser(req);
     const { ids, set } = parse(BulkBody, req.body);
     assertCategoryExists(db, set.categoryId);
-    const changed = db.transaction((tx) => {
-      const update: Partial<typeof t.$inferInsert> = {};
-      if (set.categoryId !== undefined) {
-        update.categoryId = set.categoryId;
-        update.userModified = true;
-      }
-      if (set.hidden !== undefined) update.hidden = set.hidden;
-      let n = 0;
-      if (Object.keys(update).length) {
-        n = tx.update(t).set(update).where(inArray(t.id, ids)).run().changes;
-        if (set.categoryId !== undefined) {
-          rememberCategory(tx, ids, set.categoryId);
-          // Explicit recategorization replaces any splits.
-          tx.delete(schema.transactionSplits)
-            .where(inArray(schema.transactionSplits.transactionId, ids))
-            .run();
-        }
-      }
-      if (set.addTag) {
-        const tagId = upsertTag(tx, set.addTag);
-        for (const txnId of ids) {
-          tx.insert(schema.transactionTags)
-            .values({ transactionId: txnId, tagId })
-            .onConflictDoNothing()
-            .run();
-        }
-        n = Math.max(n, ids.length);
-      }
-      return n;
-    });
+    const changed = bulkUpdateTransactions(db, ids, set);
     log(user.id, "transaction.bulk_update", undefined, { count: ids.length, set });
     return { updated: changed };
   });

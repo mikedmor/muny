@@ -16,6 +16,7 @@ import type {
 } from "@muny/shared";
 import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { localToday } from "../lib/dates.js";
+import { notFound } from "../lib/http.js";
 
 type Tx = Parameters<Parameters<MunyDb["transaction"]>[0]>[0];
 type Db = MunyDb | Tx;
@@ -454,6 +455,30 @@ export function rescanRecurring(tx: Tx, today = localToday()): RecurringScanResu
     result.updated++;
   }
   return result;
+}
+
+/** Confirm, ignore or cancel a series. Ignoring detaches its charges so they read as ordinary transactions. */
+export function setSeriesStatus(
+  db: Db,
+  id: string,
+  status: "confirmed" | "ignored" | "cancelled",
+  today = localToday(),
+) {
+  const s = schema.recurringSeries;
+  const current = db.select().from(s).where(eq(s.id, id)).get();
+  if (!current) throw notFound("Recurring charge not found");
+  db.update(s)
+    .set({
+      status,
+      cancelledAt: status === "cancelled" ? (current.cancelledAt ?? today) : null,
+    })
+    .where(eq(s.id, id))
+    .run();
+  if (status === "ignored")
+    db.update(schema.transactions)
+      .set({ recurringSeriesId: null })
+      .where(eq(schema.transactions.recurringSeriesId, id))
+      .run();
 }
 
 /** Create a series by hand from one transaction ("this is a subscription"). */

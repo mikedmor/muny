@@ -46,6 +46,7 @@ import {
   themeState,
   updateTheme,
 } from "../settings/themes.js";
+import { listProposalsTool, PROPOSAL_TOOLS } from "./proposals.js";
 import { defineTool, dryRunField, type Tool, type ToolContext, ToolError } from "./registry.js";
 
 /** What reading each dataset takes. A card's data is only as open as this allows. */
@@ -210,6 +211,8 @@ const COMPACT_CARDS = (ctx: ToolContext) =>
   }));
 
 export const TOOLS: Tool[] = [
+  ...PROPOSAL_TOOLS,
+  listProposalsTool,
   // --- Summaries
   defineTool({
     name: "get_financial_overview",
@@ -279,6 +282,7 @@ export const TOOLS: Tool[] = [
       listSeries(ctx.db, ctx.today)
         .filter((s) => s.status !== "ignored" && (include_inactive || s.active))
         .map((s) => ({
+          id: s.id,
           name: s.name,
           kind: s.kind,
           status: s.status,
@@ -473,7 +477,7 @@ export const TOOLS: Tool[] = [
           ...(category ? [{ field: "category", op: "eq" as const, value: category }] : []),
           ...(account ? [{ field: "account", op: "eq" as const, value: account }] : []),
         ],
-        dimensions: ["date", "merchant", "category", "account", "pending", "notes"].map(
+        dimensions: ["id", "date", "merchant", "category", "account", "pending", "notes"].map(
           (field) => ({
             field,
           }),

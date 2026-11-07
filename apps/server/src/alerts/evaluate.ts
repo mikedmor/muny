@@ -50,6 +50,7 @@ export const DEFAULT_PARAMS: Record<AlertType, AlertParams> = {
   charged_after_cancel: {},
   connection_error: {},
   trial_ending: { daysBefore: 3 },
+  agent_proposal: {},
 };
 
 const STATE_KEY = "alerts.state";
