@@ -8,7 +8,7 @@ import {
   EVERYTHING_ELSE,
 } from "@muny/shared";
 import { sql } from "drizzle-orm";
-import { budgetMonth, excludedCategoryIds, recurringPaidByMonth } from "../budgets/service.js";
+import { billCharges, billsPaidByMonth, budgetMonth } from "../budgets/service.js";
 import {
   addMonths,
   categoryMeta,
@@ -118,20 +118,6 @@ function partsIn(db: MunyDb, month: string, ids: string[] | "uncategorized") {
     .map((p) => Number(p.cents));
 }
 
-/** Charges from recurring bills and subscriptions in a month (as the budget counts them). */
-function billParts(db: MunyDb, month: string, excluded: string[]) {
-  return db
-    .all<{ cents: number }>(sql`
-      select t.amount_cents as cents
-        from transactions t
-        join recurring_series r on r.id = t.recurring_series_id
-       where t.hidden = 0 and t.amount_cents < 0 and r.kind <> 'income'
-         and (r.category_id is null or r.category_id not in (${idList(excluded)}))
-         and t.posted_date between ${`${month}-01`} and ${monthEnd(month)}
-    `)
-    .map((p) => Number(p.cents));
-}
-
 const BUDGET_ROW_LABELS: Record<BudgetRowId, CategoryActivity["category"]> = {
   [EVERYTHING_ELSE]: {
     id: EVERYTHING_ELSE,
@@ -148,7 +134,7 @@ const BUDGET_ROW_LABELS: Record<BudgetRowId, CategoryActivity["category"]> = {
   [BILLS]: {
     id: BILLS,
     name: "Bills & subscriptions",
-    groupName: "Charges from your recurring bills and subscriptions",
+    groupName: "Recurring bills and subscriptions, and your bill categories",
     kind: "expense",
   },
 };
@@ -173,9 +159,8 @@ export function budgetRowActivity(
   const byMonth = new Map<string, number>();
   let amounts: number[];
   if (row === BILLS) {
-    const excluded = excludedCategoryIds(db);
-    for (const [m, cents] of recurringPaidByMonth(db, months, excluded)) byMonth.set(m, cents);
-    amounts = billParts(db, month, excluded).map((c) => -c);
+    for (const [m, cents] of billsPaidByMonth(db, months)) byMonth.set(m, cents);
+    amounts = billCharges(db, `${month}-01`, monthEnd(month)).map((c) => c.cents);
   } else {
     const meta = categoryMeta(db);
     const income = [...meta.values()].filter((c) => c.kind === "income").map((c) => c.id);

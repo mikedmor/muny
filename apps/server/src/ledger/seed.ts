@@ -1,5 +1,5 @@
 import { type MunyDb, newId, schema } from "@muny/db";
-import { DEFAULT_CATEGORIES } from "@muny/shared";
+import { DEFAULT_BILL_CATEGORIES, DEFAULT_CATEGORIES } from "@muny/shared";
 import { count, eq } from "drizzle-orm";
 
 const SEEDED_FLAG = "seed.default_categories";
@@ -27,7 +27,15 @@ export function seedDefaultCategories(db: MunyDb): boolean {
           .values({ id: groupId, name: g.group, kind: g.kind, sortOrder: gi })
           .run();
         g.categories.forEach((name, ci) => {
-          tx.insert(schema.categories).values({ id: newId(), groupId, name, sortOrder: ci }).run();
+          tx.insert(schema.categories)
+            .values({
+              id: newId(),
+              groupId,
+              name,
+              sortOrder: ci,
+              isBill: DEFAULT_BILL_CATEGORIES.includes(name),
+            })
+            .run();
         });
       });
     }

@@ -8,7 +8,7 @@ import type {
   ScheduledItem,
   SetBudgetInput,
 } from "@muny/shared";
-import { and, eq, gte, isNotNull, isNull, lt, lte, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { localToday } from "../lib/dates.js";
 import { listSeries, upcoming } from "../recurring/service.js";
 import {
@@ -154,8 +154,7 @@ export function budgetMonth(db: Db, month: string): BudgetMonth {
   const total = line(null, "Total spending");
 
   // Earnings and bills: an optional fixed target; no target = automatic (the forecast).
-  const excludedIds = [...cats.values()].filter((c) => c.excludeFromBudget).map((c) => c.id);
-  const billsPaid = recurringPaidByMonth(db, [month, ...prev3], excludedIds);
+  const billsPaid = billsPaidByMonth(db, [month, ...prev3]);
   const basic = (
     kind: "income" | "bills",
     name: string,
@@ -258,26 +257,8 @@ function forecastMonth(
     scheduledByCategory[k] = (scheduledByCategory[k] ?? 0) - s.amountCents;
   }
 
-  // Recurring charges already paid this month (subscriptions and bills).
-  const t = schema.transactions;
-  const paid = db
-    .select({ cents: t.amountCents, seriesId: t.recurringSeriesId })
-    .from(t)
-    .where(
-      and(
-        gte(t.postedDate, `${month}-01`),
-        lte(t.postedDate, end),
-        eq(t.hidden, false),
-        isNotNull(t.recurringSeriesId),
-        lt(t.amountCents, 0),
-      ),
-    )
-    .all()
-    .filter((r) => {
-      const s = series.get(r.seriesId as string);
-      return s?.kind !== "income" && so.isSpending(s?.categoryId ?? null);
-    })
-    .reduce((s, r) => s - r.cents, 0);
+  // Bills already paid this month (recurring charges and bill categories).
+  const paid = billCharges(db, `${month}-01`, end).reduce((s, c) => s + c.cents, 0);
 
   const projectedSpending = so.spentCents + due;
   const projectedIncome = so.incomeCents + incomeExpected;
@@ -296,33 +277,55 @@ function forecastMonth(
   };
 }
 
-/** Categories left out of budgets (their bills don't count either). */
-export function excludedCategoryIds(db: Db): string[] {
-  return [...categoryMeta(db).values()].filter((c) => c.excludeFromBudget).map((c) => c.id);
+/** SQL: recurring bills and subscriptions (not income; category not left out of budgets). */
+export const BILL_SERIES = sql`(select r.id from recurring_series r
+  where r.kind <> 'income'
+    and (r.category_id is null or r.category_id not in (select id from categories where exclude_from_budget = 1)))`;
+
+/** SQL: categories that count as bills (and aren't left out of budgets). */
+export const BILL_CATEGORIES = sql`(select id from categories where is_bill = 1 and exclude_from_budget = 0)`;
+
+/**
+ * Bill charges between two dates (positive cents): charges from recurring
+ * bills and subscriptions, and anything in a bill category (split parts
+ * included). A transaction counts once.
+ */
+export function billCharges(
+  db: Db,
+  from: string,
+  to: string,
+): { id: string; date: string; cents: number }[] {
+  return db
+    .all<{ id: string; date: string; cents: number }>(sql`
+      select t.id as id, t.posted_date as date, -t.amount_cents as cents
+        from transactions t join accounts a on a.id = t.account_id
+       where t.hidden = 0 and a.exclude_from_reports = 0 and a.type <> 'loan'
+         and t.posted_date between ${from} and ${to}
+         and ((t.amount_cents < 0 and t.recurring_series_id in ${BILL_SERIES})
+           or (t.category_id in ${BILL_CATEGORIES}
+               and not exists (select 1 from transaction_splits x where x.transaction_id = t.id)))
+      union all
+      select t.id as id, t.posted_date as date, -sp.amount_cents as cents
+        from transaction_splits sp
+        join transactions t on t.id = sp.transaction_id
+        join accounts a on a.id = t.account_id
+       where t.hidden = 0 and a.exclude_from_reports = 0 and a.type <> 'loan'
+         and t.posted_date between ${from} and ${to}
+         and sp.category_id in ${BILL_CATEGORIES}
+         and not (t.amount_cents < 0 and coalesce(t.recurring_series_id, '-') in ${BILL_SERIES})
+    `)
+    .map((r) => ({ ...r, cents: Number(r.cents) }));
 }
 
-/** Recurring bills/subscriptions charged per month (positive cents). */
-export function recurringPaidByMonth(
-  db: Db,
-  months: string[],
-  excludedCategoryIds: string[] = [],
-): Map<string, number> {
+/** Bills paid per month (positive cents), for the months given. */
+export function billsPaidByMonth(db: Db, months: string[]): Map<string, number> {
   const out = new Map<string, number>();
   if (!months.length) return out;
   const sorted = [...months].sort();
-  const rows = db.all<{ m: string; s: number }>(sql`
-    select substr(t.posted_date, 1, 7) as m, -sum(t.amount_cents) as s
-      from transactions t
-      join recurring_series r on r.id = t.recurring_series_id
-     where t.hidden = 0 and t.amount_cents < 0 and r.kind <> 'income'
-       and (r.category_id is null or r.category_id not in (${sql.join(
-         ["-", ...excludedCategoryIds].map((id) => sql`${id}`),
-         sql`, `,
-       )}))
-       and t.posted_date between ${`${sorted[0]}-01`} and ${monthEnd(sorted[sorted.length - 1] as string)}
-     group by m
-  `);
-  for (const r of rows) out.set(r.m, Number(r.s));
+  for (const c of billCharges(db, `${sorted[0]}-01`, monthEnd(sorted.at(-1) as string))) {
+    const m = c.date.slice(0, 7);
+    out.set(m, (out.get(m) ?? 0) + c.cents);
+  }
   return out;
 }
 

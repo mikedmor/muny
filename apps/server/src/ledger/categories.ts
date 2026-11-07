@@ -31,6 +31,7 @@ const CategoryCreate = z.object({
 const CategoryUpdate = CategoryCreate.partial().extend({
   hidden: z.boolean().optional(),
   excludeFromBudget: z.boolean().optional(),
+  isBill: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
 });
 
@@ -64,6 +65,7 @@ export function listCategoryGroups(db: MunyDb): CategoryGroup[] {
         color: c.color,
         hidden: c.hidden,
         excludeFromBudget: c.excludeFromBudget,
+        isBill: c.isBill,
         sortOrder: c.sortOrder,
         transactionCount: Number(n),
       })),

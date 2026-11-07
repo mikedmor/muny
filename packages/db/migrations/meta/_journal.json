@@ -323,6 +323,13 @@
       "when": 1794015261132,
       "tag": "0045_category_budget_exclude",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "6",
+      "when": 1794019203224,
+      "tag": "0046_category_is_bill",
+      "breakpoints": true
     }
   ]
 }

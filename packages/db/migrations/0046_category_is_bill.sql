@@ -1,0 +1,2 @@
+ALTER TABLE `categories` ADD `is_bill` integer DEFAULT false NOT NULL;--> statement-breakpoint
+UPDATE `categories` SET `is_bill` = 1 WHERE `name` IN ('Rent & Mortgage', 'Electric', 'Gas & Heating', 'Water & Sewer', 'Trash', 'Internet', 'Phone', 'Streaming', 'Software & Apps', 'Cloud & Hosting', 'Memberships', 'News & Magazines', 'Gaming', 'Auto Payment', 'Insurance', 'Loan Payment', 'Bills & Utilities');

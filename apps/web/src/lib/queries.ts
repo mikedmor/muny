@@ -170,6 +170,7 @@ export const useUpdateCategory = () =>
       name?: string;
       hidden?: boolean;
       excludeFromBudget?: boolean;
+      isBill?: boolean;
       groupId?: string;
     }) => api.patch(`/api/categories/${id}`, input),
     [keys.categories, keys.budgets, keys.overview],

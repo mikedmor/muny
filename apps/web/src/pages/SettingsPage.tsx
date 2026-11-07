@@ -304,6 +304,23 @@ function GroupCard({
                   {c.excludeFromBudget ? "Not budgeted" : "In budget"}
                 </button>
               )}
+              {group.kind === "expense" && (
+                <button
+                  type="button"
+                  onClick={() => updateCategory.mutate({ id: c.id, isBill: !c.isBill })}
+                  title={
+                    c.isBill
+                      ? "Counted in Bills & subscriptions: click to stop"
+                      : "Count this category in Bills & subscriptions on Budgets"
+                  }
+                  className={cx(
+                    "hover:underline",
+                    c.isBill && "text-brand-600 dark:text-brand-500",
+                  )}
+                >
+                  {c.isBill ? "Bill" : "Not a bill"}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => onDelete(c)}

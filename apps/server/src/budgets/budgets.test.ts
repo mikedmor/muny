@@ -294,7 +294,7 @@ describe("everything else", () => {
 
 describe("earnings and bills pages", () => {
   it("match the budget rows", async () => {
-    const { client, add } = await setup();
+    const { client, add, cat } = await setup();
     const today = localToday();
     const rows: string[] = ["Date,Description,Amount"];
     for (let i = 4; i >= 1; i--) {
@@ -308,8 +308,18 @@ describe("earnings and bills pages", () => {
     });
     const m = addInterval(today, "monthly", -1).slice(0, 7);
     const pay = await add(`${m}-15`, 30_000, "Paycheck");
+    // Not recurring, but Electric counts as a bill; a split part in Internet does too.
+    const electric = await add(`${m}-20`, -8000, "Electric");
+    const split = await add(`${m}-21`, -5000, null);
+    await client.put(`/api/transactions/${split.id}/splits`, {
+      splits: [
+        { categoryId: cat("Internet"), amountCents: -3000 },
+        { categoryId: cat("Groceries"), amountCents: -2000 },
+      ],
+    });
+    await add(`${m}-22`, -4000, "Groceries");
     const b = (await client.get(`/api/budgets/${m}`)).json<BudgetMonth>();
-    expect(b.bills.spentCents).toBe(1200);
+    expect(b.bills.spentCents).toBe(1200 + 8000 + 3000);
 
     const act = async (id: string) =>
       (
@@ -326,8 +336,15 @@ describe("earnings and bills pages", () => {
     expect((await list("earnings")).map((t) => t.id)).toContain(pay.id);
 
     const bills = await act("bills");
-    expect(bills.stats).toMatchObject({ count: 1, totalCents: 1200 });
-    expect(bills.months.at(-1)).toEqual({ month: m, cents: 1200 });
-    expect((await list("bills")).map((t) => t.amountCents)).toEqual([-1200]);
+    expect(bills.stats).toMatchObject({ count: 3, totalCents: 12_200 });
+    expect(bills.months.at(-1)).toEqual({ month: m, cents: 12_200 });
+    expect((await list("bills")).map((t) => t.id)).toEqual(
+      expect.arrayContaining([electric.id, split.id]),
+    );
+    expect(await list("bills")).toHaveLength(3);
+
+    // Not a bill any more: it drops out.
+    await client.patch(`/api/categories/${cat("Electric")}`, { isBill: false });
+    expect((await act("bills")).stats.totalCents).toBe(4200);
   });
 });

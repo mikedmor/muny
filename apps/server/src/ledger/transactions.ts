@@ -5,6 +5,7 @@ import { alias } from "drizzle-orm/sqlite-core";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
+import { BILL_CATEGORIES, BILL_SERIES } from "../budgets/service.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, notFound, parse } from "../lib/http.js";
 import { rememberCategory } from "./memory.js";
@@ -110,7 +111,11 @@ function buildFilters(q: z.infer<typeof ListQuery>): SQL | undefined {
   }
   if (q.budgetRow === "bills") {
     conds.push(
-      sql`${t.amountCents} < 0 and ${t.recurringSeriesId} in (select r.id from recurring_series r where r.kind <> 'income' and (r.category_id is null or r.category_id not in (select id from categories where exclude_from_budget = 1)))`,
+      or(
+        sql`${t.amountCents} < 0 and ${t.recurringSeriesId} in ${BILL_SERIES}`,
+        sql`${t.categoryId} in ${BILL_CATEGORIES}`,
+        sql`exists (select 1 from ${schema.transactionSplits} s where s.transaction_id = ${t.id} and s.category_id in ${BILL_CATEGORIES})`,
+      ),
     );
   }
   if (q.tagId) {

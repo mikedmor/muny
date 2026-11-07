@@ -80,6 +80,8 @@ export interface Category {
   hidden: boolean;
   /** Left out of budgets (spending, totals and the forecast). */
   excludeFromBudget: boolean;
+  /** Counts as a bill (Budgets → Bills & subscriptions), recurring or not. */
+  isBill: boolean;
   sortOrder: number;
   transactionCount: number;
 }
@@ -179,6 +181,27 @@ export const DEFAULT_CATEGORIES: { group: string; kind: CategoryKind; categories
     kind: "transfer",
     categories: ["Credit Card Payment", "Internal Transfer", "Savings", "Investments"],
   },
+];
+
+/** Categories that count as bills out of the box (also Rocket Money's "Bills & Utilities"). */
+export const DEFAULT_BILL_CATEGORIES = [
+  "Rent & Mortgage",
+  "Electric",
+  "Gas & Heating",
+  "Water & Sewer",
+  "Trash",
+  "Internet",
+  "Phone",
+  "Streaming",
+  "Software & Apps",
+  "Cloud & Hosting",
+  "Memberships",
+  "News & Magazines",
+  "Gaming",
+  "Auto Payment",
+  "Insurance",
+  "Loan Payment",
+  "Bills & Utilities",
 ];
 
 /** Display preferences (Settings → Display), shared by the household. */

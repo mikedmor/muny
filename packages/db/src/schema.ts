@@ -183,6 +183,8 @@ export const categories = sqliteTable(
     hidden: integer({ mode: "boolean" }).notNull().default(false),
     /** Left out of budgets (spending, totals, forecast), e.g. reimbursements. */
     excludeFromBudget: integer({ mode: "boolean" }).notNull().default(false),
+    /** Counts as a bill (Budgets → Bills & subscriptions), recurring or not. */
+    isBill: integer({ mode: "boolean" }).notNull().default(false),
     sortOrder: integer().notNull().default(0),
     createdAt: createdAt(),
   },
