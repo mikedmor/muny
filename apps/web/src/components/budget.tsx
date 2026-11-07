@@ -6,7 +6,7 @@ import {
   toDecimalString,
 } from "@muny/shared";
 import { useState } from "react";
-import { useDeleteBudget, useSetBudget } from "../lib/queries.js";
+import { useCategories, useDeleteBudget, useSetBudget, useUpdateCategory } from "../lib/queries.js";
 import { Checkbox, MoneyField } from "./forms.js";
 import { Alert, Button, cx } from "./ui.js";
 
@@ -89,6 +89,16 @@ export function EditBudget({
 }) {
   const set = useSetBudget();
   const del = useDeleteBudget();
+  const updateCategory = useUpdateCategory();
+  const categories = useCategories();
+  const category = categories.data
+    ?.flatMap((g) => g.categories)
+    .find((c) => c.id === line.categoryId);
+  const [isBill, setIsBill] = useState<boolean | null>(null);
+  const bill = isBill ?? category?.isBill ?? false;
+  const billChanged = category !== undefined && bill !== category.isBill;
+  const saveBill = () =>
+    billChanged && category ? updateCategory.mutateAsync({ id: category.id, isBill: bill }) : null;
   const suggested = line.averageCents > 0 ? Math.ceil(line.averageCents / 1000) * 1000 : null;
   const [amount, setAmount] = useState<number | null>(line.budgetCents ?? suggested);
   const [rollover, setRollover] = useState(line.rollover);
@@ -111,8 +121,18 @@ export function EditBudget({
           checked={rollover}
           onChange={setRollover}
         />
+        {category && (
+          <Checkbox
+            label="Bill or subscription"
+            description="Count this category in Bills & subscriptions instead of All other categories."
+            checked={bill}
+            onChange={setIsBill}
+          />
+        )}
       </div>
-      {(set.error || del.error) && <Alert>{(set.error ?? del.error)?.message}</Alert>}
+      {(set.error || del.error || updateCategory.error) && (
+        <Alert>{(set.error ?? del.error ?? updateCategory.error)?.message}</Alert>
+      )}
       <div className="flex flex-wrap justify-between gap-2">
         {line.budgetId ? (
           <Button
@@ -130,14 +150,17 @@ export function EditBudget({
             Cancel
           </Button>
           <Button
-            disabled={amount === null || set.isPending}
-            onClick={() =>
-              amount !== null &&
+            disabled={
+              (amount === null && !billChanged) || set.isPending || updateCategory.isPending
+            }
+            onClick={async () => {
+              await saveBill();
+              if (amount === null) return onDone();
               set.mutate(
                 { categoryId: line.categoryId, amountCents: amount, rollover, fromMonth: month },
                 { onSuccess: onDone },
-              )
-            }
+              );
+            }}
           >
             Save
           </Button>

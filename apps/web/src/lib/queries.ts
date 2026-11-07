@@ -8,6 +8,7 @@ import type {
   BudgetMonth,
   BulkUpdateInput,
   CategoryGroup,
+  CategoryUsage,
   ChannelConfig,
   ChannelType,
   ConnectionSummary,
@@ -176,13 +177,37 @@ export const useUpdateCategory = () =>
     [keys.categories, keys.budgets, keys.overview],
   );
 
+export const useDeleteUnusedCategories = () =>
+  useInvalidatingMutation(
+    () => api.post<{ deleted: number }>("/api/categories/delete-unused", {}),
+    [keys.categories],
+  );
+
+/** What deleting a category would move. */
+export function useCategoryUsage(id: string | null) {
+  return useQuery({
+    queryKey: [...keys.categories, "usage", id],
+    queryFn: () => api.get<CategoryUsage>(`/api/categories/${id}/usage`),
+    enabled: !!id,
+  });
+}
+
 export const useDeleteCategory = () =>
   useInvalidatingMutation(
     ({ id, reassignTo }: { id: string; reassignTo?: string }) =>
       api.delete(
         `/api/categories/${id}${reassignTo ? `?reassignTo=${encodeURIComponent(reassignTo)}` : ""}`,
       ),
-    [keys.categories],
+    [
+      keys.categories,
+      keys.transactions,
+      keys.rules,
+      keys.payees,
+      keys.recurring,
+      keys.budgets,
+      keys.overview,
+      keys.reports,
+    ],
   );
 
 // ---------------------------------------------------------------------------

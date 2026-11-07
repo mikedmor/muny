@@ -84,6 +84,24 @@ export interface Category {
   isBill: boolean;
   sortOrder: number;
   transactionCount: number;
+  /** Nothing uses it: no transactions, split parts, recurring charges, payee defaults, rules or budget. */
+  unused: boolean;
+}
+
+/** What uses a category: what deleting it moves (or leaves uncategorized). */
+export interface CategoryUsage {
+  transactions: number;
+  /** Split parts in this category. */
+  splits: number;
+  /** Recurring series in this category. */
+  recurring: number;
+  /** Payees that default to it. */
+  payees: number;
+  /** Rules that set it. */
+  rules: number;
+  /** Of those, rules that do nothing else (deleted when there's nowhere to move them). */
+  rulesOnlySetting: number;
+  budget: boolean;
 }
 
 export interface CategoryGroup {

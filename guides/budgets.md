@@ -15,3 +15,9 @@ Refunds lower a category's spending, split transactions count in each of their c
 - **A transaction:** hide it (on Transactions). Hidden transactions don't count anywhere.
 - **An account:** turn on **Exclude from reports** in the account's settings (for example a business account).
 - **A category:** in **Left out of budgets** (under the category table), pick a category and click **Leave out**, or use **In budget / Not budgeted** next to it in **Settings → Categories**. Its spending no longer counts toward budgets, the total, bills or the forecast; the card still shows how much went to it this month, with **Include** to count it again. It still appears in Spending and Reports. Useful for reimbursed work expenses or money you set aside on purpose.
+
+## Managing categories
+
+**Settings → Categories** lists every category by group. Click a name to rename it, use **Move…** to put it in another group, **Hide** to stop offering it, and **Bill / Not a bill** to choose whether it counts in Bills & subscriptions. You can also mark a category as a bill from its own page: click **Edit budget** (or **Set a budget**) and tick **Bill or subscription**.
+
+**Delete** shows what uses the category and lets you pick where it goes: its transactions, split parts, recurring charges, payee defaults and rules move to the category you choose (search for it, or create a new one), and its budget moves too if that category doesn't have one. Choose **Uncategorized** to leave them without a category instead; rules then stop setting a category, and a rule that did nothing else is deleted. Categories that nothing uses are marked **unused**, and **Delete unused…** removes them all at once.

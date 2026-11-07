@@ -1,13 +1,16 @@
 import type { Category, CategoryGroup } from "@muny/shared";
 import { type FormEvent, useEffect, useState } from "react";
-import { Modal, SelectField } from "../components/forms.js";
+import { CategorySelect } from "../components/CategorySelect.js";
+import { Modal } from "../components/forms.js";
 import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
 import {
   useCategories,
+  useCategoryUsage,
   useCreateCategory,
   useCreateGroup,
   useDeleteCategory,
   useDeleteGroup,
+  useDeleteUnusedCategories,
   useSetUiPrefs,
   useUiPrefs,
   useUpdateCategory,
@@ -136,6 +139,9 @@ function CategoriesSettings() {
   const createGroup = useCreateGroup();
   const [newGroup, setNewGroup] = useState("");
   const [deleting, setDeleting] = useState<Category | null>(null);
+  const [clearing, setClearing] = useState(false);
+  const deleteUnused = useDeleteUnusedCategories();
+  const unused = (categories.data ?? []).flatMap((g) => g.categories.filter((c) => c.unused));
 
   const addGroup = (e: FormEvent) => {
     e.preventDefault();
@@ -148,8 +154,22 @@ function CategoriesSettings() {
       <h2 className="mb-1 text-lg font-semibold">Categories</h2>
       <p className="mb-4 text-sm text-slate-500">
         Click a name to rename it. Hidden categories stay on existing transactions but aren't
-        offered for new ones.
+        offered for new ones. <strong>Delete</strong> moves a category's transactions, rules and
+        recurring charges to another category (or leaves them uncategorized).
       </p>
+      {unused.length > 0 && (
+        <p className="mb-4 text-sm">
+          {unused.length} {unused.length === 1 ? "category isn't" : "categories aren't"} used by
+          anything.{" "}
+          <button
+            type="button"
+            onClick={() => setClearing(true)}
+            className="font-medium text-red-600 hover:underline"
+          >
+            Delete unused…
+          </button>
+        </p>
+      )}
       {categories.isError && <Alert>Couldn't load categories.</Alert>}
       <div className="grid gap-4 lg:grid-cols-2">
         {categories.data?.map((g) => (
@@ -178,14 +198,34 @@ function CategoriesSettings() {
         <p className="mt-2 text-sm text-red-600">{createGroup.error.message}</p>
       )}
 
+      <Modal open={clearing} onClose={() => setClearing(false)} title="Delete unused categories">
+        <div className="space-y-4">
+          <p className="text-sm">
+            These have no transactions, recurring charges, rules, payee defaults or budget:
+          </p>
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            {unused.map((c) => c.name).join(", ")}
+          </p>
+          {deleteUnused.error && <Alert>{deleteUnused.error.message}</Alert>}
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setClearing(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              disabled={deleteUnused.isPending}
+              onClick={() =>
+                deleteUnused.mutate(undefined, { onSuccess: () => setClearing(false) })
+              }
+            >
+              Delete {unused.length}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
       <Modal open={deleting !== null} onClose={() => setDeleting(null)} title="Delete category">
-        {deleting && (
-          <DeleteCategoryForm
-            category={deleting}
-            groups={categories.data ?? []}
-            onDone={() => setDeleting(null)}
-          />
-        )}
+        {deleting && <DeleteCategoryForm category={deleting} onDone={() => setDeleting(null)} />}
       </Modal>
     </section>
   );
@@ -258,7 +298,11 @@ function GroupCard({
               className={cx(c.hidden && "text-slate-400 line-through")}
             />
             <div className="flex shrink-0 items-center gap-3 text-xs text-slate-500">
-              <span className="tabular-nums">{c.transactionCount || ""}</span>
+              {c.unused ? (
+                <span className="text-slate-400">unused</span>
+              ) : (
+                <span className="tabular-nums">{c.transactionCount || ""}</span>
+              )}
               {allGroups.length > 1 && (
                 <select
                   aria-label={`Move ${c.name} to group`}
@@ -354,43 +398,48 @@ function GroupCard({
   );
 }
 
-function DeleteCategoryForm({
-  category,
-  groups,
-  onDone,
-}: {
-  category: Category;
-  groups: CategoryGroup[];
-  onDone: () => void;
-}) {
+function DeleteCategoryForm({ category, onDone }: { category: Category; onDone: () => void }) {
   const del = useDeleteCategory();
-  const [reassignTo, setReassignTo] = useState("");
+  const usage = useCategoryUsage(category.id);
+  const [reassignTo, setReassignTo] = useState<string | null>(null);
+  const u = usage.data;
+  const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+  const used = u
+    ? [
+        u.transactions && plural(u.transactions, "transaction"),
+        u.splits && plural(u.splits, "split part"),
+        u.recurring && plural(u.recurring, "recurring charge"),
+        u.payees && plural(u.payees, "payee default"),
+        u.rules && plural(u.rules, "rule"),
+        u.budget && "a budget",
+      ].filter(Boolean)
+    : [];
   return (
     <div className="space-y-4">
       <p className="text-sm">
-        Delete <strong>{category.name}</strong>?
-        {category.transactionCount > 0 &&
-          ` It's used by ${category.transactionCount} transaction${category.transactionCount === 1 ? "" : "s"}.`}
+        Delete <strong>{category.name}</strong>?{" "}
+        {usage.isLoading
+          ? "Checking what uses it…"
+          : used.length
+            ? `It's used by ${used.join(", ")}.`
+            : "Nothing uses it."}
       </p>
-      {category.transactionCount > 0 && (
-        <SelectField
-          label="Move its transactions to"
-          value={reassignTo}
-          onChange={(e) => setReassignTo(e.target.value)}
-        >
-          <option value="">Uncategorized</option>
-          {groups.map((g) => (
-            <optgroup key={g.id} label={g.name}>
-              {g.categories
-                .filter((c) => c.id !== category.id)
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-            </optgroup>
-          ))}
-        </SelectField>
+      {used.length > 0 && (
+        <div className="space-y-1">
+          <span className="block text-sm font-medium">Move them to</span>
+          <CategorySelect
+            value={reassignTo}
+            onChange={setReassignTo}
+            emptyLabel="Uncategorized"
+            aria-label="Move them to"
+            filter={(c) => c.id !== category.id}
+          />
+          <p className="text-xs text-slate-500">
+            {reassignTo
+              ? `Transactions, recurring charges, payee defaults and rules switch over${u?.budget ? "; the budget moves too unless that category already has one" : ""}.`
+              : `They'll be left uncategorized${u?.rules ? `; rules stop setting a category${u.rulesOnlySetting ? ` (${plural(u.rulesOnlySetting, "rule")} that only did that will be deleted)` : ""}` : ""}${u?.budget ? "; its budget is removed" : ""}.`}
+          </p>
+        </div>
       )}
       {del.error && <Alert>{del.error.message}</Alert>}
       <div className="flex justify-end gap-2">
@@ -399,15 +448,15 @@ function DeleteCategoryForm({
         </Button>
         <Button
           variant="danger"
-          disabled={del.isPending}
+          disabled={del.isPending || usage.isLoading}
           onClick={() =>
             del.mutate(
-              { id: category.id, reassignTo: reassignTo || undefined },
+              { id: category.id, reassignTo: reassignTo ?? undefined },
               { onSuccess: onDone },
             )
           }
         >
-          Delete
+          {reassignTo ? "Move and delete" : "Delete"}
         </Button>
       </div>
     </div>

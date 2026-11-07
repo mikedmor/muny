@@ -163,6 +163,82 @@ describe("categories", () => {
     expect(txn?.categoryId).toBe(dining.id);
   });
 
+  it("moves rules and the budget along with a deleted category", async () => {
+    const { client, db } = await makeSignedInApp();
+    const groups = (await client.get("/api/categories")).json<CategoryGroup[]>();
+    const food = groups.find((g) => g.name === "Food & Dining");
+    const coffee = food?.categories.find((c) => c.name === "Coffee");
+    const dining = food?.categories.find((c) => c.name === "Dining & Drinks");
+    if (!coffee || !dining) throw new Error("seed missing");
+    const rule = (when: string, actions: unknown[]) =>
+      client.post("/api/rules", {
+        name: when,
+        match: "all",
+        conditions: [{ field: "description", op: "contains", value: when }],
+        actions,
+      });
+    expect((await rule("BEANS", [{ type: "setCategory", categoryId: coffee.id }])).statusCode).toBe(
+      201,
+    );
+    await rule("ROAST", [
+      { type: "setCategory", categoryId: coffee.id },
+      { type: "addTag", name: "treat" },
+    ]);
+    await client.put("/api/budgets", { categoryId: coffee.id, amountCents: 4_000 });
+
+    const usage = (await client.get(`/api/categories/${coffee.id}/usage`)).json();
+    expect(usage).toMatchObject({ rules: 2, rulesOnlySetting: 1, budget: true });
+
+    expect(
+      (await client.delete(`/api/categories/${coffee.id}?reassignTo=${dining.id}`)).statusCode,
+    ).toBe(200);
+    const rules = db.select().from(schema.rules).all();
+    expect(rules).toHaveLength(2);
+    for (const r of rules)
+      expect(r.actions).toContainEqual({ type: "setCategory", categoryId: dining.id });
+    const budget = db
+      .select()
+      .from(schema.budgets)
+      .all()
+      .find((b) => b.categoryId === dining.id);
+    expect(budget).toBeDefined();
+
+    // With nowhere to move them, the set-category-only rule goes; the other keeps its tag.
+    expect((await client.delete(`/api/categories/${dining.id}`)).statusCode).toBe(200);
+    const left = db.select().from(schema.rules).all();
+    expect(left.map((r) => r.actions)).toEqual([[{ type: "addTag", name: "treat" }]]);
+  });
+
+  it("deletes only the categories nothing uses", async () => {
+    const { client, db } = await makeSignedInApp();
+    const all = () => db.select().from(schema.categories).all();
+    const groups = (await client.get("/api/categories")).json<CategoryGroup[]>();
+    const cats = groups.flatMap((g) => g.categories);
+    const [a, b] = groups.filter((g) => g.kind === "expense").flatMap((g) => g.categories);
+    if (!a || !b) throw new Error("seed missing");
+    const acc = (
+      await client.post("/api/accounts", { name: "Card", type: "credit" })
+    ).json<Account>();
+    addTxn(db, acc.id, -550, { categoryId: a.id });
+    await client.put("/api/budgets", { categoryId: b.id, amountCents: 1_000 });
+    const listed = (await client.get("/api/categories"))
+      .json<CategoryGroup[]>()
+      .flatMap((g) => g.categories);
+    expect(
+      listed
+        .filter((c) => !c.unused)
+        .map((c) => c.id)
+        .sort(),
+    ).toEqual([a.id, b.id].sort());
+    const res = (await client.post("/api/categories/delete-unused", {})).json();
+    expect(res.deleted).toBe(cats.length - 2);
+    expect(
+      all()
+        .map((c) => c.id)
+        .sort(),
+    ).toEqual([a.id, b.id].sort());
+  });
+
   it("refuses to delete a non-empty group", async () => {
     const { client } = await makeSignedInApp();
     const groups = (await client.get("/api/categories")).json<CategoryGroup[]>();
