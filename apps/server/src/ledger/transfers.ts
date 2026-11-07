@@ -368,7 +368,7 @@ export function pairPayPalFunding(tx: Tx): number {
       .run();
     n++;
   }
-  linkFundedPurchases(tx, paypal, cats.internal);
+  linkFundedPurchases(tx, paypal);
   return n;
 }
 
@@ -379,11 +379,7 @@ export function pairPayPalFunding(tx: Tx): number {
  * is then listed once, showing where the money came from. Returns how many
  * purchases were linked.
  */
-export function linkFundedPurchases(
-  tx: Tx,
-  paypal: string[],
-  internal: string | null | undefined,
-): number {
+export function linkFundedPurchases(tx: Tx, paypal: string[]): number {
   if (!paypal.length) return 0;
   const t = schema.transactions;
   const rows = tx

@@ -1,3 +1,4 @@
+import type { Category, CategoryGroup } from "@muny/shared";
 import {
   type KeyboardEvent,
   type ReactNode,
@@ -8,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useCategories } from "../lib/queries.js";
+import { useCategories, useCreateCategory } from "../lib/queries.js";
 import { cx } from "./ui.js";
 import { CategoryIcon } from "./visuals.js";
 
@@ -19,7 +20,13 @@ import { CategoryIcon } from "./visuals.js";
  *
  * Keyboard: Enter/Space/↓ or just start typing to open; ↑/↓ to move,
  * Enter to pick, Esc to close. Matches category or group names.
+ *
+ * A search that matches no category offers to create it ("+ Create …"):
+ * choose its group, and it's made and picked in one go.
  */
+
+/** The "+ Create …" option's value. */
+const CREATE = "__create__";
 
 interface Option {
   value: string;
@@ -39,6 +46,9 @@ export function CategorySelect({
   disabled,
   "aria-label": ariaLabel,
   id,
+  filter,
+  hideEmpty = false,
+  allowCreate = true,
 }: {
   value: string | null;
   onChange: (id: string | null) => void;
@@ -48,8 +58,17 @@ export function CategorySelect({
   disabled?: boolean;
   "aria-label"?: string;
   id?: string;
+  /** Only these categories are offered. */
+  filter?: (c: Category, g: CategoryGroup) => boolean;
+  /** Don't offer the empty choice (the button still shows `emptyLabel`). */
+  hideEmpty?: boolean;
+  /** Offer to create a category the search doesn't find. */
+  allowCreate?: boolean;
 }) {
   const categories = useCategories();
+  const create = useCreateCategory();
+  /** Making a new category: its name, and the group it goes in. */
+  const [creating, setCreating] = useState<{ name: string; groupId: string } | null>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -63,22 +82,54 @@ export function CategorySelect({
   const listId = `${uid}-list`;
 
   const options = useMemo<Option[]>(() => {
-    const out: Option[] = [{ value: "", label: emptyLabel, group: null }];
+    const out: Option[] = hideEmpty ? [] : [{ value: "", label: emptyLabel, group: null }];
     for (const o of extraOptions ?? []) out.push({ value: o.value, label: o.label, group: null });
     for (const g of categories.data ?? [])
       for (const c of g.categories)
-        if (!c.hidden || c.id === value) out.push({ value: c.id, label: c.name, group: g.name });
+        if ((!c.hidden || c.id === value) && (!filter || filter(c, g)))
+          out.push({ value: c.id, label: c.name, group: g.name });
     return out;
-  }, [categories.data, emptyLabel, extraOptions, value]);
+  }, [categories.data, emptyLabel, extraOptions, value, filter, hideEmpty]);
 
-  const selected = options.find((o) => o.value === (value ?? "")) ?? options[0];
+  const selected = options.find((o) => o.value === (value ?? "")) ?? {
+    value: "",
+    label: emptyLabel,
+    group: null,
+  };
   const filtered = useMemo(() => {
     const q = norm(query.trim());
     if (!q) return options;
-    return options.filter(
+    const hits = options.filter(
       (o) => norm(o.label).includes(q) || (o.group !== null && norm(o.group).includes(q)),
     );
-  }, [options, query]);
+    // No category by exactly this name: offer to make it.
+    const exists = (categories.data ?? []).some((g) =>
+      g.categories.some((c) => norm(c.name) === q),
+    );
+    if (allowCreate && !exists)
+      hits.push({ value: CREATE, label: `+ Create “${query.trim()}”`, group: null });
+    return hits;
+  }, [options, query, allowCreate, categories.data]);
+  /** Where a new category goes by default: the current one's group, else the first spending group. */
+  const defaultGroup = () => {
+    const groups = categories.data ?? [];
+    return (
+      groups.find((g) => g.categories.some((c) => c.id === value))?.id ??
+      groups.find((g) => g.kind === "expense")?.id ??
+      groups[0]?.id ??
+      ""
+    );
+  };
+  const makeIt = async () => {
+    if (!creating?.groupId || !creating.name.trim()) return;
+    const made = (await create.mutateAsync({
+      groupId: creating.groupId,
+      name: creating.name.trim(),
+    })) as { id: string };
+    setCreating(null);
+    close();
+    onChange(made.id);
+  };
 
   const place = () => {
     const r = buttonRef.current?.getBoundingClientRect();
@@ -104,10 +155,15 @@ export function CategorySelect({
   const close = (refocus = true) => {
     setOpen(false);
     setQuery("");
+    setCreating(null);
     if (refocus) buttonRef.current?.focus();
   };
   const pick = (o: Option | undefined) => {
     if (!o) return;
+    if (o.value === CREATE) {
+      setCreating({ name: query.trim(), groupId: defaultGroup() });
+      return;
+    }
     close();
     if (o.value !== (value ?? "")) onChange(o.value || null);
   };
@@ -160,7 +216,9 @@ export function CategorySelect({
       setActive((a) => Math.max(0, a - 1));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      pick(filtered[active]);
+      // Making a category: Enter creates it.
+      if (creating) void makeIt();
+      else pick(filtered[active]);
     } else if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation(); // don't close an enclosing dialog
@@ -277,8 +335,54 @@ export function CategorySelect({
             aria-label={ariaLabel ?? "Categories"}
             className="overflow-y-auto py-1"
           >
-            {items}
-            {filtered.length === 0 && (
+            {creating ? (
+              <form
+                className="space-y-2 px-3 py-2 text-sm"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void makeIt();
+                }}
+              >
+                <p className="font-medium">New category “{creating.name}”</p>
+                <label className="block">
+                  <span className="text-xs text-slate-500">In the group</span>
+                  <select
+                    value={creating.groupId}
+                    onChange={(e) => setCreating({ ...creating, groupId: e.target.value })}
+                    className="mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
+                  >
+                    {(categories.data ?? [])
+                      .filter((g) => g.kind !== "transfer")
+                      .map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.name}
+                          {g.kind === "income" ? " (income)" : ""}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                {create.error && <p className="text-xs text-red-600">{create.error.message}</p>}
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCreating(null)}
+                    className="rounded-lg px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={create.isPending}
+                    className="rounded-lg bg-brand-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+                  >
+                    {create.isPending ? "Creating…" : "Create and use it"}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              items
+            )}
+            {!creating && filtered.length === 0 && (
               <div className="px-3 py-3 text-sm text-slate-500">No category matches “{query}”.</div>
             )}
           </div>

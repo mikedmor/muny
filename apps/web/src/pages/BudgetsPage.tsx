@@ -10,6 +10,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { EditBudget, InlineBudget, Ring } from "../components/budget.js";
+import { CategorySelect } from "../components/CategorySelect.js";
 import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
 import { CategoryIcon, MerchantAvatar } from "../components/visuals.js";
 import { api } from "../lib/api.js";
@@ -100,48 +101,19 @@ function Remaining({ cents, muted }: { cents: number | null; muted?: boolean }) 
   );
 }
 
-/** "+ bill category": mark another spending category as a bill. */
+/** "+ bill category": mark another spending category as a bill (search to find it, or make one). */
 function AddBillCategory() {
-  const groups = useCategories().data ?? [];
   const update = useUpdateCategory();
-  const [open, setOpen] = useState(false);
-  const options = groups
-    .filter((g) => g.kind === "expense")
-    .flatMap((g) =>
-      g.categories
-        .filter((c) => !c.isBill && !c.excludeFromBudget && !c.hidden)
-        .map((c) => ({ ...c, group: g.name })),
-    );
-  if (!open)
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="text-brand-600 hover:underline dark:text-brand-500"
-      >
-        + bill category
-      </button>
-    );
   return (
-    <select
-      aria-label="Category to count as a bill"
-      // biome-ignore lint/a11y/noAutofocus: opened by a click to pick right away
-      autoFocus
-      value=""
-      onBlur={() => setOpen(false)}
-      onChange={(e) => {
-        if (e.target.value) update.mutate({ id: e.target.value, isBill: true });
-        setOpen(false);
-      }}
-      className="max-w-48 rounded border border-slate-300 bg-white px-1 py-0.5 text-xs dark:border-slate-700 dark:bg-slate-950"
-    >
-      <option value="">Count as a bill…</option>
-      {options.map((c) => (
-        <option key={c.id} value={c.id}>
-          {c.group} · {c.name}
-        </option>
-      ))}
-    </select>
+    <CategorySelect
+      value={null}
+      emptyLabel="+ bill category"
+      hideEmpty
+      aria-label="Count another category as a bill"
+      filter={(c, g) => g.kind === "expense" && !c.isBill && !c.excludeFromBudget}
+      onChange={(id) => id && update.mutate({ id, isBill: true })}
+      className="inline-flex text-brand-600 hover:underline dark:text-brand-500"
+    />
   );
 }
 
