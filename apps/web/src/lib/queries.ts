@@ -7,6 +7,8 @@ import type {
   BackupInfo,
   BudgetMonth,
   BulkUpdateInput,
+  CardData,
+  CardSpec,
   CategoryGroup,
   CategoryUsage,
   ChannelConfig,
@@ -25,6 +27,11 @@ import type {
   CryptoUsage,
   CryptoWallet,
   CryptoWalletDetail,
+  CustomCard,
+  CustomCardInput,
+  Dashboard,
+  DashboardItem,
+  DashboardSchema,
   DiyInput,
   DiyProject,
   InfraCost,
@@ -911,3 +918,56 @@ export const useSetUiPrefs = () =>
     (patch: Partial<UiPrefs>) => api.put<UiPrefs>("/api/settings/ui", patch),
     [["ui-prefs"]],
   );
+
+// ---------------------------------------------------------------------------
+// Overview dashboard
+// ---------------------------------------------------------------------------
+
+const dashboardKey = ["dashboard"] as const;
+
+export const useDashboard = () =>
+  useQuery({ queryKey: dashboardKey, queryFn: () => api.get<Dashboard>("/api/dashboard") });
+
+export const useDashboardSchema = (enabled: boolean) =>
+  useQuery({
+    queryKey: [...dashboardKey, "schema"],
+    queryFn: () => api.get<DashboardSchema>("/api/dashboard/schema"),
+    enabled,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+
+export const useSaveLayout = () =>
+  useInvalidatingMutation(
+    (items: DashboardItem[]) => api.put<Dashboard>("/api/dashboard/layout", { items }),
+    [dashboardKey],
+  );
+
+export const useResetLayout = () =>
+  useInvalidatingMutation(() => api.delete<Dashboard>("/api/dashboard/layout"), [dashboardKey]);
+
+/** A custom card's numbers. */
+export const useCardData = (id: string) =>
+  useQuery({
+    queryKey: [...dashboardKey, "data", id],
+    queryFn: () => api.get<CardData>(`/api/dashboard/cards/${id}/data`),
+  });
+
+export const useCardPreview = (spec: CardSpec) =>
+  useQuery({
+    queryKey: [...dashboardKey, "preview", spec],
+    queryFn: () => api.post<CardData>("/api/dashboard/preview", spec),
+    retry: false,
+    placeholderData: keepPreviousData,
+  });
+
+export const useSaveCustomCard = () =>
+  useInvalidatingMutation(
+    ({ id, ...input }: CustomCardInput & { id?: string; place?: boolean }) =>
+      id
+        ? api.put<CustomCard>(`/api/dashboard/cards/${id}`, input)
+        : api.post<CustomCard>("/api/dashboard/cards", input),
+    [dashboardKey],
+  );
+
+export const useDeleteCustomCard = () =>
+  useInvalidatingMutation((id: string) => api.delete(`/api/dashboard/cards/${id}`), [dashboardKey]);

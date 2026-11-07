@@ -22,7 +22,14 @@ const PUBLIC_ROUTES = new Set([
 ]);
 
 /** The only changes a read-only (viewer) user may make. */
-const VIEWER_WRITES = new Set(["POST /api/auth/logout", "POST /api/auth/password"]);
+const VIEWER_WRITES = new Set([
+  "POST /api/auth/logout",
+  "POST /api/auth/password",
+  // Their own Overview layout, and trying a card out (reads only).
+  "PUT /api/dashboard/layout",
+  "DELETE /api/dashboard/layout",
+  "POST /api/dashboard/preview",
+]);
 
 /** Header the web client sends on every mutating request (see SECURITY.md). */
 export const CSRF_HEADER = "x-muny-csrf";

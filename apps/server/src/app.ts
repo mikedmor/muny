@@ -15,6 +15,7 @@ import { registerBudgetRoutes } from "./budgets/routes.js";
 import { registerCardRoutes } from "./cards/routes.js";
 import type { Config } from "./config.js";
 import { registerCryptoRoutes } from "./crypto/routes.js";
+import { registerDashboardRoutes } from "./dashboard/routes.js";
 import { registerBackupRoutes } from "./data/backups.js";
 import { registerExportRoutes } from "./data/export.js";
 import { registerDocumentRoutes } from "./documents/routes.js";
@@ -131,6 +132,7 @@ export async function buildApp({
   registerTransactionRoutes(app, db);
   registerImportRoutes(app, db);
   registerPrefsRoutes(app, db);
+  registerDashboardRoutes(app, db);
   registerInvestRoutes(app, db, { fetch: priceFetch });
   registerLoanRoutes(app, db, config.secretKey);
   registerDocumentRoutes(app, db, config.secretKey);

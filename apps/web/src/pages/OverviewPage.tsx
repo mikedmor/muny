@@ -1,13 +1,17 @@
 import {
   type Account,
   type AccountType,
+  CUSTOM_PREFIX,
+  type DashboardItem,
   formatMoney,
+  GRID_ROW_PX,
   type Overview,
   type TransactionPage,
 } from "@muny/shared";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
+import { CustomCardView } from "../components/CustomCard.js";
 import {
   ColumnChart,
   LineChart,
@@ -15,16 +19,18 @@ import {
   RankedBars,
   type StackBand,
 } from "../components/charts.js";
+import { DashboardGrid } from "../components/DashboardGrid.js";
 import { FindSimilar } from "../components/FindSimilar.js";
 import {
   CardsOverviewCard,
   LoansOverviewCard,
   StocksOverviewCard,
 } from "../components/OverviewCards.js";
+import { UpcomingCalendar } from "../components/UpcomingCalendar.js";
 import { Alert, Card, cx, PageHeader } from "../components/ui.js";
 import { CategoryIcon, MerchantAvatar } from "../components/visuals.js";
 import { api } from "../lib/api.js";
-import { keys, useAccounts, useConnections } from "../lib/queries.js";
+import { keys, useAccounts, useConnections, useDashboard } from "../lib/queries.js";
 import { assignColors, OTHER_COLOR, SERIES_SLOTS } from "../lib/series.js";
 import { CryptoOverviewCard } from "./crypto/CryptoTaxSection.js";
 
@@ -680,23 +686,37 @@ function AttentionBar({ d }: { d: Overview }) {
 
 // ---------------------------------------------------------------------------
 
-function useMediaQuery(query: string): boolean {
-  const [match, setMatch] = useState(() => window.matchMedia(query).matches);
-  useEffect(() => {
-    const m = window.matchMedia(query);
-    const on = () => setMatch(m.matches);
-    m.addEventListener("change", on);
-    return () => m.removeEventListener("change", on);
-  }, [query]);
-  return match;
-}
+/**
+ * Every built-in card. To add one: give it an entry in BUILTIN_CARDS
+ * (@muny/shared) and a renderer here; it then shows up under Add card.
+ */
+const CARD_RENDERERS: Record<string, (d: Overview, item: DashboardItem) => ReactNode> = {
+  spending: (d) => <SpendingCard d={d} />,
+  "cash-flow": (d) => <CashFlowCard d={d} />,
+  categories: (d) => <CategoriesCard d={d} />,
+  merchants: (d) => <TopMerchantsCard d={d} />,
+  "cash-trend": (d) => <CashTrendCard d={d} />,
+  calendar: () => <UpcomingCalendar />,
+  // A card you've made taller shows more of them.
+  recent: (_d, item) => (
+    <RecentTransactions
+      limit={item.auto ? 8 : Math.max(3, Math.floor((item.h * GRID_ROW_PX - 90) / 56))}
+    />
+  ),
+  accounts: () => <AccountsCard />,
+  cards: () => <CardsOverviewCard />,
+  loans: () => <LoansOverviewCard />,
+  stocks: () => <StocksOverviewCard />,
+  crypto: () => <CryptoOverviewCard />,
+  budget: (d) => <BudgetCard d={d} />,
+  "coming-up": (d) => <UpcomingCard d={d} />,
+};
 
 export function OverviewPage() {
   const accounts = useAccounts();
+  const dashboard = useDashboard();
   const o = useQuery({ queryKey: ["overview"], queryFn: () => api.get<Overview>("/api/overview") });
   const d = o.data;
-  // In the wide layouts recent transactions get a full-height column of their own.
-  const tall = useMediaQuery("(min-width: 112rem)");
 
   if (accounts.isSuccess && accounts.data.length === 0) {
     return (
@@ -720,69 +740,25 @@ export function OverviewPage() {
     );
   }
 
+  const renderCard = (item: DashboardItem) => {
+    if (!d) return null;
+    if (item.card.startsWith(CUSTOM_PREFIX)) {
+      const card = dashboard.data?.customCards.find((c) => `${CUSTOM_PREFIX}${c.id}` === item.card);
+      return card ? <CustomCardView card={card} /> : null;
+    }
+    return CARD_RENDERERS[item.card]?.(d, item) ?? null;
+  };
+
   return (
-    <>
-      <PageHeader title="Overview" />
-      {o.isError && <Alert>Couldn't load the overview.</Alert>}
-      {d && (
-        <div className="space-y-6">
-          <AttentionBar d={d} />
-          {/*
-            Phones: one column; the cards interleave by `order` (the column
-            wrappers are display:contents).
-            Desktop (lg): charts stacked on the left, accounts on the right.
-            Wide (112rem+): charts | recent transactions | accounts.
-            Ultrawide (150rem+): four columns.
-          */}
-          <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:grid-rows-[auto_auto_1fr] lg:items-start lg:[grid-template-areas:'a_s'_'b_s'_'c_s'] min-[112rem]:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_26rem] min-[112rem]:grid-rows-[auto_1fr] min-[112rem]:[grid-template-areas:'a_c_s'_'b_c_s'] min-[150rem]:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)_26rem] min-[150rem]:grid-rows-1 min-[150rem]:[grid-template-areas:'a_b_c_s']">
-            <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-6 lg:[grid-area:a]">
-              <div className="order-1 min-w-0 lg:order-0">
-                <SpendingCard d={d} />
-              </div>
-              <div className="order-7 min-w-0 lg:order-0">
-                <CashFlowCard d={d} />
-              </div>
-            </div>
-            <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-6 lg:[grid-area:b]">
-              <div className="order-6 min-w-0 lg:order-0">
-                <CategoriesCard d={d} />
-              </div>
-              <div className="order-8 min-w-0 lg:order-0">
-                <TopMerchantsCard d={d} />
-              </div>
-              <div className="order-9 min-w-0 lg:order-0">
-                <CashTrendCard d={d} />
-              </div>
-            </div>
-            <div className="order-5 min-w-0 lg:order-0 lg:[grid-area:c]">
-              <RecentTransactions limit={tall ? 20 : 8} />
-            </div>
-            <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-6 lg:[grid-area:s]">
-              <div className="order-2 min-w-0 lg:order-0">
-                <AccountsCard />
-              </div>
-              <div className="order-3 min-w-0 lg:order-0">
-                <CardsOverviewCard />
-              </div>
-              <div className="order-3 min-w-0 lg:order-0">
-                <LoansOverviewCard />
-              </div>
-              <div className="order-3 min-w-0 lg:order-0">
-                <StocksOverviewCard />
-              </div>
-              <div className="order-3 min-w-0 lg:order-0">
-                <CryptoOverviewCard />
-              </div>
-              <div className="order-3 min-w-0 lg:order-0">
-                <BudgetCard d={d} />
-              </div>
-              <div className="order-4 min-w-0 lg:order-0">
-                <UpcomingCard d={d} />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+    <DashboardGrid
+      title="Overview"
+      top={
+        <>
+          {o.isError && <Alert>Couldn't load the overview.</Alert>}
+          {d && <AttentionBar d={d} />}
+        </>
+      }
+      renderCard={renderCard}
+    />
   );
 }

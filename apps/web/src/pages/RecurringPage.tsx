@@ -6,11 +6,11 @@ import {
   RECURRING_KINDS,
   type RecurringKind,
   type RecurringSeries,
-  type UpcomingCharge,
 } from "@muny/shared";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { CategorySelect } from "../components/CategorySelect.js";
 import { Modal, MoneyField, SelectField } from "../components/forms.js";
+import { UpcomingCalendar } from "../components/UpcomingCalendar.js";
 import { Alert, Button, Card, cx, Field, PageHeader } from "../components/ui.js";
 import {
   useDeleteRecurring,
@@ -471,32 +471,10 @@ function SeriesDetail({ s, onDone }: { s: RecurringSeries; onDone: () => void })
   );
 }
 
-function monthGrid(year: number, month: number): (string | null)[] {
-  const first = new Date(year, month, 1);
-  const days = new Date(year, month + 1, 0).getDate();
-  const cells: (string | null)[] = Array.from({ length: first.getDay() }, () => null);
-  for (let d = 1; d <= days; d++) cells.push(iso(new Date(year, month, d)));
-  while (cells.length % 7) cells.push(null);
-  return cells;
-}
-
 function Upcoming() {
   const today = todayIso();
-  const [cursor, setCursor] = useState(() => {
-    const d = new Date();
-    return { y: d.getFullYear(), m: d.getMonth() };
-  });
-  const monthStart = iso(new Date(cursor.y, cursor.m, 1));
-  const monthEnd = iso(new Date(cursor.y, cursor.m + 1, 0));
   const in30 = iso(new Date(Date.now() + 30 * 86_400_000));
-  const later = (a: string, b: string) => (a < b ? b : a);
-  const month = useUpcoming(later(monthStart, today), later(monthEnd, today));
   const next = useUpcoming(today, in30);
-  const byDay = useMemo(() => {
-    const m = new Map<string, UpcomingCharge[]>();
-    for (const u of month.data ?? []) m.set(u.date, [...(m.get(u.date) ?? []), u]);
-    return m;
-  }, [month.data]);
   const out30 = (next.data ?? [])
     .filter((u) => u.amountCents < 0)
     .reduce((s, u) => s + u.amountCents, 0);
@@ -506,82 +484,7 @@ function Upcoming() {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-      <Card className="p-3">
-        <div className="mb-2 flex items-center justify-between">
-          <Button
-            variant="ghost"
-            aria-label="Previous month"
-            onClick={() =>
-              setCursor((c) => (c.m === 0 ? { y: c.y - 1, m: 11 } : { y: c.y, m: c.m - 1 }))
-            }
-          >
-            ‹
-          </Button>
-          <p className="font-medium">
-            {new Date(cursor.y, cursor.m, 1).toLocaleDateString(undefined, {
-              month: "long",
-              year: "numeric",
-            })}
-          </p>
-          <Button
-            variant="ghost"
-            aria-label="Next month"
-            onClick={() =>
-              setCursor((c) => (c.m === 11 ? { y: c.y + 1, m: 0 } : { y: c.y, m: c.m + 1 }))
-            }
-          >
-            ›
-          </Button>
-        </div>
-        <div className="grid grid-cols-7 gap-px overflow-hidden rounded-lg bg-slate-200 text-xs dark:bg-slate-800">
-          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-            <div
-              key={d}
-              className="bg-slate-50 py-1 text-center font-medium text-slate-500 dark:bg-slate-900"
-            >
-              {d}
-            </div>
-          ))}
-          {monthGrid(cursor.y, cursor.m).map((d, i) => {
-            const items = d ? (byDay.get(d) ?? []) : [];
-            return (
-              <div
-                // biome-ignore lint/suspicious/noArrayIndexKey: fixed grid cells
-                key={i}
-                className={cx(
-                  "min-h-20 bg-white p-1 dark:bg-slate-950",
-                  !d && "bg-slate-50 dark:bg-slate-900",
-                  d === today && "ring-2 ring-inset ring-brand-500",
-                  d && d < today && "opacity-50",
-                )}
-              >
-                {d && <p className="text-[11px] text-slate-500">{Number(d.slice(8))}</p>}
-                {items.slice(0, 3).map((u) => (
-                  <p
-                    key={`${u.seriesId}-${u.pending ? "p" : ""}`}
-                    title={`${u.name} ${formatMoney(u.amountCents)}${u.pending ? " (pending)" : ""}`}
-                    className={cx(
-                      "mt-0.5 truncate rounded px-1 text-[11px]",
-                      u.pending && "outline-1 outline-dashed outline-current",
-                      u.amountCents > 0
-                        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-                        : u.kind === "bill"
-                          ? "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
-                          : "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300",
-                    )}
-                  >
-                    {u.pending && "⏳ "}
-                    {u.name}
-                  </p>
-                ))}
-                {items.length > 3 && (
-                  <p className="text-[11px] text-slate-500">+{items.length - 3} more</p>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </Card>
+      <UpcomingCalendar />
       <Card className="p-0">
         <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
           <p className="font-medium">Next 30 days</p>
