@@ -43,6 +43,7 @@ const RuleParams = z
     days: z.number().int().min(1).max(14).optional(),
     daysBefore: z.number().int().min(0).max(30).optional(),
     percents: z.array(z.number().int().min(1).max(500)).min(1).max(5).optional(),
+    mutedCategoryIds: z.array(z.string().min(1).max(64)).max(500).optional(),
   })
   .strict();
 

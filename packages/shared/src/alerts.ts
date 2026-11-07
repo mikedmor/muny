@@ -53,6 +53,8 @@ export interface AlertParams {
   daysBefore?: number;
   /** budget: alert at these percentages of a budget (e.g. [80, 100]). */
   percents?: number[];
+  /** budget: categories that never alert ("total" for the total spending budget). */
+  mutedCategoryIds?: string[];
 }
 
 export interface AlertRule {

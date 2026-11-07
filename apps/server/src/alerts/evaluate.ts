@@ -354,8 +354,10 @@ export function evaluateRules(
         const b = budgetMonth(db, month);
         const percents = [...(p.percents ?? [80, 100])].sort((a, z) => z - a);
         const lines = [b.total, ...b.groups.flatMap((g) => g.lines)];
+        const muted = new Set(p.mutedCategoryIds ?? []);
         for (const l of lines) {
           if (!l.budgetCents || l.budgetCents <= 0) continue;
+          if (muted.has(l.categoryId ?? "total")) continue;
           const limit = l.budgetCents + Math.max(0, l.rolloverCents);
           const pct = (l.spentCents / limit) * 100;
           const hit = percents.find((x) => pct >= x);

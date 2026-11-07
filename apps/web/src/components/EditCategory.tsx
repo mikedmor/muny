@@ -1,18 +1,21 @@
 import { type BudgetLine, type Category, formatMoney } from "@muny/shared";
 import { type FormEvent, useState } from "react";
 import {
+  useAlertRules,
   useCategories,
   useCategoryUsage,
   useDeleteBudget,
   useDeleteCategory,
   useSetBudget,
+  useUpdateAlertRule,
   useUpdateCategory,
 } from "../lib/queries.js";
 import { monthLabel } from "./budget.js";
 import { CategorySelect } from "./CategorySelect.js";
 import { Checkbox, Modal, MoneyField, SelectField } from "./forms.js";
+import { IconPicker } from "./IconPicker.js";
 import { Alert, Button } from "./ui.js";
-import { CATEGORY_ICON_CHOICES, categoryIcon } from "./visuals.js";
+import { categoryIcon } from "./visuals.js";
 
 /**
  * Everything about one category in one dialog: name, group, its budget
@@ -83,6 +86,12 @@ function EditCategoryForm({
   const [isBill, setIsBill] = useState(category.isBill);
   const [inBudget, setInBudget] = useState(!category.excludeFromBudget);
   const [hidden, setHidden] = useState(category.hidden);
+  const alertRules = useAlertRules();
+  const updateRule = useUpdateAlertRule();
+  const budgetRule = alertRules.data?.find((r) => r.type === "budget");
+  const muted = budgetRule?.params.mutedCategoryIds ?? [];
+  const [alerts, setAlerts] = useState<boolean | null>(null);
+  const alertsOn = alerts ?? !muted.includes(category.id);
   const [icon, setIcon] = useState<string | null>(category.icon);
   const groupName = groups.find((g) => g.id === groupId)?.name;
   const [amount, setAmount] = useState<number | null>(line?.budgetCents ?? null);
@@ -115,6 +124,15 @@ function EditCategoryForm({
       if (hidden !== category.hidden) patch.hidden = hidden;
       if ((icon || null) !== category.icon) patch.icon = icon?.trim() || null;
       if (Object.keys(patch).length > 1) await update.mutateAsync(patch);
+      if (budgetRule && alertsOn === muted.includes(category.id))
+        await updateRule.mutateAsync({
+          type: "budget",
+          params: {
+            mutedCategoryIds: alertsOn
+              ? muted.filter((id) => id !== category.id)
+              : [...muted, category.id],
+          },
+        });
       if (line && spending) {
         if (amount === null) {
           if (line.budgetId) await delBudget.mutateAsync(line.budgetId);
@@ -156,52 +174,7 @@ function EditCategoryForm({
         </SelectField>
       </div>
 
-      <fieldset>
-        <legend className="text-sm font-medium text-slate-700 dark:text-slate-300">Icon</legend>
-        <div className="mt-1 flex flex-wrap items-center gap-2">
-          <span
-            aria-hidden="true"
-            className="flex size-10 items-center justify-center rounded-full bg-slate-100 text-xl dark:bg-slate-800"
-          >
-            {icon || categoryIcon(name, groupName)}
-          </span>
-          <input
-            value={icon ?? ""}
-            onChange={(e) => setIcon(e.target.value || null)}
-            maxLength={16}
-            placeholder="Type or paste an emoji"
-            aria-label="Icon (an emoji)"
-            className="w-44 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
-          />
-          {icon && (
-            <button
-              type="button"
-              onClick={() => setIcon(null)}
-              className="text-xs text-brand-600 hover:underline"
-            >
-              Automatic
-            </button>
-          )}
-        </div>
-        <div className="mt-2 flex max-h-24 flex-wrap gap-1 overflow-y-auto">
-          {CATEGORY_ICON_CHOICES.map((i) => (
-            <button
-              key={i}
-              type="button"
-              aria-label={`Use ${i}`}
-              aria-pressed={icon === i}
-              onClick={() => setIcon(i)}
-              className={
-                icon === i
-                  ? "size-8 rounded-lg bg-brand-100 text-lg ring-2 ring-brand-500 dark:bg-brand-700/40"
-                  : "size-8 rounded-lg text-lg hover:bg-slate-100 dark:hover:bg-slate-800"
-              }
-            >
-              {i}
-            </button>
-          ))}
-        </div>
-      </fieldset>
+      <IconPicker value={icon} automatic={categoryIcon(name, groupName)} onChange={setIcon} />
 
       {spending && line && (
         <fieldset className="space-y-3 rounded-lg bg-slate-50 p-3 dark:bg-slate-800/50">
@@ -240,6 +213,18 @@ function EditCategoryForm({
               checked={inBudget}
               onChange={setInBudget}
             />
+            {budgetRule && (
+              <Checkbox
+                label="Budget alerts"
+                description={
+                  budgetRule.enabled
+                    ? `Alert when its spending reaches ${(budgetRule.params.percents ?? [80, 100]).join("% and ")}% of its budget.`
+                    : "Budget alerts are off for every category (Settings → Alerts)."
+                }
+                checked={alertsOn}
+                onChange={setAlerts}
+              />
+            )}
           </>
         )}
         <Checkbox

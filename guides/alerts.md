@@ -6,7 +6,7 @@ Muny checks for alerts every 5 minutes:
 - low balances
 - large, unusual or duplicate charges
 - price increases on subscriptions
-- budgets reaching 80% and 100%
+- budgets reaching 80% and 100% (turn them off for one category with **Budget alerts** in that category's **Edit** dialog)
 - charges after you cancelled something
 - banks that need you to log in again
 

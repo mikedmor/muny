@@ -81,6 +81,9 @@ importers:
       cryptocurrency-icons:
         specifier: 0.18.1
         version: 0.18.1
+      emojibase-data:
+        specifier: 16.0.3
+        version: 16.0.3(emojibase@18.0.0)
       lucide-react:
         specifier: 0.511.0
         version: 0.511.0(react@19.3.1)
@@ -1537,6 +1540,15 @@ packages:
 
   emoji-regex@8.0.0:
     resolution: {integrity: sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A==}
+
+  emojibase-data@16.0.3:
+    resolution: {integrity: sha512-MopInVCDZeXvqBMPJxnvYUyKw9ImJZqIDr2sABo6acVSPev5IDYX+mf+0tsu96JJyc3INNvgIf06Eso7bdTX2Q==}
+    peerDependencies:
+      emojibase: '*'
+
+  emojibase@18.0.0:
+    resolution: {integrity: sha512-5PG+EEt5zQ9qvqdHZw61+T9iz96g+r621QS/w8jEzPg+3mjzAdjl8LPLc+e9ABv/yboNfMwEair7aK9qKnwAbQ==}
+    engines: {node: '>=20.0.0'}
 
   enhanced-resolve@5.26.1:
     resolution: {integrity: sha512-PPnnSJq3azKOIewXR/uppBV/6h98dprBJ/WaQ9Qgj10xX1lJLNfg+XShpbsrSqcDSy2yYYyhfXM1wWhftqgyzw==}
@@ -3057,6 +3069,12 @@ snapshots:
       better-sqlite3: 13.0.3
 
   emoji-regex@8.0.0: {}
+
+  emojibase-data@16.0.3(emojibase@18.0.0):
+    dependencies:
+      emojibase: 18.0.0
+
+  emojibase@18.0.0: {}
 
   enhanced-resolve@5.26.1:
     dependencies:

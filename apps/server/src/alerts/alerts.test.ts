@@ -146,6 +146,15 @@ describe("alerts", () => {
     ]);
   });
 
+  it("stays quiet for budgets you muted", async () => {
+    const { client, add, card, run, list } = await setup();
+    await client.put("/api/budgets", { categoryId: null, amountCents: 10_000 });
+    await client.patch("/api/alerts/rules/budget", { params: { mutedCategoryIds: ["total"] } });
+    await add(card.id, today, -12_000, "GROCER", "Groceries");
+    await run();
+    expect((await list()).items.filter((n) => n.ruleType === "budget")).toEqual([]);
+  });
+
   it("doesn't replay history when an account's alert is turned on", async () => {
     const { add, card, run, list, alertsOn } = await setup();
     await add(card.id, today, -90_000, "OLD BIG THING");

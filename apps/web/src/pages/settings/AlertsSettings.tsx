@@ -15,6 +15,7 @@ import { Alert, Button, Card, Field } from "../../components/ui.js";
 import { ApiError, api } from "../../lib/api.js";
 import {
   useAlertRules,
+  useCategories,
   useChannels,
   useDeleteChannel,
   useSaveChannel,
@@ -180,12 +181,47 @@ function RuleParams({ rule, save }: { rule: AlertRule; save: (params: AlertParam
             max={500}
             onCommit={(v) => save({ percents: [first, v] })}
           />
+          <MutedBudgets
+            ids={p.mutedCategoryIds ?? []}
+            onUnmute={(id) =>
+              save({ mutedCategoryIds: (p.mutedCategoryIds ?? []).filter((x) => x !== id) })
+            }
+          />
         </div>
       );
     }
     default:
       return null;
   }
+}
+
+/** Categories with budget alerts turned off (from a category's Edit dialog). */
+function MutedBudgets({ ids, onUnmute }: { ids: string[]; onUnmute: (id: string) => void }) {
+  const categories = useCategories();
+  if (!ids.length) return null;
+  const name = (id: string) =>
+    id === "total"
+      ? "Total budget"
+      : (categories.data?.flatMap((g) => g.categories).find((c) => c.id === id)?.name ??
+        "A deleted category");
+  return (
+    <p className="basis-full text-xs text-slate-500">
+      Off for:{" "}
+      {ids.map((id, i) => (
+        <span key={id}>
+          {i > 0 && ", "}
+          {name(id)}{" "}
+          <button
+            type="button"
+            onClick={() => onUnmute(id)}
+            className="text-brand-600 hover:underline"
+          >
+            (turn on)
+          </button>
+        </span>
+      ))}
+    </p>
+  );
 }
 
 function Rules() {
