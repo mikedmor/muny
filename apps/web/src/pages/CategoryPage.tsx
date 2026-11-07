@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from "react";
 import { EditBudget, monthLabel, Ring } from "../components/budget.js";
 import { CategorySelect } from "../components/CategorySelect.js";
 import { ColumnChart } from "../components/charts.js";
+import { useRuleOffer } from "../components/RuleOffer.js";
 import { Alert, Button, Card, cx } from "../components/ui.js";
 import { CategoryIcon, MerchantAvatar } from "../components/visuals.js";
 import { api } from "../lib/api.js";
@@ -66,6 +67,7 @@ export function CategoryPage() {
   const [sort, setSort] = useState<"date" | "amount">("date");
   const [editing, setEditing] = useState(false);
   const update = useUpdateTransaction();
+  const { offerRule, offerNode, dialog: ruleDialog } = useRuleOffer();
   /** The budget page's "Everything else": categories without a budget, and uncategorized. */
   const virtual = categoryId === EVERYTHING_ELSE;
 
@@ -237,7 +239,10 @@ export function CategoryPage() {
                                   <CategorySelect
                                     aria-label={`Category for ${name}`}
                                     value={t.categoryId}
-                                    onChange={(id) => update.mutate({ id: t.id, categoryId: id })}
+                                    onChange={(id) => {
+                                      update.mutate({ id: t.id, categoryId: id });
+                                      offerRule(t, id);
+                                    }}
                                     className={cx(
                                       "max-w-44 truncate rounded border border-transparent px-1 py-0.5 text-left text-xs hover:border-slate-300 dark:hover:border-slate-700",
                                       t.categoryId
@@ -407,6 +412,8 @@ export function CategoryPage() {
           </div>
         </>
       )}
+      {offerNode}
+      {ruleDialog}
     </>
   );
 }
