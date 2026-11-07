@@ -24,7 +24,7 @@ import type {
 } from "@muny/shared";
 import { and, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { applyMerchantMemory } from "../ledger/memory.js";
-import { upsertPayee, upsertTag } from "../ledger/transactions.js";
+import { payeesByShape, upsertPayee, upsertTag } from "../ledger/transactions.js";
 import { linkTransfersFor } from "../ledger/transfers.js";
 import { badRequest } from "../lib/http.js";
 import { refreshManualLoans } from "../loans/service.js";
@@ -523,6 +523,7 @@ export function commitImport(db: MunyDb, req: ImportCommitRequest, userId: strin
     const hashes = computeHashes(parsed.transactions, lookup);
     const isDup = findDuplicates(tx, parsed.transactions, hashes, lookup);
     const payeeCache = new Map<string, string>();
+    const knownPayee = payeesByShape(tx);
     const tagCache = new Map<string, string>();
     let imported = 0;
     let duplicates = 0;
@@ -541,9 +542,10 @@ export function commitImport(db: MunyDb, req: ImportCommitRequest, userId: strin
         return;
       }
       // The file's merchant name if it has one, else a cleaned-up bank description.
+      // ...or the merchant earlier charges like this one have.
       const payeeName = t.payeeName ?? cleanPayeeName(t.rawDescription);
-      let payeeId: string | null = null;
-      if (payeeName) {
+      let payeeId: string | null = t.payeeName ? null : (knownPayee(t.rawDescription) ?? null);
+      if (!payeeId && payeeName) {
         const k = lc(payeeName);
         payeeId = payeeCache.get(k) ?? upsertPayee(tx, payeeName.slice(0, 100));
         payeeCache.set(k, payeeId);

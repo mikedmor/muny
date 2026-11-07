@@ -4,7 +4,7 @@ import { and, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { applyCardTerms } from "../cards/service.js";
 import type { Config } from "../config.js";
 import { computeHashes, findDuplicates } from "../import/service.js";
-import { upsertPayee } from "../ledger/transactions.js";
+import { payeesByShape, upsertPayee } from "../ledger/transactions.js";
 import { linkTransfersFor } from "../ledger/transfers.js";
 import { decryptJson, encryptJson } from "../lib/crypto.js";
 import { localToday } from "../lib/dates.js";
@@ -247,6 +247,7 @@ export function applySync(
   const matches = findDuplicates(tx, dedupeInput, hashes, accountFor, { unreferencedOnly: true });
   const categoryCache = new Map<string, string | null>();
   const payeeCache = new Map<string, string>();
+  const knownPayee = payeesByShape(tx);
   const newIds: string[] = [];
   fresh.forEach((p, i) => {
     const accountId = linked.get(p.accountRef) as string;
@@ -258,12 +259,13 @@ export function applySync(
       return;
     }
     const merchant = p.merchantName?.trim();
-    // Keep provider names like "iHerb" as-is; ALL-CAPS ones get the usual cleanup.
+    // Keep provider names like "iHerb" as-is; else the merchant earlier charges
+    // like this one have; else the usual cleanup.
+    const proper = merchant && merchant !== merchant.toUpperCase() ? merchant : null;
+    let payeeId: string | null = proper ? null : (knownPayee(p.description) ?? null);
     const payeeName =
-      (merchant && (merchant !== merchant.toUpperCase() ? merchant : cleanPayeeName(merchant))) ||
-      cleanPayeeName(p.description);
-    let payeeId: string | null = null;
-    if (payeeName) {
+      proper || (merchant ? cleanPayeeName(merchant) : null) || cleanPayeeName(p.description);
+    if (!payeeId && payeeName) {
       const k = payeeName.toLowerCase();
       payeeId = payeeCache.get(k) ?? upsertPayee(tx, payeeName.slice(0, 100));
       payeeCache.set(k, payeeId);

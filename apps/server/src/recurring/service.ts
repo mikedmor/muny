@@ -61,8 +61,8 @@ interface Row {
   recurringSeriesId: string | null;
 }
 
-/** Transactions that can be part of a recurring series (no transfers, hidden or pending). */
-function loadRows(db: Db): Row[] {
+/** Transactions that can be part of a recurring series (no transfers or hidden; pending only when asked). */
+function loadRows(db: Db, pending = false): Row[] {
   const t = schema.transactions;
   return db
     .select({
@@ -84,7 +84,7 @@ function loadRows(db: Db): Row[] {
     .leftJoin(schema.categoryGroups, eq(schema.categoryGroups.id, schema.categories.groupId))
     .where(
       and(
-        eq(t.pending, false),
+        eq(t.pending, pending),
         eq(t.hidden, false),
         // A bank's withdrawal that only paid for a PayPal purchase: the purchase recurs.
         isNull(t.fundsTransactionId),
@@ -233,17 +233,32 @@ export function rescanRecurring(tx: Tx, today = localToday()): RecurringScanResu
     }
   };
 
+  /** Share of a candidate's charges already linked to a series. */
+  const owned = (seriesId: string, ids: string[]) =>
+    ids.filter((id) => byId.get(id)?.recurringSeriesId === seriesId).length / (ids.length || 1);
+
   for (const c of candidates) {
-    const match = existing.find(
-      (e) =>
-        !touched.has(e.id) &&
-        e.matchKey === c.key &&
-        e.direction === c.direction &&
-        near(e.anchorCents, c.anchorCents, 0.3),
-    );
+    const match =
+      existing.find(
+        (e) =>
+          !touched.has(e.id) &&
+          e.matchKey === c.key &&
+          e.direction === c.direction &&
+          near(e.anchorCents, c.anchorCents, 0.3),
+      ) ??
+      // The merchant's name changed (renamed, or a better name cleanup): the
+      // series that already holds most of these charges keeps them.
+      existing.find(
+        (e) =>
+          !touched.has(e.id) && e.direction === c.direction && owned(e.id, c.transactionIds) >= 0.5,
+      );
     const latest = byId.get(c.transactionIds[c.transactionIds.length - 1] ?? "");
     if (match) {
       touched.add(match.id);
+      if (match.matchKey !== c.key) {
+        tx.update(s).set({ matchKey: c.key }).where(eq(s.id, match.id)).run();
+        match.matchKey = c.key;
+      }
       if (match.status === "ignored") continue;
       tx.update(s)
         .set({
@@ -439,10 +454,35 @@ export function listSeries(db: Db, today = localToday(), id?: string): Recurring
     }
   }
 
+  // Pending charges that look like a series' next one (same rules as newer charges).
+  const pendingRows = rows.length ? loadRows(db, true) : [];
+  const pendingFor = (r: (typeof rows)[number]["s"]) => {
+    if (r.status === "ignored") return null;
+    const words = keyWords(r.matchKey);
+    const hit = pendingRows
+      .filter((x) => {
+        if (x.postedDate < r.lastDate || (x.amountCents < 0 ? "out" : "in") !== r.direction)
+          return false;
+        const cents = Math.abs(x.amountCents);
+        const key = merchantKey(x.payee, x.rawDescription);
+        if (key === r.matchKey) return near(cents, r.anchorCents, 0.3);
+        return (
+          x.accountId === r.accountId &&
+          (near(cents, r.anchorCents, 0.1) || near(cents, Math.abs(r.lastAmountCents), 0.1)) &&
+          [...keyWords(key)].some((w) => words.has(w))
+        );
+      })
+      .sort((a, b) => a.postedDate.localeCompare(b.postedDate))[0];
+    return hit
+      ? { transactionId: hit.id, date: hit.postedDate, amountCents: hit.amountCents }
+      : null;
+  };
+
   const t = dayNum(today);
   return rows.map(({ s: r, accountName, categoryName, count }) => {
     const interval = r.interval as RecurringInterval;
     const next = addInterval(r.lastDate, interval);
+    const pending = pendingFor(r);
     const sinceLast = t - dayNum(r.lastDate);
     const active = sinceLast <= grace(interval) && r.status !== "cancelled";
     let priceChange: RecurringSeries["priceChange"] = null;
@@ -476,7 +516,7 @@ export function listSeries(db: Db, today = localToday(), id?: string): Recurring
       lastAmountCents: r.lastAmountCents,
       nextDate: next,
       active,
-      late: active && next < today,
+      late: active && next < today && !pending,
       chargedAfterCancel: r.status === "cancelled" && !!r.cancelledAt && r.lastDate > r.cancelledAt,
       accountId: r.accountId,
       accountName,
@@ -487,18 +527,42 @@ export function listSeries(db: Db, today = localToday(), id?: string): Recurring
       notes: r.notes,
       transactionCount: Number(count),
       priceChange,
+      pending,
     };
   });
 }
 
-/** Expected charges between two dates for active, non-ignored, non-cancelled series. */
-export function upcoming(db: Db, from: string, to: string, today = localToday()): UpcomingCharge[] {
+/**
+ * Expected charges between two dates for active, non-ignored, non-cancelled
+ * series. A pending charge stands for the next one (it's already been charged);
+ * with `withPending` it's listed too, marked pending.
+ */
+export function upcoming(
+  db: Db,
+  from: string,
+  to: string,
+  today = localToday(),
+  withPending = false,
+): UpcomingCharge[] {
   const out: UpcomingCharge[] = [];
   for (const s of listSeries(db, today)) {
     if (!s.active || s.status === "ignored" || s.status === "cancelled") continue;
+    if (s.pending && withPending) {
+      const date = s.pending.date < from ? from : s.pending.date;
+      if (date <= to)
+        out.push({
+          seriesId: s.id,
+          name: s.name,
+          kind: s.kind,
+          date,
+          amountCents: s.pending.amountCents,
+          accountName: s.accountName,
+          pending: true,
+        });
+    }
     // A late charge is still expected; show it on today.
-    const dates: string[] = s.nextDate < today ? [today] : [];
-    for (let i = 1; i <= 400; i++) {
+    const dates: string[] = s.nextDate < today && !s.pending ? [today] : [];
+    for (let i = s.pending ? 2 : 1; i <= 400; i++) {
       const d = addInterval(s.lastDate, s.interval, i);
       if (d < today) continue;
       if (d > to) break;

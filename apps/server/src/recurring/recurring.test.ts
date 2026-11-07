@@ -1,4 +1,5 @@
 import { addInterval } from "@muny/core";
+import { newId, schema } from "@muny/db";
 import type {
   Account,
   RecurringScanResult,
@@ -198,5 +199,58 @@ describe("recurring", () => {
     expect((await client.delete(`/api/recurring/${s.id}`)).statusCode).toBe(200);
     const detected = (await list(client))[0] as RecurringSeries;
     expect((await client.delete(`/api/recurring/${detected.id}`)).statusCode).toBe(400);
+  });
+});
+
+describe("recurring: names that change, and pending charges", () => {
+  it("keeps a series when its merchant is renamed", async () => {
+    const { client, db } = await setup();
+    const before = (await list(client)).find((s) => s.name === "Streamflix") as RecurringSeries;
+    const payee = db
+      .select()
+      .from(schema.payees)
+      .all()
+      .find((p) => p.displayName === "Streamflix");
+    if (!payee) throw new Error("payee missing");
+    await client.patch(`/api/payees/${payee.id}`, { displayName: "Flix Plus" });
+    await client.post("/api/recurring/rescan", {});
+    const after = await list(client);
+    expect(after.filter((s) => s.expectedAmountCents === -1599)).toHaveLength(1);
+    expect(after.find((s) => s.id === before.id)?.transactionCount).toBe(before.transactionCount);
+    const row = db
+      .select()
+      .from(schema.recurringSeries)
+      .all()
+      .find((s) => s.id === before.id);
+    expect(row?.matchKey).toBe("flix plus");
+  });
+
+  it("shows a pending charge as the next one", async () => {
+    const { client, db } = await setup();
+    const sf = (await list(client)).find((s) => s.name === "Streamflix") as RecurringSeries;
+    const acc = db.select().from(schema.accounts).get();
+    if (!acc) throw new Error("account missing");
+    db.insert(schema.transactions)
+      .values({
+        id: newId(),
+        accountId: acc.id,
+        postedDate: today,
+        amountCents: -1599,
+        currency: "USD",
+        rawDescription: "POS DEBIT STREAMFLIX.COM SEATTLE WA",
+        pending: true,
+        importHash: newId(),
+      })
+      .run();
+    const now = (await list(client)).find((s) => s.id === sf.id) as RecurringSeries;
+    expect(now.pending).toMatchObject({ date: today, amountCents: -1599 });
+    expect(now.late).toBe(false);
+    const up = (await client.get(`/api/recurring/upcoming?from=${today}`)).json<UpcomingCharge[]>();
+    const mine = up.filter((u) => u.seriesId === sf.id);
+    expect(mine[0]).toMatchObject({ pending: true, date: today });
+    // The pending charge stands for the next expected one.
+    expect(
+      mine.filter((u) => !u.pending).every((u) => u.date > addInterval(sf.lastDate, "monthly")),
+    ).toBe(true);
   });
 });

@@ -66,3 +66,9 @@ A purchase PayPal pays from your bank shows up three times: the purchase in PayP
 On **Accounts → Bank connections**, click **Connect**. After you log in to your bank, choose where each bank account goes. **Link it to an account you already have** (for example one from a Rocket Money import) to keep its history: transactions you already imported are matched instead of duplicated. From then on the account shows the bank's reported balance.
 
 If a bank needs you to log in again (a password change or expired consent), the connection shows **Needs login**; click **Log in again**. **Disconnect** keeps the accounts and their history; they just stop updating.
+
+### Merchant names and pending charges
+
+Muny names the merchant from the bank's description, dropping card prefixes, store and reference numbers, dates, phone numbers and the city and state ("POS DEBIT WD7 FT. WORTH TX" becomes **WD7**). A new charge whose description looks like earlier ones (the same words, ignoring numbers and dates) gets the merchant those already have, so a merchant you renamed keeps its name. If a merchant's name changes, its recurring bill or subscription keeps its charges instead of starting over.
+
+Charges your bank still shows as pending appear on the Recurring page: a series whose next charge is pending is marked **Pending** (and isn't late), and the upcoming list shows it with a ⏳.

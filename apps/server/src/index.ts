@@ -4,7 +4,7 @@ import { buildApp } from "./app.js";
 import { anchorAllCards } from "./cards/service.js";
 import { loadConfig } from "./config.js";
 import { startBackupScheduler } from "./data/backups.js";
-import { repairRawAchPayees } from "./ledger/payees.js";
+import { repairRawAchPayees, repairStubPayees } from "./ledger/payees.js";
 import { seedDefaultCategories } from "./ledger/seed.js";
 import { pairLoanPayments, pairPayPalFunding } from "./ledger/transfers.js";
 import { refreshManualLoans } from "./loans/service.js";
@@ -20,6 +20,7 @@ async function main() {
   seedDefaultCategories(db);
   ensureAlertRules(db);
   repairRawAchPayees(db);
+  repairStubPayees(db);
   // Cheap (well under a second for years of history); picks up detection improvements after upgrades.
   db.transaction((tx) => {
     pairLoanPayments(tx);

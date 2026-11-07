@@ -48,6 +48,8 @@ export interface RecurringSeries {
   transactionCount: number;
   /** Most recent price change on a fixed-price series. */
   priceChange: { fromCents: number; toCents: number; date: string } | null;
+  /** A charge the bank shows as pending that looks like this series' next one. */
+  pending: { transactionId: string; date: string; amountCents: number } | null;
 }
 
 export interface UpdateRecurringInput {
@@ -69,6 +71,8 @@ export interface UpcomingCharge {
   date: string;
   amountCents: number;
   accountName: string | null;
+  /** Already at the bank, pending (dated when it was charged, or today if earlier). */
+  pending?: boolean;
 }
 
 export interface RecurringScanResult {

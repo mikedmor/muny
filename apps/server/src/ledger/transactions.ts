@@ -1,3 +1,4 @@
+import { descriptionShape } from "@muny/core";
 import { type MunyDb, newId, schema } from "@muny/db";
 import { MoneyParseError, parseAmount, type Transaction, type TransactionPage } from "@muny/shared";
 import { and, desc, eq, inArray, isNull, like, or, type SQL, sql } from "drizzle-orm";
@@ -358,6 +359,33 @@ export function upsertPayee(tx: Tx | MunyDb, displayName: string): string {
   const pid = newId();
   tx.insert(schema.payees).values({ id: pid, displayName }).run();
   return pid;
+}
+
+/**
+ * The merchant earlier transactions with the same description shape have (the
+ * most recent one's), so new charges keep the name you know them by, even if
+ * you renamed it or the name cleanup changes. Built once per sync or import.
+ */
+export function payeesByShape(tx: Tx | MunyDb): (raw: string) => string | undefined {
+  let byShape: Map<string, string> | null = null;
+  return (raw) => {
+    const shape = descriptionShape(raw);
+    if (!shape) return undefined;
+    if (!byShape) {
+      byShape = new Map();
+      const t = schema.transactions;
+      for (const r of tx
+        .select({ raw: t.rawDescription, payeeId: t.payeeId })
+        .from(t)
+        .where(sql`${t.payeeId} is not null`)
+        .orderBy(t.postedDate)
+        .all()) {
+        const s = descriptionShape(r.raw);
+        if (s && r.payeeId) byShape.set(s, r.payeeId);
+      }
+    }
+    return byShape.get(shape);
+  };
 }
 
 /** Find a tag by name (case-insensitive) or create it. */

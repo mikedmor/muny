@@ -77,6 +77,63 @@ export function repairRawAchPayees(db: MunyDb): number {
   });
 }
 
+/**
+ * Older name cleanup cut some merchants to a stub: "WD7 512-555-0142 TX 01/06"
+ * became "Tx", "GOOGLE *FI ..." became "Fi". Re-derive names for merchants of
+ * at most 3 characters when today's cleanup gives a longer one, unless you
+ * renamed that merchant yourself. Idempotent; runs at startup.
+ */
+export function repairStubPayees(db: MunyDb): number {
+  return db.transaction((tx) => {
+    const renamed = new Set(
+      tx
+        .select({ id: schema.auditLog.entityId })
+        .from(schema.auditLog)
+        .where(sql`${schema.auditLog.action} in ('payee.rename', 'payee.merge')`)
+        .all()
+        .map((r) => r.id),
+    );
+    const stubs = tx
+      .select({ id: p.id, name: p.displayName })
+      .from(p)
+      .where(sql`length(${p.displayName}) <= 3`)
+      .all()
+      // All-caps ones ("KFC", "BP") are real names, not stubs.
+      .filter((s) => !renamed.has(s.id) && s.name !== s.name.toUpperCase());
+    if (!stubs.length) return 0;
+    const stubName = new Map(stubs.map((s) => [s.id, s.name]));
+    let n = 0;
+    for (const r of tx
+      .select({ id: t.id, raw: t.rawDescription, payeeId: t.payeeId })
+      .from(t)
+      .where(inArray(t.payeeId, [...stubName.keys()]))
+      .all()) {
+      const old = stubName.get(r.payeeId ?? "") ?? "";
+      const name = cleanPayeeName(r.raw);
+      if (!name || name.length <= old.length || name.toLowerCase() === old.toLowerCase()) continue;
+      const to = upsertPayee(tx, name);
+      n += tx.update(t).set({ payeeId: to }).where(eq(t.id, r.id)).run().changes;
+      // The remembered category comes along.
+      tx.update(p)
+        .set({
+          defaultCategoryId: sql`(select x.default_category_id from payees x where x.id = ${r.payeeId})`,
+        })
+        .where(and(eq(p.id, to), isNull(p.defaultCategoryId)))
+        .run();
+    }
+    // Recurring series follow their transactions on the next rescan.
+    tx.delete(p)
+      .where(
+        and(
+          inArray(p.id, [...stubName.keys()]),
+          sql`not exists (select 1 from transactions x where x.payee_id = ${p.id})`,
+        ),
+      )
+      .run();
+    return n;
+  });
+}
+
 export function registerPayeeRoutes(app: FastifyInstance, db: MunyDb) {
   const log = (userId: string, action: string, entityId?: string, details?: unknown) =>
     audit(db, {

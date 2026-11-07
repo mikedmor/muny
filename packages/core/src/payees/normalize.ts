@@ -13,6 +13,8 @@
 const KNOWN: [RegExp, string][] = [
   [/^(amzn|amazon)(mktp|mktplace|\.com|com|prime|digital|retail|marketplace)?/, "Amazon"],
   [/^primevideo/, "Prime Video"],
+  [/^google\*?fi(?!ber)/, "Google Fi"],
+  [/^bp\d/, "BP"],
   [/^audible/, "Audible"],
   [/^apple\.?com\/?bill|^applecom|^itunes/, "Apple"],
   [/^netflix/, "Netflix"],
@@ -64,7 +66,7 @@ const KNOWN: [RegExp, string][] = [
 /** Card/ACH prefixes, removed repeatedly from the start. */
 const PREFIXES = [
   /^purchase from\s+/i,
-  /^(pos|debit|dbt|chk|check ?card|checkcard|card purchase|visa|mastercard|purchase|recurring|electronic|online|preauthorized|pre-authorized|ach|atm|bill ?pay(ment)?|int'?l|international)\b[\s:-]*/i,
+  /^(pos|pur|debit|dbt|chk|check ?card|checkcard|card purchase|visa|mastercard|purchase|recurring|electronic|online|preauthorized|pre-authorized|ach|atm|bill ?pay(ment)?|int'?l|international)\b[\s:-]*/i,
   /^(purchase|payment|pmt|debit|withdrawal|transfer|xfer|dep(osit)?) (authorized|auth|on|to|from)\b[\s:-]*/i,
   /^authorized on \d{1,2}\/\d{1,2}\b\s*/i,
   /^(purchase|pmt|debit) \d{1,2}\/\d{1,2}\b\s*/i,
@@ -91,7 +93,18 @@ const TAILS = [
   /\s+card\s*(#|no\.?)?\s*x*\d{4}.*$/i,
   /\s+x{2,}\d{2,}.*$/i,
   /\s+on \d{1,2}\/\d{1,2}(\/\d{2,4})?.*$/i,
+  /\s+pos (pur|rec)\b.*$/i,
 ];
+
+/** Words that start a two-word city ("Ft. Worth", "New Albany", "St. Louis"). */
+const CITY_PREFIX =
+  /^(ft|fort|st|saint|mt|mount|new|north|south|east|west|lake|port|san|santa|los|las|el|la|palm)\.?$/i;
+
+/** A name with a short number in it ("WD7", "PIX365"), unlike store or reference numbers. */
+const WORDLIKE = /^[a-z]{2,4}\d{1,3}$/i;
+
+/** Stands in for a phone number: dropped like any number, but it means "no city here". */
+const PHONE = "#0";
 
 const STATES = new Set(
   "AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY DC PR".split(
@@ -113,7 +126,7 @@ function titleCase(s: string): string {
     .split(" ")
     .map((w, i) => {
       const up = w.toUpperCase();
-      if (ACRONYMS.has(up)) return up;
+      if (ACRONYMS.has(up) || /\d/.test(w)) return up;
       if (i > 0 && SMALL.has(w)) return w;
       // Keep things like "o'reilly" and "7-eleven" readable.
       return w.replace(/(^|[-'./])([a-z])/g, (_m, p: string, c: string) => p + c.toUpperCase());
@@ -146,7 +159,7 @@ const ACH_ORIG =
   /\borig(?:inator)? co(?:mpany)? name\s*:\s*(.+?)\s+(?:co entry descr|co id|sec|trace|ind id|ind name)\s*[:#]/i;
 
 export function cleanPayeeName(raw: string): string | null {
-  let s = raw.replace(/\s+/g, " ").trim();
+  let s = raw.replace(/&amp;/gi, "&").replace(/\s+/g, " ").trim();
   if (!s) return null;
   const ach = ACH_ORIG.exec(s)?.[1]?.trim();
   if (ach && /[a-z]{2}/i.test(ach)) s = ach;
@@ -175,18 +188,42 @@ export function cleanPayeeName(raw: string): string | null {
   const compact2 = s.toLowerCase().replace(/\s+/g, "");
   for (const [re, name] of KNOWN) if (re.test(compact2)) return name;
 
-  // Drop URLs' TLD, phone numbers, store numbers and other digit-bearing tokens.
+  // Phone numbers become a marker; drop URLs' TLD; "PILOT_1234" -> "PILOT".
   s = s
-    .replace(/\b(\d{3}[-.\s]?\d{3}[-.\s]?\d{4}|\d{3}-\d{4})\b/g, " ")
+    .replace(/\b(\d{3}[-.\s]?\d{3}[-.\s]?\d{4}|\d{3}-\d{4})\b/g, ` ${PHONE} `)
     .replace(/\.(com|net|org|io|co)\b/gi, "")
-    .replace(/\bwww\./gi, "");
-  let tokens = s.split(/\s+/).filter((t) => t && !/\d/.test(t) && !/^[#*\-/.:,]+$/.test(t));
-
-  // Trailing "CITY ST": drop the state and one city word, if enough is left.
-  const last = tokens[tokens.length - 1];
-  if (tokens.length >= 3 && last && STATES.has(last.toUpperCase()) && last === last.toUpperCase()) {
-    tokens = tokens.slice(0, -2);
+    .replace(/\bwww\./gi, "")
+    .replace(/_\d+\b/g, " ")
+    // "MILL HALL, PA, USA" -> "MILL HALL PA"
+    .replace(/,\s*([a-z]{2})(,\s*(usa|us))?\s*$/i, " $1");
+  // Keep words, and names with a short number ("WD7"); drop store and reference numbers.
+  const keep = (w: string) => !/^[#*\-/.:,]+$/.test(w) && (!/\d/.test(w) || WORDLIKE.test(w));
+  const kept = (ws: string[]) => ws.filter(keep).length;
+  let words = s.split(/\s+/).filter(Boolean);
+  // Trailing posting dates and reference numbers ("... TX 123456 01/06").
+  while (/^(\d{1,2}\/\d{1,2}(\/\d{2,4})?|\d+|#0)$/.test(words[words.length - 1] ?? "")) {
+    // Keep a phone marker right after a name: it's what says "no city" before a state.
+    if (words[words.length - 1] === PHONE && !STATES.has(words[words.length - 2] ?? "")) break;
+    words.pop();
   }
+
+  // Trailing "CITY ST": drop the state, then the city (one word, or two like
+  // "Ft. Worth"), unless a phone or store number stands where the city would be.
+  const last = words[words.length - 1];
+  if (last && STATES.has(last.toUpperCase()) && last === last.toUpperCase()) {
+    const before = words.slice(0, -1);
+    const city = before[before.length - 1];
+    // "POWER CO" is a name; "WD7 512-555-0142 TX" and "CAFE AUSTIN TX" end in a place.
+    if (kept(before) >= 2 || (kept(before) >= 1 && city !== undefined && !keep(city))) {
+      words = before;
+      if (city && keep(city) && !/\d/.test(city) && kept(before) >= 2) {
+        words = before.slice(0, -1);
+        const pre = words[words.length - 1];
+        if (pre && CITY_PREFIX.test(pre) && kept(words) >= 2) words.pop();
+      }
+    }
+  }
+  const tokens = words.filter(keep);
 
   const out = titleCase(
     tokens
@@ -198,4 +235,21 @@ export function cleanPayeeName(raw: string): string | null {
   );
   if (out.replace(/[^a-z]/gi, "").length < 2) return null;
   return out.slice(0, 100);
+}
+
+/**
+ * A description's shape: its words without numbers, dates, ids or punctuation.
+ * Charges from one merchant usually share it ("WD7 512-555-0142 TX 01/06" and
+ * "WD7 512-555-0142 TX 02/05" -> "wd tx"), so a new charge can reuse the
+ * merchant earlier ones have, whatever the name cleanup would say today.
+ * Null when too little is left to tell merchants apart.
+ */
+export function descriptionShape(raw: string): string | null {
+  const shape = raw
+    .toLowerCase()
+    .replace(/&amp;/g, "&")
+    .replace(/[^a-z&'\s]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return shape.replace(/[^a-z]/g, "").length >= 4 ? shape : null;
 }

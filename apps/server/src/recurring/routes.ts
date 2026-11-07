@@ -66,7 +66,7 @@ export function registerRecurringRoutes(app: FastifyInstance, db: MunyDb) {
     const to = q.to ?? addDays(from, 30);
     if (to < from || to > addDays(from, 400))
       throw badRequest("Choose a range of at most 400 days");
-    return upcoming(db, from, to, today);
+    return upcoming(db, from, to, today, true);
   });
 
   app.get("/api/recurring/:id/transactions", async (req) => {

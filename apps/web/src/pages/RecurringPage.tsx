@@ -69,6 +69,14 @@ function SeriesRow({ s, onOpen }: { s: RecurringSeries; onOpen: () => void }) {
               New
             </span>
           )}
+          {s.pending && (
+            <span
+              title="Your bank shows this charge as pending"
+              className="ml-2 rounded bg-violet-100 px-1.5 py-0.5 text-[11px] font-medium text-violet-800 dark:bg-violet-900/40 dark:text-violet-300"
+            >
+              Pending
+            </span>
+          )}
           {s.late && (
             <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
               Late
@@ -82,7 +90,9 @@ function SeriesRow({ s, onOpen }: { s: RecurringSeries; onOpen: () => void }) {
         </p>
         <p className="truncate text-xs text-slate-500">
           {INTERVAL_LABELS[s.interval]}
-          {s.active && ` · next ${fmtDay(s.nextDate)}`}
+          {s.pending
+            ? ` · ${formatMoney(Math.abs(s.pending.amountCents))} pending since ${fmtDay(s.pending.date)}`
+            : s.active && ` · next ${fmtDay(s.nextDate)}`}
           {!s.active &&
             ` · last ${fmtDay(s.lastDate, { month: "short", day: "numeric", year: "numeric" })}`}
           {s.accountName && ` · ${s.accountName}`}
@@ -462,10 +472,11 @@ function Upcoming() {
                 {d && <p className="text-[11px] text-slate-500">{Number(d.slice(8))}</p>}
                 {items.slice(0, 3).map((u) => (
                   <p
-                    key={u.seriesId}
-                    title={`${u.name} ${formatMoney(u.amountCents)}`}
+                    key={`${u.seriesId}-${u.pending ? "p" : ""}`}
+                    title={`${u.name} ${formatMoney(u.amountCents)}${u.pending ? " (pending)" : ""}`}
                     className={cx(
                       "mt-0.5 truncate rounded px-1 text-[11px]",
+                      u.pending && "outline-1 outline-dashed outline-current",
                       u.amountCents > 0
                         ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
                         : u.kind === "bill"
@@ -473,6 +484,7 @@ function Upcoming() {
                           : "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300",
                     )}
                   >
+                    {u.pending && "⏳ "}
                     {u.name}
                   </p>
                 ))}
@@ -493,9 +505,19 @@ function Upcoming() {
         </div>
         <ul className="max-h-[32rem] divide-y divide-slate-100 overflow-auto text-sm dark:divide-slate-800">
           {next.data?.map((u) => (
-            <li key={`${u.seriesId}-${u.date}`} className="flex justify-between gap-3 px-4 py-2">
+            <li
+              key={`${u.seriesId}-${u.date}-${u.pending ? "p" : ""}`}
+              className="flex justify-between gap-3 px-4 py-2"
+            >
               <span className="min-w-0">
-                <span className="block truncate">{u.name}</span>
+                <span className="block truncate">
+                  {u.name}
+                  {u.pending && (
+                    <span className="ml-2 rounded bg-violet-100 px-1.5 py-0.5 text-[11px] font-medium text-violet-800 dark:bg-violet-900/40 dark:text-violet-300">
+                      Pending
+                    </span>
+                  )}
+                </span>
                 <span className="text-xs text-slate-500">
                   {u.date === today
                     ? "Today"

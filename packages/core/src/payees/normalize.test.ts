@@ -22,6 +22,22 @@ describe("cleanPayeeName", () => {
     ["UBER *EATS PENDING", "Uber Eats"],
     ["O'REILLY AUTO PARTS 1234", "O'Reilly Auto Parts"],
     ["CVS/PHARMACY #01234", "CVS"],
+    ["POS DEBIT WD7 FT. WORTH TX", "WD7"],
+    ["WD7 512-555-0142 TX 01/06", "WD7"],
+    ["GOOGLE *FI 297KJx g.co/helppay# CA 06/13", "Google Fi"],
+    ["REY AZTECA 570-1234 PA 01/07", "Rey Azteca"],
+    ["MSI RENTERS 844-788-1234 TX 04/29", "Msi Renters"],
+    ["MR FUEL_1234 WACO TX 06/27", "Mr Fuel"],
+    ["PIX365 512-946-1234 TX 03/13", "PIX365"],
+    ["BWR LAKEVIEW 141 214-1234 TX 03/06", "Bwr Lakeview"],
+    ["BP12345BP FO AUSTIN TX 04/11", "BP"],
+    ["PILOT_1234 POS PUR RF12345 MI", "Pilot"],
+    ["PIZZA PALACE NEW ALBANY IN", "Pizza Palace"],
+    ["THE HOME DEPOT #1234 PLANO TX 123456 10/02", "The Home Depot"],
+    ["FLYING J #123 MILL HALL, PA, US", "Flying J Mill"],
+    ["EINSTEIN BROS BAGELS353 LAS VEGAS NV 01/02", "Einstein Bros"],
+    ["TROPICAL SMOOTHIE CAFE 512-1234567 TX 01/02", "Tropical Smoothie Cafe"],
+    ["FRISCO TOBACCO &amp; VA POS PUR RF#123456 Frisco TX 1234", "Frisco Tobacco"],
   ])("%s -> %s", (raw, expected) => {
     expect(cleanPayeeName(raw)).toBe(expected);
   });
