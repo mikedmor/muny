@@ -155,8 +155,9 @@ export function budgetMonth(db: Db, month: string): BudgetMonth {
 
   // Earnings and bills: an optional fixed target; no target = automatic (the forecast).
   const billsPaid = billsPaidByMonth(db, [month, ...prev3]);
+  const otherSpent = otherSpentByMonth(db, [month, ...prev3]);
   const basic = (
-    kind: "income" | "bills",
+    kind: "income" | "bills" | "other",
     name: string,
     actual: (m: string) => number,
   ): BudgetLine => {
@@ -181,6 +182,7 @@ export function budgetMonth(db: Db, month: string): BudgetMonth {
   return {
     income: basic("income", "Earnings", (m) => incomeByMonth.get(m) ?? 0),
     bills: basic("bills", "Bills & subscriptions", (m) => billsPaid.get(m) ?? 0),
+    other: basic("other", "All other categories", (m) => otherSpent.get(m) ?? 0),
     forecast: forecastMonth(db, month, {
       spentCents: total.spentCents,
       incomeCents: income,
@@ -315,6 +317,57 @@ export function billCharges(
          and not (t.amount_cents < 0 and coalesce(t.recurring_series_id, '-') in ${BILL_SERIES})
     `)
     .map((r) => ({ ...r, cents: Number(r.cents) }));
+}
+
+/** SQL: spending categories that count in budgets (not income or transfers, not left out). */
+const SPENDING_CATEGORIES = sql`(select c.id from categories c join category_groups g on g.id = c.group_id
+  where g.kind = 'expense' and c.exclude_from_budget = 0)`;
+
+/**
+ * Spending that isn't a bill ("All other categories", positive cents): what
+ * budgets count as spending (spending categories and uncategorized) minus
+ * bill charges (recurring bills, bill categories). Split parts count alone.
+ */
+export function otherSpending(
+  db: Db,
+  from: string,
+  to: string,
+): { id: string; date: string; cents: number }[] {
+  return db
+    .all<{ id: string; date: string; cents: number }>(sql`
+      select t.id as id, t.posted_date as date, -t.amount_cents as cents
+        from transactions t join accounts a on a.id = t.account_id
+       where t.hidden = 0 and a.exclude_from_reports = 0 and a.type <> 'loan'
+         and t.posted_date between ${from} and ${to}
+         and not exists (select 1 from transaction_splits x where x.transaction_id = t.id)
+         and (t.category_id in ${SPENDING_CATEGORIES}
+           or (t.category_id is null and t.transfer_pair_id is null))
+         and coalesce(t.category_id, '-') not in ${BILL_CATEGORIES}
+         and not (t.amount_cents < 0 and coalesce(t.recurring_series_id, '-') in ${BILL_SERIES})
+      union all
+      select t.id as id, t.posted_date as date, -sp.amount_cents as cents
+        from transaction_splits sp
+        join transactions t on t.id = sp.transaction_id
+        join accounts a on a.id = t.account_id
+       where t.hidden = 0 and a.exclude_from_reports = 0 and a.type <> 'loan'
+         and t.posted_date between ${from} and ${to}
+         and (sp.category_id in ${SPENDING_CATEGORIES} or sp.category_id is null)
+         and coalesce(sp.category_id, '-') not in ${BILL_CATEGORIES}
+         and not (t.amount_cents < 0 and coalesce(t.recurring_series_id, '-') in ${BILL_SERIES})
+    `)
+    .map((r) => ({ ...r, cents: Number(r.cents) }));
+}
+
+/** Spending that isn't a bill, per month (positive cents), for the months given. */
+export function otherSpentByMonth(db: Db, months: string[]): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!months.length) return out;
+  const sorted = [...months].sort();
+  for (const c of otherSpending(db, `${sorted[0]}-01`, monthEnd(sorted.at(-1) as string))) {
+    const m = c.date.slice(0, 7);
+    out.set(m, (out.get(m) ?? 0) + c.cents);
+  }
+  return out;
 }
 
 /** Bills paid per month (positive cents), for the months given. */

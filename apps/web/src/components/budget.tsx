@@ -279,7 +279,9 @@ export function InlineBudget({
             ? "Your income over the past 3 months"
             : line.kind === "bills"
               ? "Bills & subscriptions paid over the past 3 months"
-              : "Your spending over the past 3 months"}
+              : line.kind === "other"
+                ? "Spending outside bills over the past 3 months"
+                : "Your spending over the past 3 months"}
         </span>
         <span className="relative mt-2 flex h-24 items-end justify-around gap-3 border-b border-slate-200 dark:border-slate-700">
           {history.map((h) => (
@@ -331,7 +333,11 @@ export function InlineBudget({
             <span>
               <span className="font-semibold">{isAuto ? "✓ Automatic" : "Use automatic"}</span>
               <span className="block text-left text-slate-500">
-                {line.kind === "income" ? "Paychecks Muny expects" : "Recurring bills scheduled"}
+                {line.kind === "income"
+                  ? "Paychecks Muny expects"
+                  : line.kind === "other"
+                    ? "Your 3-month average"
+                    : "Recurring bills scheduled"}
               </span>
             </span>
             <span className="font-medium tabular-nums">{formatMoney(auto)}</span>

@@ -374,7 +374,7 @@ export const budgets = sqliteTable(
      * budget), "income" (earnings target) or "bills" (recurring bills budget).
      * Category budgets are always "spending".
      */
-    kind: text({ enum: ["spending", "income", "bills"] })
+    kind: text({ enum: ["spending", "income", "bills", "other"] })
       .notNull()
       .default("spending"),
     /** Unspent money carries into next month (and overspending is deducted). */

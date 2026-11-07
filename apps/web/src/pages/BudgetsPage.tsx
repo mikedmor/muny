@@ -1,4 +1,11 @@
-import { BILLS, type BudgetMonth, EARNINGS, EVERYTHING_ELSE, formatMoney } from "@muny/shared";
+import {
+  BILLS,
+  type BudgetMonth,
+  EARNINGS,
+  EVERYTHING_ELSE,
+  formatMoney,
+  OTHER_SPENDING,
+} from "@muny/shared";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
@@ -125,7 +132,19 @@ function BasicsTable({ b, month }: { b: BudgetMonth; month: string }) {
       remaining: billsTarget - f.recurringPaidCents,
       ring: [f.recurringPaidCents, billsTarget] as const,
     },
+    {
+      key: "other",
+      icon: "🛒",
+      name: "All other categories",
+      note: "Spending that isn't a bill",
+      line: b.other,
+      auto: b.other.averageCents,
+      actual: b.other.spentCents,
+      remaining: (b.other.budgetCents ?? b.other.averageCents) - b.other.spentCents,
+      ring: [b.other.spentCents, b.other.budgetCents ?? b.other.averageCents] as const,
+    },
   ];
+  const pageFor = { earnings: EARNINGS, bills: BILLS, other: OTHER_SPENDING } as const;
   return (
     <Card className="p-0">
       <TableHead first="Budget basics" />
@@ -142,7 +161,7 @@ function BasicsTable({ b, month }: { b: BudgetMonth; month: string }) {
               <span className="min-w-0">
                 <Link
                   to="/categories/$categoryId"
-                  params={{ categoryId: r.key === "earnings" ? EARNINGS : BILLS }}
+                  params={{ categoryId: pageFor[r.key as keyof typeof pageFor] }}
                   search={{ month }}
                   className="block truncate font-medium underline-offset-2 hover:underline"
                 >

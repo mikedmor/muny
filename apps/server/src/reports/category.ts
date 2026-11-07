@@ -6,9 +6,16 @@ import {
   type CategoryActivity,
   EARNINGS,
   EVERYTHING_ELSE,
+  OTHER_SPENDING,
 } from "@muny/shared";
 import { sql } from "drizzle-orm";
-import { billCharges, billsPaidByMonth, budgetMonth } from "../budgets/service.js";
+import {
+  billCharges,
+  billsPaidByMonth,
+  budgetMonth,
+  otherSpending,
+  otherSpentByMonth,
+} from "../budgets/service.js";
 import {
   addMonths,
   categoryMeta,
@@ -131,6 +138,12 @@ const BUDGET_ROW_LABELS: Record<BudgetRowId, CategoryActivity["category"]> = {
     groupName: "Money in your income categories",
     kind: "income",
   },
+  [OTHER_SPENDING]: {
+    id: OTHER_SPENDING,
+    name: "All other categories",
+    groupName: "Spending that isn't a bill",
+    kind: "expense",
+  },
   [BILLS]: {
     id: BILLS,
     name: "Bills & subscriptions",
@@ -158,7 +171,10 @@ export function budgetRowActivity(
   const months = monthsBetween(first, end);
   const byMonth = new Map<string, number>();
   let amounts: number[];
-  if (row === BILLS) {
+  if (row === OTHER_SPENDING) {
+    for (const [m, cents] of otherSpentByMonth(db, months)) byMonth.set(m, cents);
+    amounts = otherSpending(db, `${month}-01`, monthEnd(month)).map((c) => c.cents);
+  } else if (row === BILLS) {
     for (const [m, cents] of billsPaidByMonth(db, months)) byMonth.set(m, cents);
     amounts = billCharges(db, `${month}-01`, monthEnd(month)).map((c) => c.cents);
   } else {

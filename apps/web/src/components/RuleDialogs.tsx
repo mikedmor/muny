@@ -433,7 +433,7 @@ function RuleSteps({
         </button>
       </div>
 
-      {onEditInstead && (
+      {onEditInstead && !save.isPending && !save.isSuccess && (
         <OverlapWarning
           def={{ match: "all", conditions, actions }}
           exceptId={initial.id}

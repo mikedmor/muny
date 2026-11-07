@@ -343,6 +343,32 @@ describe("earnings and bills pages", () => {
     );
     expect(await list("bills")).toHaveLength(3);
 
+    // All other categories: spending that isn't a bill (Groceries, and the split's Groceries part).
+    // With bills, it covers all spending once.
+    expect(b.other.spentCents + b.bills.spentCents).toBe(b.total.spentCents);
+    const other = await act("other-spending");
+    // Groceries and the split's Groceries part, less the uncategorized payroll that month
+    // (uncategorized money in lowers spending, as everywhere in budgets).
+    expect(other.stats.totalCents).toBe(b.other.spentCents);
+    expect(other.stats.totalCents).toBe(4000 + 2000 - 250_000);
+    expect(other.months.at(-1)).toEqual({ month: m, cents: b.other.spentCents });
+    expect((await list("other")).map((t) => t.id)).toContain(split.id);
+    expect((await list("other")).map((t) => t.id)).not.toContain(electric.id);
+    // A target for it, like the other basics.
+    expect(
+      (
+        await client.put("/api/budgets", {
+          categoryId: null,
+          kind: "other",
+          amountCents: 50_000,
+          fromMonth: m,
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect((await client.get(`/api/budgets/${m}`)).json<BudgetMonth>().other.budgetCents).toBe(
+      50_000,
+    );
+
     // Not a bill any more: it drops out.
     await client.patch(`/api/categories/${cat("Electric")}`, { isBill: false });
     expect((await act("bills")).stats.totalCents).toBe(4200);

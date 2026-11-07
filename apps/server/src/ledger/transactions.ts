@@ -29,7 +29,7 @@ const ListQuery = z.object({
   accountId: id.optional(),
   categoryId: id.optional(),
   /** A budget row's transactions: earnings (income categories) or bills (recurring charges). */
-  budgetRow: z.enum(["earnings", "bills"]).optional(),
+  budgetRow: z.enum(["earnings", "bills", "other"]).optional(),
   tagId: id.optional(),
   from: isoDate.optional(),
   to: isoDate.optional(),
@@ -123,6 +123,18 @@ function buildFilters(q: z.infer<typeof ListQuery>): SQL | undefined {
         sql`${t.amountCents} < 0 and ${t.recurringSeriesId} in ${BILL_SERIES}`,
         sql`${t.categoryId} in ${BILL_CATEGORIES}`,
         sql`exists (select 1 from ${schema.transactionSplits} s where s.transaction_id = ${t.id} and s.category_id in ${BILL_CATEGORIES})`,
+      ),
+    );
+  }
+  if (q.budgetRow === "other") {
+    // Spending that isn't a bill: spending categories or uncategorized, not a bill.
+    const spending = sql`(select c.id from categories c join category_groups g on g.id = c.group_id where g.kind = 'expense' and c.exclude_from_budget = 0)`;
+    conds.push(
+      sql`not (${t.amountCents} < 0 and coalesce(${t.recurringSeriesId}, '-') in ${BILL_SERIES})`,
+      or(
+        sql`${t.categoryId} in ${spending} and ${t.categoryId} not in ${BILL_CATEGORIES}`,
+        sql`${t.categoryId} is null and ${t.transferPairId} is null`,
+        sql`exists (select 1 from ${schema.transactionSplits} s where s.transaction_id = ${t.id} and (s.category_id is null or (s.category_id in ${spending} and s.category_id not in ${BILL_CATEGORIES})))`,
       ),
     );
   }

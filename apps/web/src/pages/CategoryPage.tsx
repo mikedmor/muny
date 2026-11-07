@@ -7,6 +7,7 @@ import {
   EARNINGS,
   EVERYTHING_ELSE,
   formatMoney,
+  OTHER_SPENDING,
   type Transaction,
   type TransactionPage,
 } from "@muny/shared";
@@ -91,9 +92,11 @@ export function CategoryPage() {
   const filter =
     row === EVERYTHING_ELSE
       ? "categoryId=uncategorized"
-      : row
-        ? `budgetRow=${row}`
-        : `categoryId=${categoryId}`;
+      : row === OTHER_SPENDING
+        ? "budgetRow=other"
+        : row
+          ? `budgetRow=${row}`
+          : `categoryId=${categoryId}`;
   const txns = useQuery({
     queryKey: [...keys.transactions, "category", filter, month],
     queryFn: () =>
@@ -106,6 +109,16 @@ export function CategoryPage() {
   const inCategory = useMemo(() => {
     if (row === BILLS) return () => true;
     if (row === EVERYTHING_ELSE) return (id: string | null) => id === null;
+    if (row === OTHER_SPENDING) {
+      // Spending categories that aren't bills, and uncategorized.
+      const other = new Set(
+        (categories.data ?? [])
+          .filter((g) => g.kind === "expense")
+          .flatMap((g) => g.categories.filter((c) => !c.isBill && !c.excludeFromBudget))
+          .map((c) => c.id),
+      );
+      return (id: string | null) => id === null || other.has(id);
+    }
     if (row === EARNINGS) {
       const income = new Set(
         (categories.data ?? [])
@@ -142,7 +155,9 @@ export function CategoryPage() {
           ? s.amountCents < 0 && spending(s.categoryId)
           : row === EVERYTHING_ELSE
             ? s.amountCents < 0 && s.categoryId === null
-            : s.categoryId === categoryId,
+            : row === OTHER_SPENDING
+              ? false // scheduled charges are recurring bills
+              : s.categoryId === categoryId,
     );
   }, [budget.data, categories.data, row, categoryId]);
   /** What the pending rows add to this month (spending out, or income in). */
@@ -449,6 +464,8 @@ export function CategoryPage() {
                     "Everything else is spending with no category. Pick a category for each transaction to move it into that category's budget."}
                   {row === EARNINGS &&
                     "Earnings is money in your income categories (pay, interest, refunds you filed as income). Set an earnings target on the Budgets page."}
+                  {row === OTHER_SPENDING &&
+                    "All other categories is your spending that isn't a bill: everything in your spending categories (and uncategorized) except recurring bills and bill categories. Set a target for it on the Budgets page."}
                   {row === BILLS && (
                     <>
                       Bills & subscriptions are charges from the recurring bills and subscriptions

@@ -1,9 +1,9 @@
-export type BudgetKind = "spending" | "income" | "bills";
+export type BudgetKind = "spending" | "income" | "bills" | "other";
 
 export interface BudgetLine {
   /** null for the overall total budget (or the earnings / bills lines). */
   categoryId: string | null;
-  /** "spending" for categories and the total; "income" / "bills" for the basics. */
+  /** "spending" for categories and the total; "income" / "bills" / "other" for the basics. */
   kind: BudgetKind;
   name: string;
   budgetId: string | null;
@@ -74,6 +74,8 @@ export interface BudgetMonth {
   income: BudgetLine;
   /** Bills & subscriptions: budget vs recurring charges paid (spentCents). */
   bills: BudgetLine;
+  /** All other categories: spending that isn't a bill (spentCents). */
+  other: BudgetLine;
   groups: BudgetGroup[];
   /** Spending with no category (needs categorizing). */
   uncategorizedCents: number;

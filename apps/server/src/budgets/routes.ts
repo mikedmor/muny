@@ -13,7 +13,7 @@ const month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Use YYYY-MM");
 const SetBody = z.object({
   categoryId: z.string().min(1).max(64).nullable(),
   /** With no category: the total spending budget, the earnings target, or the bills budget. */
-  kind: z.enum(["spending", "income", "bills"]).optional(),
+  kind: z.enum(["spending", "income", "bills", "other"]).optional(),
   amountCents: z.number().int().min(0).max(1_000_000_000),
   rollover: z.boolean().optional(),
   fromMonth: month.optional(),
