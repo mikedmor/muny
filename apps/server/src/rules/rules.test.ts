@@ -5,6 +5,7 @@ import type {
   PayeeCleanupPreview,
   PayeeSummary,
   Rule,
+  RuleConflict,
   RuleOverlap,
   RulePreview,
   TransactionPage,
@@ -285,5 +286,37 @@ describe("rule overlaps", () => {
     // Nothing in common, and a rule doesn't overlap itself while being edited.
     expect(await check("payroll", "Paycheck")).toEqual([]);
     expect(await check("corner cafe", "Coffee", cafe.id)).toEqual([]);
+  });
+});
+
+describe("rule conflicts", () => {
+  it("lists duplicates and rules that file the same transactions differently", async () => {
+    const { client, cat } = await setup();
+    await importCsv(client);
+    const make = async (value: string, category: string) =>
+      (
+        await client.post("/api/rules", {
+          name: `${value} → ${category}`,
+          match: "all",
+          conditions: [{ field: "description", op: "contains", value }],
+          actions: [{ type: "setCategory", categoryId: cat(category) }],
+        })
+      ).json<Rule>();
+    const a = await make("corner cafe", "Coffee");
+    const b = await make("SQ *CORNER", "Dining & Drinks");
+    const c = await make("Corner Cafe", "Coffee");
+    await make("streamflix", "Streaming");
+
+    const list = (await client.get("/api/rules/conflicts")).json<RuleConflict[]>();
+    const pair = (x: Rule, y: Rule) => list.find((p) => p.firstId === x.id && p.secondId === y.id);
+    expect(pair(a, b)).toMatchObject({
+      identical: false,
+      sharedCount: 2,
+      conflicts: ["sets the category to Dining & Drinks"],
+    });
+    expect(pair(a, c)).toMatchObject({ identical: true, conflicts: [] });
+    expect(pair(b, c)?.conflicts).toEqual(["sets the category to Coffee"]);
+    expect(pair(b, c)?.firstConflicts).toEqual(["sets the category to Dining & Drinks"]);
+    expect(list).toHaveLength(3); // streamflix clashes with nothing
   });
 });

@@ -3,6 +3,7 @@ import { type MunyDb, newId, schema } from "@muny/db";
 import {
   AMOUNT_OPS,
   type Rule,
+  type RuleConflict,
   type RuleDefinition,
   type RuleOverlap,
   type RulePreview,
@@ -328,6 +329,24 @@ export function ruleOverlaps(db: Db, def: RuleDefinition, exceptId?: string): Ru
   const facts = loadCandidates(db).map((c) => c.facts);
   const mine = facts.filter((f) => ruleMatches(def, f));
   const key = conditionKey(def);
+  const differ = disagreement(db);
+  const out: RuleOverlap[] = [];
+  for (const r of others) {
+    const identical = conditionKey(r) === key;
+    const sharedCount = mine.filter((f) => ruleMatches(r, f)).length;
+    if (!identical && sharedCount === 0) continue;
+    out.push({ rule: r, identical, sharedCount, newCount: mine.length, conflicts: differ(def, r) });
+  }
+  return out.sort(
+    (x, y) =>
+      Number(y.identical) - Number(x.identical) ||
+      y.conflicts.length - x.conflicts.length ||
+      y.sharedCount - x.sharedCount,
+  );
+}
+
+/** How rule `other` would file transactions differently from `def` ("sets the category to …"). */
+function disagreement(db: Db) {
   const catName = new Map(
     db
       .select({ id: schema.categories.id, name: schema.categories.name })
@@ -338,24 +357,56 @@ export function ruleOverlaps(db: Db, def: RuleDefinition, exceptId?: string): Ru
   const category = (d: RuleDefinition) =>
     d.actions.find((a) => a.type === "setCategory")?.categoryId;
   const payee = (d: RuleDefinition) => d.actions.find((a) => a.type === "setPayee")?.name;
-  const out: RuleOverlap[] = [];
-  for (const r of others) {
-    const identical = conditionKey(r) === key;
-    const sharedCount = mine.filter((f) => ruleMatches(r, f)).length;
-    if (!identical && sharedCount === 0) continue;
-    const conflicts: string[] = [];
-    const [a, b] = [category(def), category(r)];
-    if (a && b && a !== b)
-      conflicts.push(`sets the category to ${catName.get(b) ?? "another category"}`);
-    const [p, q] = [payee(def), payee(r)];
+  return (def: RuleDefinition, other: RuleDefinition): string[] => {
+    const out: string[] = [];
+    const [a, b] = [category(def), category(other)];
+    if (a && b && a !== b) out.push(`sets the category to ${catName.get(b) ?? "another category"}`);
+    const [p, q] = [payee(def), payee(other)];
     if (p && q && p.trim().toLowerCase() !== q.trim().toLowerCase())
-      conflicts.push(`renames them to ${q}`);
-    out.push({ rule: r, identical, sharedCount, newCount: mine.length, conflicts });
-  }
-  return out.sort(
-    (x, y) =>
-      Number(y.identical) - Number(x.identical) ||
-      y.conflicts.length - x.conflicts.length ||
-      y.sharedCount - x.sharedCount,
-  );
+      out.push(`renames them to ${q}`);
+    return out;
+  };
+}
+
+/**
+ * Pairs of your rules that are duplicates (same conditions) or that match the
+ * same transactions and would file them differently. Rules are in list order,
+ * so the first of a pair is the one that wins.
+ */
+export function ruleConflicts(db: Db): RuleConflict[] {
+  const rules = listRules(db);
+  if (rules.length < 2) return [];
+  const facts = loadCandidates(db).map((c) => c.facts);
+  const matched = rules.map((r) => {
+    const set = new Set<number>();
+    facts.forEach((f, i) => {
+      if (ruleMatches(r, f)) set.add(i);
+    });
+    return set;
+  });
+  const keys = rules.map((r) => conditionKey(r));
+  const differ = disagreement(db);
+  const out: RuleConflict[] = [];
+  for (let i = 0; i < rules.length; i++)
+    for (let j = i + 1; j < rules.length; j++) {
+      const [a, b] = [rules[i] as Rule, rules[j] as Rule];
+      const identical = keys[i] === keys[j];
+      const [small, big] =
+        (matched[i]?.size ?? 0) <= (matched[j]?.size ?? 0)
+          ? [matched[i], matched[j]]
+          : [matched[j], matched[i]];
+      let sharedCount = 0;
+      for (const x of small ?? []) if (big?.has(x)) sharedCount++;
+      const conflicts = sharedCount ? differ(a, b) : [];
+      if (identical || conflicts.length)
+        out.push({
+          firstId: a.id,
+          secondId: b.id,
+          identical,
+          sharedCount,
+          conflicts,
+          firstConflicts: conflicts.length ? differ(b, a) : [],
+        });
+    }
+  return out;
 }

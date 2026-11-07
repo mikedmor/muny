@@ -10,7 +10,7 @@ A rule finds transactions and does something to them: sets the category, renames
 
 All rules, their order and the full editor (several names, "any of") are in **Settings → Rules**.
 
-While you make or edit a rule, Muny warns when you already have the same rule, or another rule matches the same transactions (saying how many, and whether it files them differently), with **Edit this rule instead** to change the one you have. When rules disagree, the one higher in the list wins.
+While you make or edit a rule, Muny warns when you already have the same rule, or another rule matches the same transactions (saying how many, and whether it files them differently), with **Edit this rule instead** to change the one you have. When rules disagree, the one higher in the list wins. **Settings → Rules** also marks rules that clash: the same rule twice, or two rules that file the same transactions differently, with how many transactions they share and which one wins.
 
 ## Documents
 

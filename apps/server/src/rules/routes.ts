@@ -15,6 +15,7 @@ import {
   getRule,
   listRules,
   previewOf,
+  ruleConflicts,
   ruleOverlaps,
   rulesForTransaction,
   storeDefinition,
@@ -55,6 +56,12 @@ export function registerRuleRoutes(app: FastifyInstance, db: MunyDb) {
     });
 
   app.get("/api/rules", async () => listRules(db));
+
+  /** Duplicate rules, and rules that file the same transactions differently. */
+  app.get("/api/rules/conflicts", async (req) => {
+    requireUser(req);
+    return ruleConflicts(db);
+  });
 
   app.post("/api/rules", async (req, reply) => {
     const user = requireUser(req);

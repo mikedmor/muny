@@ -4,14 +4,18 @@ import {
   type Rule,
   type RuleAction,
   type RuleCondition,
+  type RuleConflict,
   TEXT_OP_LABELS,
   toDecimalString,
 } from "@muny/shared";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Checkbox, Modal } from "../../components/forms.js";
 import { type RuleDraft, RuleEditor } from "../../components/RuleEditor.js";
 import { Alert, Button, Card, cx } from "../../components/ui.js";
+import { api } from "../../lib/api.js";
 import {
+  keys,
   useAccounts,
   useApplyRule,
   useApplyTransfers,
@@ -135,6 +139,25 @@ export function RulesSettings() {
   const [editing, setEditing] = useState<RuleDraft | null>(null);
   const [includeEdited, setIncludeEdited] = useState(false);
   const list = rules.data ?? [];
+  // Duplicates, and rules that file the same transactions differently.
+  const conflicts = useQuery({
+    queryKey: [...keys.rules, "conflicts"],
+    queryFn: () => api.get<RuleConflict[]>("/api/rules/conflicts"),
+    enabled: list.length > 1,
+  });
+  const nameOf = new Map(list.map((r) => [r.id, r.name]));
+  const issuesFor = (id: string) =>
+    (conflicts.data ?? [])
+      .filter((c) => c.firstId === id || c.secondId === id)
+      .map((c) => {
+        const other = nameOf.get(c.firstId === id ? c.secondId : c.firstId) ?? "another rule";
+        const wins = c.firstId === id;
+        if (c.identical) return `Same as “${other}”${wins ? "" : " (that one runs first)"}`;
+        // What the other rule does with the transactions both match.
+        const theirs = ((wins ? c.conflicts : c.firstConflicts) ?? c.conflicts ?? []).join(" and ");
+        return `“${other}” also matches ${c.sharedCount} of these transactions and ${theirs}: ${wins ? "this rule wins (higher in the list)" : `“${other}” wins (higher in the list)`}`;
+      });
+  const conflictCount = conflicts.data?.length ?? 0;
 
   return (
     <section className="space-y-4">
@@ -150,6 +173,18 @@ export function RulesSettings() {
       </div>
 
       {rules.isError && <Alert>Couldn't load rules.</Alert>}
+      {conflictCount > 0 && (
+        <div
+          role="status"
+          className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
+        >
+          {conflictCount === 1
+            ? "Two of your rules clash"
+            : `${conflictCount} pairs of rules clash`}
+          : the same rule twice, or rules that file the same transactions differently. They're
+          marked below; edit, reorder or delete one. The higher rule wins.
+        </div>
+      )}
       {list.length === 0 && rules.isSuccess && (
         <Card className="text-sm text-slate-500">
           No rules yet. Create one here, or open a transaction and choose "Create rule".
@@ -174,6 +209,15 @@ export function RulesSettings() {
                   <p className="text-xs text-slate-500">
                     When {d.when} → {d.actions}
                   </p>
+                  {issuesFor(r.id).map((text) => (
+                    <p
+                      key={text}
+                      className="mt-1 flex items-start gap-1 text-xs text-amber-700 dark:text-amber-400"
+                    >
+                      <span aria-hidden="true">⚠</span>
+                      {text}
+                    </p>
+                  ))}
                 </div>
                 <div className="flex w-full items-center justify-end gap-1 text-sm sm:w-auto">
                   <button

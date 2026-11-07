@@ -122,3 +122,18 @@ export interface RuleOverlap {
   /** Where they disagree on the same transactions, e.g. "sets the category to Dining". */
   conflicts: string[];
 }
+
+/** Two of your rules that are the same, or that file the same transactions differently. */
+export interface RuleConflict {
+  /** Higher in the list (wins on category and merchant name when both are on). */
+  firstId: string;
+  secondId: string;
+  /** Same conditions: one of them is a duplicate. */
+  identical: boolean;
+  /** Transactions both match. */
+  sharedCount: number;
+  /** What the second would do differently, e.g. "sets the category to Dining". */
+  conflicts: string[];
+  /** What the first would do differently (the same disagreement, seen from the second). */
+  firstConflicts: string[];
+}
