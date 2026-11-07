@@ -103,6 +103,89 @@ function NumberInput({
   );
 }
 
+/**
+ * A short list of numbers (percentages, days before): remove any with ×, add
+ * another with the box. At least one stays; at most 10.
+ */
+function NumberList({
+  label,
+  values,
+  onChange,
+  min,
+  max,
+  suffix,
+  descending = false,
+}: {
+  label: string;
+  values: number[];
+  onChange: (v: number[]) => void;
+  min: number;
+  max: number;
+  suffix: (v: number) => string;
+  descending?: boolean;
+}) {
+  const [text, setText] = useState("");
+  const sorted = [...new Set(values)].sort((a, b) => (descending ? b - a : a - b));
+  const add = () => {
+    const v = Number(text);
+    if (text.trim() === "" || !Number.isInteger(v) || v < min || v > max) return;
+    if (!sorted.includes(v)) onChange([...sorted, v]);
+    setText("");
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <span className="text-slate-600 dark:text-slate-400">{label}</span>
+      {sorted.map((v) => (
+        <span
+          key={v}
+          className="inline-flex items-center gap-1 rounded-full bg-slate-100 py-0.5 pr-1 pl-2.5 tabular-nums dark:bg-slate-800"
+        >
+          {suffix(v)}
+          {sorted.length > 1 && (
+            <button
+              type="button"
+              aria-label={`Remove ${suffix(v)}`}
+              onClick={() => onChange(sorted.filter((x) => x !== v))}
+              className="rounded-full px-1 text-slate-500 hover:bg-slate-200 hover:text-slate-800 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+            >
+              ×
+            </button>
+          )}
+        </span>
+      ))}
+      {sorted.length < 10 && (
+        <span className="inline-flex items-center gap-1">
+          <input
+            type="number"
+            min={min}
+            max={max}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                add();
+              }
+            }}
+            placeholder="Add"
+            aria-label={`Add to ${label}`}
+            className="w-20 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm tabular-nums dark:border-slate-700 dark:bg-slate-950"
+          />
+          {text.trim() !== "" && (
+            <button
+              type="button"
+              onClick={add}
+              className="text-sm font-medium text-brand-600 hover:underline"
+            >
+              Add
+            </button>
+          )}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function RuleParams({ rule, save }: { rule: AlertRule; save: (params: AlertParams) => void }) {
   const p = rule.params;
   switch (rule.type) {
@@ -152,34 +235,26 @@ function RuleParams({ rule, save }: { rule: AlertRule; save: (params: AlertParam
     case "trial_ending":
     case "bill_due":
       return (
-        <NumberInput
-          label="Notify"
-          suffix="days before"
-          value={p.daysBefore ?? 3}
+        <NumberList
+          label="Remind me"
+          suffix={(d) => (d === 0 ? "on the day" : `${d} day${d === 1 ? "" : "s"} before`)}
+          values={p.reminderDays?.length ? p.reminderDays : [p.daysBefore ?? 3]}
           min={0}
-          max={30}
-          onCommit={(v) => save({ daysBefore: v })}
+          max={60}
+          descending
+          onChange={(v) => save({ reminderDays: v })}
         />
       );
-    case "budget": {
-      const [first = 80, second = 100] = p.percents ?? [80, 100];
+    case "budget":
       return (
-        <div className="flex flex-wrap gap-3">
-          <NumberInput
+        <div className="flex flex-wrap items-center gap-3">
+          <NumberList
             label="Warn at"
-            suffix="%"
-            value={first}
+            suffix={(v) => `${v}%`}
+            values={p.percents ?? [80, 100]}
             min={1}
             max={500}
-            onCommit={(v) => save({ percents: [v, second] })}
-          />
-          <NumberInput
-            label="and at"
-            suffix="%"
-            value={second}
-            min={1}
-            max={500}
-            onCommit={(v) => save({ percents: [first, v] })}
+            onChange={(v) => save({ percents: v })}
           />
           <MutedBudgets
             ids={p.mutedCategoryIds ?? []}
@@ -189,7 +264,6 @@ function RuleParams({ rule, save }: { rule: AlertRule; save: (params: AlertParam
           />
         </div>
       );
-    }
     default:
       return null;
   }

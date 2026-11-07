@@ -58,6 +58,26 @@ interface AlertState {
   conn: Record<string, string>;
 }
 
+/** Reminder days for bills and trials, largest first (older rules have one daysBefore). */
+export function reminderDays(p: AlertParams): number[] {
+  const days = p.reminderDays?.length ? p.reminderDays : [p.daysBefore ?? 3];
+  return [...new Set(days)].sort((a, b) => b - a);
+}
+
+/**
+ * Which reminder a date `left` days away falls in: the closest one at or above
+ * it. The earliest reminder keeps the key it always had, so upgrading doesn't
+ * repeat alerts already sent. Null when it's not time yet.
+ */
+export function reminderTier(days: number[], left: number): { suffix: string } | null {
+  const hit = [...days].reverse().find((d) => left <= d);
+  if (hit === undefined) return null;
+  return { suffix: hit === days[0] ? "" : `:${hit}d` };
+}
+
+const daysBetween = (from: string, to: string) =>
+  Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+
 function addDays(iso: string, n: number) {
   const d = new Date(`${iso}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
@@ -279,12 +299,14 @@ export function evaluateRules(
         break;
       }
       case "bill_due": {
-        const ahead = p.daysBefore ?? 3;
-        for (const u of upcoming(db, today, addDays(today, ahead), today)) {
+        const days = reminderDays(p);
+        for (const u of upcoming(db, today, addDays(today, Math.max(...days)), today)) {
           if (u.amountCents >= 0) continue;
+          const tier = reminderTier(days, daysBetween(today, u.date));
+          if (tier === null) continue;
           out.push({
             type: rule.type,
-            dedupeKey: `bill:${u.seriesId}:${u.date}`,
+            dedupeKey: `bill:${u.seriesId}:${u.date}${tier.suffix}`,
             severity: "info",
             title:
               u.date === today
@@ -329,15 +351,17 @@ export function evaluateRules(
         break;
       }
       case "trial_ending": {
-        const ahead = p.daysBefore ?? 3;
+        const days = reminderDays(p);
         for (const tr of listTrials(db, today)) {
-          if (tr.status !== "active" || tr.daysLeft < 0 || tr.daysLeft > ahead) continue;
+          if (tr.status !== "active" || tr.daysLeft < 0) continue;
+          const tier = reminderTier(days, tr.daysLeft);
+          if (tier === null) continue;
           const price = tr.priceCents
             ? ` It becomes ${formatMoney(tr.priceCents)}${tr.interval ? ` (${tr.interval})` : ""}.`
             : "";
           out.push({
             type: rule.type,
-            dedupeKey: `trial:${tr.id}:${tr.endDate}`,
+            dedupeKey: `trial:${tr.id}:${tr.endDate}${tier.suffix}`,
             severity: "warning",
             title:
               tr.daysLeft === 0

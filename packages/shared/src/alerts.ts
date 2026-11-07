@@ -49,8 +49,10 @@ export interface AlertParams {
   multiplier?: number;
   /** duplicate_charge: same merchant & amount within this many days. */
   days?: number;
-  /** bill_due: this many days before the expected date. */
+  /** bill_due / trial_ending: this many days before (older setting; see reminderDays). */
   daysBefore?: number;
+  /** bill_due / trial_ending: remind at each of these many days before (e.g. [7, 1]). */
+  reminderDays?: number[];
   /** budget: alert at these percentages of a budget (e.g. [80, 100]). */
   percents?: number[];
   /** budget: categories that never alert ("total" for the total spending budget). */

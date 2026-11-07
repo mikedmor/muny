@@ -42,7 +42,8 @@ const RuleParams = z
     multiplier: z.number().min(1.5).max(20).optional(),
     days: z.number().int().min(1).max(14).optional(),
     daysBefore: z.number().int().min(0).max(30).optional(),
-    percents: z.array(z.number().int().min(1).max(500)).min(1).max(5).optional(),
+    percents: z.array(z.number().int().min(1).max(500)).min(1).max(10).optional(),
+    reminderDays: z.array(z.number().int().min(0).max(60)).min(1).max(10).optional(),
     mutedCategoryIds: z.array(z.string().min(1).max(64)).max(500).optional(),
   })
   .strict();
