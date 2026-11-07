@@ -34,7 +34,7 @@ Only the household's owner can do this.
    For other MCP clients, use the address `/mcp` on your Muny, with the same header.
 3. Restart the assistant if it was already running, so it picks up the new tools.
 
-The address has to be one the assistant can reach, like your LAN address or Tailscale name. Don't expose Muny to the public internet for this. A token sent over plain HTTP can be read by others on the same network, so prefer HTTPS or Tailscale.
+**Use an HTTPS address.** MCP doesn't work reliably over plain HTTP, and a token sent that way can be read by others on the same network. Tailscale's HTTPS address is the easiest way to get one (see [Secure access](access.md)). The **Agents** page warns you when you've opened Muny without SSL, and the command it gives you uses whichever address you opened it from, so open Muny at your HTTPS address first. Don't expose Muny to the public internet for this.
 
 To cut off a token, click **Revoke**. It stops working straight away.
 
