@@ -53,7 +53,7 @@ describe("arrangeColumns", () => {
     const lists = [main("a", 30), main("b", 30), main("c", 30)];
     for (const n of ["u", "v", "w", "x", "y", "z"]) lists.push(side(n, 30));
     const { columns } = arrangeColumns(lists, 4);
-    // 270 over 4 columns: the right one keeps three, the rest overflow in order.
+    // Three stay on the right, and the rest overflow, without making the page any taller.
     expect(columns[3]).toEqual(["u", "v", "w"]);
     expect(columns.slice(0, 3)).toEqual([
       ["a", "x"],
@@ -61,9 +61,34 @@ describe("arrangeColumns", () => {
       ["c", "z"],
     ]);
     // Always keeps its top card, however tall.
-    expect(arrangeColumns([main("a", 1), side("huge", 500), side("n", 1)], 2).columns[1]).toEqual([
+    expect(arrangeColumns([main("a", 1), side("huge", 5000), side("n", 1)], 4).columns[3]).toEqual([
       "huge",
     ]);
+  });
+
+  it("makes room for one very tall card rather than stacking on it", () => {
+    const tall = [
+      main("a", 30),
+      main("b", 30),
+      main("c", 30),
+      main("d", 30),
+      side("x", 30),
+      side("huge", 200),
+    ];
+    const { columns } = arrangeColumns(tall, 4);
+    const weightOf = new Map(tall.map((c) => [c.card, c.weight]));
+    const heights = columns.map((col) => col.reduce((s, c) => s + (weightOf.get(c) ?? 0), 0));
+    // Nothing is stacked on it: it's alone, and the others share the rest.
+    expect(Math.max(...heights)).toBe(200);
+    expect(columns.find((col) => col.includes("huge"))).toEqual(["huge"]);
+  });
+
+  it("reads in priority order within every column, highest-priority column first", () => {
+    const list = [main("first", 5), main("big", 90), main("mid", 40), main("low", 30)];
+    const { columns } = arrangeColumns(list, 2);
+    expect(columns[0]?.[0]).toBe("first");
+    const rank = (c: string) => list.findIndex((x) => x.card === c);
+    for (const col of columns) expect(col).toEqual([...col].sort((x, y) => rank(x) - rank(y)));
   });
 
   it("handles no cards", () => {
@@ -114,9 +139,9 @@ describe("the standard Overview", () => {
     const three = arrangeColumns(standard, 3).columns;
     expect(three).toHaveLength(3);
     expect(three[0]?.[0]).toBe("spending");
-    expect(three[1]?.[0]).toBe("calendar");
-    expect(three[2]).toContain("recent");
+    expect(three.slice(0, 2).map((c) => c[0])).toContain("calendar");
     expect(three[2]?.[0]).toBe("accounts");
+    expect(three.flat()).toContain("recent");
     expect(arrangeColumns(standard, 4).columns).toHaveLength(4);
     expect(arrangeColumns(standard, 2).columns[1]).toContain("accounts");
   });
@@ -128,7 +153,7 @@ describe("the standard Overview", () => {
     const heights = columns.map((col) => col.reduce((s, c) => s + (weight.get(c) ?? 0), 0));
     expect(Math.max(...heights)).toBeLessThanOrEqual(Math.min(...heights) * 1.6);
     expect(columns[3]?.[0]).toBe("accounts");
-    expect(columns.slice(0, 3).map((c) => c[0])).toEqual(["spending", "calendar", "cash-flow"]);
+    expect(columns[0]?.[0]).toBe("spending");
   });
 
   it("leaves every list on the right on a laptop", () => {

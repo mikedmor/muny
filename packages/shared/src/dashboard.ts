@@ -20,7 +20,7 @@ export interface BuiltinCard {
   description: string;
   /** "main": flexible columns (charts). "side": the fixed right column (lists). */
   placement: CardPlacement;
-  /** Roughly how tall it is, for balancing columns. */
+  /** Roughly how tall it is, in 16px rows, until its real height is known. */
   weight: number;
 }
 
@@ -155,42 +155,58 @@ export interface ArrangedColumns {
   hasSide: boolean;
 }
 
+/** Share cards between columns as evenly as possible: tallest first, into the shortest. */
+function packColumns(cards: ArrangeCard[], count: number) {
+  const columns: ArrangeCard[][] = Array.from({ length: count }, () => []);
+  const heights = columns.map(() => 0);
+  for (const c of [...cards].sort((x, y) => y.weight - x.weight)) {
+    const shortest = heights.indexOf(Math.min(...heights));
+    columns[shortest]?.push(c);
+    heights[shortest] = (heights[shortest] ?? 0) + c.weight;
+  }
+  return { columns, tallest: Math.max(0, ...heights) };
+}
+
 /**
- * Lay cards out in the columns available. One column is simply the priority
- * order. With more, side cards fill the right column in order, but only up to
- * their fair share of the page's height, so it can't run on alone past the
- * others on a wide screen. Main cards then go to the shortest remaining column,
- * followed by any side cards that didn't fit, so priority still reads top to
- * bottom. Uses each card's typical height rather than measuring, so cards never
- * jump between columns as their numbers load.
+ * Lay cards out in the columns available, with as little empty space as
+ * possible. One column is simply the priority order. With more, side cards stay
+ * in the right column as far as that keeps the page short, highest priority
+ * first; the rest share the other columns with the main cards. Priority reads
+ * top to bottom in every column, and the column holding your highest-priority
+ * card comes first. Weights can be any unit: the web app passes measured heights.
  */
 export function arrangeColumns(cards: ArrangeCard[], columnCount: number): ArrangedColumns {
   const count = Math.max(1, Math.floor(columnCount));
   if (count === 1) return { columns: [cards.map((c) => c.card)], hasSide: false };
+  const priority = new Map(cards.map((c, i) => [c.card, i]));
+  const rank = (c: ArrangeCard) => priority.get(c.card) ?? 0;
+  const inOrder = (column: ArrangeCard[]) => [...column].sort((x, y) => rank(x) - rank(y));
+  const flexibleColumns = (packed: ArrangeCard[][]) =>
+    packed
+      .map(inOrder)
+      .sort((x, y) => (x[0] ? rank(x[0]) : Infinity) - (y[0] ? rank(y[0]) : Infinity))
+      .map((column) => column.map((c) => c.card));
+
   const side = cards.filter((c) => c.placement === "side");
   const main = cards.filter((c) => c.placement === "main");
   // With only one kind of card, every column is available to it.
-  const hasSide = side.length > 0 && main.length > 0;
-  const fairShare = cards.reduce((sum, c) => sum + c.weight, 0) / count;
-  const inSide: string[] = [];
-  const overflow: ArrangeCard[] = [];
-  let sideHeight = 0;
-  for (const c of hasSide ? side : []) {
-    if (sideHeight < fairShare) {
-      inSide.push(c.card);
-      sideHeight += c.weight;
-    } else overflow.push(c);
+  if (side.length === 0 || main.length === 0)
+    return { columns: flexibleColumns(packColumns(cards, count).columns), hasSide: false };
+
+  // How many lists to keep on the right: whichever makes the page shortest,
+  // and on a tie, the most (that's where lists read best).
+  let best: { keep: number; tallest: number; packed: ArrangeCard[][] } | null = null;
+  for (let keep = side.length; keep >= 1; keep--) {
+    const sideHeight = side.slice(0, keep).reduce((sum, c) => sum + c.weight, 0);
+    const { columns, tallest } = packColumns([...main, ...side.slice(keep)], count - 1);
+    const pageHeight = Math.max(sideHeight, tallest);
+    if (!best || pageHeight < best.tallest) best = { keep, tallest: pageHeight, packed: columns };
   }
-  const flexible = hasSide ? [...main, ...overflow] : cards;
-  const columns: string[][] = Array.from({ length: hasSide ? count - 1 : count }, () => []);
-  const heights = columns.map(() => 0);
-  for (const c of flexible) {
-    const shortest = heights.indexOf(Math.min(...heights));
-    columns[shortest]?.push(c.card);
-    heights[shortest] = (heights[shortest] ?? 0) + c.weight;
-  }
-  if (hasSide) columns.push(inSide);
-  return { columns, hasSide };
+  const keep = best?.keep ?? side.length;
+  return {
+    columns: [...flexibleColumns(best?.packed ?? []), side.slice(0, keep).map((c) => c.card)],
+    hasSide: true,
+  };
 }
 
 /** Move a card to a new position in the priority order. */

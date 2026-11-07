@@ -60,11 +60,121 @@ function describe(ref: string, custom: CustomCard[]) {
   return { title: b?.title ?? ref, description: b?.description ?? "" };
 }
 
-function arrangeInfo(ref: string, custom: CustomCard[]): ArrangeCard {
+const ROW_PX = 16;
+const GAP_PX = 24;
+
+/** A card's placement and height: measured if we've seen it, else its typical height. */
+function arrangeInfo(ref: string, custom: CustomCard[], heights: Heights): ArrangeCard {
   const c = custom.find((x) => customRef(x) === ref);
-  if (c) return { card: ref, ...customCardArrangement(c.spec.view) };
   const b = BUILTIN_CARDS.find((x) => x.id === ref);
-  return { card: ref, placement: b?.placement ?? "main", weight: b?.weight ?? 24 };
+  const known = c
+    ? customCardArrangement(c.spec.view)
+    : { placement: b?.placement ?? ("main" as const), weight: b?.weight ?? 24 };
+  const px = heights[ref];
+  return {
+    card: ref,
+    placement: known.placement,
+    // A card with nothing to show takes no space, not even a gap.
+    weight: px === undefined ? known.weight * ROW_PX + GAP_PX : px === 0 ? 0 : px + GAP_PX,
+  };
+}
+
+type Heights = Record<string, number>;
+
+const HEIGHTS_KEY = "muny.overview.heights";
+/** Rearranging is only for while the page settles; after that cards stay put. */
+const SETTLE_MS = 6000;
+const SETTLE_ROUNDS = 4;
+/** Differences smaller than this aren't worth moving a card for. */
+const NOTICEABLE_PX = 24;
+
+/** Remembered per browser and column count, so the next visit starts in the right place. */
+function savedHeights(count: number): Heights {
+  try {
+    return JSON.parse(localStorage.getItem(HEIGHTS_KEY) ?? "{}")[count] ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function saveHeights(count: number, heights: Heights) {
+  try {
+    const all = JSON.parse(localStorage.getItem(HEIGHTS_KEY) ?? "{}");
+    localStorage.setItem(HEIGHTS_KEY, JSON.stringify({ ...all, [count]: heights }));
+  } catch {
+    // Private windows and full storage: it just settles again next visit.
+  }
+}
+
+/**
+ * The heights to arrange by. They only change for a few seconds after the page
+ * opens or the layout changes, so nothing moves under you later (opening an
+ * account, changing the calendar's month). Later changes are remembered for the
+ * next visit.
+ */
+function useCardHeights(count: number, layout: string) {
+  const [heights, setHeights] = useState<Heights>(() => savedHeights(count));
+  const live = useRef<Heights>({});
+  const applied = useRef(heights);
+  const settling = useRef({ start: Date.now(), rounds: 0 });
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new column count or layout starts a new settling window.
+  useEffect(() => {
+    live.current = {};
+    const saved = savedHeights(count);
+    applied.current = saved;
+    setHeights(saved);
+    settling.current = { start: Date.now(), rounds: 0 };
+    return () => clearTimeout(timer.current);
+  }, [count, layout]);
+
+  const countNow = useRef(count);
+  countNow.current = count;
+  const report = useRef((card: string, px: number) => {
+    live.current[card] = px;
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      const next = { ...applied.current, ...live.current };
+      saveHeights(countNow.current, next);
+      const w = settling.current;
+      if (w.rounds >= SETTLE_ROUNDS || Date.now() - w.start > SETTLE_MS) return;
+      const moved = Object.keys(next).some(
+        (k) => Math.abs((next[k] ?? 0) - (applied.current[k] ?? -1000)) >= NOTICEABLE_PX,
+      );
+      if (!moved) return;
+      w.rounds++;
+      applied.current = next;
+      setHeights(next);
+    }, 200);
+  });
+  return { heights, report: report.current };
+}
+
+/** One card on the page, reporting its height. */
+function CardSlot({
+  card,
+  onHeight,
+  children,
+}: {
+  card: string;
+  onHeight: (card: string, px: number) => void;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => onHeight(card, el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [card, onHeight]);
+  return (
+    // A card with nothing to show renders nothing, and takes no space.
+    <div ref={ref} data-card={card} className="min-w-0 empty:hidden">
+      {children}
+    </div>
+  );
 }
 
 export function DashboardBoard({
@@ -82,9 +192,11 @@ export function DashboardBoard({
   const [customizing, setCustomizing] = useState(false);
   const cards = dashboard.data?.cards ?? [];
   const custom = dashboard.data?.customCards ?? [];
+  const count = tier?.count ?? 1;
+  const { heights, report } = useCardHeights(count, cards.join());
   const { columns, hasSide } = arrangeColumns(
-    cards.map((c) => arrangeInfo(c, custom)),
-    tier?.count ?? 1,
+    cards.map((c) => arrangeInfo(c, custom, heights)),
+    count,
   );
   const template = !tier
     ? "minmax(0,1fr)"
@@ -114,10 +226,9 @@ export function DashboardBoard({
             // biome-ignore lint/suspicious/noArrayIndexKey: columns have no identity beyond position.
             <div key={i} className="flex min-w-0 flex-col gap-6">
               {column.map((card) => (
-                // A card with nothing to show renders nothing, and takes no space.
-                <div key={card} data-card={card} className="min-w-0 empty:hidden">
+                <CardSlot key={card} card={card} onHeight={report}>
                   {renderCard(card)}
-                </div>
+                </CardSlot>
               ))}
             </div>
           ))}
