@@ -126,6 +126,7 @@ export function budgetMonth(db: Db, month: string): BudgetMonth {
       availableCents: budgetCents === null ? null : budgetCents + rolloverCents - spentCents,
       averageCents: Math.round(prev3.reduce((s, m) => s + spentIn(m, categoryId), 0) / 3),
       historyCents: [...prev3].reverse().map((m) => ({ month: m, cents: spentIn(m, categoryId) })),
+      isBill: categoryId ? (cats.get(categoryId)?.isBill ?? false) : false,
     };
   };
 
@@ -156,19 +157,20 @@ export function budgetMonth(db: Db, month: string): BudgetMonth {
   // Earnings and bills: an optional fixed target; no target = automatic (the forecast).
   const billsPaid = billsPaidByMonth(db, [month, ...prev3]);
   const otherSpent = otherSpentByMonth(db, [month, ...prev3]);
+  // The basics aren't budgeted by hand: earnings is the income expected this
+  // month; bills and all other categories add up their category budgets.
   const basic = (
     kind: "income" | "bills" | "other",
     name: string,
     actual: (m: string) => number,
+    budgetCents: number | null,
   ): BudgetLine => {
-    const b = budgets.find((x) => x.categoryId === null && x.kind === kind);
-    const budgetCents = b ? amountFor(b, month) : null;
     const spentCents = actual(month);
     return {
       categoryId: null,
       kind,
       name,
-      budgetId: b?.id ?? null,
+      budgetId: null,
       budgetCents,
       spentCents,
       rollover: false,
@@ -176,25 +178,33 @@ export function budgetMonth(db: Db, month: string): BudgetMonth {
       availableCents: budgetCents === null ? null : budgetCents - spentCents,
       averageCents: Math.round(prev3.reduce((s, m) => s + actual(m), 0) / 3),
       historyCents: [...prev3].reverse().map((m) => ({ month: m, cents: actual(m) })),
+      isBill: false,
     };
   };
+  const categoryLines = groupList.flatMap((g) => g.lines);
+  const sumBudgets = (bill: boolean) => {
+    const ls = categoryLines.filter((l) => l.isBill === bill && l.budgetCents !== null);
+    return ls.length ? ls.reduce((s, l) => s + (l.budgetCents ?? 0), 0) : null;
+  };
+  const forecast = forecastMonth(db, month, {
+    spentCents: total.spentCents,
+    incomeCents: income,
+    incomeAverageCents: Math.round(prev3.reduce((s, m) => s + (incomeByMonth.get(m) ?? 0), 0) / 3),
+    isSpending: (categoryId) => {
+      if (categoryId === null) return true;
+      const c = cats.get(categoryId);
+      return c?.kind === "expense" && !c.excludeFromBudget;
+    },
+  });
+  // Earnings: received so far plus what recurring income should still bring (past: received).
+  const expectedIncome =
+    forecast.period === "past" ? forecast.incomeSoFarCents : forecast.projectedIncomeCents;
 
   return {
-    income: basic("income", "Earnings", (m) => incomeByMonth.get(m) ?? 0),
-    bills: basic("bills", "Bills & subscriptions", (m) => billsPaid.get(m) ?? 0),
-    other: basic("other", "All other categories", (m) => otherSpent.get(m) ?? 0),
-    forecast: forecastMonth(db, month, {
-      spentCents: total.spentCents,
-      incomeCents: income,
-      incomeAverageCents: Math.round(
-        prev3.reduce((s, m) => s + (incomeByMonth.get(m) ?? 0), 0) / 3,
-      ),
-      isSpending: (categoryId) => {
-        if (categoryId === null) return true;
-        const c = cats.get(categoryId);
-        return c?.kind === "expense" && !c.excludeFromBudget;
-      },
-    }),
+    income: basic("income", "Earnings", (m) => incomeByMonth.get(m) ?? 0, expectedIncome),
+    bills: basic("bills", "Bills & subscriptions", (m) => billsPaid.get(m) ?? 0, sumBudgets(true)),
+    other: basic("other", "All other categories", (m) => otherSpent.get(m) ?? 0, sumBudgets(false)),
+    forecast,
     month,
     total,
     groups: groupList,

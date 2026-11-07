@@ -12,7 +12,7 @@ const month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Use YYYY-MM");
 
 const SetBody = z.object({
   categoryId: z.string().min(1).max(64).nullable(),
-  /** With no category: the total spending budget, the earnings target, or the bills budget. */
+  /** "spending" only: a category's budget, or (no category) the total spending budget. */
   kind: z.enum(["spending", "income", "bills", "other"]).optional(),
   amountCents: z.number().int().min(0).max(1_000_000_000),
   rollover: z.boolean().optional(),
@@ -39,8 +39,11 @@ export function registerBudgetRoutes(app: FastifyInstance, db: MunyDb) {
   app.put("/api/budgets", async (req) => {
     const user = requireUser(req);
     const body = parse(SetBody, req.body);
-    if (body.categoryId && body.kind && body.kind !== "spending")
-      throw badRequest("Earnings and bills budgets have no category");
+    // Budget basics are worked out (expected income; category budgets added up).
+    if (body.kind && body.kind !== "spending")
+      throw badRequest(
+        "Earnings, bills and all other categories are worked out from your income and category budgets",
+      );
     if (body.categoryId) {
       const c = db
         .select({ kind: schema.categoryGroups.kind })

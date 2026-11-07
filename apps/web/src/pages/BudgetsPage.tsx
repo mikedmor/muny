@@ -100,13 +100,63 @@ function Remaining({ cents, muted }: { cents: number | null; muted?: boolean }) 
   );
 }
 
+/** "+ bill category": mark another spending category as a bill. */
+function AddBillCategory() {
+  const groups = useCategories().data ?? [];
+  const update = useUpdateCategory();
+  const [open, setOpen] = useState(false);
+  const options = groups
+    .filter((g) => g.kind === "expense")
+    .flatMap((g) =>
+      g.categories
+        .filter((c) => !c.isBill && !c.excludeFromBudget && !c.hidden)
+        .map((c) => ({ ...c, group: g.name })),
+    );
+  if (!open)
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="text-brand-600 hover:underline dark:text-brand-500"
+      >
+        + bill category
+      </button>
+    );
+  return (
+    <select
+      aria-label="Category to count as a bill"
+      // biome-ignore lint/a11y/noAutofocus: opened by a click to pick right away
+      autoFocus
+      value=""
+      onBlur={() => setOpen(false)}
+      onChange={(e) => {
+        if (e.target.value) update.mutate({ id: e.target.value, isBill: true });
+        setOpen(false);
+      }}
+      className="max-w-48 rounded border border-slate-300 bg-white px-1 py-0.5 text-xs dark:border-slate-700 dark:bg-slate-950"
+    >
+      <option value="">Count as a bill…</option>
+      {options.map((c) => (
+        <option key={c.id} value={c.id}>
+          {c.group} · {c.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/**
+ * Budget basics, worked out rather than typed in: earnings is the income
+ * expected this month; bills and all other categories add up the budgets of
+ * the categories below (bill categories, and the rest).
+ */
 function BasicsTable({ b, month }: { b: BudgetMonth; month: string }) {
   const f = b.forecast;
   const past = f.period === "past";
-  const expectedIncome = past ? f.incomeSoFarCents : f.projectedIncomeCents;
-  const scheduledBills = f.recurringPaidCents + f.recurringDueCents;
-  const incomeTarget = b.income.budgetCents ?? expectedIncome;
-  const billsTarget = b.bills.budgetCents ?? scheduledBills;
+  const lines = b.groups.flatMap((g) => g.lines);
+  const budgeted = (bill: boolean) =>
+    lines.filter((l) => l.isBill === bill && l.budgetCents !== null).length;
+  const billCount = lines.filter((l) => l.isBill).length;
   const rows = [
     {
       key: "earnings",
@@ -115,41 +165,38 @@ function BasicsTable({ b, month }: { b: BudgetMonth; month: string }) {
       note: past
         ? "Income received"
         : f.incomeExpectedCents > 0
-          ? `${formatMoney(f.incomeExpectedCents)} more expected from recurring income`
+          ? `${formatMoney(f.incomeSoFarCents)} so far, ${formatMoney(f.incomeExpectedCents)} more expected`
           : `Usually about ${formatMoney(f.incomeAverageCents)}/mo`,
       line: b.income,
-      auto: expectedIncome,
-      actual: f.incomeSoFarCents,
-      remaining: incomeTarget - f.incomeSoFarCents,
-      ring: [f.incomeSoFarCents, incomeTarget] as const,
+      basis: "Income received plus what your recurring income should still bring",
     },
     {
       key: "bills",
       icon: "🧾",
       name: "Bills & subscriptions",
-      note: past
-        ? "Recurring charges paid"
-        : f.recurringDueCents > 0
-          ? `${formatMoney(f.recurringDueCents)} still due this month`
-          : "All paid for the month",
+      note: (
+        <>
+          {budgeted(true)
+            ? `Budgets of ${budgeted(true)} bill categor${budgeted(true) === 1 ? "y" : "ies"}`
+            : billCount
+              ? "Give your bill categories a budget below"
+              : "No bill categories yet"}
+          {" · "}
+          <AddBillCategory />
+        </>
+      ),
       line: b.bills,
-      auto: scheduledBills,
-      actual: f.recurringPaidCents,
-      remaining: billsTarget - f.recurringPaidCents,
-      ring: [f.recurringPaidCents, billsTarget] as const,
+      basis: "Your bill categories' budgets added up",
     },
     {
       key: "other",
       icon: "🛒",
       name: "All other categories",
-      // Like Earnings: what's usual, or what was spent once the month is over. (Every
-      // recurring charge counts as a bill, so none are expected here.)
-      note: past ? "Spent outside bills" : `Usually about ${formatMoney(b.other.averageCents)}/mo`,
+      note: budgeted(false)
+        ? `Budgets of ${budgeted(false)} other categor${budgeted(false) === 1 ? "y" : "ies"}`
+        : "Give categories a budget below",
       line: b.other,
-      auto: b.other.averageCents,
-      actual: b.other.spentCents,
-      remaining: (b.other.budgetCents ?? b.other.averageCents) - b.other.spentCents,
-      ring: [b.other.spentCents, b.other.budgetCents ?? b.other.averageCents] as const,
+      basis: "Your other categories' budgets added up",
     },
   ];
   const pageFor = { earnings: EARNINGS, bills: BILLS, other: OTHER_SPENDING } as const;
@@ -157,38 +204,47 @@ function BasicsTable({ b, month }: { b: BudgetMonth; month: string }) {
     <Card className="p-0">
       <TableHead first="Budget basics" />
       <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-        {rows.map((r) => (
-          <li key={r.key} className={cx(ROW, "px-4 py-3")}>
-            <span className={cx(NAME_CELL, "flex min-w-0 items-center gap-3")}>
-              <span
-                aria-hidden="true"
-                className="flex size-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-lg dark:bg-slate-800"
-              >
-                {r.icon}
-              </span>
-              <span className="min-w-0">
-                <Link
-                  to="/categories/$categoryId"
-                  params={{ categoryId: pageFor[r.key as keyof typeof pageFor] }}
-                  search={{ month }}
-                  className="block truncate font-medium underline-offset-2 hover:underline"
+        {rows.map((r) => {
+          const target = r.line.budgetCents;
+          const actual = r.line.spentCents;
+          return (
+            <li key={r.key} className={cx(ROW, "px-4 py-3")}>
+              <span className={cx(NAME_CELL, "flex min-w-0 items-center gap-3")}>
+                <span
+                  aria-hidden="true"
+                  className="flex size-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-lg dark:bg-slate-800"
                 >
-                  {r.name}
-                </Link>
-                <span className="block truncate text-xs text-slate-500">{r.note}</span>
+                  {r.icon}
+                </span>
+                <span className="min-w-0">
+                  <Link
+                    to="/categories/$categoryId"
+                    params={{ categoryId: pageFor[r.key as keyof typeof pageFor] }}
+                    search={{ month }}
+                    className="block truncate font-medium underline-offset-2 hover:underline"
+                  >
+                    {r.name}
+                  </Link>
+                  <span className="block truncate text-xs text-slate-500">{r.note}</span>
+                </span>
               </span>
-            </span>
-            <InlineBudget line={r.line} month={month} auto={r.auto} />
-            <span className="text-right tabular-nums">{formatMoney(r.actual)}</span>
-            <Remaining
-              cents={r.remaining}
-              muted={r.key === "earnings" || r.line.budgetCents === null}
-            />
-            <span className="hidden sm:block">
-              <Ring used={r.ring[0]} limit={r.ring[1]} />
-            </span>
-          </li>
-        ))}
+              <span
+                className="text-slate-600 tabular-nums sm:text-right dark:text-slate-300"
+                title={r.basis}
+              >
+                {target === null ? <span className="text-slate-400">—</span> : formatMoney(target)}
+              </span>
+              <span className="text-right tabular-nums">{formatMoney(actual)}</span>
+              <Remaining
+                cents={target === null ? null : target - actual}
+                muted={r.key === "earnings"}
+              />
+              <span className="hidden sm:block">
+                {target !== null && <Ring used={actual} limit={target} />}
+              </span>
+            </li>
+          );
+        })}
       </ul>
     </Card>
   );
@@ -197,6 +253,7 @@ function BasicsTable({ b, month }: { b: BudgetMonth; month: string }) {
 function CategoriesTable({ b, month }: { b: BudgetMonth; month: string }) {
   const [showAll, setShowAll] = useState(false);
   const scheduled = b.forecast.scheduledByCategory;
+  const updateCategory = useUpdateCategory();
   const lines = b.groups.flatMap((g) => g.lines.map((l) => ({ ...l, groupName: g.name })));
   // Categories with a budget, spending or a scheduled charge this month; the
   // rest until "show more". Uncategorized spending is "Everything else".
@@ -238,6 +295,16 @@ function CategoriesTable({ b, month }: { b: BudgetMonth; month: string }) {
                     {l.name}
                   </Link>
                   <span className="block truncate text-xs text-slate-500">
+                    {l.isBill && (
+                      <button
+                        type="button"
+                        onClick={() => updateCategory.mutate({ id, isBill: false })}
+                        title="Counts toward Bills & subscriptions. Click to stop."
+                        className="mr-1.5 rounded bg-brand-50 px-1.5 py-px text-[10px] font-medium text-brand-700 hover:bg-brand-100 dark:bg-brand-700/20 dark:text-brand-500"
+                      >
+                        Bill
+                      </button>
+                    )}
                     {due > 0 && `${formatMoney(due)} more scheduled`}
                     {due > 0 && l.rollover && l.rolloverCents !== 0 && " · "}
                     {l.rollover &&

@@ -20,6 +20,8 @@ export interface BudgetLine {
   averageCents: number;
   /** Spending in each of the previous 3 months, oldest first (for picking a budget). */
   historyCents: { month: string; cents: number }[];
+  /** A bill category (its budget counts toward Bills & subscriptions). */
+  isBill: boolean;
 }
 
 export interface BudgetGroup {
