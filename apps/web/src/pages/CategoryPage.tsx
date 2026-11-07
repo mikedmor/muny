@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 import { EditBudget, monthLabel, Ring } from "../components/budget.js";
 import { CategorySelect } from "../components/CategorySelect.js";
 import { ColumnChart } from "../components/charts.js";
+import { FindSimilar } from "../components/FindSimilar.js";
 import { useRuleOffer } from "../components/RuleOffer.js";
 import { Alert, Button, Card, cx } from "../components/ui.js";
 import { CategoryIcon, MerchantAvatar } from "../components/visuals.js";
@@ -334,10 +335,11 @@ export function CategoryPage() {
                         </span>
                         <span
                           className={cx(
-                            "text-right font-medium tabular-nums",
+                            "flex items-center justify-end gap-1 text-right font-medium tabular-nums",
                             part > 0 && "text-emerald-700 dark:text-emerald-400",
                           )}
                         >
+                          <FindSimilar payeeName={t.payeeName} description={t.rawDescription} />
                           {part > 0 ? "+" : ""}
                           {formatMoney(Math.abs(part))}
                         </span>

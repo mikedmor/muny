@@ -15,6 +15,7 @@ import {
   RankedBars,
   type StackBand,
 } from "../components/charts.js";
+import { FindSimilar } from "../components/FindSimilar.js";
 import {
   CardsOverviewCard,
   LoansOverviewCard,
@@ -470,6 +471,7 @@ function RecentTransactions({ limit }: { limit: number }) {
                   </span>
                 </span>
               </span>
+              <FindSimilar payeeName={t.payeeName} description={t.rawDescription} />
               <span
                 className={cx(
                   "shrink-0 font-medium tabular-nums",

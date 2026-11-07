@@ -10,6 +10,7 @@ import { Link } from "@tanstack/react-router";
 import { FileText, Link2, Pencil } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { LineChart } from "../components/charts.js";
+import { FindSimilar } from "../components/FindSimilar.js";
 import { Modal } from "../components/forms.js";
 import {
   StatementBadge,
@@ -544,7 +545,10 @@ function CardTile({ card }: { card: CreditCard }) {
                       <span className="block text-xs text-slate-500">{p.fromAccountName}</span>
                     )}
                   </span>
-                  <span className="font-medium tabular-nums">{formatMoney(p.amountCents)}</span>
+                  <span className="flex items-center gap-1 font-medium tabular-nums">
+                    <FindSimilar description={p.description} />
+                    {formatMoney(p.amountCents)}
+                  </span>
                 </li>
               ))}
             </ul>

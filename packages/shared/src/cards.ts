@@ -6,6 +6,8 @@ export interface CardPayment {
   amountCents: number;
   /** The account it was paid from, when Muny paired it. */
   fromAccountName: string | null;
+  /** The bank's description of the payment. */
+  description: string;
 }
 
 export interface CreditCard {

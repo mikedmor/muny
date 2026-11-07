@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import { CategorySelect } from "../components/CategorySelect.js";
+import { FindSimilar } from "../components/FindSimilar.js";
 import { Modal, MoneyField, SelectField } from "../components/forms.js";
 import { CreateRuleDialog, RulesAppliedDialog } from "../components/RuleDialogs.js";
 import type { RuleDraft } from "../components/RuleEditor.js";
@@ -400,6 +401,7 @@ function TransactionRow({
           />
         )}
       </div>
+      <FindSimilar payeeName={txn.payeeName} description={txn.rawDescription} />
       <button type="button" onClick={onOpen} className="shrink-0 text-right text-sm font-medium">
         <Amount cents={txn.amountCents} />
       </button>
@@ -1014,7 +1016,14 @@ function TransactionDetail({
               .filter(Boolean)
               .join("  |  ")}
           </p>
-          <p className="break-words text-slate-500 uppercase">{txn.rawDescription}</p>
+          <p className="flex items-center justify-center gap-1 break-words text-slate-500 uppercase">
+            {txn.rawDescription}
+            <FindSimilar
+              payeeName={txn.payeeName}
+              description={txn.rawDescription}
+              onFind={onDone}
+            />
+          </p>
         </div>
       </div>
       {offer}

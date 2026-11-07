@@ -17,6 +17,7 @@ import { Link } from "@tanstack/react-router";
 import { Download, Pencil, Plus, X } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { LineChart } from "../components/charts.js";
+import { FindSimilar } from "../components/FindSimilar.js";
 import { Modal } from "../components/forms.js";
 import {
   ImportStatementsButton,
@@ -872,8 +873,11 @@ function Payments({ loan }: { loan: Loan }) {
               {loan.payments.map((p) => (
                 <tr key={p.transactionId}>
                   <td className="py-2 whitespace-nowrap">{day(p.date)}</td>
-                  <td className="max-w-48 truncate py-2 text-slate-500" title={p.description}>
-                    {p.fromAccountName}
+                  <td className="max-w-48 py-2 text-slate-500" title={p.description}>
+                    <span className="flex min-w-0 items-center gap-1">
+                      <span className="truncate">{p.fromAccountName}</span>
+                      <FindSimilar description={p.description} />
+                    </span>
                   </td>
                   <td className="py-2 text-right font-medium tabular-nums">
                     {formatMoney(p.amountCents)}

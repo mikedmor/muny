@@ -92,7 +92,14 @@ export function cardsReport(db: Db, today = localToday()): CardsReport {
 
   // Payments found by their words in your other accounts (when you linked them).
   // Each card's candidates: its words, then its amount, day and paying account when set.
-  type Cand = { id: string; date: string; amount: number; name: string; mask: string | null };
+  type Cand = {
+    id: string;
+    date: string;
+    amount: number;
+    name: string;
+    mask: string | null;
+    raw: string;
+  };
   const candidates = new Map<string, { list: Cand[]; fit: (c: Cand) => number }>();
   for (const a of cards) {
     const d = details.get(a.id);
@@ -106,6 +113,7 @@ export function cardsReport(db: Db, today = localToday()): CardsReport {
         accountId: t.accountId,
         name: schema.accounts.name,
         mask: schema.accounts.mask,
+        raw: t.rawDescription,
       })
       .from(t)
       .innerJoin(schema.accounts, eq(schema.accounts.id, t.accountId))
@@ -185,6 +193,7 @@ export function cardsReport(db: Db, today = localToday()): CardsReport {
         date: x.date,
         amountCents: x.amountCents,
         fromAccountName: x.pair ? (pairFrom.get(x.pair) ?? null) : null,
+        description: x.raw,
       }));
     // From your other accounts, unless the same payment already shows on the card.
     const day = (iso: string) => Date.parse(`${iso}T00:00:00Z`) / 86_400_000;
@@ -200,6 +209,7 @@ export function cardsReport(db: Db, today = localToday()): CardsReport {
         date: p.date,
         amountCents: -p.amount,
         fromAccountName: p.mask ? `${p.name} ••${p.mask}` : p.name,
+        description: p.raw,
       }));
     const payments = [...onCard, ...fromOthers].sort((x, y) => y.date.localeCompare(x.date));
     // A hand-added card: payments from checking since its newest statement aren't on

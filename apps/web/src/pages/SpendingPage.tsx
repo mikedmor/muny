@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { monthLabel } from "../components/budget.js";
 import { ColumnChart, Donut, type DonutSlice } from "../components/charts.js";
+import { FindSimilar } from "../components/FindSimilar.js";
 import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
 import { CategoryIcon } from "../components/visuals.js";
 import { api } from "../lib/api.js";
@@ -326,6 +327,7 @@ export function SpendingPage() {
                           <span className="block truncate font-medium">{l.name}</span>
                           <span className="text-xs text-slate-500">{day(l.date)}</span>
                         </span>
+                        <FindSimilar payeeName={l.name} description={l.name} />
                         <span className="font-semibold tabular-nums">{formatMoney(l.cents)}</span>
                       </li>
                     ))}
