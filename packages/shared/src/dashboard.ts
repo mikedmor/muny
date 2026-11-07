@@ -123,7 +123,7 @@ export const BUILTIN_CARDS: BuiltinCard[] = [
   {
     id: "coming-up",
     title: "Coming up",
-    description: "Bills and subscriptions due in the next 7 days.",
+    description: "Bills, subscriptions and income expected in the next 7 days.",
     placement: "side",
     weight: 20,
   },

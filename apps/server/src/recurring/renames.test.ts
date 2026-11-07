@@ -1,6 +1,7 @@
 import { schema } from "@muny/db";
 import type { Account, RecurringSeries } from "@muny/shared";
 import { describe, expect, it } from "vitest";
+import { overview } from "../reports/service.js";
 import { makeSignedInApp } from "../test-utils.js";
 import { listSeries, rescanRecurring } from "./service.js";
 
@@ -29,6 +30,24 @@ async function setup() {
   };
   return { ...ctx, account, add, scan, series, seriesOf };
 }
+
+describe("the Coming up card's data", () => {
+  it("includes expected income as well as bills", async () => {
+    const { db, account, add, scan } = await setup();
+    const a = await account("Main");
+    for (const m of ["05", "06", "07", "08", "09", "10"]) {
+      await add(a.id, `2026-${m}-10`, 250_000, "ACME EMPLOYER");
+      await add(a.id, `2026-${m}-11`, -5_000, "SAMPLE STREAMING");
+    }
+    scan();
+    const coming = overview(db, TODAY).upcoming;
+    expect(coming.find((u) => u.amountCents > 0)).toMatchObject({
+      date: "2026-11-10",
+      amountCents: 250_000,
+    });
+    expect(coming.find((u) => u.amountCents < 0)).toMatchObject({ amountCents: -5_000 });
+  });
+});
 
 describe("merchants the bank rewords", () => {
   it("keeps a bill that varies with its series when the name changes", async () => {

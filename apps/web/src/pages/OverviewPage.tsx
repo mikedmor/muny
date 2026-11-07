@@ -411,14 +411,21 @@ function BudgetCard({ d }: { d: Overview }) {
 }
 
 function UpcomingCard({ d }: { d: Overview }) {
-  const total = d.upcoming.reduce((s, u) => s - u.amountCents, 0);
+  const due = d.upcoming.reduce((s, u) => s + Math.max(0, -u.amountCents), 0);
+  const incoming = d.upcoming.reduce((s, u) => s + Math.max(0, u.amountCents), 0);
   return (
     <Card className="p-0">
       <div className="px-4 pt-4">
         <SectionHeader title="Coming up" link={<Link to="/recurring">All recurring</Link>} />
         {d.upcoming.length > 0 && (
           <p className="-mt-2 mb-2 text-xs text-slate-500">
-            {formatMoney(total)} due in the next 7 days
+            {[
+              due > 0 && `${formatMoney(due)} due`,
+              incoming > 0 && `${formatMoney(incoming)} coming in`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}{" "}
+            in the next 7 days
           </p>
         )}
       </div>
@@ -432,11 +439,18 @@ function UpcomingCard({ d }: { d: Overview }) {
                 {u.date === d.today ? "Today" : weekday(u.date)}
               </span>
             </span>
-            <span className="tabular-nums">{formatMoney(-u.amountCents)}</span>
+            <span
+              className={cx(
+                "tabular-nums",
+                u.amountCents > 0 && "text-emerald-700 dark:text-emerald-400",
+              )}
+            >
+              {u.amountCents > 0 ? `+${formatMoney(u.amountCents)}` : formatMoney(-u.amountCents)}
+            </span>
           </li>
         ))}
         {d.upcoming.length === 0 && (
-          <li className="px-4 py-3 text-slate-500">Nothing due in the next 7 days.</li>
+          <li className="px-4 py-3 text-slate-500">Nothing expected in the next 7 days.</li>
         )}
       </ul>
     </Card>

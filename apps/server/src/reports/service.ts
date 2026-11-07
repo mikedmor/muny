@@ -422,8 +422,7 @@ export function overview(db: Db, today = localToday()): Overview {
       ? { budgetCents: overallBudget(b).budgetCents, spentCents: b.total.spentCents }
       : null,
     upcoming: upcoming(db, today, addDays(today, 7), today)
-      .filter((u) => u.amountCents < 0)
-      .slice(0, 8)
+      .slice(0, 12)
       .map((u) => ({
         seriesId: u.seriesId,
         name: u.name,

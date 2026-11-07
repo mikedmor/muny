@@ -69,6 +69,7 @@ export interface Overview {
   };
   incomeMonthToDateCents: number;
   budget: { budgetCents: number | null; spentCents: number } | null;
+  /** Signed: money out is negative, expected income positive. */
   upcoming: { seriesId: string; name: string; date: string; amountCents: number }[];
   topCategories: { id: string | null; name: string; cents: number; groupName: string | null }[];
   /** Biggest merchants by spending this month. */
