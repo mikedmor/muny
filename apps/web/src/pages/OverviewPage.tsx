@@ -2,9 +2,7 @@ import {
   type Account,
   type AccountType,
   CUSTOM_PREFIX,
-  type DashboardItem,
   formatMoney,
-  GRID_ROW_PX,
   type Overview,
   type TransactionPage,
 } from "@muny/shared";
@@ -19,7 +17,7 @@ import {
   RankedBars,
   type StackBand,
 } from "../components/charts.js";
-import { DashboardGrid } from "../components/DashboardGrid.js";
+import { DashboardBoard } from "../components/DashboardBoard.js";
 import { FindSimilar } from "../components/FindSimilar.js";
 import {
   CardsOverviewCard,
@@ -690,19 +688,14 @@ function AttentionBar({ d }: { d: Overview }) {
  * Every built-in card. To add one: give it an entry in BUILTIN_CARDS
  * (@muny/shared) and a renderer here; it then shows up under Add card.
  */
-const CARD_RENDERERS: Record<string, (d: Overview, item: DashboardItem) => ReactNode> = {
+const CARD_RENDERERS: Record<string, (d: Overview) => ReactNode> = {
   spending: (d) => <SpendingCard d={d} />,
   "cash-flow": (d) => <CashFlowCard d={d} />,
   categories: (d) => <CategoriesCard d={d} />,
   merchants: (d) => <TopMerchantsCard d={d} />,
   "cash-trend": (d) => <CashTrendCard d={d} />,
   calendar: () => <UpcomingCalendar />,
-  // A card you've made taller shows more of them.
-  recent: (_d, item) => (
-    <RecentTransactions
-      limit={item.auto ? 8 : Math.max(3, Math.floor((item.h * GRID_ROW_PX - 90) / 56))}
-    />
-  ),
+  recent: () => <RecentTransactions limit={8} />,
   accounts: () => <AccountsCard />,
   cards: () => <CardsOverviewCard />,
   loans: () => <LoansOverviewCard />,
@@ -740,17 +733,17 @@ export function OverviewPage() {
     );
   }
 
-  const renderCard = (item: DashboardItem) => {
+  const renderCard = (ref: string) => {
     if (!d) return null;
-    if (item.card.startsWith(CUSTOM_PREFIX)) {
-      const card = dashboard.data?.customCards.find((c) => `${CUSTOM_PREFIX}${c.id}` === item.card);
+    if (ref.startsWith(CUSTOM_PREFIX)) {
+      const card = dashboard.data?.customCards.find((c) => `${CUSTOM_PREFIX}${c.id}` === ref);
       return card ? <CustomCardView card={card} /> : null;
     }
-    return CARD_RENDERERS[item.card]?.(d, item) ?? null;
+    return CARD_RENDERERS[ref]?.(d) ?? null;
   };
 
   return (
-    <DashboardGrid
+    <DashboardBoard
       title="Overview"
       top={
         <>

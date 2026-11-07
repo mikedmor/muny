@@ -30,7 +30,6 @@ import type {
   CustomCard,
   CustomCardInput,
   Dashboard,
-  DashboardItem,
   DashboardSchema,
   DiyInput,
   DiyProject,
@@ -938,7 +937,7 @@ export const useDashboardSchema = (enabled: boolean) =>
 
 export const useSaveLayout = () =>
   useInvalidatingMutation(
-    (items: DashboardItem[]) => api.put<Dashboard>("/api/dashboard/layout", { items }),
+    (cards: string[]) => api.put<Dashboard>("/api/dashboard/layout", { cards }),
     [dashboardKey],
   );
 

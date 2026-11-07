@@ -44,9 +44,9 @@ export function registerDashboardRoutes(app: FastifyInstance, db: MunyDb) {
 
   app.put("/api/dashboard/layout", async (req) => {
     const user = requireUser(req);
-    const { items } = parse(LayoutSchema, req.body);
-    const out = saveLayout(db, user.id, items);
-    log(user.id, "dashboard.layout", user.id, { cards: items.length });
+    const { cards } = parse(LayoutSchema, req.body);
+    const out = saveLayout(db, user.id, cards);
+    log(user.id, "dashboard.layout", user.id, { cards: cards.length });
     return out;
   });
 

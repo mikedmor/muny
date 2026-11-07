@@ -1,3 +1,4 @@
+import { schema } from "@muny/db";
 import {
   type Account,
   CARD_SOURCE_INFO,
@@ -42,44 +43,59 @@ async function setup() {
   return { ...ctx, acc, add, preview, groceries };
 }
 
+async function makeSignedInAppWithUser() {
+  const ctx = await makeSignedInApp();
+  const user = ctx.db.select().from(schema.users).get();
+  if (!user) throw new Error("no user");
+  return { ...ctx, user };
+}
+
 const dashboard = async (c: Awaited<ReturnType<typeof makeSignedInApp>>["client"]) =>
   (await c.get("/api/dashboard")).json<Dashboard>();
 
 describe("dashboard layout", () => {
-  it("starts on the default: calendar in, Coming up out, recent on the right", async () => {
+  it("starts on the standard cards, with the calendar in and Coming up out", async () => {
     const { client } = await makeSignedInApp();
     const d = await dashboard(client);
     expect(d.isDefault).toBe(true);
-    const cards = d.items.map((i) => i.card);
-    expect(cards).toContain("calendar");
-    expect(cards).not.toContain("coming-up");
-    expect(d.items.find((i) => i.card === "recent")?.x).toBe(8);
+    expect(d.cards).toContain("calendar");
+    expect(d.cards).toContain("recent");
+    expect(d.cards).not.toContain("coming-up");
   });
 
-  it("saves a layout, tidies it, and goes back to the default", async () => {
+  it("saves your priority order, and goes back to the standard one", async () => {
     const { client } = await makeSignedInApp();
-    const res = await client.put("/api/dashboard/layout", {
-      items: [
-        { card: "coming-up", x: 0, y: 40, w: 6, h: 20 },
-        { card: "recent", x: 6, y: 0, w: 6, h: 20 },
-      ],
-    });
+    const res = await client.put("/api/dashboard/layout", { cards: ["coming-up", "recent"] });
     expect(res.statusCode).toBe(200);
     const d = await dashboard(client);
     expect(d.isDefault).toBe(false);
-    expect(d.items.find((i) => i.card === "coming-up")?.y).toBe(0); // floated up
+    expect(d.cards).toEqual(["coming-up", "recent"]);
     expect((await client.delete("/api/dashboard/layout")).statusCode).toBe(200);
     expect((await dashboard(client)).isDefault).toBe(true);
   });
 
-  it("refuses unknown cards, duplicates and sizes off the grid", async () => {
+  it("refuses unknown cards, duplicates and the wrong shape", async () => {
     const { client } = await makeSignedInApp();
-    const put = (items: unknown[]) => client.put("/api/dashboard/layout", { items });
-    expect((await put([{ card: "nope", x: 0, y: 0, w: 4, h: 10 }])).statusCode).toBe(400);
-    const a = { card: "recent", x: 0, y: 0, w: 4, h: 10 };
-    expect((await put([a, a])).statusCode).toBe(400);
-    expect((await put([{ ...a, w: 13 }])).statusCode).toBe(400);
-    expect((await put([{ ...a, w: 1 }])).statusCode).toBe(400);
+    const put = (body: unknown) => client.put("/api/dashboard/layout", body);
+    expect((await put({ cards: ["nope"] })).statusCode).toBe(400);
+    expect((await put({ cards: ["recent", "recent"] })).statusCode).toBe(400);
+    expect((await put({ cards: "recent" })).statusCode).toBe(400);
+    expect((await put({ cards: [], extra: 1 })).statusCode).toBe(400);
+  });
+
+  it("converts a layout saved with grid positions", async () => {
+    const { client, db, user } = await makeSignedInAppWithUser();
+    db.insert(schema.appSettings)
+      .values({
+        key: `dashboard.layout:${user.id}`,
+        value: [
+          { card: "recent", x: 8, y: 0, w: 4, h: 10 },
+          { card: "spending", x: 0, y: 0, w: 8, h: 10 },
+          { card: "calendar", x: 0, y: 20, w: 8, h: 10 },
+        ],
+      })
+      .run();
+    expect((await dashboard(client)).cards).toEqual(["spending", "recent", "calendar"]);
   });
 });
 
@@ -93,7 +109,7 @@ describe("custom cards", () => {
     expect(res.statusCode).toBe(201);
     const card = res.json<CustomCard>();
     const ref = `custom:${card.id}`;
-    expect((await dashboard(client)).items.some((i) => i.card === ref)).toBe(true);
+    expect((await dashboard(client)).cards.at(-1)).toBe(ref);
     expect((await client.get(`/api/dashboard/cards/${card.id}/data`)).statusCode).toBe(200);
 
     const edit = await client.put(`/api/dashboard/cards/${card.id}`, {
@@ -104,7 +120,7 @@ describe("custom cards", () => {
 
     expect((await client.delete(`/api/dashboard/cards/${card.id}`)).statusCode).toBe(200);
     const after = await dashboard(client);
-    expect(after.items.some((i) => i.card === ref)).toBe(false);
+    expect(after.cards).not.toContain(ref);
     expect(after.customCards).toEqual([]);
   });
 
@@ -127,10 +143,9 @@ describe("custom cards", () => {
   it("describes itself, and every source and view it lists actually runs", async () => {
     const { client, preview, add } = await setup();
     await add(-1_000, "COFFEE");
-    const schema = (await client.get("/api/dashboard/schema")).json<DashboardSchema>();
-    expect(schema.grid.columns).toBe(12);
-    expect(Object.keys(schema.sources).sort()).toEqual([...CARD_SOURCES].sort());
-    expect(schema.cardJsonSchema).toBeTruthy();
+    const info = (await client.get("/api/dashboard/schema")).json<DashboardSchema>();
+    expect(Object.keys(info.sources).sort()).toEqual([...CARD_SOURCES].sort());
+    expect(info.cardJsonSchema).toBeTruthy();
     for (const source of CARD_SOURCES)
       for (const view of CARD_SOURCE_INFO[source].views) {
         const res = await preview({ source, view });

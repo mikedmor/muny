@@ -1,11 +1,7 @@
 import { cleanPayeeName } from "@muny/core";
 import { type MunyDb, newId, schema } from "@muny/db";
 import {
-  addCard,
   BUILTIN_CARDS,
-  CARD_MAX_H,
-  CARD_MIN_H,
-  CARD_MIN_W,
   CARD_PERIOD_LABELS,
   CARD_PERIODS,
   CARD_SOURCE_INFO,
@@ -18,14 +14,11 @@ import {
   type CustomCard,
   type CustomCardInput,
   type Dashboard,
-  type DashboardItem,
   type DashboardSchema,
   DEFAULT_DASHBOARD,
-  GRID_COLUMNS,
-  GRID_ROW_PX,
+  layoutFromSaved,
   MAX_CUSTOM_CARDS,
-  MAX_LAYOUT_ITEMS,
-  normalizeLayout,
+  MAX_LAYOUT_CARDS,
 } from "@muny/shared";
 import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -103,37 +96,11 @@ export const CustomCardSchema = z
   .strict();
 
 export const LayoutSchema = z
-  .object({
-    items: z
-      .array(
-        z
-          .object({
-            card: z.string().min(1).max(80),
-            x: z
-              .number()
-              .int()
-              .min(0)
-              .max(GRID_COLUMNS - 1),
-            y: z.number().int().min(0),
-            w: z.number().int().min(CARD_MIN_W).max(GRID_COLUMNS),
-            h: z.number().int().min(CARD_MIN_H).max(CARD_MAX_H),
-            auto: z.boolean().optional(),
-          })
-          .strict(),
-      )
-      .max(MAX_LAYOUT_ITEMS),
-  })
+  .object({ cards: z.array(z.string().min(1).max(80)).max(MAX_LAYOUT_CARDS) })
   .strict();
 
 export function dashboardSchema(): DashboardSchema {
   return {
-    grid: {
-      columns: GRID_COLUMNS,
-      rowPx: GRID_ROW_PX,
-      minW: CARD_MIN_W,
-      minH: CARD_MIN_H,
-      maxH: CARD_MAX_H,
-    },
     builtinCards: BUILTIN_CARDS,
     views: CARD_VIEWS,
     periods: CARD_PERIODS,
@@ -187,25 +154,25 @@ function knownCards(db: Db) {
 }
 
 export function getDashboard(db: Db, userId: string): Dashboard {
-  const saved = read<DashboardItem[]>(db, layoutKey(userId));
+  const saved = layoutFromSaved(read<unknown>(db, layoutKey(userId)));
   const known = knownCards(db);
   return {
     // A custom card someone deleted simply drops out of everyone's layout.
-    items: normalizeLayout((saved ?? DEFAULT_DASHBOARD).filter((i) => known.has(i.card))),
+    cards: (saved ?? DEFAULT_DASHBOARD).filter((c) => known.has(c)),
     isDefault: saved === null,
     customCards: listCustomCards(db),
   };
 }
 
-export function saveLayout(db: Db, userId: string, items: DashboardItem[]): Dashboard {
+export function saveLayout(db: Db, userId: string, cards: string[]): Dashboard {
   const known = knownCards(db);
   const seen = new Set<string>();
-  for (const i of items) {
-    if (!known.has(i.card)) throw badRequest(`Unknown card: ${i.card}`);
-    if (seen.has(i.card)) throw badRequest(`A layout can hold ${i.card} only once`);
-    seen.add(i.card);
+  for (const c of cards) {
+    if (!known.has(c)) throw badRequest(`Unknown card: ${c}`);
+    if (seen.has(c)) throw badRequest(`A layout can hold ${c} only once`);
+    seen.add(c);
   }
-  write(db, layoutKey(userId), normalizeLayout(items));
+  write(db, layoutKey(userId), cards);
   return getDashboard(db, userId);
 }
 
@@ -216,7 +183,7 @@ export function resetLayout(db: Db, userId: string): Dashboard {
   return getDashboard(db, userId);
 }
 
-/** Create a custom card; with `place`, also put it at the bottom of this person's layout. */
+/** Create a custom card; with `place`, also add it to this person's Overview. */
 export function createCustomCard(
   db: Db,
   userId: string,
@@ -228,11 +195,9 @@ export function createCustomCard(
     throw conflict(`You can keep up to ${MAX_CUSTOM_CARDS} custom cards; delete one first`);
   const card: CustomCard = { id: newId(), ...input };
   write(db, CARDS_KEY, [...cards, card]);
-  if (place) {
-    const { items } = getDashboard(db, userId);
-    const size = input.spec.view === "stat" ? { w: 3, h: 9 } : { w: 4, h: 22 };
-    saveLayout(db, userId, addCard(items, `${CUSTOM_PREFIX}${card.id}`, { ...size, auto: true }));
-  }
+  // New cards start at the lowest priority.
+  if (place)
+    saveLayout(db, userId, [...getDashboard(db, userId).cards, `${CUSTOM_PREFIX}${card.id}`]);
   return card;
 }
 

@@ -1,97 +1,106 @@
 import { describe, expect, it } from "vitest";
 import {
-  addCard,
+  type ArrangeCard,
+  arrangeColumns,
   BUILTIN_CARDS,
-  clampRect,
-  type DashboardItem,
   DEFAULT_DASHBOARD,
-  GRID_COLUMNS,
-  normalizeLayout,
-  placeCard,
-  removeCard,
+  layoutFromSaved,
+  moveCard,
 } from "./dashboard.js";
 
-const item = (card: string, x: number, y: number, w: number, h: number): DashboardItem => ({
-  card,
-  x,
-  y,
-  w,
-  h,
+const main = (card: string, weight = 10): ArrangeCard => ({ card, placement: "main", weight });
+const side = (card: string, weight = 10): ArrangeCard => ({ card, placement: "side", weight });
+
+describe("arrangeColumns", () => {
+  const cards = [main("a"), side("x"), main("b"), side("y"), main("c")];
+
+  it("is simply the priority order in one column", () => {
+    expect(arrangeColumns(cards, 1)).toEqual({
+      columns: [["a", "x", "b", "y", "c"]],
+      hasSide: false,
+    });
+  });
+
+  it("keeps side cards in the right column, in order", () => {
+    expect(arrangeColumns(cards, 2)).toEqual({
+      columns: [
+        ["a", "b", "c"],
+        ["x", "y"],
+      ],
+      hasSide: true,
+    });
+  });
+
+  it("spreads main cards across the other columns, shortest first", () => {
+    expect(arrangeColumns(cards, 3).columns).toEqual([["a", "c"], ["b"], ["x", "y"]]);
+    expect(arrangeColumns(cards, 4).columns).toEqual([["a"], ["b"], ["c"], ["x", "y"]]);
+    const tall = [main("big", 50), main("s1"), main("s2"), side("x")];
+    expect(arrangeColumns(tall, 3).columns).toEqual([["big"], ["s1", "s2"], ["x"]]);
+  });
+
+  it("gives every column to one kind of card when there's no other", () => {
+    expect(arrangeColumns([side("x"), side("y")], 3)).toEqual({
+      columns: [["x"], ["y"], []],
+      hasSide: false,
+    });
+    expect(arrangeColumns([main("a"), main("b")], 2)).toEqual({
+      columns: [["a"], ["b"]],
+      hasSide: false,
+    });
+  });
+
+  it("handles no cards", () => {
+    expect(arrangeColumns([], 3).columns.flat()).toEqual([]);
+  });
 });
 
-function noOverlaps(items: DashboardItem[]) {
-  const cells = new Set<string>();
-  for (const i of items)
-    for (let x = i.x; x < i.x + i.w; x++)
-      for (let y = i.y; y < i.y + i.h; y++) {
-        const k = `${x},${y}`;
-        expect(cells.has(k), `${i.card} overlaps at ${k}`).toBe(false);
-        cells.add(k);
-      }
-}
+describe("moveCard", () => {
+  const list = ["a", "b", "c", "d"];
+  it("moves up, down, and stays on the list", () => {
+    expect(moveCard(list, "c", 0)).toEqual(["c", "a", "b", "d"]);
+    expect(moveCard(list, "a", 2)).toEqual(["b", "c", "a", "d"]);
+    expect(moveCard(list, "a", 99)).toEqual(["b", "c", "d", "a"]);
+    expect(moveCard(list, "b", -5)).toEqual(["b", "a", "c", "d"]);
+    expect(moveCard(list, "nope", 1)).toEqual(list);
+  });
+});
 
-const at = (items: DashboardItem[], card: string) => items.find((i) => i.card === card);
+describe("saved layouts", () => {
+  it("reads the current format and converts grid positions from the earlier one", () => {
+    expect(layoutFromSaved(null)).toBeNull();
+    expect(layoutFromSaved(["a", "b"])).toEqual(["a", "b"]);
+    expect(
+      layoutFromSaved([
+        { card: "low", x: 0, y: 40, w: 8, h: 10 },
+        { card: "right", x: 8, y: 0, w: 4, h: 10 },
+        { card: "left", x: 0, y: 0, w: 8, h: 10 },
+      ]),
+    ).toEqual(["left", "right", "low"]);
+  });
+});
 
-describe("dashboard grid", () => {
-  it("keeps cards on the 12 columns", () => {
-    expect(clampRect(item("a", 11, -3, 6, 2))).toMatchObject({ x: 6, y: 0, w: 6, h: 4 });
-    expect(clampRect(item("a", 0, 0, 40, 9000))).toMatchObject({ w: GRID_COLUMNS, h: 200 });
-    expect(clampRect(item("a", 0, 0, 1, 10)).w).toBe(2);
-    // No upper limit on how far down a card can go.
-    expect(clampRect(item("a", 0, 100_000, 4, 10)).y).toBe(100_000);
+describe("the standard Overview", () => {
+  const known = new Map(BUILTIN_CARDS.map((c) => [c.id, c]));
+  const standard = DEFAULT_DASHBOARD.map((card) => {
+    const c = known.get(card);
+    if (!c) throw new Error(`unknown card ${card}`);
+    return { card, placement: c.placement, weight: c.weight };
   });
 
-  it("floats cards up and resolves overlaps", () => {
-    const out = normalizeLayout([item("a", 0, 50, 6, 10), item("b", 0, 52, 6, 10)]);
-    expect(at(out, "a")?.y).toBe(0);
-    expect(at(out, "b")?.y).toBe(10);
-    noOverlaps(out);
-  });
-
-  it("leaves side-by-side cards side by side", () => {
-    const out = normalizeLayout([item("a", 0, 0, 6, 10), item("b", 6, 0, 6, 20)]);
-    expect(at(out, "b")).toMatchObject({ x: 6, y: 0 });
-  });
-
-  it("moves a card into another's spot, and the other makes room", () => {
-    const start = [item("a", 0, 0, 12, 10), item("b", 0, 10, 12, 10)];
-    const out = placeCard(start, "b", { x: 0, y: 0, w: 12, h: 10 });
-    expect(at(out, "b")?.y).toBe(0);
-    expect(at(out, "a")?.y).toBe(10);
-    noOverlaps(out);
-  });
-
-  it("makes room when a card is resized", () => {
-    const start = [item("a", 0, 0, 6, 10), item("b", 6, 0, 6, 10)];
-    const out = placeCard(start, "a", { x: 0, y: 0, w: 12, h: 10 });
-    expect(at(out, "a")?.w).toBe(12);
-    expect(at(out, "b")?.y).toBe(10);
-    noOverlaps(out);
-  });
-
-  it("adds under everything, once, and closes the gap on removal", () => {
-    const start = [item("a", 0, 0, 12, 10)];
-    const added = addCard(start, "b", { w: 4, h: 8 });
-    expect(at(added, "b")).toMatchObject({ x: 0, y: 10 });
-    expect(addCard(added, "b", { w: 4, h: 8 })).toHaveLength(2);
-    const removed = removeCard(added, "a");
-    expect(removed).toHaveLength(1);
-    expect(at(removed, "b")?.y).toBe(0);
-  });
-
-  it("gives empty cards no space", () => {
-    const out = normalizeLayout([item("a", 0, 0, 6, 0), item("b", 0, 5, 6, 10)]);
-    expect(at(out, "b")?.y).toBe(0);
-  });
-
-  it("has a valid default that uses only known cards and leaves Coming up to add", () => {
-    const known = new Set(BUILTIN_CARDS.map((c) => c.id));
-    for (const i of DEFAULT_DASHBOARD) expect(known.has(i.card)).toBe(true);
-    expect(new Set(DEFAULT_DASHBOARD.map((i) => i.card)).size).toBe(DEFAULT_DASHBOARD.length);
-    noOverlaps(normalizeLayout(DEFAULT_DASHBOARD));
+  it("uses known cards once each, and leaves Coming up to add", () => {
+    expect(new Set(DEFAULT_DASHBOARD).size).toBe(DEFAULT_DASHBOARD.length);
     expect(known.has("coming-up")).toBe(true);
-    expect(at(DEFAULT_DASHBOARD, "coming-up")).toBeUndefined();
-    expect(at(DEFAULT_DASHBOARD, "calendar")?.x).toBe(0);
-    expect(at(DEFAULT_DASHBOARD, "recent")?.x).toBe(8);
+    expect(DEFAULT_DASHBOARD).not.toContain("coming-up");
+  });
+
+  it("restores the wide layouts: calendar beside spending, recent on the right", () => {
+    const three = arrangeColumns(standard, 3).columns;
+    expect(three).toHaveLength(3);
+    expect(three[0]?.[0]).toBe("spending");
+    expect(three[1]?.[0]).toBe("calendar");
+    expect(three[2]).toContain("recent");
+    expect(three[2]?.[0]).toBe("accounts");
+    expect(arrangeColumns(standard, 4).columns).toHaveLength(4);
+    expect(arrangeColumns(standard, 2).columns[1]).toContain("accounts");
   });
 });
