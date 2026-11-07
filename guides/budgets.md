@@ -6,7 +6,7 @@
 - **Budget categories:** what you planned to spend in each category, what you spent, and what's left. Click a **Budgeted** amount to set or change it (from this month on). Turn on rollover to carry what's left (or overspent) into the next month. Every category you spent in this month has its own row, budget or not; ones with neither a budget nor spending appear when you show them all. **Everything else** is spending with no category: click it to see those transactions month by month and give each one a category.
 - **Summary and forecast:** what's left this month, and what should still come in or go out before the month ends.
 
-Click a category to see its months and transactions; change a transaction's category right there.
+Click a category to see its months and transactions; change a transaction's category right there. Recurring charges (or income) still expected this month are listed at the top, marked **Pending** with the date they're expected; they appear only on these pages, not on Transactions, until the real charge arrives.
 
 Refunds lower a category's spending, split transactions count in each of their categories, and transfers between your own accounts never count.
 

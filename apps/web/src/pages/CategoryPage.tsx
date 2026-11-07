@@ -115,11 +115,34 @@ export function CategoryPage() {
     return (id: string | null) => id === categoryId;
   }, [row, categories.data, categoryId]);
   // The budget editor needs the month's full budget line.
+  // The month's budget: its line (for the editor) and what's still scheduled.
   const budget = useQuery({
     queryKey: [...keys.budgets, month],
     queryFn: () => api.get<BudgetMonth>(`/api/budgets/${month}`),
-    enabled: editing,
   });
+  /** Recurring charges or income still expected this month in this category (or row). */
+  const scheduled = useMemo(() => {
+    const kindOf = new Map(
+      (categories.data ?? []).flatMap((g) =>
+        g.categories.map((c) => [c.id, { kind: g.kind, excluded: c.excludeFromBudget }] as const),
+      ),
+    );
+    // As the budget counts them: money out in a spending category (or none).
+    const spending = (id: string | null) => {
+      if (id === null) return true;
+      const k = kindOf.get(id);
+      return k?.kind === "expense" && !k.excluded;
+    };
+    return (budget.data?.forecast.scheduled ?? []).filter((s) =>
+      row === EARNINGS
+        ? s.amountCents > 0
+        : row === BILLS
+          ? s.amountCents < 0 && spending(s.categoryId)
+          : row === EVERYTHING_ELSE
+            ? s.amountCents < 0 && s.categoryId === null
+            : s.categoryId === categoryId,
+    );
+  }, [budget.data, categories.data, row, categoryId]);
   const line = budget.data?.groups.flatMap((g) => g.lines).find((l) => l.categoryId === categoryId);
 
   const a = activity.data;
@@ -232,6 +255,37 @@ export function CategoryPage() {
                   <span className="text-right">Amount</span>
                 </div>
                 <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                  {scheduled.map((s) => (
+                    <li
+                      key={`${s.seriesId}:${s.date}`}
+                      className="grid grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-3 bg-slate-50/60 px-4 py-2.5 dark:bg-slate-800/30"
+                    >
+                      <span className="text-slate-500 tabular-nums">{shortDay(s.date)}</span>
+                      <span className="flex min-w-0 items-center gap-3">
+                        <MerchantAvatar name={s.name} size="sm" />
+                        <span className="min-w-0">
+                          <span className="block truncate text-slate-600 dark:text-slate-300">
+                            {s.name}
+                          </span>
+                          <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                              Pending
+                            </span>
+                            Expected {shortDay(s.date)} · {s.kind}
+                          </span>
+                        </span>
+                      </span>
+                      <span
+                        className={cx(
+                          "text-right tabular-nums text-slate-500",
+                          s.amountCents > 0 && "text-emerald-700/80 dark:text-emerald-400/80",
+                        )}
+                      >
+                        {s.amountCents > 0 ? "+" : ""}
+                        {formatMoney(Math.abs(s.amountCents))}
+                      </span>
+                    </li>
+                  ))}
                   {items.map((t) => {
                     const part = amountIn(t, inCategory);
                     const name = t.payeeName ?? t.description;
@@ -290,7 +344,7 @@ export function CategoryPage() {
                       </li>
                     );
                   })}
-                  {txns.isSuccess && items.length === 0 && (
+                  {txns.isSuccess && items.length === 0 && scheduled.length === 0 && (
                     <li className="px-4 py-6 text-center text-slate-500">
                       Nothing in {a.category.name} in {monthLabel(month)}.
                     </li>
