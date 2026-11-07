@@ -174,11 +174,13 @@ export async function marketIntraday(
   const hit = intradayCache.get(symbol);
   if (hit && now - hit.at < 10 * 60_000) return hit.data;
   spend(db, "yahoo");
-  // Pre-market and after-hours too, so the index funds cover the day like the VIX does.
+  // Funds trade before and after the bell, so their day includes it. An index
+  // (the VIX) only during the session: Yahoo's VIX "extended hours" start at
+  // 3:15 AM, which brokerages don't chart.
   const { meta, points } = await chart(
     deps.fetch ?? fetch,
     symbol,
-    "range=1d&interval=5m&includePrePost=true",
+    `range=1d&interval=5m&includePrePost=${symbol.startsWith("^") ? "false" : "true"}`,
   );
   const data: MarketIntraday = {
     symbol,

@@ -179,14 +179,25 @@ function MarketChart({ indexes }: { indexes: MarketQuote[] }) {
     keysList = [...new Set(priceAt.flatMap((m) => [...m.keys()]))].sort();
     labels = keysList.map(shortDay);
   }
-  // Fill gaps with the last price so every line is continuous.
+  // Fill gaps inside each line with its last price, but only between its first
+  // and last prices: a line starts and ends where its data does (the VIX trades
+  // 9:30 to 4:15; the funds from 4 AM to 8 PM), like a brokerage's chart.
   const prices = indexes.map((_, i) => {
+    const has = keysList.map((k) => priceAt[i]?.has(k) ?? false);
+    const first = has.indexOf(true);
+    const last = has.lastIndexOf(true);
     let lastSeen: number | null = null;
-    return keysList.map((k) => {
+    return keysList.map((k, j) => {
+      if (first < 0 || j < first || j > last) return null;
       const v = priceAt[i]?.get(k);
       if (v !== undefined) lastSeen = v;
       return lastSeen;
     });
+  });
+  /** Each line's latest point (where it ends, which can be before the chart's end). */
+  const lastIndex = prices.map((p) => {
+    for (let j = p.length - 1; j >= 0; j--) if (p[j] !== null) return j;
+    return -1;
   });
   const series: PercentSeries[] = indexes.map((q, i) => ({
     key: q.symbol,
@@ -197,13 +208,15 @@ function MarketChart({ indexes }: { indexes: MarketQuote[] }) {
       return v === null || !b0 ? null : ((v - b0) / b0) * 100;
     }),
   }));
-  const at = hover ?? keysList.length - 1;
+  // Hovering: the prices at that time; otherwise each line's latest.
+  const atFor = (i: number) => hover ?? lastIndex[i] ?? keysList.length - 1;
   const loading = range === "1D" && intraday.some((r) => r.isLoading);
 
   return (
     <div>
       <div className="mb-3 flex flex-wrap gap-2">
         {indexes.map((q, i) => {
+          const at = atFor(i);
           const price = prices[i]?.[at] ?? q.price;
           const change = series[i]?.values[at] ?? null;
           const up = (change ?? 0) >= 0;

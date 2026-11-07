@@ -100,5 +100,10 @@ describe("stocks extras (opt-in)", () => {
       previousClose: 100,
     });
     expect((await client.get("/api/invest/market/intraday?symbol=AAPL")).statusCode).toBe(400);
+    // Funds include pre-market and after-hours; the VIX only its session (no 3:15 AM start).
+    await client.get("/api/invest/market/intraday?symbol=%5EVIX");
+    const intraday = x.calls.filter((u) => u.includes("interval=5m"));
+    expect(intraday.find((u) => u.includes("/chart/SPY?"))).toContain("includePrePost=true");
+    expect(intraday.find((u) => u.includes("/chart/%5EVIX?"))).toContain("includePrePost=false");
   });
 });
