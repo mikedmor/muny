@@ -337,6 +337,13 @@
       "when": 1794020749162,
       "tag": "0047_transaction_funds",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "6",
+      "when": 1794045743804,
+      "tag": "0048_minor_toad",
+      "breakpoints": true
     }
   ]
 }

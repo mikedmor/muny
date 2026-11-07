@@ -425,7 +425,12 @@ export function updateCustomCard(db: Db, cardId: string, input: CustomCardInput)
   assertUsable(input.doc);
   const cards = listCustomCards(db);
   if (!cards.some((c) => c.id === cardId)) throw notFound("Card not found");
-  const card: CustomCard = { id: cardId, ...input };
+  const before = cards.find((c) => c.id === cardId);
+  const card: CustomCard = {
+    id: cardId,
+    ...input,
+    ...(before?.createdBy ? { createdBy: before.createdBy } : {}),
+  };
   write(
     db,
     CARDS_KEY,

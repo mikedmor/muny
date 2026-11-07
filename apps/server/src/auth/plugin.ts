@@ -51,7 +51,7 @@ export function registerAuth(app: FastifyInstance, db: MunyDb) {
   app.decorateRequest("user", null);
 
   app.addHook("onRequest", async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!req.url.startsWith("/api/")) return;
+    if (!req.url.startsWith("/api/") || req.url.startsWith("/api/v1/")) return;
 
     // CSRF: a custom header can't be sent cross-site without a CORS preflight,
     // which this server never approves.

@@ -15,6 +15,7 @@ import {
   useUpdateCategory,
   useUpdateGroup,
 } from "../lib/queries.js";
+import { AgentSettings } from "./settings/AgentSettings.js";
 import { DataSettings } from "./settings/DataSettings.js";
 import { HouseholdSettings } from "./settings/HouseholdSettings.js";
 import { PayeesSettings } from "./settings/PayeesSettings.js";
@@ -28,6 +29,7 @@ const TABS = [
   ["merchants", "Merchants"],
   ["display", "Appearance"],
   ["data", "Data & backups"],
+  ["agents", "Agents"],
   ["household", "Household & account"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
@@ -78,6 +80,7 @@ export function SettingsPage() {
       {tab === "merchants" && <PayeesSettings />}
       {tab === "data" && <DataSettings />}
       {tab === "display" && <DisplaySettings />}
+      {tab === "agents" && <AgentSettings />}
       {tab === "household" && <HouseholdSettings />}
     </>
   );

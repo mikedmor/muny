@@ -337,6 +337,8 @@ export interface CustomCard {
   doc: CardDoc;
   /** The built-in card it started as, if any. */
   basedOn?: string;
+  /** Set by the server when an assistant made it ("agent:<token id>"). */
+  createdBy?: string;
 }
 
 /** Create or replace a custom card. */

@@ -71,6 +71,24 @@ export const sessions = sqliteTable(
   (t) => [index("sessions_user_idx").on(t.userId)],
 );
 
+/** Tokens for AI assistants and scripts. Only the hash is stored. */
+export const apiTokens = sqliteTable("api_tokens", {
+  id: text().primaryKey(),
+  name: text().notNull(),
+  tokenHash: text().notNull().unique(),
+  /** The start of the token, to tell them apart. */
+  prefix: text().notNull(),
+  scopes: text({ mode: "json" }).$type<string[]>().notNull(),
+  /** Whose Overview and theme it changes. */
+  createdBy: text()
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: integer({ mode: "timestamp_ms" }),
+  lastUsedAt: integer({ mode: "timestamp_ms" }),
+  revokedAt: integer({ mode: "timestamp_ms" }),
+  createdAt: createdAt(),
+});
+
 // ---------------------------------------------------------------------------
 // Connections & accounts
 // ---------------------------------------------------------------------------

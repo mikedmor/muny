@@ -60,10 +60,12 @@ export interface Theme {
   name: string;
   mode: ThemeMode;
   colors: ThemeColors;
+  /** Set by the server when an assistant made it ("agent:<token id>"). */
+  createdBy?: string;
 }
 
 /** Create or replace a custom theme. */
-export type ThemeInput = Omit<Theme, "id">;
+export type ThemeInput = Omit<Theme, "id" | "createdBy">;
 
 /** The saved choice: a theme id, or "system" to follow the device's light or dark setting. */
 export const SYSTEM_THEME = "system";

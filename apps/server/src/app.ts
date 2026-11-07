@@ -5,6 +5,8 @@ import fastifyStatic from "@fastify/static";
 import { appliedMigrationCount, type MunyDb, pingDb } from "@muny/db";
 import type { HealthResponse, MetaResponse } from "@muny/shared";
 import Fastify, { type FastifyInstance } from "fastify";
+import { registerAgentSurfaces } from "./agent/surfaces.js";
+import { registerTokenRoutes } from "./agent/tokens.js";
 import { registerAlertRoutes } from "./alerts/routes.js";
 import type { AlertDeps } from "./alerts/service.js";
 import { registerAssetRoutes } from "./assets/routes.js";
@@ -135,6 +137,8 @@ export async function buildApp({
   registerPrefsRoutes(app, db);
   registerDashboardRoutes(app, db);
   registerThemeRoutes(app, db);
+  registerTokenRoutes(app, db);
+  registerAgentSurfaces(app, db);
   registerInvestRoutes(app, db, { fetch: priceFetch });
   registerLoanRoutes(app, db, config.secretKey);
   registerDocumentRoutes(app, db, config.secretKey);

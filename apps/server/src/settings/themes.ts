@@ -66,6 +66,52 @@ export function themeState(db: MunyDb, userId: string): ThemeState {
   };
 }
 
+export function selectTheme(db: MunyDb, userId: string, id: string) {
+  const known =
+    id === SYSTEM_THEME ||
+    BUILTIN_THEMES.some((t) => t.id === id) ||
+    listThemes(db).some((t) => t.id === id);
+  if (!known) throw badRequest("That theme doesn't exist");
+  write(db, selectedKey(userId), id);
+}
+
+export function createTheme(db: MunyDb, input: Omit<Theme, "id">, createdBy?: string): Theme {
+  const themes = listThemes(db);
+  if (themes.length >= MAX_CUSTOM_THEMES)
+    throw conflict(`You can keep up to ${MAX_CUSTOM_THEMES} custom themes; delete one first`);
+  const theme: Theme = { id: newId(), ...input, ...(createdBy ? { createdBy } : {}) };
+  write(db, THEMES_KEY, [...themes, theme]);
+  return theme;
+}
+
+export function updateTheme(db: MunyDb, id: string, input: Omit<Theme, "id">): Theme {
+  const themes = listThemes(db);
+  const before = themes.find((t) => t.id === id);
+  if (!before) throw notFound("Theme not found");
+  const theme: Theme = {
+    id,
+    ...input,
+    ...(before.createdBy ? { createdBy: before.createdBy } : {}),
+  };
+  write(
+    db,
+    THEMES_KEY,
+    themes.map((t) => (t.id === id ? theme : t)),
+  );
+  return theme;
+}
+
+export function deleteTheme(db: MunyDb, id: string) {
+  const themes = listThemes(db);
+  if (!themes.some((t) => t.id === id)) throw notFound("Theme not found");
+  // Anyone using it goes back to following their device: resolveTheme ignores unknown ids.
+  write(
+    db,
+    THEMES_KEY,
+    themes.filter((t) => t.id !== id),
+  );
+}
+
 export function registerThemeRoutes(app: FastifyInstance, db: MunyDb) {
   const log = (userId: string, action: string, entityId: string, details?: unknown) =>
     audit(db, {
@@ -81,24 +127,13 @@ export function registerThemeRoutes(app: FastifyInstance, db: MunyDb) {
 
   app.put("/api/theme/selected", async (req) => {
     const user = requireUser(req);
-    const { id } = parse(SelectSchema, req.body);
-    const known =
-      id === SYSTEM_THEME ||
-      BUILTIN_THEMES.some((t) => t.id === id) ||
-      listThemes(db).some((t) => t.id === id);
-    if (!known) throw badRequest("That theme doesn't exist");
-    write(db, selectedKey(user.id), id);
+    selectTheme(db, user.id, parse(SelectSchema, req.body).id);
     return themeState(db, user.id);
   });
 
   app.post("/api/themes", async (req, reply) => {
     const user = requireUser(req);
-    const input = parse(ThemeInputSchema, req.body);
-    const themes = listThemes(db);
-    if (themes.length >= MAX_CUSTOM_THEMES)
-      throw conflict(`You can keep up to ${MAX_CUSTOM_THEMES} custom themes; delete one first`);
-    const theme: Theme = { id: newId(), ...input };
-    write(db, THEMES_KEY, [...themes, theme]);
+    const theme = createTheme(db, parse(ThemeInputSchema, req.body));
     log(user.id, "theme.create", theme.id, { name: theme.name });
     return reply.code(201).send(theme);
   });
@@ -106,15 +141,7 @@ export function registerThemeRoutes(app: FastifyInstance, db: MunyDb) {
   app.put("/api/themes/:id", async (req) => {
     const user = requireUser(req);
     const { id } = parse(IdParams, req.params);
-    const input = parse(ThemeInputSchema, req.body);
-    const themes = listThemes(db);
-    if (!themes.some((t) => t.id === id)) throw notFound("Theme not found");
-    const theme: Theme = { id, ...input };
-    write(
-      db,
-      THEMES_KEY,
-      themes.map((t) => (t.id === id ? theme : t)),
-    );
+    const theme = updateTheme(db, id, parse(ThemeInputSchema, req.body));
     log(user.id, "theme.update", id, { name: theme.name });
     return theme;
   });
@@ -122,14 +149,7 @@ export function registerThemeRoutes(app: FastifyInstance, db: MunyDb) {
   app.delete("/api/themes/:id", async (req) => {
     const user = requireUser(req);
     const { id } = parse(IdParams, req.params);
-    const themes = listThemes(db);
-    if (!themes.some((t) => t.id === id)) throw notFound("Theme not found");
-    // Anyone using it goes back to following their device: resolveTheme ignores unknown ids.
-    write(
-      db,
-      THEMES_KEY,
-      themes.filter((t) => t.id !== id),
-    );
+    deleteTheme(db, id);
     log(user.id, "theme.delete", id);
     return { ok: true };
   });
