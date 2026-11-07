@@ -403,7 +403,7 @@ export function StocksExtrasBanner({ onDismiss }: { onDismiss: () => void }) {
             type="button"
             disabled={set.isPending}
             onClick={() => set.mutate({ logos: true })}
-            className="rounded-lg bg-brand-600 px-3 py-1.5 font-medium text-white hover:bg-brand-700"
+            className="rounded-lg bg-brand-600 px-3 py-1.5 font-medium text-on-brand hover:bg-brand-700"
           >
             Show logos
           </button>
@@ -413,7 +413,7 @@ export function StocksExtrasBanner({ onDismiss }: { onDismiss: () => void }) {
             type="button"
             disabled={set.isPending}
             onClick={() => set.mutate({ market: true })}
-            className="rounded-lg bg-brand-600 px-3 py-1.5 font-medium text-white hover:bg-brand-700"
+            className="rounded-lg bg-brand-600 px-3 py-1.5 font-medium text-on-brand hover:bg-brand-700"
           >
             Show market overview
           </button>
@@ -421,7 +421,7 @@ export function StocksExtrasBanner({ onDismiss }: { onDismiss: () => void }) {
         <button
           type="button"
           onClick={onDismiss}
-          className="rounded-lg px-3 py-1.5 text-slate-500 hover:bg-white/60 dark:hover:bg-slate-800"
+          className="rounded-lg px-3 py-1.5 text-slate-500 hover:bg-surface/60 dark:hover:bg-slate-800"
         >
           Not now
         </button>

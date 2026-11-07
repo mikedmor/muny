@@ -10,7 +10,7 @@ import {
 import { cx } from "./ui.js";
 
 const inputClass =
-  "mt-1 block w-full rounded-lg border bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 dark:bg-slate-950 dark:text-slate-100";
+  "mt-1 block w-full rounded-lg border bg-surface px-3 py-2 text-sm text-slate-900 shadow-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 dark:bg-slate-950 dark:text-slate-100";
 
 export function SelectField({
   label,
@@ -178,7 +178,7 @@ export function Modal({
       }}
       aria-label={title}
       className={cx(
-        "m-auto w-[calc(100%-2rem)] border border-slate-200 bg-white p-0 text-slate-900 shadow-xl backdrop:bg-slate-900/50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100",
+        "m-auto w-[calc(100%-2rem)] border border-slate-200 bg-surface p-0 text-slate-900 shadow-xl backdrop:bg-slate-900/50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100",
         bare
           ? "max-w-3xl overflow-hidden rounded-2xl"
           : wide

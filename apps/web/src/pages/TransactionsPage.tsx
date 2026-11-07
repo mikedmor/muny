@@ -48,7 +48,7 @@ import {
 import type { TransactionSearch } from "../lib/search.js";
 
 const selectClass =
-  "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950";
+  "rounded-lg border border-slate-300 bg-surface px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950";
 
 function useDebounced<T>(value: T, ms = 300): T {
   const [v, setV] = useState(value);
@@ -317,7 +317,7 @@ export function TransactionsPage() {
             <h2 className="mb-1 px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
               {formatDay(group.day)}
             </h2>
-            <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
+            <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-surface dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
               {group.items.map((t) => (
                 <TransactionRow
                   key={t.id}
@@ -567,7 +567,7 @@ function NewTransactionForm({ onDone }: { onDone: () => void }) {
               onClick={() => setIsIncome(label === "Income")}
               className={cx(
                 "flex-1 rounded-md py-1",
-                (label === "Income") === isIncome && "bg-brand-600 text-white",
+                (label === "Income") === isIncome && "bg-brand-600 text-on-brand",
               )}
             >
               {label}
@@ -724,7 +724,7 @@ function RecurringAction({ txn }: { txn: Transaction }) {
             aria-label="Repeats"
             value={interval}
             onChange={(e) => setRepeat(e.target.value as Interval)}
-            className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
+            className="rounded-md border border-slate-300 bg-surface px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
           >
             {INTERVALS.map((i) => (
               <option key={i} value={i}>

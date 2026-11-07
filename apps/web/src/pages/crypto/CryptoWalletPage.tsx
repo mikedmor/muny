@@ -50,7 +50,7 @@ function Notes({ id, notes }: { id: string; notes: string | null }) {
         onBlur={() => v !== (notes ?? "") && save.mutate(v)}
         rows={3}
         placeholder="Add notes here…"
-        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+        className="w-full rounded-lg border border-slate-300 bg-surface px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
       />
       {save.isPending && <span className="text-xs text-slate-500">Saving…</span>}
     </label>
@@ -118,7 +118,7 @@ function ExchangeCard({
           aria-label="Exchange"
           defaultValue=""
           onChange={(e) => e.target.value && patch.mutate({ exchange: e.target.value })}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+          className="rounded-lg border border-slate-300 bg-surface px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
         >
           <option value="">Choose…</option>
           {CRYPTO_EXCHANGES.map((x) => (
@@ -187,7 +187,7 @@ function ExchangeCard({
               aria-label="Lost on"
               value={lostOn}
               onChange={(e) => setLostOn(e.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+              className="rounded-lg border border-slate-300 bg-surface px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
             />
             <Button
               variant="secondary"
@@ -248,7 +248,7 @@ function LostAccessCard({ w, onClose }: { w: CryptoWallet; onClose: () => void }
               aria-label="Lost access on"
               value={lostOn}
               onChange={(e) => setLostOn(e.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+              className="rounded-lg border border-slate-300 bg-surface px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
             />
             <Button
               variant="secondary"
@@ -315,7 +315,7 @@ function ConnectExchange({ w, onDone }: { w: CryptoWallet; onDone: () => void })
           onChange={(e) => setKey(e.target.value)}
           autoComplete="off"
           spellCheck={false}
-          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
+          className="mt-1 w-full rounded-lg border border-slate-300 bg-surface px-3 py-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
         />
       </label>
       <label className="block">
@@ -326,7 +326,7 @@ function ConnectExchange({ w, onDone }: { w: CryptoWallet; onDone: () => void })
           rows={w.exchange === "coinbase" ? 5 : 2}
           autoComplete="off"
           spellCheck={false}
-          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
+          className="mt-1 w-full rounded-lg border border-slate-300 bg-surface px-3 py-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
         />
       </label>
       <p className="text-xs text-slate-500">
@@ -511,7 +511,7 @@ export function CryptoWalletPage() {
                         "rounded-md px-2 py-1 text-xs font-medium",
                         type
                           ? "bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200"
-                          : "bg-brand-600 text-white hover:bg-brand-700",
+                          : "bg-brand-600 text-on-brand hover:bg-brand-700",
                       )}
                     >
                       {n} {n === 1 ? one : many}

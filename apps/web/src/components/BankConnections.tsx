@@ -116,7 +116,7 @@ export function LinkAccountsForm({ start, onDone }: { start: LinkStart; onDone: 
               aria-label={`Link ${a.name} to`}
               value={map[a.ref]}
               onChange={(e) => setMap((m) => ({ ...m, [a.ref]: e.target.value }))}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+              className="rounded-lg border border-slate-300 bg-surface px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
             >
               <option value="new">Add as a new account</option>
               {accounts.data?.map((acc) => (
@@ -484,7 +484,7 @@ function PlaidLogins({ logins }: { logins: { used: number; limit: number; custom
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 inputMode="numeric"
-                className="w-16 rounded border border-slate-300 bg-white px-1.5 py-0.5 dark:border-slate-700 dark:bg-slate-950"
+                className="w-16 rounded border border-slate-300 bg-surface px-1.5 py-0.5 dark:border-slate-700 dark:bg-slate-950"
               />
               <Button type="submit" className="px-2 py-0.5 text-xs">
                 Save
@@ -591,7 +591,7 @@ function PayPalForm({
           value={clientId}
           onChange={(e) => setClientId(e.target.value)}
           autoComplete="off"
-          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
+          className="mt-1 w-full rounded-lg border border-slate-300 bg-surface px-3 py-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
         />
       </label>
       <label className="block">
@@ -601,7 +601,7 @@ function PayPalForm({
           value={secret}
           onChange={(e) => setSecret(e.target.value)}
           autoComplete="off"
-          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
+          className="mt-1 w-full rounded-lg border border-slate-300 bg-surface px-3 py-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
         />
       </label>
       <label className="flex items-center gap-2 text-xs text-slate-500">

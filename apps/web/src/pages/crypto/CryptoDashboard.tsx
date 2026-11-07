@@ -665,7 +665,7 @@ export function CryptoDashboard() {
                     className={cx(
                       "rounded-md px-3 py-1 text-sm",
                       range === k
-                        ? "bg-white font-semibold shadow-sm dark:bg-slate-900"
+                        ? "bg-surface font-semibold shadow-sm dark:bg-slate-900"
                         : "text-slate-500",
                     )}
                   >
@@ -684,7 +684,7 @@ export function CryptoDashboard() {
                   onChange={(e) =>
                     e.target.value && setCustom((c) => ({ ...c, from: e.target.value }))
                   }
-                  className="rounded-lg border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
+                  className="rounded-lg border border-slate-300 bg-surface px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
                 />
                 <span className="text-slate-500">to</span>
                 <input
@@ -695,7 +695,7 @@ export function CryptoDashboard() {
                   onChange={(e) =>
                     e.target.value && setCustom((c) => ({ ...c, to: e.target.value }))
                   }
-                  className="rounded-lg border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
+                  className="rounded-lg border border-slate-300 bg-surface px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
                 />
               </div>
             )}

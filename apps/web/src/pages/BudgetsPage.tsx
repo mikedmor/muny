@@ -396,7 +396,7 @@ function ExcludedCard({ b }: { b: BudgetMonth }) {
           aria-label="Category to leave out of budgets"
           value={pick}
           onChange={(e) => setPick(e.target.value)}
-          className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
+          className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-surface px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
         >
           <option value="">Leave a category out…</option>
           {options.map((c) => (
@@ -449,7 +449,7 @@ function Allocation({ b, month }: { b: BudgetMonth; month: string }) {
         {over && (
           // Where the spending budget ends.
           <div
-            className="absolute inset-y-0 w-0.5 bg-white dark:bg-slate-950"
+            className="absolute inset-y-0 w-0.5 bg-surface dark:bg-slate-950"
             style={{ left: width(total) }}
           />
         )}

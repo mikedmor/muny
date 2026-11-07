@@ -209,7 +209,7 @@ function PaymentsEditor({
               <select
                 value={p.account}
                 onChange={(e) => set(p.key, { account: e.target.value })}
-                className="mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
+                className="mt-0.5 w-full rounded-lg border border-slate-300 bg-surface px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
               >
                 <option value="">Any account</option>
                 {(accounts.data ?? [])
@@ -239,7 +239,7 @@ function PaymentsEditor({
                       }
                       inputMode="decimal"
                       placeholder="0.00"
-                      className="mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm tabular-nums dark:border-slate-700 dark:bg-slate-950"
+                      className="mt-0.5 w-full rounded-lg border border-slate-300 bg-surface px-2 py-1.5 text-sm tabular-nums dark:border-slate-700 dark:bg-slate-950"
                     />
                   </label>
                 ))}
@@ -342,7 +342,7 @@ export function LenderLoansForm({ onDone }: { onDone: () => void }) {
           <select
             value={kind}
             onChange={(e) => setKind(e.target.value as LoanKind)}
-            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
+            className="mt-1 w-full rounded-lg border border-slate-300 bg-surface px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
           >
             {LOAN_KINDS.map((k) => (
               <option key={k} value={k}>

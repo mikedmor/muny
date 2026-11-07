@@ -211,7 +211,7 @@ export function CustomCardDialog({
   };
 
   const input =
-    "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950";
+    "mt-1 w-full rounded-lg border border-slate-300 bg-surface px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950";
   const label = "block text-sm font-medium text-slate-700 dark:text-slate-300";
 
   return (

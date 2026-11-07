@@ -82,7 +82,7 @@ function LinkForm({ loan, onDone }: { loan: Loan; onDone: () => void }) {
           <select
             value={from}
             onChange={(e) => setFrom(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
+            className="mt-1 w-full rounded-lg border border-slate-300 bg-surface px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
           >
             <option value="">Any account</option>
             {(accounts.data ?? [])

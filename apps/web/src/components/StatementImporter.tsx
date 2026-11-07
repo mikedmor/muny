@@ -79,7 +79,7 @@ function readable(p: StatementPreview | null, type: AccountType | undefined) {
 }
 
 const inputCls =
-  "rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950";
+  "rounded-lg border border-slate-300 bg-surface px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950";
 
 export function StatementImporter({
   forAccount,
@@ -268,7 +268,7 @@ export function StatementImporter({
         accept="application/pdf,.pdf"
         disabled={!!busy}
         onChange={(e) => void read(e.target.files)}
-        className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-brand-600 file:px-3 file:py-1.5 file:text-white"
+        className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-brand-600 file:px-3 file:py-1.5 file:text-on-brand"
       />
       {busy && <p className="text-sm text-slate-500">{busy}</p>}
       <ul className="space-y-3">

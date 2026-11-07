@@ -200,7 +200,7 @@ function MonthSummary({ series }: { series: RecurringSeries[] }) {
   const leftCents = left.reduce((a, u) => a - u.amountCents, 0);
   const lateN = out.filter((s) => s.late).length;
   return (
-    <div className="mb-4 flex flex-wrap gap-x-6 gap-y-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-900">
+    <div className="mb-4 flex flex-wrap gap-x-6 gap-y-1 rounded-xl border border-slate-200 bg-surface px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-900">
       <span className="font-medium">{d.toLocaleDateString(undefined, { month: "long" })}</span>
       <span>
         <span className="text-emerald-700 dark:text-emerald-400">✓ Paid {formatMoney(paid)}</span>{" "}
@@ -255,7 +255,7 @@ function Section({
         )}
       </button>
       {open && (
-        <ul className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
+        <ul className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-surface dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
           {items.map((s) => (
             <SeriesRow key={s.id} s={s} onOpen={() => onOpen(s)} />
           ))}
@@ -354,7 +354,7 @@ function SeriesDetail({ s, onDone }: { s: RecurringSeries; onDone: () => void })
             aria-label="Category"
             value={categoryId}
             onChange={setCategoryId}
-            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+            className="mt-1 w-full rounded-lg border border-slate-300 bg-surface px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
           />
         </div>
         <Field

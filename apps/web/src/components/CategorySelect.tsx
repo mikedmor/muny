@@ -304,7 +304,7 @@ export function CategorySelect({
       {open && pos && (
         <div
           ref={popRef}
-          className="fixed z-50 flex max-h-80 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          className="fixed z-50 flex max-h-80 flex-col overflow-hidden rounded-xl border border-slate-200 bg-surface text-slate-900 shadow-xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
           style={{
             left: pos.left,
             width: pos.width,
@@ -325,7 +325,7 @@ export function CategorySelect({
               aria-label="Search categories"
               aria-controls={listId}
               aria-activedescendant={filtered[active] ? `${uid}-opt-${active}` : undefined}
-              className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 dark:border-slate-700 dark:bg-slate-950"
+              className="w-full rounded-lg border border-slate-300 bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 dark:border-slate-700 dark:bg-slate-950"
             />
           </div>
           <div
@@ -349,7 +349,7 @@ export function CategorySelect({
                   <select
                     value={creating.groupId}
                     onChange={(e) => setCreating({ ...creating, groupId: e.target.value })}
-                    className="mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
+                    className="mt-0.5 w-full rounded-lg border border-slate-300 bg-surface px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
                   >
                     {(categories.data ?? [])
                       .filter((g) => g.kind !== "transfer")
@@ -373,7 +373,7 @@ export function CategorySelect({
                   <button
                     type="submit"
                     disabled={create.isPending}
-                    className="rounded-lg bg-brand-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+                    className="rounded-lg bg-brand-600 px-2.5 py-1 text-xs font-medium text-on-brand hover:bg-brand-700 disabled:opacity-60"
                   >
                     {create.isPending ? "Creating…" : "Create and use it"}
                   </button>

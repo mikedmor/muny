@@ -31,7 +31,7 @@ import { Alert, Button, cx } from "./ui.js";
  */
 
 const ctl =
-  "w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950";
+  "w-full rounded-lg border border-slate-300 bg-surface px-2.5 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950";
 
 interface Simple {
   name: { on: boolean; field: "payee" | "description"; op: TextOp; value: string };
@@ -146,7 +146,7 @@ function OptionCard({
   children?: ReactNode;
 }) {
   return (
-    <div className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+    <div className="rounded-2xl bg-surface shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
       <label className="flex cursor-pointer items-center gap-3 px-4 py-3 text-sm font-medium">
         {icon}
         <span className="flex-1">{title}</span>
@@ -759,7 +759,7 @@ export function RulesAppliedDialog({
                   key={r.id}
                   type="button"
                   onClick={() => setEditing(r)}
-                  className="block w-full space-y-2 rounded-2xl bg-white p-5 text-left shadow-sm ring-1 ring-slate-200 hover:ring-brand-500 dark:bg-slate-900 dark:ring-slate-800"
+                  className="block w-full space-y-2 rounded-2xl bg-surface p-5 text-left shadow-sm ring-1 ring-slate-200 hover:ring-brand-500 dark:bg-slate-900 dark:ring-slate-800"
                 >
                   <span className="flex items-baseline justify-between gap-3">
                     <RuleSummary rule={r} />

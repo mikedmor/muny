@@ -265,14 +265,14 @@ export function InlineBudget({
             if (e.key === "Escape") setEditing(false);
           }}
           className={cx(
-            "w-24 rounded-md border bg-white py-1 pr-1.5 pl-4 text-right text-sm tabular-nums outline-none focus:ring-2 focus:ring-brand-500/30 dark:bg-slate-950",
+            "w-24 rounded-md border bg-surface py-1 pr-1.5 pl-4 text-right text-sm tabular-nums outline-none focus:ring-2 focus:ring-brand-500/30 dark:bg-slate-950",
             valid ? "border-brand-500" : "border-red-500",
           )}
         />
       </span>
       <span
         role="tooltip"
-        className="absolute top-full left-0 z-20 mt-2 w-64 max-w-[calc(100vw-2rem)] sm:right-0 sm:left-auto rounded-xl border border-slate-200 bg-white p-3 text-left shadow-lg dark:border-slate-700 dark:bg-slate-900"
+        className="absolute top-full left-0 z-20 mt-2 w-64 max-w-[calc(100vw-2rem)] sm:right-0 sm:left-auto rounded-xl border border-slate-200 bg-surface p-3 text-left shadow-lg dark:border-slate-700 dark:bg-slate-900"
       >
         <span className="block text-xs text-slate-600 dark:text-slate-300">
           {line.kind === "income"

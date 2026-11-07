@@ -192,7 +192,7 @@ export function CategoryPage() {
           </Link>
           <span
             aria-hidden="true"
-            className="flex size-11 shrink-0 items-center justify-center rounded-full bg-white text-xl shadow-sm dark:bg-slate-800"
+            className="flex size-11 shrink-0 items-center justify-center rounded-full bg-surface text-xl shadow-sm dark:bg-slate-800"
           >
             <CategoryIcon name={a?.category.name} group={a?.category.groupName} />
           </span>
@@ -294,7 +294,7 @@ export function CategoryPage() {
           <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
             <div className="order-2 min-w-0 space-y-3 lg:order-0">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="rounded-full bg-brand-600 px-3 py-1 text-sm font-medium text-white">
+                <span className="rounded-full bg-brand-600 px-3 py-1 text-sm font-medium text-on-brand">
                   {monthLabel(month, { month: "long" })} 1 – {monthLabel(month, { month: "long" })}{" "}
                   {Number(monthEnd(month).slice(8))}
                 </span>
@@ -303,7 +303,7 @@ export function CategoryPage() {
                   <select
                     value={sort}
                     onChange={(e) => setSort(e.target.value as "date" | "amount")}
-                    className="rounded-lg border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
+                    className="rounded-lg border border-slate-300 bg-surface px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
                   >
                     <option value="date">Date</option>
                     <option value="amount">Amount</option>

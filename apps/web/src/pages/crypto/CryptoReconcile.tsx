@@ -557,7 +557,7 @@ function Mismatch({
         aria-label="Date of the adjustment"
         value={adjustOn}
         onChange={(e) => e.target.value && setAdjustOn(e.target.value)}
-        className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+        className="rounded-lg border border-slate-300 bg-surface px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
       />
     </label>
   );
@@ -724,7 +724,7 @@ function Mismatch({
                 value={closedOn}
                 min={isoDay(m.closed.lastAt)}
                 onChange={(e) => setClosedOn(e.target.value)}
-                className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+                className="rounded-lg border border-slate-300 bg-surface px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
               />
             </label>
             <Button

@@ -51,7 +51,7 @@ function Tooltip({
   return (
     <div
       role="tooltip"
-      className="pointer-events-none absolute z-10 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs shadow-md dark:border-slate-700 dark:bg-slate-900"
+      className="pointer-events-none absolute z-10 whitespace-nowrap rounded-lg border border-slate-200 bg-surface px-2.5 py-1.5 text-xs shadow-md dark:border-slate-700 dark:bg-slate-900"
       style={{
         top: Math.max(0, y - 8),
         ...(left ? { right: width - x + 12 } : { left: x + 12 }),

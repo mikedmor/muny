@@ -122,7 +122,7 @@ export function AccountsPage() {
                     </h2>
                     <Money cents={total} className="text-sm font-medium text-slate-500" />
                   </div>
-                  <ul className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
+                  <ul className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-surface dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
                     {items.map((a) => (
                       <li
                         key={a.id}

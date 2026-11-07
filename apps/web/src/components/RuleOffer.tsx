@@ -45,7 +45,7 @@ function RuleOffer({
   return (
     <div
       role="status"
-      className="fixed right-4 bottom-4 z-50 flex items-center gap-3 rounded-xl bg-white py-2.5 pr-2.5 pl-4 text-sm shadow-lg ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-700"
+      className="fixed right-4 bottom-4 z-50 flex items-center gap-3 rounded-xl bg-surface py-2.5 pr-2.5 pl-4 text-sm shadow-lg ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-700"
     >
       <span className="font-medium text-emerald-700 dark:text-emerald-400">
         Changed category to {categoryName}

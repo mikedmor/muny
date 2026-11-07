@@ -124,7 +124,7 @@ export function TaxesPage() {
               aria-label="Tax year"
               value={year}
               onChange={(e) => setYear(Number(e.target.value))}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+              className="rounded-lg border border-slate-300 bg-surface px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
             >
               {years.map((y) => (
                 <option key={y} value={y}>
@@ -158,7 +158,7 @@ export function TaxesPage() {
               <a
                 key={s.key}
                 href={`#tax-${s.key}`}
-                className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:border-brand-500 dark:border-slate-800 dark:bg-slate-900"
+                className="rounded-xl border border-slate-200 bg-surface p-4 shadow-sm hover:border-brand-500 dark:border-slate-800 dark:bg-slate-900"
               >
                 <span className="flex items-center gap-1.5 text-xs text-slate-500">
                   <span aria-hidden="true">{ICON[s.key]}</span>

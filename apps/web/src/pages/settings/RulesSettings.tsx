@@ -192,7 +192,7 @@ export function RulesSettings() {
       )}
 
       {list.length > 0 && (
-        <ul className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
+        <ul className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-surface dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
           {list.map((r, i) => {
             const d = describe(r);
             return (

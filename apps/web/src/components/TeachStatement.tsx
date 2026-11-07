@@ -107,7 +107,7 @@ function Teach({
                   e.target.value &&
                   setLabels((x) => ({ ...x, [f.key]: labelFrom(e.target.value, f.type) }))
                 }
-                className="min-w-0 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-950"
+                className="min-w-0 rounded-lg border border-slate-300 bg-surface px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-950"
               >
                 <option value="">
                   {candidates.length ? "Pick the line…" : "No line with this kind of value"}
@@ -124,7 +124,7 @@ function Teach({
                 value={labels[f.key] ?? ""}
                 onChange={(e) => setLabels((x) => ({ ...x, [f.key]: e.target.value }))}
                 placeholder="Label text"
-                className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
+                className="rounded-lg border border-slate-300 bg-surface px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
               />
             </div>
           );

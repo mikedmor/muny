@@ -441,7 +441,7 @@ function Planner({
                 onChange={(e) =>
                   update({ debtFreeBy: e.target.value ? `${e.target.value}-01` : null })
                 }
-                className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-950"
+                className="rounded-lg border border-slate-300 bg-surface px-2 py-1.5 dark:border-slate-700 dark:bg-slate-950"
               />
               {p.debtFreeBy && (
                 <button
@@ -624,7 +624,7 @@ function Planner({
                             else delete t[id];
                             update({ targets: t });
                           }}
-                          className="w-36 rounded border border-slate-300 bg-white px-1.5 py-1 text-xs dark:border-slate-700 dark:bg-slate-950"
+                          className="w-36 rounded border border-slate-300 bg-surface px-1.5 py-1 text-xs dark:border-slate-700 dark:bg-slate-950"
                         />
                       </span>
                     </td>

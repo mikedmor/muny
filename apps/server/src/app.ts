@@ -32,6 +32,7 @@ import { registerReportRoutes } from "./reports/routes.js";
 import { registerRuleRoutes } from "./rules/routes.js";
 import { registerSavingsRoutes } from "./savings/routes.js";
 import { registerPrefsRoutes } from "./settings/prefs.js";
+import { registerThemeRoutes } from "./settings/themes.js";
 import { registerStatementTemplateRoutes } from "./statements/routes.js";
 import { makeProviders, type Providers } from "./sync/engine.js";
 import { registerSyncRoutes } from "./sync/routes.js";
@@ -133,6 +134,7 @@ export async function buildApp({
   registerImportRoutes(app, db);
   registerPrefsRoutes(app, db);
   registerDashboardRoutes(app, db);
+  registerThemeRoutes(app, db);
   registerInvestRoutes(app, db, { fetch: priceFetch });
   registerLoanRoutes(app, db, config.secretKey);
   registerDocumentRoutes(app, db, config.secretKey);

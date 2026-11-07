@@ -130,7 +130,7 @@ export function HouseholdSettings() {
                         api.patch(`/api/household/users/${u.id}`, { role: e.target.value }),
                       )
                     }
-                    className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+                    className="rounded-lg border border-slate-300 bg-surface px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
                   >
                     <option value="member">{ROLE_LABEL.member}</option>
                     <option value="viewer">{ROLE_LABEL.viewer}</option>
@@ -194,7 +194,7 @@ export function HouseholdSettings() {
                   value={link}
                   aria-label="Invite link"
                   onFocus={(e) => e.currentTarget.select()}
-                  className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
+                  className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-surface px-2 py-1.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
                 />
                 <Button
                   variant="secondary"

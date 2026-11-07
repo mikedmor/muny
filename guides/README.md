@@ -10,6 +10,7 @@ How to install, set up and use Muny.
 | [Importing files](importing.md)               | Rocket Money, bank CSV/OFX, brokerage and Koinly exports                 |
 | [Budgets](budgets.md)                         | Monthly budgets, the forecast, and leaving categories out                |
 | [Your Overview](overview.md)                  | Choose and order your cards, make your own, have an assistant write them |
+| [Themes](themes.md)                           | Light, dark and your own color themes                                    |
 | [Loans](loans.md)                             | Loans: balances, rates, payoff dates and paying extra                    |
 | [Credit cards](cards.md)                      | Limits, statements, due dates and paying cards off                       |
 | [Stocks](stocks.md)                           | Tracking brokerage accounts, holdings and dividends                      |

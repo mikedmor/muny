@@ -2,6 +2,7 @@ import type { Category, CategoryGroup } from "@muny/shared";
 import { type FormEvent, useEffect, useState } from "react";
 import { DeleteCategoryForm } from "../components/EditCategory.js";
 import { Modal } from "../components/forms.js";
+import { ThemeSettings } from "../components/ThemeSettings.js";
 import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
 import {
   useCategories,
@@ -25,7 +26,7 @@ const TABS = [
   ["categories", "Categories"],
   ["rules", "Rules"],
   ["merchants", "Merchants"],
-  ["display", "Display"],
+  ["display", "Appearance"],
   ["data", "Data & backups"],
   ["household", "Household & account"],
 ] as const;
@@ -125,7 +126,7 @@ function InlineText({
         if (e.key === "Escape") setEditing(false);
       }}
       className={cx(
-        "w-full rounded border border-brand-500 bg-white px-2 py-0.5 outline-none dark:bg-slate-950",
+        "w-full rounded border border-brand-500 bg-surface px-2 py-0.5 outline-none dark:bg-slate-950",
         className,
       )}
     />
@@ -186,7 +187,7 @@ function CategoriesSettings() {
           onChange={(e) => setNewGroup(e.target.value)}
           placeholder="New group name"
           aria-label="New group name"
-          className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+          className="flex-1 rounded-lg border border-slate-300 bg-surface px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
         />
         <Button type="submit" variant="secondary" disabled={createGroup.isPending}>
           Add group
@@ -401,24 +402,28 @@ function DisplaySettings() {
   const set = useSetUiPrefs();
   const split = prefs.data?.splitCharts ?? true;
   return (
-    <Card className="max-w-2xl">
-      <h2 className="font-semibold">Charts</h2>
-      <label className="mt-3 flex items-start gap-3 text-sm">
-        <input
-          type="checkbox"
-          checked={split}
-          disabled={!prefs.data || set.isPending}
-          onChange={(e) => set.mutate({ splitCharts: e.target.checked })}
-          className="mt-0.5 size-4 accent-brand-600"
-        />
-        <span>
-          <span className="font-medium">Split totals into colored parts</span>
-          <span className="block text-xs text-slate-500">
-            Spending this month by category, crypto by coin, stocks by holding, and savings by money
-            added and interest. Off: one line per chart. Applies to everyone in the household.
+    <div className="space-y-8">
+      <ThemeSettings />
+      <Card className="max-w-2xl">
+        <h2 className="font-semibold">Charts</h2>
+        <label className="mt-3 flex items-start gap-3 text-sm">
+          <input
+            type="checkbox"
+            checked={split}
+            disabled={!prefs.data || set.isPending}
+            onChange={(e) => set.mutate({ splitCharts: e.target.checked })}
+            className="mt-0.5 size-4 accent-brand-600"
+          />
+          <span>
+            <span className="font-medium">Split totals into colored parts</span>
+            <span className="block text-xs text-slate-500">
+              Spending this month by category, crypto by coin, stocks by holding, and savings by
+              money added and interest. Off: one line per chart. Applies to everyone in the
+              household.
+            </span>
           </span>
-        </span>
-      </label>
-    </Card>
+        </label>
+      </Card>
+    </div>
   );
 }

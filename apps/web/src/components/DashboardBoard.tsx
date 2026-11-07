@@ -313,7 +313,7 @@ function CustomizeDialog({
                 key={card}
                 data-row={card}
                 className={cx(
-                  "group flex items-center gap-2 bg-white px-2 py-1.5 dark:bg-slate-900",
+                  "group flex items-center gap-2 bg-surface px-2 py-1.5 dark:bg-slate-900",
                   dragging === card && "relative z-10 shadow-lg ring-2 ring-brand-500",
                 )}
               >

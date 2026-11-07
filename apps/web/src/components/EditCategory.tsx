@@ -161,7 +161,7 @@ function EditCategoryForm({
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={60}
-            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+            className="mt-1 w-full rounded-lg border border-slate-300 bg-surface px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
           />
         </label>
         <SelectField label="Group" value={groupId} onChange={(e) => setGroupId(e.target.value)}>

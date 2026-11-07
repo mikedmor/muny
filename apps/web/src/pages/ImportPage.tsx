@@ -168,7 +168,7 @@ export function ImportPage() {
               "flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-16 text-center transition-colors",
               dragging
                 ? "border-brand-500 bg-brand-50 dark:bg-brand-700/10"
-                : "border-slate-300 bg-white hover:border-brand-500 dark:border-slate-700 dark:bg-slate-900",
+                : "border-slate-300 bg-surface hover:border-brand-500 dark:border-slate-700 dark:bg-slate-900",
             )}
           >
             <span className="text-3xl" aria-hidden>
@@ -281,7 +281,7 @@ export function ImportPage() {
 
               <section>
                 <h2 className="mb-2 font-semibold">Accounts in this file</h2>
-                <ul className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
+                <ul className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-surface dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
                   {p.accounts.map((a) => (
                     <li
                       key={a.key}
@@ -326,7 +326,7 @@ export function ImportPage() {
                         aria-label={`Import ${a.name} into`}
                         value={map[a.key] ?? "new"}
                         onChange={(e) => setMap((m) => ({ ...m, [a.key]: e.target.value }))}
-                        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                        className="rounded-lg border border-slate-300 bg-surface px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
                       >
                         <option value="new">Create new account</option>
                         {accounts.data?.map((acc) => (

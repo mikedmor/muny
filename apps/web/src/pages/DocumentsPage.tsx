@@ -202,7 +202,7 @@ export function DocumentsPage() {
       <PageHeader
         title="Documents"
         actions={
-          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">
+          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-on-brand hover:bg-brand-700">
             <Upload aria-hidden="true" className="size-4" /> Upload to {uploadFolder}
             <input
               type="file"
@@ -285,7 +285,7 @@ export function DocumentsPage() {
         </nav>
 
         <div className="min-w-0 space-y-4">
-          <label className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950">
+          <label className="flex items-center gap-2 rounded-lg border border-slate-300 bg-surface px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950">
             <Search aria-hidden="true" className="size-4 text-slate-400" />
             <span className="sr-only">Search documents</span>
             <input
@@ -305,7 +305,7 @@ export function DocumentsPage() {
                   key={n.path}
                   type="button"
                   onClick={() => go(n.path)}
-                  className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-brand-500 dark:border-slate-800 dark:bg-slate-900"
+                  className="flex items-center gap-3 rounded-xl border border-slate-200 bg-surface px-4 py-3 text-left hover:border-brand-500 dark:border-slate-800 dark:bg-slate-900"
                 >
                   <Folder aria-hidden="true" className="size-5 shrink-0 text-brand-600" />
                   <span className="min-w-0 flex-1 truncate font-medium">{n.name}</span>
@@ -364,7 +364,7 @@ export function DocumentsPage() {
                                 value={moving.folder}
                                 onChange={(e) => setMoving({ id: d.id, folder: e.target.value })}
                                 placeholder="e.g. Car or Home / Insurance"
-                                className="w-64 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+                                className="w-64 rounded-lg border border-slate-300 bg-surface px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
                               />
                               <datalist id="doc-folders">
                                 {userFolders.map((f) => (

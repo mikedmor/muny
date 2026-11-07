@@ -294,7 +294,7 @@ function Suggestion({ s }: { s: AlternativeSuggestion }) {
               aria-label={`Alternative to ${s.seriesName}`}
               value={pick}
               onChange={(e) => setPick(e.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
+              className="rounded-lg border border-slate-300 bg-surface px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
             >
               {s.alternatives.map((a) => (
                 <option key={a.name}>{a.name}</option>
@@ -377,7 +377,7 @@ function Project({ p }: { p: DiyProject }) {
         aria-label={`Status of ${p.serviceName} switch`}
         value={p.status}
         onChange={(e) => save.mutate({ id: p.id, status: e.target.value as DiyStatus })}
-        className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
+        className="rounded-lg border border-slate-300 bg-surface px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
       >
         {DIY_STATUSES.map((s) => (
           <option key={s} value={s}>

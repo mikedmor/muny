@@ -18,5 +18,6 @@ export * from "./savings.js";
 export * from "./statements.js";
 export * from "./sync.js";
 export * from "./tax.js";
+export * from "./themes.js";
 export * from "./transactions.js";
 export * from "./trials.js";

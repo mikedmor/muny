@@ -134,7 +134,7 @@ function ApyEditor({ a, onSaved }: { a: SavingsAccountInfo; onSaved: () => void 
         }}
         placeholder="4.35"
         inputMode="decimal"
-        className="w-16 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-sm dark:border-slate-700 dark:bg-slate-950"
+        className="w-16 rounded border border-slate-300 bg-surface px-1.5 py-0.5 text-sm dark:border-slate-700 dark:bg-slate-950"
       />
       <span className="text-xs text-slate-500">%</span>
       <Button className="px-2 py-0.5 text-xs" onClick={() => void save()}>

@@ -29,6 +29,8 @@ import {
 import { useState } from "react";
 import { useLogout, useMeta } from "../lib/auth.js";
 import { useNotifications } from "../lib/queries.js";
+import { ThemeProvider } from "../lib/theme.js";
+import { ThemeTryBar } from "./ThemeSettings.js";
 import { cx } from "./ui.js";
 
 /** The menu, in groups. Icons: Lucide (ISC license), drawn at one size and weight. */
@@ -72,7 +74,7 @@ const NAV: { label?: string; items: { to: string; label: string; icon: LucideIco
 function UnreadBadge({ count }: { count: number }) {
   if (!count) return null;
   return (
-    <span className="ml-auto rounded-full bg-brand-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white tabular-nums">
+    <span className="ml-auto rounded-full bg-brand-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-on-brand tabular-nums">
       {count > 99 ? "99+" : count}
       <span className="sr-only"> unread</span>
     </span>
@@ -138,7 +140,7 @@ function UserBox({ user, onNavigate }: { user: CurrentUser; onNavigate?: () => v
           />
           <div
             role="menu"
-            className="absolute right-0 bottom-full left-0 z-20 mb-2 rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+            className="absolute right-0 bottom-full left-0 z-20 mb-2 rounded-lg border border-slate-200 bg-surface p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
           >
             <Link
               to="/accounts"
@@ -193,7 +195,7 @@ function UserBox({ user, onNavigate }: { user: CurrentUser; onNavigate?: () => v
       >
         <span
           aria-hidden="true"
-          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-600 text-xs font-semibold text-white"
+          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-600 text-xs font-semibold text-on-brand"
         >
           {initials(user)}
         </span>
@@ -230,13 +232,22 @@ function UserBox({ user, onNavigate }: { user: CurrentUser; onNavigate?: () => v
 }
 
 export function AppShell({ user }: { user: CurrentUser }) {
+  return (
+    <ThemeProvider>
+      <ThemeTryBar />
+      <Shell user={user} />
+    </ThemeProvider>
+  );
+}
+
+function Shell({ user }: { user: CurrentUser }) {
   const [open, setOpen] = useState(false);
   const unread = useNotifications().data?.unread ?? 0;
 
   return (
     <div className="min-h-dvh bg-slate-50 text-slate-900 md:flex dark:bg-slate-950 dark:text-slate-100">
       {/* Desktop sidebar */}
-      <aside className="hidden w-60 shrink-0 flex-col justify-between border-r border-slate-200 bg-white p-4 md:sticky md:top-0 md:flex md:h-dvh dark:border-slate-800 dark:bg-slate-900">
+      <aside className="hidden w-60 shrink-0 flex-col justify-between border-r border-slate-200 bg-surface p-4 md:sticky md:top-0 md:flex md:h-dvh dark:border-slate-800 dark:bg-slate-900">
         <div className="min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <Link to="/" className="mb-6 flex items-center gap-2 px-3">
             <img src="/favicon.svg" alt="" className="size-7" />
@@ -248,7 +259,7 @@ export function AppShell({ user }: { user: CurrentUser }) {
       </aside>
 
       {/* Mobile top bar */}
-      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 md:hidden dark:border-slate-800 dark:bg-slate-900">
+      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-surface px-4 py-3 md:hidden dark:border-slate-800 dark:bg-slate-900">
         <Link to="/" className="flex items-center gap-2">
           <img src="/favicon.svg" alt="" className="size-7" />
           <span className="text-lg font-semibold">Muny</span>
@@ -264,7 +275,7 @@ export function AppShell({ user }: { user: CurrentUser }) {
             {unread > 0 && (
               <span
                 aria-hidden="true"
-                className="absolute top-0 right-0 rounded-full bg-brand-600 px-1 text-[10px] font-semibold leading-4 text-white"
+                className="absolute top-0 right-0 rounded-full bg-brand-600 px-1 text-[10px] font-semibold leading-4 text-on-brand"
               >
                 {unread > 9 ? "9+" : unread}
               </span>
@@ -287,7 +298,7 @@ export function AppShell({ user }: { user: CurrentUser }) {
       </header>
       <div
         className={cx(
-          "fixed inset-x-0 top-[57px] bottom-0 z-10 flex flex-col justify-between overflow-y-auto bg-white p-4 md:hidden dark:bg-slate-900",
+          "fixed inset-x-0 top-[57px] bottom-0 z-10 flex flex-col justify-between overflow-y-auto bg-surface p-4 md:hidden dark:bg-slate-900",
           !open && "hidden",
         )}
       >

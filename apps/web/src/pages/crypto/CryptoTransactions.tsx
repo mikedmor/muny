@@ -285,7 +285,7 @@ function TagMenu({
       />
       <div
         role="menu"
-        className="absolute top-full left-0 z-20 mt-1 w-56 rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+        className="absolute top-full left-0 z-20 mt-1 w-56 rounded-lg border border-slate-200 bg-surface p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
       >
         {t.type !== "transfer" && t.type !== "trade" && (
           <>
@@ -604,7 +604,7 @@ function Details({
             rows={2}
             maxLength={500}
             placeholder="Add a note…"
-            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+            className="mt-1 w-full rounded-lg border border-slate-300 bg-surface px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
           />
         </label>
         {t.deletable && (
@@ -622,7 +622,7 @@ function Details({
         )}
         {del.error && <p className="text-xs text-red-600">{del.error.message}</p>}
       </div>
-      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
+      <div className="rounded-lg border border-slate-200 bg-surface px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
         {line(s.out, "-", mineIsOut)}
         {!s.feeOnly && line(s.in, "+", !mineIsOut)}
         <dl className="mt-1 divide-y divide-slate-100 border-t border-slate-200 dark:divide-slate-800 dark:border-slate-700">
@@ -742,7 +742,7 @@ function TxnRow({ t }: { t: CryptoTxn }) {
           <span className="relative">
             <WalletIcon name={s.sender.wallet ?? ""} chain={s.sender.chain} kind={s.sender.kind} />
             {s.receiver && (
-              <span className="absolute -right-1.5 -bottom-1.5 rounded-full ring-2 ring-white dark:ring-slate-900">
+              <span className="absolute -right-1.5 -bottom-1.5 rounded-full ring-2 ring-surface dark:ring-slate-900">
                 <WalletIcon
                   name={s.receiver.wallet ?? ""}
                   chain={s.receiver.chain}
@@ -991,11 +991,11 @@ function WalletPicker({
     onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
   return (
     <div className="relative">
-      <div className="flex min-h-[2.5rem] min-w-[14rem] max-w-xl flex-wrap items-center gap-1 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950">
+      <div className="flex min-h-[2.5rem] min-w-[14rem] max-w-xl flex-wrap items-center gap-1 rounded-lg border border-slate-300 bg-surface px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950">
         {chosen.map((w) => (
           <span
             key={w.id}
-            className="flex items-center gap-1 rounded-md bg-brand-600 py-0.5 pr-1 pl-1.5 text-xs text-white"
+            className="flex items-center gap-1 rounded-md bg-brand-600 py-0.5 pr-1 pl-1.5 text-xs text-on-brand"
           >
             {w.name}
             <button
@@ -1026,7 +1026,7 @@ function WalletPicker({
             className="fixed inset-0 z-10 cursor-default"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute top-full left-0 z-20 mt-1 w-72 rounded-lg border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+          <div className="absolute top-full left-0 z-20 mt-1 w-72 rounded-lg border border-slate-200 bg-surface p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
             <input
               // biome-ignore lint/a11y/noAutofocus: opened by the button
               autoFocus
@@ -1034,7 +1034,7 @@ function WalletPicker({
               placeholder="Find a wallet"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              className="mb-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+              className="mb-1 w-full rounded-md border border-slate-300 bg-surface px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
             />
             <ul className="max-h-72 overflow-y-auto">
               {shown.map((w) => (
@@ -1111,7 +1111,7 @@ export function CryptoTransactions() {
     ...new Set((wallets.data ?? []).flatMap((w) => w.balances.map((b) => b.asset))),
   ].sort();
   const sel =
-    "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950";
+    "rounded-lg border border-slate-300 bg-surface px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950";
   const active = !!(
     search.walletId ||
     search.warnings ||

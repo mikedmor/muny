@@ -114,7 +114,7 @@ function Select({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
+        className="mt-1 w-full rounded-lg border border-slate-300 bg-surface px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
       >
         {children}
       </select>
@@ -859,7 +859,7 @@ function Payments({ loan }: { loan: Loan }) {
       ) : (
         <div className="max-h-72 overflow-auto">
           <table className="w-full min-w-[32rem] text-sm">
-            <thead className="sticky top-0 bg-white text-xs text-slate-500 dark:bg-slate-900">
+            <thead className="sticky top-0 bg-surface text-xs text-slate-500 dark:bg-slate-900">
               <tr>
                 <th className="py-1.5 text-left font-medium">Date</th>
                 <th className="py-1.5 text-left font-medium">From</th>
@@ -1390,7 +1390,7 @@ export function LoansPage() {
                   className={cx(
                     "rounded-md px-3 py-1",
                     addMode === k
-                      ? "bg-brand-600 text-white"
+                      ? "bg-brand-600 text-on-brand"
                       : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100",
                   )}
                 >

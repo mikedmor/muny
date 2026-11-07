@@ -70,7 +70,7 @@ export function IconPicker({
           }}
           placeholder="Search icons: robot, water, car…"
           aria-label="Search icons"
-          className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
+          className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-surface px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
         />
         {value && (
           <button

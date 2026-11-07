@@ -28,6 +28,7 @@ import { SettingsPage } from "./pages/SettingsPage.js";
 import { SpendingPage } from "./pages/SpendingPage.js";
 import { StocksPage } from "./pages/StocksPage.js";
 import { TaxesPage } from "./pages/TaxesPage.js";
+import { ThemeEditorPage } from "./pages/ThemeEditorPage.js";
 import { TransactionsPage } from "./pages/TransactionsPage.js";
 
 /** Root: decides between first-run setup, sign-in, and the app. */
@@ -88,6 +89,9 @@ const cryptoTxnSearch = (s: Record<string, unknown>) => {
   };
 };
 
+const themeSearch = (s: Record<string, unknown>): { from?: string } =>
+  typeof s.from === "string" && s.from.length <= 64 ? { from: s.from } : {};
+
 const routeTree = rootRoute.addChildren([
   page("/", OverviewPage),
   searchPage("/transactions", TransactionsPage, validateTransactionSearch),
@@ -113,6 +117,7 @@ const routeTree = rootRoute.addChildren([
   page("/accounts", AccountsPage),
   page("/import", ImportPage),
   page("/settings", SettingsPage),
+  searchPage("/settings/themes/$themeId", ThemeEditorPage, themeSearch),
   page("/oauth/plaid", PlaidOAuthPage),
 ]);
 

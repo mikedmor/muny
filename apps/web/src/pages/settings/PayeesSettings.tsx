@@ -113,7 +113,7 @@ function PayeeRow({ payee }: { payee: PayeeSummary }) {
             if (e.key === "Enter") commit();
             if (e.key === "Escape") setEditing(false);
           }}
-          className="w-full rounded border border-brand-500 bg-white px-2 py-0.5 outline-none dark:bg-slate-950"
+          className="w-full rounded border border-brand-500 bg-surface px-2 py-0.5 outline-none dark:bg-slate-950"
         />
       ) : (
         <button
@@ -168,10 +168,10 @@ export function PayeesSettings() {
         onChange={(e) => setQ(e.target.value)}
         placeholder={`Search ${payees.data?.length ?? ""} merchants`}
         aria-label="Search merchants"
-        className="w-full max-w-md rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+        className="w-full max-w-md rounded-lg border border-slate-300 bg-surface px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
       />
       {payees.isError && <Alert>Couldn't load merchants.</Alert>}
-      <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
+      <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-surface dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
         {filtered.slice(0, 300).map((p) => (
           <PayeeRow key={p.id} payee={p} />
         ))}

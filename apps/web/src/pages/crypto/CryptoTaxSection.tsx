@@ -156,7 +156,7 @@ export function CryptoTaxSection({ year }: { year: number }) {
                     }}
                     className={cx(
                       "rounded-md px-2 py-1 font-medium",
-                      i ? "bg-slate-200 dark:bg-slate-700" : "bg-brand-600 text-white",
+                      i ? "bg-slate-200 dark:bg-slate-700" : "bg-brand-600 text-on-brand",
                     )}
                   >
                     {n} {k}
@@ -235,7 +235,7 @@ function Reports({ year }: { year: number }) {
         <select
           value={kind}
           onChange={(e) => setKind(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
+          className="mt-1 w-full rounded-lg border border-slate-300 bg-surface px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
         >
           {CRYPTO_TAX_REPORTS.map(([k, label]) => (
             <option key={k} value={k}>
@@ -247,7 +247,7 @@ function Reports({ year }: { year: number }) {
       {info && <p className="text-xs text-slate-500">{info[2]}</p>}
       <a
         href={`/api/crypto/tax/${year}/report/${kind}`}
-        className="inline-block rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700"
+        className="inline-block rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-on-brand hover:bg-brand-700"
       >
         ⤓ Download {year} (CSV)
       </a>
@@ -406,7 +406,7 @@ function DocRow({
                 Reports cost basis
               </label>
             )}
-            <label className="cursor-pointer rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700">
+            <label className="cursor-pointer rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-on-brand hover:bg-brand-700">
               {upload.isPending ? "Uploading…" : "Upload"}
               <input
                 type="file"

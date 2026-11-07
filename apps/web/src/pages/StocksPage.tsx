@@ -355,7 +355,7 @@ function CostCell({
           onChange={(e) => setText(e.target.value)}
           placeholder="per share"
           inputMode="decimal"
-          className="w-20 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-right dark:border-slate-700 dark:bg-slate-950"
+          className="w-20 rounded border border-slate-300 bg-surface px-1.5 py-0.5 text-right dark:border-slate-700 dark:bg-slate-950"
         />
         <Button type="submit" className="px-2 py-0.5 text-xs" disabled={save.isPending}>
           Save
@@ -462,7 +462,7 @@ function HoldingRow({
               {cash ? <MerchantAvatar name={name} /> : <StockLogo symbol={p.symbol} />}
               <span
                 aria-hidden="true"
-                className="absolute -right-0.5 -bottom-0.5 size-3 rounded-full ring-2 ring-white dark:ring-slate-900"
+                className="absolute -right-0.5 -bottom-0.5 size-3 rounded-full ring-2 ring-surface dark:ring-slate-900"
                 style={{ background: color }}
               />
             </span>
@@ -648,7 +648,7 @@ function WatchList() {
             onChange={(e) => setSymbol(e.target.value.toUpperCase())}
             placeholder="Ticker, e.g. NVDA"
             maxLength={12}
-            className="w-36 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm uppercase placeholder:normal-case dark:border-slate-700 dark:bg-slate-950"
+            className="w-36 rounded-lg border border-slate-300 bg-surface px-2 py-1 text-sm uppercase placeholder:normal-case dark:border-slate-700 dark:bg-slate-950"
           />
           <Button type="submit" className="px-3 py-1 text-sm" disabled={add.isPending}>
             {add.isPending ? "Adding…" : "Watch"}
@@ -755,7 +755,7 @@ function Activity({ accounts }: { accounts: { id: string; name: string }[] }) {
           aria-label="Account"
           value={accountId}
           onChange={(e) => setAccountId(e.target.value)}
-          className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+          className="rounded-lg border border-slate-300 bg-surface px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
         >
           <option value="">All accounts</option>
           {accounts.map((a) => (
@@ -899,7 +899,7 @@ function ImportDialog({ onClose }: { onClose: () => void }) {
                 aria-label={`Account for ${a.label}`}
                 value={targets[a.ref] ?? "new"}
                 onChange={(e) => setTargets((t) => ({ ...t, [a.ref]: e.target.value }))}
-                className="rounded-lg border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
+                className="rounded-lg border border-slate-300 bg-surface px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
               >
                 <option value="new">New account</option>
                 {summary.data?.accounts.map((x) => (

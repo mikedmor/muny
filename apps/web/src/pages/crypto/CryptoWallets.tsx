@@ -115,7 +115,7 @@ export function ImportKoinly({ onDone }: { onDone: () => void }) {
           type="file"
           accept=".csv,text/csv"
           onChange={(e) => void pick(e.target.files?.[0])}
-          className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-brand-600 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white"
+          className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-brand-600 file:px-3 file:py-2 file:text-sm file:font-medium file:text-on-brand"
         />
       </label>
       {busy && <p className="text-sm text-slate-500">Reading {fileName}…</p>}
@@ -149,7 +149,7 @@ export function ImportKoinly({ onDone }: { onDone: () => void }) {
                     aria-label={`Muny wallet for ${w.name}`}
                     value={mapping[w.name] ?? "new"}
                     onChange={(e) => setMapping((m) => ({ ...m, [w.name]: e.target.value }))}
-                    className="max-w-[16rem] rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+                    className="max-w-[16rem] rounded-lg border border-slate-300 bg-surface px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
                   >
                     <option value="new">
                       New {w.kind === "exchange" ? "exchange" : "wallet"}:{" "}
@@ -282,7 +282,7 @@ function SourceFields({
               ]);
               paste([...all].join("\n"));
             }}
-            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
+            className="mt-1 w-full rounded-lg border border-slate-300 bg-surface px-3 py-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
           />
           <span className="text-xs text-slate-500">
             {source.split(/[\s,;]+/).filter(Boolean).length} addresses. One is enough to start: each
@@ -553,7 +553,7 @@ function WalletRow({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 onBlur={() => setRenaming(false)}
-                className="w-full rounded border border-brand-500 bg-white px-2 py-0.5 text-sm dark:bg-slate-950"
+                className="w-full rounded border border-brand-500 bg-surface px-2 py-0.5 text-sm dark:bg-slate-950"
               />
             </form>
           ) : (
@@ -768,7 +768,7 @@ export function CryptoWallets() {
           onChange={(e) => setFind(e.target.value)}
           placeholder="Find wallet"
           aria-label="Find wallet"
-          className="w-64 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+          className="w-64 rounded-lg border border-slate-300 bg-surface px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
         />
         {total > 0 && <span className="text-sm text-slate-500">Total {formatMoney(total)}</span>}
       </div>

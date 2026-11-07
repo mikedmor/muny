@@ -111,7 +111,7 @@ function AssetForm({ asset, onDone }: { asset?: Asset; onDone: () => void }) {
           <select
             value={f.kind}
             onChange={(e) => setF((x) => ({ ...x, kind: e.target.value as AssetKind }))}
-            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
+            className="mt-1 w-full rounded-lg border border-slate-300 bg-surface px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
           >
             {ASSET_KINDS.map((k) => (
               <option key={k} value={k}>
@@ -234,7 +234,7 @@ function UpdateValue({ asset }: { asset: Asset }) {
         value={text}
         onChange={(e) => setText(e.target.value)}
         inputMode="decimal"
-        className="w-28 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-sm dark:border-slate-700 dark:bg-slate-950"
+        className="w-28 rounded border border-slate-300 bg-surface px-1.5 py-0.5 text-sm dark:border-slate-700 dark:bg-slate-950"
       />
       <Button type="submit" className="px-2 py-0.5 text-xs">
         Save
@@ -430,7 +430,7 @@ function ValuationKeys() {
                       value={key}
                       onChange={(e) => setKey(e.target.value)}
                       autoComplete="off"
-                      className="w-56 rounded border border-slate-300 bg-white px-2 py-1 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
+                      className="w-56 rounded border border-slate-300 bg-surface px-2 py-1 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
                     />
                     <Button type="submit" className="px-2 py-1 text-xs">
                       Save
@@ -555,7 +555,7 @@ function OwedEditor({ asset }: { asset: Asset }) {
             value={text}
             onChange={(e) => setText(e.target.value)}
             inputMode="decimal"
-            className="w-24 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-sm dark:border-slate-700 dark:bg-slate-950"
+            className="w-24 rounded border border-slate-300 bg-surface px-1.5 py-0.5 text-sm dark:border-slate-700 dark:bg-slate-950"
           />
           <Button type="submit" className="px-2 py-0.5 text-xs">
             Save

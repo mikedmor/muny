@@ -29,6 +29,8 @@ const VIEWER_WRITES = new Set([
   "PUT /api/dashboard/layout",
   "DELETE /api/dashboard/layout",
   "POST /api/dashboard/preview",
+  // Their own choice of theme.
+  "PUT /api/theme/selected",
 ]);
 
 /** Header the web client sends on every mutating request (see SECURITY.md). */

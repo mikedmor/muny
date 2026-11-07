@@ -48,7 +48,7 @@ export function FlowsStrip({ from, to }: { from?: string; to?: string }) {
   return (
     <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-slate-200 bg-slate-200 sm:grid-cols-3 lg:grid-cols-6 dark:border-slate-800 dark:bg-slate-800">
       {cells.map(([label, v, title]) => (
-        <div key={label} className="bg-white px-3 py-2 dark:bg-slate-900" title={title}>
+        <div key={label} className="bg-surface px-3 py-2 dark:bg-slate-900" title={title}>
           <p className="text-xs text-slate-500">{label}</p>
           <p
             className={cx(
@@ -293,7 +293,7 @@ export function TaxOptimizationView() {
           onChange={(e) => setFind(e.target.value)}
           placeholder="Find coin"
           aria-label="Find coin"
-          className="w-56 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+          className="w-56 rounded-lg border border-slate-300 bg-surface px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
         />
         <div className="flex flex-wrap gap-4 text-sm">
           <label className="flex items-center gap-2">
@@ -416,7 +416,7 @@ export function TaxOptimizationView() {
                             [a.asset]: e.target.value.replace(/[^0-9.]/g, ""),
                           }))
                         }
-                        className="w-32 rounded border border-orange-300 bg-white px-2 py-1 text-right font-mono text-xs dark:border-orange-800 dark:bg-slate-950"
+                        className="w-32 rounded border border-orange-300 bg-surface px-2 py-1 text-right font-mono text-xs dark:border-orange-800 dark:bg-slate-950"
                       />
                     ) : (
                       <span className="text-slate-400">—</span>

@@ -5,12 +5,19 @@ const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).jo
 
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 const variants: Record<ButtonVariant, string> = {
-  primary: "bg-brand-600 text-white hover:bg-brand-700 disabled:bg-brand-600/60",
+  primary: "bg-brand-600 text-on-brand hover:bg-brand-700 disabled:bg-brand-600/60",
   secondary:
-    "border border-slate-300 bg-white text-slate-800 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800",
+    "border border-slate-300 bg-surface text-slate-800 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800",
   ghost: "text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800",
   danger: "bg-red-600 text-white hover:bg-red-700",
 };
+
+const buttonBase =
+  "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:cursor-not-allowed";
+
+/** A link that looks like a button. */
+export const buttonClass = (variant: ButtonVariant = "primary", className?: string) =>
+  cx(buttonBase, variants[variant], className);
 
 export function Button({
   variant = "primary",
@@ -18,17 +25,7 @@ export function Button({
   type = "button",
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
-  return (
-    <button
-      type={type}
-      className={cx(
-        "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:cursor-not-allowed",
-        variants[variant],
-        className,
-      )}
-      {...props}
-    />
-  );
+  return <button type={type} className={buttonClass(variant, className)} {...props} />;
 }
 
 export function Field({
@@ -49,7 +46,7 @@ export function Field({
         aria-invalid={error ? true : undefined}
         aria-describedby={error || hint ? `${id}-msg` : undefined}
         className={cx(
-          "mt-1 block w-full rounded-lg border bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 dark:bg-slate-950 dark:text-slate-100",
+          "mt-1 block w-full rounded-lg border bg-surface px-3 py-2 text-sm text-slate-900 shadow-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 dark:bg-slate-950 dark:text-slate-100",
           error ? "border-red-500" : "border-slate-300 dark:border-slate-700",
         )}
         {...props}
@@ -79,7 +76,7 @@ export function Card({
     <div
       id={id}
       className={cx(
-        "rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900",
+        "rounded-xl border border-slate-200 bg-surface shadow-sm dark:border-slate-800 dark:bg-slate-900",
         // A padding passed in replaces the default (Tailwind can't tell which class wins otherwise).
         !/(^|\s)p-\d/.test(className ?? "") && "p-5",
         className,

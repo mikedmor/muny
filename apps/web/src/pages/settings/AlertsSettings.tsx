@@ -96,7 +96,7 @@ function NumberInput({
           if (Number.isFinite(v) && v >= min && v <= max && v !== value) onCommit(v);
           else setText(String(value));
         }}
-        className="w-20 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm tabular-nums dark:border-slate-700 dark:bg-slate-950"
+        className="w-20 rounded-lg border border-slate-300 bg-surface px-2 py-1 text-sm tabular-nums dark:border-slate-700 dark:bg-slate-950"
       />
       {suffix && <span className="text-slate-500">{suffix}</span>}
     </label>
@@ -172,7 +172,7 @@ function NumberList({
             }}
             placeholder="Add"
             aria-label={`Add to ${label}`}
-            className="h-8 w-20 rounded-lg border border-slate-300 bg-white px-2 text-sm tabular-nums dark:border-slate-700 dark:bg-slate-950"
+            className="h-8 w-20 rounded-lg border border-slate-300 bg-surface px-2 text-sm tabular-nums dark:border-slate-700 dark:bg-slate-950"
           />
           {text.trim() !== "" && (
             <button

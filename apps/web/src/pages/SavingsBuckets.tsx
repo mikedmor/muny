@@ -40,7 +40,7 @@ interface Row {
 }
 let seq = 0;
 const input =
-  "mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm tabular-nums dark:border-slate-700 dark:bg-slate-950";
+  "mt-0.5 w-full rounded-lg border border-slate-300 bg-surface px-2 py-1.5 text-sm tabular-nums dark:border-slate-700 dark:bg-slate-950";
 
 function BucketsForm({
   accountId,

@@ -78,7 +78,7 @@ export function UpcomingCalendar() {
               // biome-ignore lint/suspicious/noArrayIndexKey: fixed grid cells
               key={i}
               className={cx(
-                "min-h-20 bg-white p-1 dark:bg-slate-950",
+                "min-h-20 bg-surface p-1 dark:bg-slate-950",
                 !d && "bg-slate-50 dark:bg-slate-900",
                 d === today && "ring-2 ring-inset ring-brand-500",
                 d && d < today && "opacity-50",
