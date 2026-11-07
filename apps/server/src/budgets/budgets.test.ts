@@ -1,5 +1,13 @@
 import { addInterval } from "@muny/core";
-import type { Account, BudgetLine, BudgetMonth, CategoryGroup, Transaction } from "@muny/shared";
+import type {
+  Account,
+  BudgetLine,
+  BudgetMonth,
+  CategoryActivity,
+  CategoryGroup,
+  Transaction,
+  TransactionPage,
+} from "@muny/shared";
 import { describe, expect, it } from "vitest";
 import { localToday } from "../lib/dates.js";
 import { makeSignedInApp } from "../test-utils.js";
@@ -254,5 +262,39 @@ describe("categories left out of budgets", () => {
     expect((await client.get("/api/budgets/2026-04")).json<BudgetMonth>().total.spentCents).toBe(
       10_500,
     );
+  });
+});
+
+describe("everything else", () => {
+  it("is spending without a budget plus uncategorized, like the budget row", async () => {
+    const { client, cat, add } = await setup();
+    await client.put("/api/budgets", {
+      categoryId: cat("Groceries"),
+      amountCents: 50_000,
+      fromMonth: "2026-05",
+    });
+    await add("2026-05-02", -6000, "Groceries");
+    const clothes = await add("2026-05-03", -4500, "Clothing");
+    const loose = await add("2026-05-04", -1200, null);
+    const m = (await client.get("/api/budgets/2026-05")).json<BudgetMonth>();
+    const budgeted = m.groups
+      .flatMap((g) => g.lines)
+      .filter((l) => l.budgetCents !== null)
+      .reduce((s, l) => s + l.spentCents, 0);
+
+    const a = (
+      await client.get("/api/categories/everything-else/activity?month=2026-05&end=2026-05")
+    ).json<CategoryActivity>();
+    expect(a.stats.totalCents).toBe(m.total.spentCents - budgeted);
+    expect(a.stats.totalCents).toBe(5700);
+    expect(a.months.at(-1)).toEqual({ month: "2026-05", cents: 5700 });
+    expect(a.categoryIds).toContain(cat("Clothing"));
+    expect(a.categoryIds).not.toContain(cat("Groceries"));
+
+    const ids = [...(a.categoryIds ?? []), "uncategorized"].join(",");
+    const page = (
+      await client.get(`/api/transactions?categoryIds=${ids}&from=2026-05-01&to=2026-05-31`)
+    ).json<TransactionPage>();
+    expect(page.items.map((t) => t.id).sort()).toEqual([clothes.id, loose.id].sort());
   });
 });

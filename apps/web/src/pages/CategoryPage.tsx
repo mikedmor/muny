@@ -1,6 +1,7 @@
 import {
   type BudgetMonth,
   type CategoryActivity,
+  EVERYTHING_ELSE,
   formatMoney,
   type Transaction,
   type TransactionPage,
@@ -9,11 +10,12 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { EditBudget, monthLabel, Ring } from "../components/budget.js";
+import { CategorySelect } from "../components/CategorySelect.js";
 import { ColumnChart } from "../components/charts.js";
 import { Alert, Button, Card, cx } from "../components/ui.js";
 import { CategoryIcon, MerchantAvatar } from "../components/visuals.js";
 import { api } from "../lib/api.js";
-import { keys } from "../lib/queries.js";
+import { keys, useUpdateTransaction } from "../lib/queries.js";
 
 /**
  * One category, like Rocket Money's category page: 12 months of spending
@@ -37,12 +39,10 @@ const monthEnd = (m: string) => {
 const shortDay = (iso: string) =>
   new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { month: "numeric", day: "numeric" });
 
-/** The part of a transaction that belongs to this category (split-aware). */
-function amountIn(t: Transaction, categoryId: string) {
+/** The part of a transaction that belongs to these categories (split-aware). */
+function amountIn(t: Transaction, inCategory: (id: string | null) => boolean) {
   if (t.splits.length)
-    return t.splits
-      .filter((s) => s.categoryId === categoryId)
-      .reduce((a, s) => a + s.amountCents, 0);
+    return t.splits.filter((s) => inCategory(s.categoryId)).reduce((a, s) => a + s.amountCents, 0);
   return t.amountCents;
 }
 
@@ -65,6 +65,9 @@ export function CategoryPage() {
   }, [month, end]);
   const [sort, setSort] = useState<"date" | "amount">("date");
   const [editing, setEditing] = useState(false);
+  const update = useUpdateTransaction();
+  /** The budget page's "Everything else": categories without a budget, and uncategorized. */
+  const virtual = categoryId === EVERYTHING_ELSE;
 
   const activity = useQuery({
     queryKey: [...keys.reports, "category", categoryId, month, end],
@@ -72,14 +75,25 @@ export function CategoryPage() {
       api.get<CategoryActivity>(`/api/categories/${categoryId}/activity?month=${month}&end=${end}`),
     placeholderData: keepPreviousData,
   });
+  const members = activity.data?.month === month ? activity.data.categoryIds : undefined;
+  const filter = virtual
+    ? `categoryIds=${[...(members ?? []), "uncategorized"].join(",")}`
+    : `categoryId=${categoryId}`;
   const txns = useQuery({
-    queryKey: [...keys.transactions, "category", categoryId, month],
+    queryKey: [...keys.transactions, "category", categoryId, month, filter],
     queryFn: () =>
       api.get<TransactionPage>(
-        `/api/transactions?categoryId=${categoryId}&from=${month}-01&to=${monthEnd(month)}&limit=200&offset=0`,
+        `/api/transactions?${filter}&from=${month}-01&to=${monthEnd(month)}&limit=200&offset=0`,
       ),
+    enabled: !virtual || !!members,
     placeholderData: keepPreviousData,
   });
+  const inCategory = useMemo(() => {
+    const set = new Set(members ?? []);
+    return virtual
+      ? (id: string | null) => id === null || set.has(id)
+      : (id: string | null) => id === categoryId;
+  }, [virtual, members, categoryId]);
   // The budget editor needs the month's full budget line.
   const budget = useQuery({
     queryKey: [...keys.budgets, month],
@@ -93,9 +107,9 @@ export function CategoryPage() {
   const items = useMemo(() => {
     const list = [...(txns.data?.items ?? [])];
     if (sort === "amount")
-      list.sort((x, y) => Math.abs(amountIn(y, categoryId)) - Math.abs(amountIn(x, categoryId)));
+      list.sort((x, y) => Math.abs(amountIn(y, inCategory)) - Math.abs(amountIn(x, inCategory)));
     return list;
-  }, [txns.data, sort, categoryId]);
+  }, [txns.data, sort, inCategory]);
 
   const exportUrl = `/api/export/transactions.csv?categoryId=${categoryId}&from=${month}-01&to=${monthEnd(month)}&includeHidden=false`;
 
@@ -122,6 +136,7 @@ export function CategoryPage() {
           </div>
         </div>
         <a
+          hidden={virtual}
           href={exportUrl}
           className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
         >
@@ -198,7 +213,7 @@ export function CategoryPage() {
                 </div>
                 <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
                   {items.map((t) => {
-                    const part = amountIn(t, categoryId);
+                    const part = amountIn(t, inCategory);
                     const name = t.payeeName ?? t.description;
                     return (
                       <li
@@ -215,10 +230,28 @@ export function CategoryPage() {
                               {name}
                               {t.pending && <span className="text-slate-500"> | Pending</span>}
                             </span>
-                            <span className="block truncate text-xs text-slate-500">
-                              {t.accountName}
-                              {t.splits.length > 0 &&
-                                ` · split, ${formatMoney(Math.abs(t.amountCents))} total`}
+                            <span className="flex min-w-0 items-center gap-1 text-xs text-slate-500">
+                              <span className="truncate">{t.accountName}</span>
+                              {t.splits.length > 0 ? (
+                                <span className="shrink-0">
+                                  · split, {formatMoney(Math.abs(t.amountCents))} total
+                                </span>
+                              ) : (
+                                <>
+                                  <span aria-hidden="true">·</span>
+                                  <CategorySelect
+                                    aria-label={`Category for ${name}`}
+                                    value={t.categoryId}
+                                    onChange={(id) => update.mutate({ id: t.id, categoryId: id })}
+                                    className={cx(
+                                      "max-w-44 truncate rounded border border-transparent px-1 py-0.5 text-left text-xs hover:border-slate-300 dark:hover:border-slate-700",
+                                      t.categoryId
+                                        ? "text-brand-600 dark:text-brand-500"
+                                        : "text-amber-600",
+                                    )}
+                                  />
+                                </>
+                              )}
                             </span>
                           </span>
                         </span>
@@ -240,7 +273,7 @@ export function CategoryPage() {
                     </li>
                   )}
                 </ul>
-                {(txns.data?.total ?? 0) > items.length && (
+                {!virtual && (txns.data?.total ?? 0) > items.length && (
                   <div className="border-t border-slate-200 px-4 py-2 text-sm dark:border-slate-800">
                     <Link
                       to="/transactions"
@@ -252,17 +285,33 @@ export function CategoryPage() {
                   </div>
                 )}
               </Card>
-              <Link
-                to="/transactions"
-                search={{ categoryId, from: `${month}-01`, to: monthEnd(month) }}
-                className="inline-block text-sm text-brand-600 hover:underline"
-              >
-                Edit these on the Transactions page
-              </Link>
+              {virtual ? (
+                <p className="text-sm text-slate-500">
+                  Change a transaction's category above to move it out of Everything else, or give
+                  its category a budget.
+                </p>
+              ) : (
+                <Link
+                  to="/transactions"
+                  search={{ categoryId, from: `${month}-01`, to: monthEnd(month) }}
+                  className="inline-block text-sm text-brand-600 hover:underline"
+                >
+                  Edit these on the Transactions page
+                </Link>
+              )}
             </div>
 
             <div className="order-1 space-y-6 lg:order-0">
-              {spending && (
+              {virtual && (
+                <Card className="text-sm text-slate-600 dark:text-slate-300">
+                  Everything else is spending in categories without a budget this month
+                  {a.categoryIds?.length
+                    ? ` (${a.categoryIds.length} categor${a.categoryIds.length === 1 ? "y" : "ies"})`
+                    : ""}
+                  , plus spending with no category. Set budgets on the Budgets page.
+                </Card>
+              )}
+              {spending && !virtual && (
                 <div>
                   <h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
                     {monthLabel(month, { month: "long" })} budget

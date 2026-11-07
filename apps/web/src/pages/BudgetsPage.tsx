@@ -1,4 +1,4 @@
-import { type BudgetMonth, formatMoney } from "@muny/shared";
+import { type BudgetMonth, EVERYTHING_ELSE, formatMoney } from "@muny/shared";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
@@ -233,7 +233,12 @@ function CategoriesTable({ b, month }: { b: BudgetMonth; month: string }) {
               ⋯
             </span>
             <span className="min-w-0">
-              <Link to="/spending" className="block truncate font-medium hover:underline">
+              <Link
+                to="/categories/$categoryId"
+                params={{ categoryId: EVERYTHING_ELSE }}
+                search={{ month }}
+                className="block truncate font-medium underline-offset-2 hover:underline"
+              >
                 Everything else
               </Link>
               <span className="block truncate text-xs text-slate-500">

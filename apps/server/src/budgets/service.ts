@@ -366,3 +366,25 @@ export function setBudget(tx: Tx, input: SetBudgetInput & { fromMonth: string })
 export function removeBudget(tx: Tx, budgetId: string): boolean {
   return tx.delete(schema.budgets).where(eq(schema.budgets.id, budgetId)).run().changes > 0;
 }
+
+/**
+ * Each month's spending categories without a budget (counted in the budget
+ * page's "Everything else" row, along with uncategorized spending).
+ */
+export function unbudgetedByMonth(db: Db, months: string[]): Map<string, Set<string>> {
+  const cats = [...categoryMeta(db).values()].filter(
+    (c) => c.kind === "expense" && !c.excludeFromBudget,
+  );
+  const budgets = loadBudgets(db).filter((b) => b.kind === "spending" && b.categoryId);
+  const out = new Map<string, Set<string>>();
+  for (const m of months)
+    out.set(
+      m,
+      new Set(
+        cats
+          .filter((c) => !budgets.some((b) => b.categoryId === c.id && amountFor(b, m) !== null))
+          .map((c) => c.id),
+      ),
+    );
+  return out;
+}
