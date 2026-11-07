@@ -188,6 +188,11 @@ export interface ColumnDatum {
   /** Full label for the tooltip. */
   title: string;
   values: number[];
+  /**
+   * Single series: where the column is expected to end up (e.g. once pending
+   * charges post), drawn as a dashed outline when above the value.
+   */
+  expected?: number;
 }
 
 /**
@@ -210,7 +215,7 @@ export function ColumnChart({
   const { ref, width } = useWidth();
   const [hover, setHover] = useState<number | null>(null);
   const multi = seriesNames.length > 1;
-  const max = Math.max(1, ...data.flatMap((d) => d.values));
+  const max = Math.max(1, ...data.flatMap((d) => [...d.values, d.expected ?? 0]));
   const ticks = niceTicks(max);
   const top = ticks[ticks.length - 1] ?? max;
   const plotW = width - PAD.left - PAD.right;
@@ -292,6 +297,20 @@ export function ColumnChart({
                   />
                 );
               })}
+              {!multi && d.expected !== undefined && d.expected > (d.values[0] ?? 0) && (
+                <rect
+                  x={x0 + 0.75}
+                  y={y(d.expected)}
+                  width={Math.max(0, barW - 1.5)}
+                  height={Math.max(0, y(d.values[0] ?? 0) - y(d.expected))}
+                  rx={Math.min(4, barW / 2)}
+                  fill="none"
+                  stroke={emphasized ? colors[0] : "var(--viz-deemph)"}
+                  strokeWidth={1.5}
+                  strokeDasharray="4 3"
+                  pointerEvents="none"
+                />
+              )}
               {i % labelEvery === 0 && (
                 <text
                   x={PAD.left + band * i + band / 2}
@@ -315,7 +334,7 @@ export function ColumnChart({
                 style={{ cursor: onSelect ? "pointer" : "default", outline: "none" }}
                 role="button"
                 tabIndex={0}
-                aria-label={`${d.title}: ${d.values.map((v, s) => `${multi ? `${seriesNames[s]} ` : ""}${formatMoney(v)}`).join(", ")}`}
+                aria-label={`${d.title}: ${d.values.map((v, s) => `${multi ? `${seriesNames[s]} ` : ""}${formatMoney(v)}`).join(", ")}${d.expected !== undefined && d.expected > (d.values[0] ?? 0) ? `, about ${formatMoney(d.expected)} once pending charges post` : ""}`}
                 onMouseEnter={() => setHover(i)}
                 onFocus={() => setHover(i)}
                 onBlur={() => setHover(null)}
@@ -334,7 +353,7 @@ export function ColumnChart({
       {hovered && hover !== null && (
         <Tooltip
           x={PAD.left + band * hover + band / 2}
-          y={y(Math.max(...hovered.values))}
+          y={y(Math.max(...hovered.values, hovered.expected ?? 0))}
           width={width}
         >
           <p className="font-medium">{hovered.title}</p>
@@ -350,6 +369,13 @@ export function ColumnChart({
               {formatMoney(v)}
             </p>
           ))}
+          {!multi &&
+            hovered.expected !== undefined &&
+            hovered.expected > (hovered.values[0] ?? 0) && (
+              <p className="text-slate-500 tabular-nums">
+                About {formatMoney(hovered.expected)} with pending
+              </p>
+            )}
           {multi && hovered.values.length === 2 && (
             <p className="text-slate-500 tabular-nums">
               Net {formatMoney((hovered.values[0] ?? 0) - (hovered.values[1] ?? 0))}

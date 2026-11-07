@@ -145,6 +145,11 @@ export function CategoryPage() {
             : s.categoryId === categoryId,
     );
   }, [budget.data, categories.data, row, categoryId]);
+  /** What the pending rows add to this month (spending out, or income in). */
+  const pendingCents = scheduled.reduce(
+    (sum, s) => sum + (activity.data?.category.kind === "income" ? s.amountCents : -s.amountCents),
+    0,
+  );
   const line = budget.data?.groups.flatMap((g) => g.lines).find((l) => l.categoryId === categoryId);
 
   const a = activity.data;
@@ -212,6 +217,10 @@ export function CategoryPage() {
                     label: monthLabel(m.month, { month: "short" }),
                     title: monthLabel(m.month),
                     values: [Math.max(0, m.cents)],
+                    // The selected month once its pending (expected) charges post.
+                    ...(m.month === month && pendingCents > 0
+                      ? { expected: Math.max(0, m.cents) + pendingCents }
+                      : {}),
                   }))}
                 />
               </div>
