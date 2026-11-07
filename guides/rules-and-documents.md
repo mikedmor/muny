@@ -10,6 +10,10 @@ A rule finds transactions and does something to them: sets the category, renames
 
 All rules, their order and the full editor (several names, "any of") are in **Settings → Rules**.
 
+While you make or edit a rule, Muny warns when you already have the same rule, or another rule matches the same transactions (saying how many, and whether it files them differently), with **Edit this rule instead** to change the one you have. When rules disagree, the one higher in the list wins.
+
+After you change a transaction's category (on Transactions or a category page, including a pending charge there), **+ Rule** offers to do the same for transactions like it.
+
 ## Documents
 
 **Insights → Documents** keeps your files in folders by where they come from:

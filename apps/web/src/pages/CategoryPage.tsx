@@ -286,13 +286,22 @@ export function CategoryPage() {
                             <CategorySelect
                               aria-label={`Category for ${s.name}`}
                               value={s.categoryId}
-                              onChange={(id) =>
+                              onChange={(id) => {
                                 updateSeries.mutate({
                                   id: s.seriesId,
                                   categoryId: id,
                                   applyToTransactions: true,
-                                })
-                              }
+                                });
+                                offerRule(
+                                  {
+                                    id: s.seriesId,
+                                    payeeName: s.name,
+                                    description: s.name,
+                                    rawDescription: s.name,
+                                  },
+                                  id,
+                                );
+                              }}
                               className={cx(
                                 "max-w-44 truncate rounded border border-transparent px-1 py-0.5 text-left text-xs hover:border-slate-300 dark:hover:border-slate-700",
                                 s.categoryId

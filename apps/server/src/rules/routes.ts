@@ -15,6 +15,7 @@ import {
   getRule,
   listRules,
   previewOf,
+  ruleOverlaps,
   rulesForTransaction,
   storeDefinition,
   validateReferences,
@@ -124,6 +125,16 @@ export function registerRuleRoutes(app: FastifyInstance, db: MunyDb) {
     const body = parse(PreviewBody, req.body);
     validateReferences(db, body);
     return previewOf(evaluateRules(db, [body], { includeEdited: body.includeEdited }), body.limit);
+  });
+
+  /** Existing rules covering the same transactions (or with the same conditions), and conflicts. */
+  app.post("/api/rules/overlaps", async (req) => {
+    requireUser(req);
+    const body = parse(
+      PreviewBody.extend({ exceptId: z.string().min(1).max(64).optional() }),
+      req.body,
+    );
+    return ruleOverlaps(db, body, body.exceptId);
   });
 
   /** The rules that match a transaction (enabled or not), for its Rules panel. */

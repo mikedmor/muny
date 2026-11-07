@@ -5,6 +5,7 @@ import type {
   PayeeCleanupPreview,
   PayeeSummary,
   Rule,
+  RuleOverlap,
   RulePreview,
   TransactionPage,
 } from "@muny/shared";
@@ -241,5 +242,48 @@ describe("rules", () => {
     expect((await client.post("/api/rules/run", {})).json()).toEqual({ changed: 3 });
     expect((await client.delete(`/api/rules/${second.id}`)).statusCode).toBe(200);
     expect((await client.get("/api/rules")).json<Rule[]>()).toHaveLength(1);
+  });
+});
+
+describe("rule overlaps", () => {
+  it("finds a duplicate, and a rule that files the same transactions elsewhere", async () => {
+    const { client, cat } = await setup();
+    await importCsv(client);
+    const make = async (value: string, category: string) =>
+      (
+        await client.post("/api/rules", {
+          name: value,
+          match: "all",
+          conditions: [{ field: "description", op: "contains", value }],
+          actions: [{ type: "setCategory", categoryId: cat(category) }],
+        })
+      ).json<Rule>();
+    const cafe = await make("corner cafe", "Coffee");
+    await make("streamflix", "Streaming");
+
+    const check = async (value: string, category: string, exceptId?: string) =>
+      (
+        await client.post("/api/rules/overlaps", {
+          match: "all",
+          conditions: [{ field: "description", op: "contains", value }],
+          actions: [{ type: "setCategory", categoryId: cat(category) }],
+          exceptId,
+        })
+      ).json<RuleOverlap[]>();
+
+    // Same wording, different case: the same rule.
+    const same = await check("  CORNER Cafe ", "Coffee");
+    expect(same).toHaveLength(1);
+    expect(same[0]).toMatchObject({ identical: true, sharedCount: 2, conflicts: [] });
+    expect(same[0]?.rule.id).toBe(cafe.id);
+
+    // Narrower wording that files them under another category: a conflict.
+    const other = await check("SQ *CORNER", "Dining & Drinks");
+    expect(other[0]).toMatchObject({ identical: false, sharedCount: 2, newCount: 2 });
+    expect(other[0]?.conflicts).toEqual(["sets the category to Coffee"]);
+
+    // Nothing in common, and a rule doesn't overlap itself while being edited.
+    expect(await check("payroll", "Paycheck")).toEqual([]);
+    expect(await check("corner cafe", "Coffee", cafe.id)).toEqual([]);
   });
 });

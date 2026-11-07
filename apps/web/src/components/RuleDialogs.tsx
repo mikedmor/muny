@@ -6,6 +6,7 @@ import {
   parseAmount,
   type RuleAction,
   type RuleCondition,
+  type RuleOverlap,
   type RulePreview,
   type RuleWithCount,
   TEXT_OP_LABELS,
@@ -229,11 +230,25 @@ export function CreateRuleDialog({
   onClose: () => void;
   initial: RuleDraft | null;
 }) {
-  const simple = initial ? toSimple(initial) : null;
+  // "Edit this rule instead" (a duplicate or conflicting rule): switch to it.
+  const [instead, setInstead] = useState<RuleDraft | null>(null);
+  useEffect(() => {
+    if (!open) setInstead(null);
+  }, [open]);
+  const current = instead ?? initial;
+  const simple = current ? toSimple(current) : null;
   return (
-    <Modal open={open} onClose={onClose} title={initial?.id ? "Edit rule" : "Create a rule"} bare>
-      {open && initial && simple && <RuleSteps initial={initial} start={simple} onDone={onClose} />}
-      {open && initial && !simple && (
+    <Modal open={open} onClose={onClose} title={current?.id ? "Edit rule" : "Create a rule"} bare>
+      {open && current && simple && (
+        <RuleSteps
+          key={current.id ?? "new"}
+          initial={current}
+          start={simple}
+          onDone={onClose}
+          onEditInstead={setInstead}
+        />
+      )}
+      {open && current && !simple && (
         <div className="p-6">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold">Edit rule</h2>
@@ -246,10 +261,67 @@ export function CreateRuleDialog({
               <X aria-hidden="true" className="size-5" />
             </button>
           </div>
-          <RuleEditor initial={initial} onDone={onClose} />
+          <RuleEditor initial={current} onDone={onClose} />
         </div>
       )}
     </Modal>
+  );
+}
+
+/**
+ * Before saving: existing rules with the same conditions, or that cover the
+ * same transactions (and what they'd do differently), each with "Edit this
+ * rule instead".
+ */
+function OverlapWarning({
+  def,
+  exceptId,
+  onEdit,
+}: {
+  def: { match: "all" | "any"; conditions: RuleCondition[]; actions: RuleAction[] };
+  exceptId?: string;
+  onEdit: (rule: RuleDraft) => void;
+}) {
+  const body = useDebounced({ ...def, exceptId, limit: 1 });
+  const q = useQuery({
+    queryKey: ["rules", "overlaps", body],
+    queryFn: () => api.post<RuleOverlap[]>("/api/rules/overlaps", body),
+    enabled: body.conditions.length > 0,
+    placeholderData: keepPreviousData,
+    retry: false,
+  });
+  const list = (q.data ?? []).slice(0, 3);
+  if (!list.length) return null;
+  return (
+    <div
+      role="status"
+      className="space-y-2 border-b border-amber-200 bg-amber-50 px-6 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
+    >
+      {list.map((o) => (
+        <div key={o.rule.id} className="flex flex-wrap items-center justify-between gap-2">
+          <span className="min-w-0">
+            {o.identical ? (
+              <>
+                You already have this rule: <strong>{o.rule.name}</strong>
+              </>
+            ) : (
+              <>
+                <strong>{o.rule.name}</strong> also matches {o.sharedCount} of the {o.newCount}{" "}
+                transaction{o.newCount === 1 ? "" : "s"} this one does
+              </>
+            )}
+            {o.conflicts.length > 0 && <> and {o.conflicts.join(" and ")}</>}
+            {!o.rule.enabled && " (it's turned off)"}.
+          </span>
+          <Button variant="secondary" onClick={() => onEdit(o.rule)}>
+            Edit this rule instead
+          </Button>
+        </div>
+      ))}
+      {list.some((o) => o.conflicts.length > 0) && (
+        <p className="text-xs">When rules disagree, the one higher in Settings → Rules wins.</p>
+      )}
+    </div>
   );
 }
 
@@ -257,10 +329,12 @@ function RuleSteps({
   initial,
   start,
   onDone,
+  onEditInstead,
 }: {
   initial: RuleDraft;
   start: Simple;
   onDone: () => void;
+  onEditInstead?: (rule: RuleDraft) => void;
 }) {
   const accounts = useAccounts();
   const save = useSaveRule();
@@ -359,6 +433,13 @@ function RuleSteps({
         </button>
       </div>
 
+      {onEditInstead && (
+        <OverlapWarning
+          def={{ match: "all", conditions, actions }}
+          exceptId={initial.id}
+          onEdit={onEditInstead}
+        />
+      )}
       <div className="grid min-h-0 flex-1 md:grid-cols-[20rem_minmax(0,1fr)]">
         <div className="min-h-0 space-y-3 overflow-y-auto bg-slate-50 p-4 dark:bg-slate-950/50">
           {step === "find" ? (

@@ -11,8 +11,11 @@ import type { RuleDraft } from "./RuleEditor.js";
  * are changed (Transactions, category pages).
  */
 
+/** What a rule offer needs from a transaction (or a recurring charge). */
+export type RuleSource = Pick<Transaction, "id" | "payeeName" | "description" | "rawDescription">;
+
 /** A new rule for transactions like this one (name contains it; the category, when set). */
-export function ruleDraftFor(txn: Transaction, categoryId: string | null): RuleDraft {
+export function ruleDraftFor(txn: RuleSource, categoryId: string | null): RuleDraft {
   return {
     name: txn.payeeName ?? txn.description,
     match: "all",
@@ -71,14 +74,14 @@ function RuleOffer({
  * change; render `offerNode` (the toast) and `dialog` (the rule editor).
  */
 export function useRuleOffer(): {
-  offerRule: (txn: Transaction, categoryId: string | null) => void;
+  offerRule: (txn: RuleSource, categoryId: string | null) => void;
   offerNode: ReactNode;
   dialog: ReactNode;
 } {
   const categories = useCategories();
-  const [offer, setOffer] = useState<{ txn: Transaction; categoryId: string } | null>(null);
+  const [offer, setOffer] = useState<{ txn: RuleSource; categoryId: string } | null>(null);
   const [draft, setDraft] = useState<RuleDraft | null>(null);
-  const offerRule = useCallback((txn: Transaction, categoryId: string | null) => {
+  const offerRule = useCallback((txn: RuleSource, categoryId: string | null) => {
     setOffer(categoryId ? { txn, categoryId } : null);
   }, []);
   const dismiss = useCallback(() => setOffer(null), []);

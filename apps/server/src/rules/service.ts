@@ -4,6 +4,7 @@ import {
   AMOUNT_OPS,
   type Rule,
   type RuleDefinition,
+  type RuleOverlap,
   type RulePreview,
   type RuleWithCount,
   TEXT_OPS,
@@ -300,4 +301,61 @@ export function runRulesOn(tx: Tx, ids: string[]): number {
     changed += applyPlans(tx, evaluateRules(tx, rules, { ids: ids.slice(i, i + 500) }).plans);
   }
   return changed;
+}
+
+/** Conditions as a comparable string (text compared without case or extra spaces). */
+function conditionKey(def: Pick<RuleDefinition, "match" | "conditions">) {
+  const norm = def.conditions
+    .map((c) =>
+      JSON.stringify(
+        typeof c.value === "string" && c.field !== "account"
+          ? { ...c, value: c.value.trim().toLowerCase().replace(/\s+/g, " ") }
+          : c,
+      ),
+    )
+    .sort();
+  return `${def.conditions.length > 1 ? def.match : "all"}|${norm.join("|")}`;
+}
+
+/**
+ * Existing rules that cover the same transactions as `def` (or have the same
+ * conditions), with where they'd disagree, so a duplicate or a conflict can be
+ * caught before it's saved. `exceptId`: the rule being edited.
+ */
+export function ruleOverlaps(db: Db, def: RuleDefinition, exceptId?: string): RuleOverlap[] {
+  const others = listRules(db).filter((r) => r.id !== exceptId);
+  if (!others.length || !def.conditions.length) return [];
+  const facts = loadCandidates(db).map((c) => c.facts);
+  const mine = facts.filter((f) => ruleMatches(def, f));
+  const key = conditionKey(def);
+  const catName = new Map(
+    db
+      .select({ id: schema.categories.id, name: schema.categories.name })
+      .from(schema.categories)
+      .all()
+      .map((c) => [c.id, c.name]),
+  );
+  const category = (d: RuleDefinition) =>
+    d.actions.find((a) => a.type === "setCategory")?.categoryId;
+  const payee = (d: RuleDefinition) => d.actions.find((a) => a.type === "setPayee")?.name;
+  const out: RuleOverlap[] = [];
+  for (const r of others) {
+    const identical = conditionKey(r) === key;
+    const sharedCount = mine.filter((f) => ruleMatches(r, f)).length;
+    if (!identical && sharedCount === 0) continue;
+    const conflicts: string[] = [];
+    const [a, b] = [category(def), category(r)];
+    if (a && b && a !== b)
+      conflicts.push(`sets the category to ${catName.get(b) ?? "another category"}`);
+    const [p, q] = [payee(def), payee(r)];
+    if (p && q && p.trim().toLowerCase() !== q.trim().toLowerCase())
+      conflicts.push(`renames them to ${q}`);
+    out.push({ rule: r, identical, sharedCount, newCount: mine.length, conflicts });
+  }
+  return out.sort(
+    (x, y) =>
+      Number(y.identical) - Number(x.identical) ||
+      y.conflicts.length - x.conflicts.length ||
+      y.sharedCount - x.sharedCount,
+  );
 }

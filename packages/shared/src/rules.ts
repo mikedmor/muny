@@ -109,3 +109,16 @@ export interface BackupInfo {
   sizeBytes: number;
   createdAt: number;
 }
+
+/** An existing rule that covers the same transactions as one being made or edited. */
+export interface RuleOverlap {
+  rule: Rule;
+  /** Same conditions (wording and case aside): it's the same rule. */
+  identical: boolean;
+  /** Transactions both rules match. */
+  sharedCount: number;
+  /** How many the new rule matches in all. */
+  newCount: number;
+  /** Where they disagree on the same transactions, e.g. "sets the category to Dining". */
+  conflicts: string[];
+}
