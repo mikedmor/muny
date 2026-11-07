@@ -1,97 +1,245 @@
-import { cleanPayeeName } from "@muny/core";
 import { type MunyDb, newId, schema } from "@muny/db";
 import {
+  AGGREGATES,
+  BLOCK_KIND_INFO,
+  BLOCK_KINDS,
   BUILTIN_CARDS,
-  CARD_PERIOD_LABELS,
-  CARD_PERIODS,
-  CARD_SOURCE_INFO,
-  CARD_SOURCES,
-  CARD_VIEWS,
-  type CardData,
-  type CardPeriod,
-  type CardSpec,
+  builtinCardDoc,
+  CARD_COLORS,
+  CARD_GRID_COLUMNS,
+  CARD_MARKS,
+  type CardDoc,
+  type CardResult,
   CUSTOM_PREFIX,
   type CustomCard,
   type CustomCardInput,
+  checkCardDoc,
+  DATASETS,
+  DATE_BUCKETS,
+  DATE_PRESETS,
   type Dashboard,
   type DashboardSchema,
   DEFAULT_DASHBOARD,
+  FILTER_OPS,
+  FUNCTIONS,
+  isV1Spec,
   layoutFromSaved,
+  MAX_BLOCKS,
+  MAX_CALCULATED,
   MAX_CUSTOM_CARDS,
+  MAX_DIMENSIONS,
+  MAX_EXPR_LENGTH,
+  MAX_FILTERS,
+  MAX_LAYERS,
   MAX_LAYOUT_CARDS,
+  MAX_MEASURES,
+  MAX_METRICS,
+  MAX_OUTPUT_ROWS,
+  runCardDoc,
+  upgradeV1Spec,
 } from "@muny/shared";
-import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { budgetMonth } from "../budgets/service.js";
-import { listAccounts } from "../ledger/accounts.js";
 import { localToday } from "../lib/dates.js";
 import { badRequest, conflict, notFound } from "../lib/http.js";
-import { upcoming } from "../recurring/service.js";
-import {
-  monthlyReport,
-  netWorthDates,
-  netWorthReport,
-  spendingReport,
-} from "../reports/service.js";
-import {
-  addMonths,
-  categoryMeta,
-  monthEnd,
-  monthlyCategoryTotals,
-  TRANSFER_KEY,
-} from "../reports/spending.js";
+import { dataProvider } from "./datasets.js";
 
 type Db = MunyDb;
 
 // ---------------------------------------------------------------------------
-// Definitions: what a custom card may be. Strict, so nothing else gets stored.
+// What a card may be. Strict, so nothing else gets stored.
 // ---------------------------------------------------------------------------
 
-const id = z.string().min(1).max(64);
+const formula = z.string().trim().min(1).max(MAX_EXPR_LENGTH);
+const shortText = z.string().trim().max(120);
+const longText = z.string().trim().max(2000);
+const name = z.string().trim().min(1).max(64);
+/** What formulas call it, so it has to be writable in one. */
+const identifier = z
+  .string()
+  .regex(/^[A-Za-z_][A-Za-z0-9_]{0,63}$/, "Use letters, numbers and underscores");
+const fieldType = z.enum(["money", "number", "percent", "text", "date", "month", "boolean"]);
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
-export const CardSpecSchema = z
+const DateRangeSchema = z.union([
+  z.object({ preset: z.enum(DATE_PRESETS) }).strict(),
+  z
+    .object({
+      last: z.number().int().min(1).max(3650).optional(),
+      next: z.number().int().min(1).max(400).optional(),
+      unit: z.enum(["days", "months"]),
+    })
+    .strict(),
+  z.object({ from: isoDate, to: isoDate }).strict(),
+]);
+
+const FilterSchema = z
   .object({
-    source: z.enum(CARD_SOURCES),
-    view: z.enum(CARD_VIEWS),
-    period: z.enum(CARD_PERIODS).optional(),
-    months: z.number().int().min(2).max(36).optional(),
-    days: z.number().int().min(1).max(90).optional(),
-    limit: z.number().int().min(1).max(50).optional(),
-    categoryId: id.optional(),
-    accountId: id.optional(),
-    search: z.string().trim().min(1).max(100).optional(),
+    field: name,
+    op: z.enum(FILTER_OPS),
+    value: z
+      .union([z.string().max(500), z.number(), z.boolean(), z.array(z.string().max(200)).max(100)])
+      .optional(),
   })
-  .strict()
-  .superRefine((s, ctx) => {
-    const info = CARD_SOURCE_INFO[s.source];
-    if (!info.views.includes(s.view))
-      ctx.addIssue({
-        code: "custom",
-        path: ["view"],
-        message: `${info.label} can be shown as: ${info.views.join(", ")}`,
-      });
-    for (const p of [
-      "period",
-      "months",
-      "days",
-      "limit",
-      "categoryId",
-      "accountId",
-      "search",
-    ] as const)
-      if (s[p] !== undefined && !info.params.includes(p))
-        ctx.addIssue({
-          code: "custom",
-          path: [p],
-          message: `${info.label} doesn't use ${p}`,
-        });
-  });
+  .strict();
+
+const QuerySchema = z
+  .object({
+    dataset: name,
+    range: DateRangeSchema.optional(),
+    filters: z.array(FilterSchema).max(MAX_FILTERS).optional(),
+    calculated: z
+      .array(
+        z
+          .object({
+            id: identifier,
+            label: shortText.optional(),
+            expr: formula,
+            format: fieldType.optional(),
+          })
+          .strict(),
+      )
+      .max(MAX_CALCULATED)
+      .optional(),
+    dimensions: z
+      .array(
+        z
+          .object({
+            field: name,
+            bucket: z.enum(DATE_BUCKETS).optional(),
+            label: shortText.optional(),
+          })
+          .strict(),
+      )
+      .max(MAX_DIMENSIONS)
+      .optional(),
+    measures: z
+      .array(
+        z
+          .object({
+            id: identifier,
+            label: shortText.optional(),
+            field: name.optional(),
+            agg: z.enum(AGGREGATES).optional(),
+            expr: formula.optional(),
+            format: fieldType.optional(),
+            color: z.enum(CARD_COLORS).optional(),
+            mark: z.enum(CARD_MARKS).optional(),
+            hidden: z.boolean().optional(),
+          })
+          .strict(),
+      )
+      .max(MAX_MEASURES)
+      .optional(),
+    sort: z
+      .array(z.object({ by: name, dir: z.enum(["asc", "desc"]) }).strict())
+      .max(4)
+      .optional(),
+    limit: z.number().int().min(1).max(MAX_OUTPUT_ROWS).optional(),
+    other: z.boolean().optional(),
+    fill: z.boolean().optional(),
+    raw: z.boolean().optional(),
+  })
+  .strict();
+
+const OptionsSchema = z
+  .object({
+    text: longText.optional(),
+    toneExpr: formula.optional(),
+    tone: z.enum(["normal", "muted", "positive", "negative", "warning"]).optional(),
+    size: z.enum(["sm", "md", "lg", "xl"]).optional(),
+    link: z
+      .object({
+        to: z.string().max(100),
+        label: shortText,
+        hash: z
+          .string()
+          .regex(/^[A-Za-z0-9_-]{1,40}$/)
+          .optional(),
+      })
+      .strict()
+      .optional(),
+    value: formula.optional(),
+    format: fieldType.optional(),
+    label: shortText.optional(),
+    compare: formula.optional(),
+    compareLabel: shortText.optional(),
+    goodWhen: z.enum(["up", "down", "either"]).optional(),
+    spark: z.boolean().optional(),
+    stacked: z.boolean().optional(),
+    height: z.number().int().min(60).max(800).optional(),
+    legend: z.boolean().optional(),
+    references: z
+      .array(
+        z
+          .object({
+            label: shortText,
+            expr: formula,
+            color: z.enum(CARD_COLORS).optional(),
+          })
+          .strict(),
+      )
+      .max(8)
+      .optional(),
+    percent: z.boolean().optional(),
+    donut: z.boolean().optional(),
+    center: shortText.optional(),
+    title: name.optional(),
+    subtitle: name.optional(),
+    amount: name.optional(),
+    subamount: name.optional(),
+    icon: z.enum(["none", "merchant", "category", "coin", "rank"]).optional(),
+    bar: z.boolean().optional(),
+    groupBy: name.optional(),
+    signColors: z.boolean().optional(),
+    flip: z.boolean().optional(),
+    totals: z.boolean().optional(),
+    target: formula.optional(),
+    marker: formula.optional(),
+    markerLabel: shortText.optional(),
+    overIsBad: z.boolean().optional(),
+  })
+  .strict();
+
+const BlockSchema = z
+  .object({
+    id: name,
+    kind: z.enum(BLOCK_KINDS),
+    w: z.number().int().min(1).max(CARD_GRID_COLUMNS),
+    title: shortText.optional(),
+    query: QuerySchema.optional(),
+    layers: z.array(QuerySchema).max(MAX_LAYERS).optional(),
+    options: OptionsSchema.optional(),
+  })
+  .strict();
+
+const MetricSchema = z
+  .object({
+    id: identifier,
+    label: shortText.optional(),
+    format: fieldType.optional(),
+    expr: formula,
+    dataset: name.optional(),
+    range: DateRangeSchema.optional(),
+    filters: z.array(FilterSchema).max(MAX_FILTERS).optional(),
+  })
+  .strict();
+
+export const CardDocSchema = z
+  .object({
+    v: z.literal(2),
+    placement: z.enum(["auto", "main", "side"]).optional(),
+    metrics: z.array(MetricSchema).max(MAX_METRICS).optional(),
+    blocks: z.array(BlockSchema).max(MAX_BLOCKS),
+  })
+  .strict();
 
 export const CustomCardSchema = z
   .object({
     title: z.string().trim().min(1, "Give the card a title").max(60),
     description: z.string().trim().max(200).optional(),
-    spec: CardSpecSchema,
+    doc: CardDocSchema,
+    basedOn: name.optional(),
   })
   .strict();
 
@@ -99,29 +247,47 @@ export const LayoutSchema = z
   .object({ cards: z.array(z.string().min(1).max(80)).max(MAX_LAYOUT_CARDS) })
   .strict();
 
+/** Refuse a card that could never work, saying exactly why. */
+function assertUsable(doc: CardDoc) {
+  const issues = checkCardDoc(doc);
+  if (issues.length) throw badRequest(issues.map((i) => i.message).join(" "));
+}
+
+const FORMULA_GUIDE = `Formulas are small expressions, not code.
+Refer to fields as [Field label] or by id, and to the card's named values as $name.
+Money in a formula is in dollars: [Amount] > 100 means more than a hundred dollars.
+Write percentages as 10% (0.1). Text goes in "quotes". Join text with &.
+Operators: + - * / ^ and = != < <= > >= and, or, not.
+A measure's formula is worked out for each group of rows. A field on its own there means its total: [Spending] / [Income]. Totals take an optional condition: sum([Spending], [Category] = "Dining").
+"Over rows" functions read the result's rows in axis order, within each series: running_sum([Spending]), pct_of_total(spent), prev(spent, 12).
+A calculated field is worked out for each row before grouping, and can then be grouped by: if([Amount] < -100, "Large", "Small").
+A named value (metric) with a dataset is worked out over that dataset's rows; without one, over other named values: $income - $spent. Named values work across datasets, so they're how to combine them.
+Text can include live values: "You spent {{$spent}} of {{$budget}}".
+Dividing by zero gives an empty value rather than an error.`;
+
 export function dashboardSchema(): DashboardSchema {
+  const example = (id: string, title: string, description: string): CustomCardInput => ({
+    title,
+    description,
+    doc: builtinCardDoc(id) as CardDoc,
+  });
   return {
     builtinCards: BUILTIN_CARDS,
-    views: CARD_VIEWS,
-    periods: CARD_PERIODS,
-    sources: CARD_SOURCE_INFO,
-    cardJsonSchema: z.toJSONSchema(
-      z.object({
-        title: z.string().max(60),
-        description: z.string().max(200).optional(),
-        spec: z.object({
-          source: z.enum(CARD_SOURCES),
-          view: z.enum(CARD_VIEWS),
-          period: z.enum(CARD_PERIODS).optional(),
-          months: z.number().int().min(2).max(36).optional(),
-          days: z.number().int().min(1).max(90).optional(),
-          limit: z.number().int().min(1).max(50).optional(),
-          categoryId: z.string().optional(),
-          accountId: z.string().optional(),
-          search: z.string().max(100).optional(),
-        }),
-      }),
-    ),
+    datasets: DATASETS,
+    functions: FUNCTIONS,
+    blockKinds: Object.values(BLOCK_KIND_INFO),
+    datePresets: DATE_PRESETS,
+    dateBuckets: DATE_BUCKETS,
+    filterOps: FILTER_OPS,
+    aggregates: AGGREGATES,
+    colors: CARD_COLORS,
+    formulaGuide: FORMULA_GUIDE,
+    cardJsonSchema: z.toJSONSchema(CustomCardSchema),
+    examples: [
+      example("cash-flow", "Income vs. spending", "Two measures by month, and a sentence."),
+      example("budget", "Budget", "Named values, a progress bar and live text."),
+      example("spending", "Spent this month", "Stacked layers across datasets."),
+    ],
   };
 }
 
@@ -144,7 +310,14 @@ function write(db: Db, key: string, value: unknown) {
     .run();
 }
 
-export const listCustomCards = (db: Db): CustomCard[] => read<CustomCard[]>(db, CARDS_KEY) ?? [];
+type StoredCard = Omit<CustomCard, "doc"> & { doc?: CardDoc; spec?: unknown };
+
+export const listCustomCards = (db: Db): CustomCard[] =>
+  (read<StoredCard[]>(db, CARDS_KEY) ?? []).map(({ spec, ...card }) => ({
+    ...card,
+    // Cards saved before documents existed.
+    doc: card.doc ?? (isV1Spec(spec) ? upgradeV1Spec(spec) : { v: 2, blocks: [] }),
+  }));
 
 function knownCards(db: Db) {
   return new Set([
@@ -183,25 +356,33 @@ export function resetLayout(db: Db, userId: string): Dashboard {
   return getDashboard(db, userId);
 }
 
-/** Create a custom card; with `place`, also add it to this person's Overview. */
+/**
+ * Create a custom card. With `place`, also add it to this person's Overview:
+ * in the place of the built-in card it's a copy of, otherwise last.
+ */
 export function createCustomCard(
   db: Db,
   userId: string,
   input: CustomCardInput,
   place: boolean,
 ): CustomCard {
+  assertUsable(input.doc);
   const cards = listCustomCards(db);
   if (cards.length >= MAX_CUSTOM_CARDS)
     throw conflict(`You can keep up to ${MAX_CUSTOM_CARDS} custom cards; delete one first`);
   const card: CustomCard = { id: newId(), ...input };
   write(db, CARDS_KEY, [...cards, card]);
-  // New cards start at the lowest priority.
-  if (place)
-    saveLayout(db, userId, [...getDashboard(db, userId).cards, `${CUSTOM_PREFIX}${card.id}`]);
+  if (place) {
+    const ref = `${CUSTOM_PREFIX}${card.id}`;
+    const layout = getDashboard(db, userId).cards;
+    const at = input.basedOn ? layout.indexOf(input.basedOn) : -1;
+    saveLayout(db, userId, at >= 0 ? layout.map((c, i) => (i === at ? ref : c)) : [...layout, ref]);
+  }
   return card;
 }
 
 export function updateCustomCard(db: Db, cardId: string, input: CustomCardInput): CustomCard {
+  assertUsable(input.doc);
   const cards = listCustomCards(db);
   if (!cards.some((c) => c.id === cardId)) throw notFound("Card not found");
   const card: CustomCard = { id: cardId, ...input };
@@ -229,251 +410,7 @@ export function customCard(db: Db, cardId: string): CustomCard {
   return card;
 }
 
-// ---------------------------------------------------------------------------
-// Data: every source returns the same shape, in integer cents.
-// ---------------------------------------------------------------------------
-
-/** First and last day of a period, inclusive. */
-export function periodRange(period: CardPeriod, today = localToday()) {
-  const month = today.slice(0, 7);
-  const back = (days: number) => {
-    const d = new Date(`${today}T00:00:00Z`);
-    d.setUTCDate(d.getUTCDate() - days);
-    return d.toISOString().slice(0, 10);
-  };
-  switch (period) {
-    case "this_month":
-      return { from: `${month}-01`, to: today };
-    case "last_month": {
-      const m = addMonths(month, -1);
-      return { from: `${m}-01`, to: monthEnd(m) };
-    }
-    case "last_30_days":
-      return { from: back(29), to: today };
-    case "last_90_days":
-      return { from: back(89), to: today };
-    case "this_year":
-      return { from: `${today.slice(0, 4)}-01-01`, to: today };
-    case "last_12_months":
-      return { from: `${addMonths(month, -11)}-01`, to: today };
-  }
-}
-
-const monthLabel = (m: string) =>
-  new Date(`${m}-15T00:00:00Z`).toLocaleDateString("en-US", {
-    month: "short",
-    year: "2-digit",
-    timeZone: "UTC",
-  });
-
-const DEBT_TYPES = new Set(["credit", "loan"]);
-
-function monthsFor(spec: CardSpec, today: string) {
-  const month = today.slice(0, 7);
-  return { from: addMonths(month, -((spec.months ?? 6) - 1)), to: month };
-}
-
-/** Run a definition. Reads only; nothing here can change data. */
-export function runCard(db: Db, spec: CardSpec, today = localToday()): CardData {
-  const period = spec.period ?? "this_month";
-  const periodName = CARD_PERIOD_LABELS[period];
-  const limit = spec.limit ?? 10;
-  const one = (totalCents: number, totalLabel: string): CardData => ({
-    totalCents,
-    totalLabel,
-    seriesNames: [totalLabel],
-    rows: [],
-  });
-
-  switch (spec.source) {
-    case "spending_by_category":
-    case "spending_by_merchant": {
-      const { from, to } = periodRange(period, today);
-      const merchants = spec.source === "spending_by_merchant";
-      const report = spendingReport(
-        db,
-        from,
-        to,
-        merchants ? "merchant" : "category",
-        spec.categoryId,
-      );
-      return {
-        totalCents: report.totalCents,
-        totalLabel: `Spent · ${periodName}`,
-        seriesNames: ["Spent"],
-        rows: report.items.slice(0, limit).map((i) => ({
-          key: i.id ?? "uncategorized",
-          label: i.name,
-          values: [i.cents],
-        })),
-      };
-    }
-    case "spending_total": {
-      const { from, to } = periodRange(period, today);
-      // The report filters by category only when grouping by merchant.
-      const report = spendingReport(
-        db,
-        from,
-        to,
-        spec.categoryId ? "merchant" : "category",
-        spec.categoryId,
-      );
-      return one(report.totalCents, `Spent · ${periodName}`);
-    }
-    case "income_total": {
-      const { from, to } = periodRange(period, today);
-      const cats = categoryMeta(db);
-      let cents = 0;
-      for (const t of monthlyCategoryTotals(db, from, to)) {
-        if (t.categoryId === TRANSFER_KEY) continue;
-        if (t.categoryId && cats.get(t.categoryId)?.kind === "income") cents += t.cents;
-      }
-      return one(cents, `Income · ${periodName}`);
-    }
-    case "spending_by_month":
-    case "income_by_month":
-    case "cash_flow_by_month": {
-      const { from, to } = monthsFor(spec, today);
-      const months = monthlyReport(db, from, to).months;
-      const spent = (m: (typeof months)[number]) =>
-        spec.categoryId ? (m.byCategory[spec.categoryId] ?? 0) : m.spendingCents;
-      const rows = months.map((m) => ({
-        key: m.month,
-        label: monthLabel(m.month),
-        values:
-          spec.source === "spending_by_month"
-            ? [spent(m)]
-            : spec.source === "income_by_month"
-              ? [m.incomeCents]
-              : [m.incomeCents, m.spendingCents],
-      }));
-      if (spec.source === "cash_flow_by_month")
-        return {
-          totalCents: months.reduce((s, m) => s + m.incomeCents - m.spendingCents, 0),
-          totalLabel: `Left over · ${months.length} months`,
-          seriesNames: ["Income", "Spending"],
-          rows,
-        };
-      const income = spec.source === "income_by_month";
-      return {
-        totalCents: rows.reduce((s, r) => s + (r.values[0] ?? 0), 0),
-        totalLabel: `${income ? "Income" : "Spent"} · ${months.length} months`,
-        seriesNames: [income ? "Income" : "Spent"],
-        rows,
-      };
-    }
-    case "net_worth_by_month": {
-      const { points } = netWorthReport(db, netWorthDates((spec.months ?? 12) - 1, today));
-      return {
-        totalCents: points.at(-1)?.netCents ?? 0,
-        totalLabel: "Net worth",
-        seriesNames: ["Net worth"],
-        rows: points.map((p) => ({
-          key: p.date,
-          label: monthLabel(p.date.slice(0, 7)),
-          values: [p.netCents],
-        })),
-      };
-    }
-    case "account_balances": {
-      const accounts = listAccounts(db).filter((a) => !a.hidden);
-      const signed = (a: (typeof accounts)[number]) =>
-        DEBT_TYPES.has(a.type) ? -Math.abs(a.balanceCents) : a.balanceCents;
-      return {
-        totalCents: accounts
-          .filter((a) => !a.excludeFromReports)
-          .reduce((s, a) => s + signed(a), 0),
-        totalLabel: "Assets minus debts",
-        seriesNames: ["Balance"],
-        rows: accounts.slice(0, limit).map((a) => ({
-          key: a.id,
-          label: a.name,
-          detail: a.institutionName ?? a.type,
-          values: [signed(a)],
-        })),
-      };
-    }
-    case "budget_status": {
-      const b = budgetMonth(db, today.slice(0, 7));
-      const lines = b.groups
-        .flatMap((g) => g.lines)
-        .filter((l) => l.categoryId && l.budgetCents !== null);
-      return {
-        totalCents: lines.reduce((s, l) => s + (l.budgetCents ?? 0) - l.spentCents, 0),
-        totalLabel: "Left in your budgets",
-        seriesNames: ["Spent"],
-        rows: lines.slice(0, limit).map((l) => ({
-          key: l.categoryId as string,
-          label: l.name,
-          detail: `of ${((l.budgetCents ?? 0) / 100).toLocaleString("en-US", {
-            style: "currency",
-            currency: "USD",
-          })}`,
-          values: [l.spentCents],
-        })),
-      };
-    }
-    case "upcoming_charges": {
-      const days = spec.days ?? 30;
-      const d = new Date(`${today}T00:00:00Z`);
-      d.setUTCDate(d.getUTCDate() + days);
-      const list = upcoming(db, today, d.toISOString().slice(0, 10), today);
-      return {
-        totalCents: list.reduce((s, u) => s + u.amountCents, 0),
-        totalLabel: `Expected · next ${days} days`,
-        seriesNames: ["Amount"],
-        rows: list.slice(0, limit).map((u) => ({
-          key: `${u.seriesId}-${u.date}`,
-          label: u.name,
-          detail: u.date,
-          values: [u.amountCents],
-        })),
-      };
-    }
-    case "transactions": {
-      const t = schema.transactions;
-      const p = schema.payees;
-      const search = spec.search ? `%${spec.search.replace(/[%_\\]/g, "\\$&")}%` : null;
-      const rows = db
-        .select({
-          id: t.id,
-          date: t.postedDate,
-          cents: t.amountCents,
-          raw: t.rawDescription,
-          payee: p.displayName,
-          account: schema.accounts.name,
-        })
-        .from(t)
-        .innerJoin(schema.accounts, eq(schema.accounts.id, t.accountId))
-        .leftJoin(p, eq(p.id, t.payeeId))
-        .where(
-          and(
-            eq(t.hidden, false),
-            isNull(t.fundsTransactionId),
-            spec.categoryId ? eq(t.categoryId, spec.categoryId) : undefined,
-            spec.accountId ? eq(t.accountId, spec.accountId) : undefined,
-            search
-              ? or(
-                  sql`${t.rawDescription} like ${search} escape '\\'`,
-                  sql`${p.displayName} like ${search} escape '\\'`,
-                )
-              : undefined,
-          ),
-        )
-        .orderBy(desc(t.postedDate), desc(t.id))
-        .limit(limit)
-        .all();
-      return {
-        totalCents: rows.reduce((s, r) => s + r.cents, 0),
-        totalLabel: `Total of the latest ${rows.length}`,
-        seriesNames: ["Amount"],
-        rows: rows.map((r) => ({
-          key: r.id,
-          label: r.payee ?? cleanPayeeName(r.raw) ?? "Transaction",
-          detail: `${r.date} · ${r.account}`,
-          values: [r.cents],
-        })),
-      };
-    }
-  }
+/** Run a card. Reads only; nothing here can change data. */
+export function runCard(db: Db, doc: CardDoc, today = localToday()): CardResult {
+  return runCardDoc(doc, dataProvider(db, today), today);
 }

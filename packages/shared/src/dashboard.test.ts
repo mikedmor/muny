@@ -3,6 +3,7 @@ import {
   type ArrangeCard,
   arrangeColumns,
   BUILTIN_CARDS,
+  customCardArrangement,
   DEFAULT_DASHBOARD,
   layoutFromSaved,
   moveCard,
@@ -93,6 +94,21 @@ describe("arrangeColumns", () => {
 
   it("handles no cards", () => {
     expect(arrangeColumns([], 3).columns.flat()).toEqual([]);
+  });
+});
+
+describe("custom cards on the board", () => {
+  it("goes where its contents read best, unless the card says otherwise", () => {
+    const stat = { id: "s", kind: "stat" as const, w: 12 };
+    const line = { id: "l", kind: "line" as const, w: 12 };
+    expect(customCardArrangement({ v: 2, blocks: [stat] }).placement).toBe("side");
+    expect(customCardArrangement({ v: 2, blocks: [stat, line] }).placement).toBe("main");
+    expect(customCardArrangement({ v: 2, placement: "side", blocks: [line] }).placement).toBe(
+      "side",
+    );
+    expect(customCardArrangement({ v: 2, blocks: [stat, line] }).weight).toBeGreaterThan(
+      customCardArrangement({ v: 2, blocks: [stat] }).weight,
+    );
   });
 });
 

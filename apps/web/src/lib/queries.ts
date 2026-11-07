@@ -7,8 +7,8 @@ import type {
   BackupInfo,
   BudgetMonth,
   BulkUpdateInput,
-  CardData,
-  CardSpec,
+  CardDoc,
+  CardResult,
   CategoryGroup,
   CategoryUsage,
   ChannelConfig,
@@ -948,15 +948,26 @@ export const useResetLayout = () =>
 export const useCardData = (id: string) =>
   useQuery({
     queryKey: [...dashboardKey, "data", id],
-    queryFn: () => api.get<CardData>(`/api/dashboard/cards/${id}/data`),
+    queryFn: () => api.get<CardResult>(`/api/dashboard/cards/${id}/data`),
   });
 
-export const useCardPreview = (spec: CardSpec) =>
+/** Run a card that isn't saved. */
+export const useCardPreview = (doc: CardDoc | null) =>
   useQuery({
-    queryKey: [...dashboardKey, "preview", spec],
-    queryFn: () => api.post<CardData>("/api/dashboard/preview", spec),
+    queryKey: [...dashboardKey, "preview", doc],
+    queryFn: () => api.post<CardResult>("/api/dashboard/preview", doc),
+    enabled: doc !== null,
     retry: false,
     placeholderData: keepPreviousData,
+  });
+
+/** A built-in card as a document to start from. */
+export const useCardTemplate = (id: string | undefined) =>
+  useQuery({
+    queryKey: [...dashboardKey, "template", id],
+    queryFn: () => api.get<CardDoc>(`/api/dashboard/templates/${id}`),
+    enabled: !!id,
+    staleTime: Number.POSITIVE_INFINITY,
   });
 
 export const useSaveCustomCard = () =>

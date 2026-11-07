@@ -1,10 +1,14 @@
 /**
  * The customizable Overview: an ordered list of cards. You choose which cards
  * and their priority; Muny lays them out in the columns the screen has room
- * for. Cards are either built in or custom. A custom card is a definition
- * (data), never code: a whitelisted data source plus a way to show it. People,
- * the API and AI assistants all create the same definitions.
+ * for. Cards are either built in or custom. A custom card is a document (data),
+ * never code; see cardkit/. People, the API and AI assistants all write the same
+ * documents.
  */
+
+import type { DatasetInfo } from "./cardkit/catalog.js";
+import type { BlockKind, BlockKindInfo, CardDoc } from "./cardkit/doc.js";
+import type { FunctionInfo } from "./cardkit/expr.js";
 
 export const MAX_LAYOUT_CARDS = 100;
 export const MAX_CUSTOM_CARDS = 100;
@@ -231,191 +235,68 @@ export function layoutFromSaved(saved: unknown): string[] | null {
     .map((i) => i.card);
 }
 
-/** Where a custom card goes: numbers and lists at the side, charts in the main columns. */
-export function customCardArrangement(view: CardView): {
-  placement: CardPlacement;
-  weight: number;
-} {
-  if (view === "stat") return { placement: "side", weight: 9 };
-  if (view === "list") return { placement: "side", weight: 22 };
-  return { placement: "main", weight: 24 };
+/** Where a custom card goes: charts in the wide columns, numbers and lists on the right. */
+export function customCardArrangement(doc: CardDoc): { placement: CardPlacement; weight: number } {
+  const hasChart = doc.blocks.some((b) => CHART_KINDS.has(b.kind));
+  const placement =
+    doc.placement && doc.placement !== "auto" ? doc.placement : hasChart ? "main" : "side";
+  // In 16px rows, for until its real height has been measured.
+  let weight = 3;
+  for (const b of doc.blocks) {
+    const rows = BLOCK_WEIGHTS[b.kind] ?? 4;
+    weight += b.w >= 12 ? rows : rows / 2;
+  }
+  return { placement, weight: Math.round(weight) };
 }
 
-// ---------------------------------------------------------------------------
-// Custom cards: definitions, never code.
-// ---------------------------------------------------------------------------
+const CHART_KINDS = new Set<BlockKind>([
+  "bars",
+  "column",
+  "line",
+  "area",
+  "pie",
+  "treemap",
+  "heatmap",
+  "scatter",
+  "waterfall",
+  "calendar",
+]);
 
-export const CARD_VIEWS = ["stat", "list", "bars", "columns", "line"] as const;
-export type CardView = (typeof CARD_VIEWS)[number];
-
-export const CARD_PERIODS = [
-  "this_month",
-  "last_month",
-  "last_30_days",
-  "last_90_days",
-  "this_year",
-  "last_12_months",
-] as const;
-export type CardPeriod = (typeof CARD_PERIODS)[number];
-
-export const CARD_PERIOD_LABELS: Record<CardPeriod, string> = {
-  this_month: "This month",
-  last_month: "Last month",
-  last_30_days: "Last 30 days",
-  last_90_days: "Last 90 days",
-  this_year: "This year",
-  last_12_months: "Last 12 months",
+const BLOCK_WEIGHTS: Partial<Record<BlockKind, number>> = {
+  stat: 6,
+  text: 2,
+  heading: 3,
+  divider: 2,
+  list: 14,
+  table: 14,
+  bars: 14,
+  column: 16,
+  line: 16,
+  area: 16,
+  pie: 14,
+  progress: 5,
+  treemap: 16,
+  heatmap: 16,
+  scatter: 16,
+  waterfall: 16,
+  calendar: 30,
 };
 
-export const CARD_SOURCES = [
-  "spending_by_category",
-  "spending_by_merchant",
-  "spending_total",
-  "income_total",
-  "spending_by_month",
-  "income_by_month",
-  "cash_flow_by_month",
-  "net_worth_by_month",
-  "account_balances",
-  "budget_status",
-  "upcoming_charges",
-  "transactions",
-] as const;
-export type CardSource = (typeof CARD_SOURCES)[number];
-
-export type CardParam =
-  | "period"
-  | "months"
-  | "days"
-  | "limit"
-  | "categoryId"
-  | "accountId"
-  | "search";
-
-export interface CardSourceInfo {
-  label: string;
-  description: string;
-  views: CardView[];
-  params: CardParam[];
-}
-
-/** What each source returns, how it can be shown, and what it accepts. */
-export const CARD_SOURCE_INFO: Record<CardSource, CardSourceInfo> = {
-  spending_by_category: {
-    label: "Spending by category",
-    description: "Each category's spending in a period, largest first.",
-    views: ["bars", "list", "stat"],
-    params: ["period", "limit"],
-  },
-  spending_by_merchant: {
-    label: "Spending by merchant",
-    description: "Each merchant's spending in a period, optionally in one category.",
-    views: ["bars", "list", "stat"],
-    params: ["period", "limit", "categoryId"],
-  },
-  spending_total: {
-    label: "Total spending",
-    description: "One number: spending in a period, optionally in one category.",
-    views: ["stat"],
-    params: ["period", "categoryId"],
-  },
-  income_total: {
-    label: "Total income",
-    description: "One number: income in a period.",
-    views: ["stat"],
-    params: ["period"],
-  },
-  spending_by_month: {
-    label: "Spending by month",
-    description: "Spending each month, optionally in one category.",
-    views: ["columns", "line", "list", "stat"],
-    params: ["months", "categoryId"],
-  },
-  income_by_month: {
-    label: "Income by month",
-    description: "Income each month.",
-    views: ["columns", "line", "list", "stat"],
-    params: ["months"],
-  },
-  cash_flow_by_month: {
-    label: "Cash flow by month",
-    description: "Income and spending side by side each month. The total is what's left.",
-    views: ["columns", "stat"],
-    params: ["months"],
-  },
-  net_worth_by_month: {
-    label: "Net worth by month",
-    description: "Assets minus debts at each month's end.",
-    views: ["line", "columns", "stat"],
-    params: ["months"],
-  },
-  account_balances: {
-    label: "Account balances",
-    description: "Each account's balance; debts count against the total.",
-    views: ["list", "stat"],
-    params: ["limit"],
-  },
-  budget_status: {
-    label: "Budget status",
-    description: "This month's category budgets: spent of budget. The total is what's left.",
-    views: ["list", "stat"],
-    params: ["limit"],
-  },
-  upcoming_charges: {
-    label: "Upcoming charges",
-    description: "Expected bills, subscriptions and income in the coming days.",
-    views: ["list", "stat"],
-    params: ["days", "limit"],
-  },
-  transactions: {
-    label: "Transactions",
-    description: "Latest transactions, optionally by text, category or account.",
-    views: ["list", "stat"],
-    params: ["limit", "search", "categoryId", "accountId"],
-  },
-};
-
-export interface CardSpec {
-  source: CardSource;
-  view: CardView;
-  period?: CardPeriod;
-  /** Months of history, 2-36. */
-  months?: number;
-  /** Days ahead, 1-90. */
-  days?: number;
-  /** Rows, 1-50. */
-  limit?: number;
-  categoryId?: string;
-  accountId?: string;
-  search?: string;
-}
+// ---------------------------------------------------------------------------
+// Custom cards: documents, never code. See cardkit/.
+// ---------------------------------------------------------------------------
 
 export interface CustomCard {
   id: string;
   title: string;
   description?: string;
-  spec: CardSpec;
+  doc: CardDoc;
+  /** The built-in card it started as, if any. */
+  basedOn?: string;
 }
 
 /** Create or replace a custom card. */
 export type CustomCardInput = Omit<CustomCard, "id">;
-
-export interface CardRow {
-  key: string;
-  label: string;
-  detail?: string;
-  /** Integer cents, one per series. */
-  values: number[];
-}
-
-/** What every source returns, whichever view shows it. */
-export interface CardData {
-  /** The headline number, in integer cents. */
-  totalCents: number;
-  totalLabel: string;
-  seriesNames: string[];
-  rows: CardRow[];
-}
 
 export interface Dashboard {
   /** Cards on this person's Overview, highest priority first. */
@@ -429,9 +310,18 @@ export interface Dashboard {
 /** The self-description assistants and tools read before making a card. */
 export interface DashboardSchema {
   builtinCards: BuiltinCard[];
-  views: readonly CardView[];
-  periods: readonly CardPeriod[];
-  sources: Record<CardSource, CardSourceInfo>;
-  /** JSON Schema of a custom card. */
+  datasets: DatasetInfo[];
+  functions: FunctionInfo[];
+  blockKinds: BlockKindInfo[];
+  datePresets: readonly string[];
+  dateBuckets: readonly string[];
+  filterOps: readonly string[];
+  aggregates: readonly string[];
+  colors: readonly string[];
+  /** How formulas work, in words. */
+  formulaGuide: string;
+  /** JSON Schema of a card. */
   cardJsonSchema: unknown;
+  /** Worked examples. */
+  examples: CustomCardInput[];
 }

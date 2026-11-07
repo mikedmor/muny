@@ -9,7 +9,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
-import { CustomCardView } from "../components/CustomCard.js";
+import { CustomCardView } from "../cardkit/CustomCardView.js";
 import {
   ColumnChart,
   LineChart,
@@ -705,11 +705,28 @@ const CARD_RENDERERS: Record<string, (d: Overview) => ReactNode> = {
   "coming-up": (d) => <UpcomingCard d={d} />,
 };
 
+const useOverview = () =>
+  useQuery({ queryKey: ["overview"], queryFn: () => api.get<Overview>("/api/overview") });
+
+/** Draws any card by its reference, built in or custom. */
+export function useCardRenderer() {
+  const dashboard = useDashboard();
+  const d = useOverview().data;
+  return (ref: string): ReactNode => {
+    if (!d) return null;
+    if (ref.startsWith(CUSTOM_PREFIX)) {
+      const card = dashboard.data?.customCards.find((c) => `${CUSTOM_PREFIX}${c.id}` === ref);
+      return card ? <CustomCardView card={card} /> : null;
+    }
+    return CARD_RENDERERS[ref]?.(d) ?? null;
+  };
+}
+
 export function OverviewPage() {
   const accounts = useAccounts();
-  const dashboard = useDashboard();
-  const o = useQuery({ queryKey: ["overview"], queryFn: () => api.get<Overview>("/api/overview") });
+  const o = useOverview();
   const d = o.data;
+  const renderCard = useCardRenderer();
 
   if (accounts.isSuccess && accounts.data.length === 0) {
     return (
@@ -732,15 +749,6 @@ export function OverviewPage() {
       </>
     );
   }
-
-  const renderCard = (ref: string) => {
-    if (!d) return null;
-    if (ref.startsWith(CUSTOM_PREFIX)) {
-      const card = dashboard.data?.customCards.find((c) => `${CUSTOM_PREFIX}${c.id}` === ref);
-      return card ? <CustomCardView card={card} /> : null;
-    }
-    return CARD_RENDERERS[ref]?.(d) ?? null;
-  };
 
   return (
     <DashboardBoard

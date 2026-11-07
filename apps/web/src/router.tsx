@@ -7,8 +7,10 @@ import { AccountsPage } from "./pages/AccountsPage.js";
 import { AssetsPage } from "./pages/AssetsPage.js";
 import { InvitePage, LoginPage, SetupPage } from "./pages/AuthPages.js";
 import { BudgetsPage } from "./pages/BudgetsPage.js";
+import { CardEditorPage } from "./pages/CardEditorPage.js";
 import { CardsPage } from "./pages/CardsPage.js";
 import { CategoryPage } from "./pages/CategoryPage.js";
+import { CustomizePage } from "./pages/CustomizePage.js";
 import { CryptoDashboard } from "./pages/crypto/CryptoDashboard.js";
 import { CryptoReconcile } from "./pages/crypto/CryptoReconcile.js";
 import { CryptoSettings } from "./pages/crypto/CryptoSettings.js";
@@ -94,6 +96,8 @@ const themeSearch = (s: Record<string, unknown>): { from?: string } =>
 
 const routeTree = rootRoute.addChildren([
   page("/", OverviewPage),
+  page("/overview/customize", CustomizePage),
+  searchPage("/overview/cards/$cardId", CardEditorPage, themeSearch),
   searchPage("/transactions", TransactionsPage, validateTransactionSearch),
   searchPage("/categories/$categoryId", CategoryPage, monthSearch),
   page("/alerts", NotificationsPage),
