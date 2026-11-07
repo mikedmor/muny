@@ -185,13 +185,38 @@ export function CategoryPage() {
             {a && <p className="text-sm text-slate-500">{a.category.groupName}</p>}
           </div>
         </div>
-        <a
-          hidden={virtual}
-          href={exportUrl}
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
-        >
-          ⤓ Export
-        </a>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* The month, like Budgets: ‹ November 2026 › */}
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              aria-label="Previous month"
+              onClick={() => setMonth(shift(month, -1))}
+            >
+              ‹
+            </Button>
+            <span className="min-w-36 text-center font-medium">{monthLabel(month)}</span>
+            <Button
+              variant="ghost"
+              aria-label="Next month"
+              onClick={() => setMonth(shift(month, 1))}
+            >
+              ›
+            </Button>
+            {month !== thisMonth() && (
+              <Button variant="ghost" onClick={() => setMonth(thisMonth())}>
+                Today
+              </Button>
+            )}
+          </div>
+          <a
+            hidden={virtual}
+            href={exportUrl}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+          >
+            ⤓ Export
+          </a>
+        </div>
       </div>
       {activity.isError && <Alert>{activity.error.message}</Alert>}
 
