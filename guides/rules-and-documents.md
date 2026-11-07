@@ -5,14 +5,12 @@
 A rule finds transactions and does something to them: sets the category, renames the merchant, adds a tag, or ignores them everywhere (left out of totals and reports). New transactions always run your rules.
 
 - **From a transaction:** open it. If no rule applies yet, click **Add rule** (+). If rules apply, **Rules** (→) lists them, with how many transactions each matches; click one to change it, or **Add rule** for another.
-- **After changing a category:** a note appears at the bottom right, "Changed category to …". Click **+ Rule** to make a rule for transactions like it, already filled in.
+- **After changing a category** (on Transactions, or a category page, including a pending charge there): a note appears at the bottom right, "Changed category to …". Click **+ Rule** to make a rule for transactions like it, already filled in.
 - **Create a rule** works in two steps. First, how it finds transactions: by name (bank description or merchant name: contains, is, starts with, ends with), amount, money in or out, and account. The matching transactions are listed as you go. **Continue**, then choose what it does, name it, and whether to change the transactions it already matches (optionally including ones you changed by hand).
 
 All rules, their order and the full editor (several names, "any of") are in **Settings → Rules**.
 
 While you make or edit a rule, Muny warns when you already have the same rule, or another rule matches the same transactions (saying how many, and whether it files them differently), with **Edit this rule instead** to change the one you have. When rules disagree, the one higher in the list wins.
-
-After you change a transaction's category (on Transactions or a category page, including a pending charge there), **+ Rule** offers to do the same for transactions like it.
 
 ## Documents
 
