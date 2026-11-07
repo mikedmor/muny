@@ -301,6 +301,23 @@ export function cumulativeDailySpending(db: Db, from: string, to: string): numbe
   return out;
 }
 
+/** Running total earned (income categories), one entry per day. */
+export function cumulativeDailyIncome(db: Db, from: string, to: string): number[] {
+  const cats = categoryMeta(db);
+  const perDay = new Map<string, number>();
+  for (const t of dailyCategoryTotals(db, from, to)) {
+    if (!t.categoryId || cats.get(t.categoryId)?.kind !== "income") continue;
+    perDay.set(t.month, (perDay.get(t.month) ?? 0) + t.cents);
+  }
+  const out: number[] = [];
+  let run = 0;
+  for (let d = from; d <= to && out.length < 400; d = addDays(d, 1)) {
+    run += perDay.get(d) ?? 0;
+    out.push(run);
+  }
+  return out;
+}
+
 /**
  * The same running total split by category: the largest `top` categories
  * (by the period's total) each get their own series, the rest are "Other".
@@ -398,6 +415,19 @@ export function overview(db: Db, today = localToday()): Overview {
     .from(schema.connections)
     .where(sql`${schema.connections.status} in ('reauth_required', 'error', 'pending_setup')`)
     .get();
+  const incomeDaily = cumulativeDailyIncome(db, `${month}-01`, today);
+  // Expected income still to come, on its due dates (a late one counts today).
+  const expectedOn = new Map<string, number>();
+  for (const u of upcoming(db, today, monthEnd(month), today))
+    if (u.amountCents > 0) expectedOn.set(u.date, (expectedOn.get(u.date) ?? 0) + u.amountCents);
+  const incomeExpectedDaily: number[] = [];
+  let projected = incomeDaily.at(-1) ?? 0;
+  for (let d = today; d <= monthEnd(month); d = addDays(d, 1)) {
+    projected += expectedOn.get(d) ?? 0;
+    incomeExpectedDaily.push(projected);
+  }
+  const incomeExpectedCents = [...expectedOn.values()].reduce((a, b) => a + b, 0);
+
   const newRecurring = listSeries(db, today).filter(
     (s) => s.status === "detected" && s.active,
   ).length;
@@ -415,6 +445,9 @@ export function overview(db: Db, today = localToday()): Overview {
       thisMonthDaily: cumulativeDailySpending(db, `${month}-01`, today),
       thisMonthByCategory: cumulativeDailyByCategory(db, `${month}-01`, today),
       lastMonthDaily: cumulativeDailySpending(db, `${lastMonth}-01`, lastMonthEnd),
+      incomeDaily,
+      incomeExpectedDaily,
+      incomeExpectedCents,
       daysInMonth: Number(monthEnd(month).slice(8)),
     },
     incomeMonthToDateCents: monthly?.incomeCents ?? 0,

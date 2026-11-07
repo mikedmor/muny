@@ -65,6 +65,15 @@ export interface Overview {
     thisMonthByCategory: { id: string | null; name: string; daily: number[] }[];
     /** Running total spent, one entry per day of last month. */
     lastMonthDaily: number[];
+    /** Running total earned, one entry per day from the 1st through today. */
+    incomeDaily: number[];
+    /**
+     * Where earnings should end up: today's total plus expected recurring income
+     * on its due dates, one entry per day from today through the month's end.
+     */
+    incomeExpectedDaily: number[];
+    /** Expected recurring income still to come this month. */
+    incomeExpectedCents: number;
     daysInMonth: number;
   };
   incomeMonthToDateCents: number;

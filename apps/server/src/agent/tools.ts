@@ -231,6 +231,7 @@ export const TOOLS: Tool[] = [
           lastMonthTotalCents: o.spending.lastMonthTotalCents,
         },
         incomeMonthToDateCents: o.incomeMonthToDateCents,
+        incomeExpectedRestOfMonthCents: o.spending.incomeExpectedCents,
         budget: o.budget,
         upcoming: o.upcoming,
         topCategories: o.topCategories,

@@ -140,15 +140,26 @@ function SpendingCard({ d }: { d: Overview }) {
           currentLabel={thisName}
           previousLabel={lastName}
           dayLabel={(day) => `Day ${day}`}
-          ariaLabel={`Running spending total: ${thisName} so far compared with ${lastName}, against ${formatMoney(d.incomeMonthToDateCents)} earned this month`}
+          ariaLabel={`Running spending total: ${thisName} so far compared with ${lastName}, against ${formatMoney(d.incomeMonthToDateCents)} earned this month${s.incomeExpectedCents > 0 ? ` and ${formatMoney(d.incomeMonthToDateCents + s.incomeExpectedCents)} expected by the end of it` : ""}`}
           stack={stack}
-          reference={{ label: "Earned", value: d.incomeMonthToDateCents }}
+          income={{
+            label: "Earned",
+            expectedLabel: "Expected",
+            actual: s.incomeDaily,
+            expected: s.incomeExpectedDaily,
+          }}
         />
       </div>
       <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-3 text-sm dark:border-slate-800">
         <div>
           <dt className="text-slate-500">Earned this month</dt>
           <dd className="font-medium tabular-nums">{formatMoney(d.incomeMonthToDateCents)}</dd>
+          {s.incomeExpectedCents > 0 && (
+            <dd className="text-xs text-slate-500 tabular-nums">
+              +{formatMoney(s.incomeExpectedCents)} expected by{" "}
+              {shortDate(addDaysIso(`${d.today.slice(0, 8)}01`, s.daysInMonth - 1))}
+            </dd>
+          )}
         </div>
         <div>
           <dt className="text-slate-500">Spent in {lastName}</dt>

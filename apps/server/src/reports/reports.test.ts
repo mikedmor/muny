@@ -11,8 +11,14 @@ import type {
 } from "@muny/shared";
 import { describe, expect, it } from "vitest";
 import { localToday } from "../lib/dates.js";
+import { rescanRecurring } from "../recurring/service.js";
 import { makeSignedInApp } from "../test-utils.js";
-import { cumulativeDailySpending, netWorthDates } from "./service.js";
+import {
+  cumulativeDailyIncome,
+  cumulativeDailySpending,
+  netWorthDates,
+  overview,
+} from "./service.js";
 
 // Synthetic data only.
 
@@ -159,6 +165,35 @@ describe("reports", () => {
     expect(cumulativeDailySpending(db, "2026-04-01", "2026-04-05")).toEqual([
       0, 7000, 7000, 5500, 5500,
     ]);
+  });
+
+  it("daily income runs up through the month, skipping spending and transfers", async () => {
+    const { db, card, chk, add } = await setup();
+    await add(card.id, "2026-04-02", -6000, "KROGER", "Groceries");
+    await add(chk.id, "2026-04-03", 300000, "PAYROLL", "Paycheck");
+    await add(chk.id, "2026-04-04", -50000, "CARD PAYMENT", "Credit Card Payment");
+    await add(chk.id, "2026-04-05", 2500, "MYSTERY CREDIT");
+    expect(cumulativeDailyIncome(db, "2026-04-01", "2026-04-05")).toEqual([
+      0, 0, 300000, 300000, 300000,
+    ]);
+  });
+
+  it("projects this month's earnings from expected recurring income", async () => {
+    const { db, chk, add } = await setup();
+    for (const m of ["07", "08", "09", "10"])
+      await add(chk.id, `2026-${m}-15`, 250000, "ACME PAYROLL", "Paycheck");
+    await add(chk.id, "2026-11-03", 4000, "SIDE GIG", "Paycheck");
+    db.transaction((tx) => rescanRecurring(tx, "2026-11-10"));
+    const o = overview(db, "2026-11-10");
+    expect(o.spending.incomeDaily).toHaveLength(10);
+    expect(o.spending.incomeDaily.at(-1)).toBe(4000);
+    // Today through the 30th, with the paycheck landing on the 15th.
+    expect(o.spending.incomeExpectedDaily).toHaveLength(21);
+    expect(o.spending.incomeExpectedDaily[0]).toBe(4000);
+    expect(o.spending.incomeExpectedDaily[4]).toBe(4000);
+    expect(o.spending.incomeExpectedDaily[5]).toBe(254000);
+    expect(o.spending.incomeExpectedDaily.at(-1)).toBe(254000);
+    expect(o.spending.incomeExpectedCents).toBe(250000);
   });
 
   it("summarizes one category by month, with budget and stats", async () => {

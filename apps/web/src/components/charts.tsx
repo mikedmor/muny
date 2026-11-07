@@ -766,10 +766,13 @@ export function PaceChart({
   ariaLabel,
   height = 180,
   stack: stackIn,
-  reference,
+  income,
 }: {
-  /** A level to compare against, drawn across the chart (e.g. what you've earned). */
-  reference?: { label: string; value: number };
+  /**
+   * Earnings to compare against: the running total so far (index 0 = day 1,
+   * through today), then where it should end up (index 0 = today, to month end).
+   */
+  income?: { label: string; actual: number[]; expected: number[]; expectedLabel: string };
   /** Running totals, index 0 = day 1, through today. */
   current: number[];
   /** This month's running total split into parts (e.g. categories), adding up to `current`. */
@@ -793,7 +796,13 @@ export function PaceChart({
   const [focus, setFocus] = useState<string | null>(null);
   const gradId = useId();
   const n = Math.max(days, previous.length, current.length, 2);
-  const hi = Math.max(1, ...current, ...previous, reference?.value ?? 0);
+  const hi = Math.max(
+    1,
+    ...current,
+    ...previous,
+    ...(income?.actual ?? []),
+    ...(income?.expected ?? []),
+  );
   const ticks = niceTicks(hi, 0);
   const top = ticks[ticks.length - 1] ?? hi;
   const plotW = width - PAD.left - PAD.right;
@@ -813,6 +822,17 @@ export function PaceChart({
   };
   const hv = hover !== null ? current[hover] : undefined;
   const hp = hover !== null ? previous[hover] : undefined;
+  // Earnings: what's arrived through today, then what's expected after it.
+  const incomeStart = (income?.actual.length ?? 0) - 1;
+  const hasIncome = !!income && Math.max(0, ...income.actual, ...income.expected) > 0;
+  const incomeAt = (i: number) =>
+    !income ? undefined : i <= incomeStart ? income.actual[i] : income.expected[i - incomeStart];
+  const incomeEnd = income?.expected.at(-1) ?? income?.actual.at(-1) ?? 0;
+  const incomeNow = income?.actual.at(-1) ?? 0;
+  const hi$ = hover !== null && hasIncome ? incomeAt(hover) : undefined;
+  const expectedPath = income
+    ? income.expected.map((v, k) => `${k ? "L" : "M"}${x(incomeStart + k)},${y(v)}`).join(" ")
+    : "";
 
   return (
     <div>
@@ -845,7 +865,7 @@ export function PaceChart({
           </svg>
           {previousLabel}
         </span>
-        {reference && (
+        {hasIncome && income && (
           <span className="inline-flex items-center gap-1.5">
             <svg width="18" height="6" aria-hidden="true">
               <line
@@ -853,12 +873,28 @@ export function PaceChart({
                 x2="17"
                 y1="3"
                 y2="3"
-                stroke="var(--viz-series-3)"
+                stroke="var(--viz-positive)"
                 strokeWidth="2"
-                strokeDasharray="8 3"
+                strokeLinecap="round"
               />
             </svg>
-            {reference.label}
+            {income.label}
+          </span>
+        )}
+        {hasIncome && income && incomeEnd > incomeNow && (
+          <span className="inline-flex items-center gap-1.5">
+            <svg width="18" height="6" aria-hidden="true">
+              <line
+                x1="1"
+                x2="17"
+                y1="3"
+                y2="3"
+                stroke="var(--viz-positive)"
+                strokeWidth="2"
+                strokeDasharray="5 3"
+              />
+            </svg>
+            {income.expectedLabel}
           </span>
         )}
       </div>
@@ -920,26 +956,36 @@ export function PaceChart({
             strokeDasharray="4 3"
             strokeLinejoin="round"
           />
-          {reference && reference.value > 0 && (
+          {hasIncome && income && (
             <g>
-              <line
-                x1={PAD.left}
-                x2={width - PAD.right}
-                y1={y(reference.value)}
-                y2={y(reference.value)}
-                stroke="var(--viz-series-3)"
+              <path
+                d={path(income.actual)}
+                fill="none"
+                stroke="var(--viz-positive)"
                 strokeWidth={2}
-                strokeDasharray="8 3"
+                strokeLinejoin="round"
+                strokeLinecap="round"
               />
+              {incomeEnd > incomeNow && (
+                <path
+                  d={expectedPath}
+                  fill="none"
+                  stroke="var(--viz-positive)"
+                  strokeWidth={2}
+                  strokeDasharray="5 3"
+                  strokeLinejoin="round"
+                />
+              )}
               <text
                 x={width - PAD.right}
-                y={y(reference.value) - 6}
+                y={y(incomeEnd) - 6}
                 textAnchor="end"
                 fontSize={11}
                 fontWeight={500}
                 fill="var(--viz-ink-2)"
               >
-                {reference.label} {compactMoney(reference.value)}
+                {incomeEnd > incomeNow ? income.expectedLabel : income.label}{" "}
+                {compactMoney(incomeEnd)}
               </text>
             </g>
           )}
@@ -995,6 +1041,16 @@ export function PaceChart({
                   strokeWidth={2}
                 />
               )}
+              {hi$ !== undefined && (
+                <circle
+                  cx={x(hover)}
+                  cy={y(hi$)}
+                  r={4}
+                  fill="var(--viz-positive)"
+                  stroke="var(--viz-surface)"
+                  strokeWidth={2}
+                />
+              )}
               {hv !== undefined && (
                 <circle
                   cx={x(hover)}
@@ -1009,7 +1065,7 @@ export function PaceChart({
           )}
         </svg>
         {hover !== null && (
-          <Tooltip x={x(hover)} y={y(Math.max(hv ?? 0, hp ?? 0))} width={width}>
+          <Tooltip x={x(hover)} y={y(Math.max(hv ?? 0, hp ?? 0, hi$ ?? 0))} width={width}>
             <p className="font-medium">{dayLabel(hover + 1)}</p>
             {hv !== undefined && (
               <p className="tabular-nums">
@@ -1022,6 +1078,12 @@ export function PaceChart({
             {hp !== undefined && (
               <p className="tabular-nums text-slate-500">
                 {previousLabel}: {formatMoney(hp)}
+              </p>
+            )}
+            {hi$ !== undefined && income && (
+              <p className="tabular-nums">
+                {hover !== null && hover > incomeStart ? income.expectedLabel : income.label}:{" "}
+                {formatMoney(hi$)}
               </p>
             )}
           </Tooltip>
