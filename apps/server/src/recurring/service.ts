@@ -242,19 +242,34 @@ function renamedMerchants(tx: Tx, rows: Row[], today: string): Map<string, strin
     if (!id || homeOf(id) !== r.accountId) continue;
     if (r.postedDate > (latestOn.get(id) ?? "")) latestOn.set(id, r.postedDate);
   }
-  const series = tx
-    .select()
-    .from(s)
-    .all()
+  const all = tx.select().from(s).all();
+  const keyOfSeries = new Map(all.map((e) => [e.id, e.matchKey]));
+  // Series whose own name is still on some of their charges. When none are (the
+  // merchant was renamed outright), the series follows the new name instead.
+  const nameStillUsed = new Set<string>();
+  for (const r of rows) {
+    const id = r.recurringSeriesId;
+    if (
+      id &&
+      homeOf(id) === r.accountId &&
+      merchantKey(r.payee, r.rawDescription) === keyOfSeries.get(id)
+    )
+      nameStillUsed.add(id);
+  }
+  const series = all
     .filter((e) => e.status !== "ignored" && e.status !== "cancelled" && latestOn.has(e.id))
     .map((e) => ({ ...e, home: homeOf(e.id), last: latestOn.get(e.id) as string }))
     .filter((e) => dayNum(today) - dayNum(e.last) <= grace(e.interval as RecurringInterval));
 
   const out = new Map<string, string>();
   for (const r of [...rows].sort((a, b) => a.postedDate.localeCompare(b.postedDate))) {
-    // Already with a series on its own account: nothing to work out.
-    if (r.recurringSeriesId && homeOf(r.recurringSeriesId) === r.accountId) continue;
     const key = merchantKey(r.payee, r.rawDescription);
+    // Already with a series on its own account: it stays there, on every later scan too.
+    if (r.recurringSeriesId && homeOf(r.recurringSeriesId) === r.accountId) {
+      const own = keyOfSeries.get(r.recurringSeriesId);
+      if (own && own !== key && nameStillUsed.has(r.recurringSeriesId)) out.set(r.id, own);
+      continue;
+    }
     const cents = Math.abs(r.amountCents);
     const direction = r.amountCents < 0 ? "out" : "in";
     const fits = series.filter(

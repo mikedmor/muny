@@ -73,6 +73,14 @@ describe("merchants the bank rewords", () => {
     expect(after?.paidThisMonth.cents).toBe(-22952);
     expect(seriesOf("SAMPLE POWER", "2026-11-05")).toBe(before?.name);
     expect(series().filter((s) => s.name.toLowerCase().includes("sample"))).toHaveLength(1);
+
+    // Every restart scans again, and the answer has to stay the same.
+    scan();
+    scan();
+    const later = series().find((s) => s.id === before?.id);
+    expect(later?.lastDate).toBe("2026-11-05");
+    expect(later?.nextDate).toBe("2026-12-05");
+    expect(seriesOf("SAMPLE POWER", "2026-11-05")).toBe(before?.name);
   });
 
   it("links a deposit to the series on its own account, not one with the same name elsewhere", async () => {
@@ -125,6 +133,19 @@ describe("merchants the bank rewords", () => {
       .all()
       .find((r) => r.accountId === side.id && r.postedDate === "2026-11-06");
     expect(row?.recurringSeriesId).toBe(sideSeries?.id);
+
+    // Every restart scans again, and the answer has to stay the same.
+    scan();
+    scan();
+    const later = series().find((s) => s.id === sideSeries?.id);
+    expect(later?.lastDate).toBe("2026-11-06");
+    expect(series().find((s) => s.accountId === other.id)?.lastDate).toBe("2026-10-28");
+    const again = db
+      .select()
+      .from(t)
+      .all()
+      .find((r) => r.accountId === side.id && r.postedDate === "2026-11-06");
+    expect(again?.recurringSeriesId).toBe(sideSeries?.id);
   });
 
   it("leaves a different purchase from the same company alone", async () => {
