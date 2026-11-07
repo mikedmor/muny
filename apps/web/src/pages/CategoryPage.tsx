@@ -14,9 +14,10 @@ import {
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { EditBudget, monthLabel, Ring } from "../components/budget.js";
+import { monthLabel, Ring } from "../components/budget.js";
 import { CategorySelect } from "../components/CategorySelect.js";
 import { ColumnChart } from "../components/charts.js";
+import { EditCategoryDialog } from "../components/EditCategory.js";
 import { FindSimilar } from "../components/FindSimilar.js";
 import { useRuleOffer } from "../components/RuleOffer.js";
 import { Alert, Button, Card, cx } from "../components/ui.js";
@@ -199,6 +200,16 @@ export function CategoryPage() {
             <h1 className="truncate text-2xl font-semibold">{a?.category.name ?? "Category"}</h1>
             {a && <p className="text-sm text-slate-500">{a.category.groupName}</p>}
           </div>
+          {!virtual && a && (
+            <Button
+              variant="ghost"
+              aria-label="Edit category"
+              title="Edit category"
+              onClick={() => setEditing(true)}
+            >
+              ✎
+            </Button>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* The month, like Budgets: ‹ November 2026 › */}
@@ -463,9 +474,9 @@ export function CategoryPage() {
                   {row === EVERYTHING_ELSE &&
                     "Everything else is spending with no category. Pick a category for each transaction to move it into that category's budget."}
                   {row === EARNINGS &&
-                    "Earnings is money in your income categories (pay, interest, refunds you filed as income). Set an earnings target on the Budgets page."}
+                    "Earnings is money in your income categories (pay, interest, refunds you filed as income). Its budget is the income you've received plus what your recurring income should still bring."}
                   {row === OTHER_SPENDING &&
-                    "All other categories is your spending that isn't a bill: everything in your spending categories (and uncategorized) except recurring bills and bill categories. Set a target for it on the Budgets page."}
+                    "All other categories is your spending that isn't a bill: everything in your spending categories (and uncategorized) except recurring bills and bill categories. Its budget adds up the budgets of your categories that aren't bills."}
                   {row === BILLS && (
                     <>
                       Bills & subscriptions are charges from the recurring bills and subscriptions
@@ -473,7 +484,7 @@ export function CategoryPage() {
                       <Link to="/recurring" className="text-brand-600 hover:underline">
                         Recurring
                       </Link>{" "}
-                      page; set a target on the Budgets page.
+                      page. Its budget adds up the budgets of your bill categories.
                     </>
                   )}
                 </Card>
@@ -544,17 +555,9 @@ export function CategoryPage() {
                       </p>
                     )}
                     <div className="border-t border-slate-200 px-4 py-3 dark:border-slate-800">
-                      {editing ? (
-                        line ? (
-                          <EditBudget line={line} month={month} onDone={() => setEditing(false)} />
-                        ) : (
-                          <p className="text-sm text-slate-500">Loading…</p>
-                        )
-                      ) : (
-                        <Button variant="secondary" onClick={() => setEditing(true)}>
-                          {a.budget ? "Edit budget" : "Set a budget"}
-                        </Button>
-                      )}
+                      <Button variant="secondary" onClick={() => setEditing(true)}>
+                        {a.budget ? "Edit budget" : "Set a budget"}
+                      </Button>
                     </div>
                   </Card>
                 </div>
@@ -585,6 +588,19 @@ export function CategoryPage() {
       )}
       {offerNode}
       {ruleDialog}
+      {!virtual && (
+        <EditCategoryDialog
+          categoryId={categoryId}
+          line={line}
+          month={month}
+          open={editing}
+          onClose={() => setEditing(false)}
+          onDeleted={() => {
+            setEditing(false);
+            void navigate({ to: "/budgets" });
+          }}
+        />
+      )}
     </>
   );
 }

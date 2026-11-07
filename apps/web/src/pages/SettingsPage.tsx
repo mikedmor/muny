@@ -1,14 +1,12 @@
 import type { Category, CategoryGroup } from "@muny/shared";
 import { type FormEvent, useEffect, useState } from "react";
-import { CategorySelect } from "../components/CategorySelect.js";
+import { DeleteCategoryForm } from "../components/EditCategory.js";
 import { Modal } from "../components/forms.js";
 import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
 import {
   useCategories,
-  useCategoryUsage,
   useCreateCategory,
   useCreateGroup,
-  useDeleteCategory,
   useDeleteGroup,
   useDeleteUnusedCategories,
   useSetUiPrefs,
@@ -395,71 +393,6 @@ function GroupCard({
       </form>
       {error && <p className="px-4 pb-2 text-xs text-red-600">{error.message}</p>}
     </Card>
-  );
-}
-
-function DeleteCategoryForm({ category, onDone }: { category: Category; onDone: () => void }) {
-  const del = useDeleteCategory();
-  const usage = useCategoryUsage(category.id);
-  const [reassignTo, setReassignTo] = useState<string | null>(null);
-  const u = usage.data;
-  const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-  const used = u
-    ? [
-        u.transactions && plural(u.transactions, "transaction"),
-        u.splits && plural(u.splits, "split part"),
-        u.recurring && plural(u.recurring, "recurring charge"),
-        u.payees && plural(u.payees, "payee default"),
-        u.rules && plural(u.rules, "rule"),
-        u.budget && "a budget",
-      ].filter(Boolean)
-    : [];
-  return (
-    <div className="space-y-4">
-      <p className="text-sm">
-        Delete <strong>{category.name}</strong>?{" "}
-        {usage.isLoading
-          ? "Checking what uses it…"
-          : used.length
-            ? `It's used by ${used.join(", ")}.`
-            : "Nothing uses it."}
-      </p>
-      {used.length > 0 && (
-        <div className="space-y-1">
-          <span className="block text-sm font-medium">Move them to</span>
-          <CategorySelect
-            value={reassignTo}
-            onChange={setReassignTo}
-            emptyLabel="Uncategorized"
-            aria-label="Move them to"
-            filter={(c) => c.id !== category.id}
-          />
-          <p className="text-xs text-slate-500">
-            {reassignTo
-              ? `Transactions, recurring charges, payee defaults and rules switch over${u?.budget ? "; the budget moves too unless that category already has one" : ""}.`
-              : `They'll be left uncategorized${u?.rules ? `; rules stop setting a category${u.rulesOnlySetting ? ` (${plural(u.rulesOnlySetting, "rule")} that only did that will be deleted)` : ""}` : ""}${u?.budget ? "; its budget is removed" : ""}.`}
-          </p>
-        </div>
-      )}
-      {del.error && <Alert>{del.error.message}</Alert>}
-      <div className="flex justify-end gap-2">
-        <Button variant="secondary" onClick={onDone}>
-          Cancel
-        </Button>
-        <Button
-          variant="danger"
-          disabled={del.isPending || usage.isLoading}
-          onClick={() =>
-            del.mutate(
-              { id: category.id, reassignTo: reassignTo ?? undefined },
-              { onSuccess: onDone },
-            )
-          }
-        >
-          {reassignTo ? "Move and delete" : "Delete"}
-        </Button>
-      </div>
-    </div>
   );
 }
 

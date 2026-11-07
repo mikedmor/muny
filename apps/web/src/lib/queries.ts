@@ -174,7 +174,7 @@ export const useUpdateCategory = () =>
       isBill?: boolean;
       groupId?: string;
     }) => api.patch(`/api/categories/${id}`, input),
-    [keys.categories, keys.budgets, keys.overview],
+    [keys.categories, keys.budgets, keys.overview, keys.reports],
   );
 
 export const useDeleteUnusedCategories = () =>

@@ -18,6 +18,6 @@ Refunds lower a category's spending, split transactions count in each of their c
 
 ## Managing categories
 
-**Settings → Categories** lists every category by group. Click a name to rename it, use **Move…** to put it in another group, **Hide** to stop offering it, and **Bill / Not a bill** to choose whether it counts in Bills & subscriptions. You can also mark a category as a bill from its own page: click **Edit budget** (or **Set a budget**) and tick **Bill or subscription**.
+**Settings → Categories** lists every category by group. Click a name to rename it, use **Move…** to put it in another group, **Hide** to stop offering it, and **Bill / Not a bill** to choose whether it counts in Bills & subscriptions. On a category's own page, **Edit budget** (or **Set a budget**, or the ✎ next to its name) opens all of this in one dialog: name, group, monthly budget and rollover, **Bill or subscription**, **Count in budgets**, **Hide**, and **Delete category…**.
 
 **Delete** shows what uses the category and lets you pick where it goes: its transactions, split parts, recurring charges, payee defaults and rules move to the category you choose (search for it, or create a new one), and its budget moves too if that category doesn't have one. Choose **Uncategorized** to leave them without a category instead; rules then stop setting a category, and a rule that did nothing else is deleted. Categories that nothing uses are marked **unused**, and **Delete unused…** removes them all at once.
