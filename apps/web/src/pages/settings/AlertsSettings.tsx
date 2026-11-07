@@ -11,7 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useState } from "react";
 import { Checkbox, MoneyField, SelectField } from "../../components/forms.js";
-import { Alert, Button, Card, Field } from "../../components/ui.js";
+import { Alert, Button, Card, cx, Field } from "../../components/ui.js";
 import { ApiError, api } from "../../lib/api.js";
 import {
   useAlertRules,
@@ -138,7 +138,10 @@ function NumberList({
       {sorted.map((v) => (
         <span
           key={v}
-          className="inline-flex items-center gap-1 rounded-full bg-slate-100 py-0.5 pr-1 pl-2.5 tabular-nums dark:bg-slate-800"
+          className={cx(
+            "inline-flex h-8 items-center gap-0.5 rounded-full bg-slate-100 pl-3 tabular-nums dark:bg-slate-800",
+            sorted.length > 1 ? "pr-1" : "pr-3",
+          )}
         >
           {suffix(v)}
           {sorted.length > 1 && (
@@ -146,7 +149,7 @@ function NumberList({
               type="button"
               aria-label={`Remove ${suffix(v)}`}
               onClick={() => onChange(sorted.filter((x) => x !== v))}
-              className="rounded-full px-1 text-slate-500 hover:bg-slate-200 hover:text-slate-800 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+              className="flex size-6 items-center justify-center rounded-full leading-none text-slate-500 hover:bg-slate-200 hover:text-slate-800 dark:hover:bg-slate-700 dark:hover:text-slate-200"
             >
               ×
             </button>
@@ -169,7 +172,7 @@ function NumberList({
             }}
             placeholder="Add"
             aria-label={`Add to ${label}`}
-            className="w-20 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm tabular-nums dark:border-slate-700 dark:bg-slate-950"
+            className="h-8 w-20 rounded-lg border border-slate-300 bg-white px-2 text-sm tabular-nums dark:border-slate-700 dark:bg-slate-950"
           />
           {text.trim() !== "" && (
             <button
