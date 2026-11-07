@@ -182,10 +182,25 @@ export async function marketIntraday(
     symbol,
     `range=1d&interval=5m&includePrePost=${symbol.startsWith("^") ? "false" : "true"}`,
   );
+  // Yahoo counts the VIX's overnight session (from 3:15 AM Eastern) as regular
+  // hours; brokerages chart it from the 9:30 open. Keep an index's day from then.
+  const nyMinutes = (t: number) => {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date(t));
+    const get = (k: string) => Number(parts.find((p) => p.type === k)?.value ?? 0);
+    return get("hour") * 60 + get("minute");
+  };
+  const kept = symbol.startsWith("^")
+    ? points.filter((p) => nyMinutes(p.t) >= 9 * 60 + 30)
+    : points;
   const data: MarketIntraday = {
     symbol,
     previousClose: meta.chartPreviousClose ?? meta.previousClose ?? null,
-    points: points.map((p) => ({ t: p.t, close: p.close })),
+    points: kept.map((p) => ({ t: p.t, close: p.close })),
   };
   intradayCache.set(symbol, { at: now, data });
   return data;

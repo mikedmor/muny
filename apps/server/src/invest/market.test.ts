@@ -1,7 +1,7 @@
 import type { MarketOverview } from "@muny/shared";
 import { beforeEach, describe, expect, it } from "vitest";
 import { makeSignedInApp } from "../test-utils.js";
-import { MARKET_INDEXES, MARKET_SECTORS, resetMarketCache } from "./market.js";
+import { MARKET_INDEXES, MARKET_SECTORS, marketIntraday, resetMarketCache } from "./market.js";
 
 // Fakes only; no network.
 
@@ -105,5 +105,33 @@ describe("stocks extras (opt-in)", () => {
     const intraday = x.calls.filter((u) => u.includes("interval=5m"));
     expect(intraday.find((u) => u.includes("/chart/SPY?"))).toContain("includePrePost=true");
     expect(intraday.find((u) => u.includes("/chart/%5EVIX?"))).toContain("includePrePost=false");
+  });
+});
+
+describe("index intraday session", () => {
+  it("charts the VIX from the 9:30 open, and funds with their pre-market", async () => {
+    const { db } = await makeSignedInApp();
+    resetMarketCache();
+    // 8:00 and 10:00 AM New York time on a winter day (UTC-5).
+    const at = (h: number) => Date.UTC(2026, 11, 3, h + 5, 0) / 1000;
+    const f = (async () =>
+      new Response(
+        JSON.stringify({
+          chart: {
+            result: [
+              {
+                meta: { gmtoffset: -21600, chartPreviousClose: 20 },
+                timestamp: [at(8), at(10)],
+                indicators: { quote: [{ close: [21, 22] }] },
+              },
+            ],
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )) as typeof fetch;
+    const vix = await marketIntraday(db, { fetch: f }, "^VIX");
+    expect(vix.points.map((p) => p.close)).toEqual([22]);
+    const spy = await marketIntraday(db, { fetch: f }, "SPY");
+    expect(spy.points.map((p) => p.close)).toEqual([21, 22]);
   });
 });
