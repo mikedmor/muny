@@ -96,6 +96,13 @@ export interface CategoryActivity {
 
 /** The budget page's "Everything else" row as a category: spending with no category. */
 export const EVERYTHING_ELSE = "everything-else";
+/** The budget page's "Earnings" row as a category: money in your income categories. */
+export const EARNINGS = "earnings";
+/** The budget page's "Bills & subscriptions" row as a category: charges from recurring bills. */
+export const BILLS = "bills";
+/** Budget rows that open as a category page, and what the transactions list filters on. */
+export const BUDGET_ROWS = [EVERYTHING_ELSE, EARNINGS, BILLS] as const;
+export type BudgetRowId = (typeof BUDGET_ROWS)[number];
 
 /** The Spending page: breakdown by category plus a monthly summary. */
 export interface SpendingOverview {

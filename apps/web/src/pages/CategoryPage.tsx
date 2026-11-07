@@ -1,6 +1,10 @@
 import {
+  BILLS,
+  BUDGET_ROWS,
   type BudgetMonth,
+  type BudgetRowId,
   type CategoryActivity,
+  EARNINGS,
   EVERYTHING_ELSE,
   formatMoney,
   type Transaction,
@@ -16,7 +20,7 @@ import { useRuleOffer } from "../components/RuleOffer.js";
 import { Alert, Button, Card, cx } from "../components/ui.js";
 import { CategoryIcon, MerchantAvatar } from "../components/visuals.js";
 import { api } from "../lib/api.js";
-import { keys, useUpdateTransaction } from "../lib/queries.js";
+import { keys, useCategories, useUpdateTransaction } from "../lib/queries.js";
 
 /**
  * One category, like Rocket Money's category page: 12 months of spending
@@ -68,8 +72,12 @@ export function CategoryPage() {
   const [editing, setEditing] = useState(false);
   const update = useUpdateTransaction();
   const { offerRule, offerNode, dialog: ruleDialog } = useRuleOffer();
-  /** The budget page's "Everything else": categories without a budget, and uncategorized. */
-  const virtual = categoryId === EVERYTHING_ELSE;
+  /** A budget page row (Everything else, Earnings, Bills & subscriptions) rather than a category. */
+  const row = (BUDGET_ROWS as readonly string[]).includes(categoryId)
+    ? (categoryId as BudgetRowId)
+    : null;
+  const virtual = row !== null;
+  const categories = useCategories();
 
   const activity = useQuery({
     queryKey: [...keys.reports, "category", categoryId, month, end],
@@ -78,19 +86,34 @@ export function CategoryPage() {
     placeholderData: keepPreviousData,
   });
   /** Transactions API filter: Everything else is uncategorized spending. */
-  const filterId = virtual ? "uncategorized" : categoryId;
+  const filter =
+    row === EVERYTHING_ELSE
+      ? "categoryId=uncategorized"
+      : row
+        ? `budgetRow=${row}`
+        : `categoryId=${categoryId}`;
   const txns = useQuery({
-    queryKey: [...keys.transactions, "category", filterId, month],
+    queryKey: [...keys.transactions, "category", filter, month],
     queryFn: () =>
       api.get<TransactionPage>(
-        `/api/transactions?categoryId=${filterId}&from=${month}-01&to=${monthEnd(month)}&limit=200&offset=0`,
+        `/api/transactions?${filter}&from=${month}-01&to=${monthEnd(month)}&limit=200&offset=0`,
       ),
     placeholderData: keepPreviousData,
   });
-  const inCategory = useMemo(
-    () => (id: string | null) => (virtual ? id === null : id === categoryId),
-    [virtual, categoryId],
-  );
+  /** Which part of a (split) transaction belongs here. */
+  const inCategory = useMemo(() => {
+    if (row === BILLS) return () => true;
+    if (row === EVERYTHING_ELSE) return (id: string | null) => id === null;
+    if (row === EARNINGS) {
+      const income = new Set(
+        (categories.data ?? [])
+          .filter((g) => g.kind === "income")
+          .flatMap((g) => g.categories.map((c) => c.id)),
+      );
+      return (id: string | null) => id !== null && income.has(id);
+    }
+    return (id: string | null) => id === categoryId;
+  }, [row, categories.data, categoryId]);
   // The budget editor needs the month's full budget line.
   const budget = useQuery({
     queryKey: [...keys.budgets, month],
@@ -287,7 +310,9 @@ export function CategoryPage() {
               </Card>
               {virtual ? (
                 <p className="text-sm text-slate-500">
-                  Change a transaction's category above to move it out of Everything else.
+                  {row === EVERYTHING_ELSE
+                    ? "Change a transaction's category above to move it out of Everything else."
+                    : "Change a transaction's category above if it's in the wrong one."}
                 </p>
               ) : (
                 <Link
@@ -303,8 +328,20 @@ export function CategoryPage() {
             <div className="order-1 space-y-6 lg:order-0">
               {virtual && (
                 <Card className="text-sm text-slate-600 dark:text-slate-300">
-                  Everything else is spending with no category. Pick a category for each transaction
-                  to move it into that category's budget.
+                  {row === EVERYTHING_ELSE &&
+                    "Everything else is spending with no category. Pick a category for each transaction to move it into that category's budget."}
+                  {row === EARNINGS &&
+                    "Earnings is money in your income categories (pay, interest, refunds you filed as income). Set an earnings target on the Budgets page."}
+                  {row === BILLS && (
+                    <>
+                      Bills & subscriptions are charges from the recurring bills and subscriptions
+                      Muny found. Manage them on the{" "}
+                      <Link to="/recurring" className="text-brand-600 hover:underline">
+                        Recurring
+                      </Link>{" "}
+                      page; set a target on the Budgets page.
+                    </>
+                  )}
                 </Card>
               )}
               {spending && !virtual && (

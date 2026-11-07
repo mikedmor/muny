@@ -27,6 +27,8 @@ const ListQuery = z.object({
   q: z.string().trim().max(200).optional(),
   accountId: id.optional(),
   categoryId: id.optional(),
+  /** A budget row's transactions: earnings (income categories) or bills (recurring charges). */
+  budgetRow: z.enum(["earnings", "bills"]).optional(),
   tagId: id.optional(),
   from: isoDate.optional(),
   to: isoDate.optional(),
@@ -95,6 +97,20 @@ function buildFilters(q: z.infer<typeof ListQuery>): SQL | undefined {
         eq(t.categoryId, q.categoryId),
         sql`exists (select 1 from ${schema.transactionSplits} s where s.transaction_id = ${t.id} and s.category_id = ${q.categoryId})`,
       ),
+    );
+  }
+  if (q.budgetRow === "earnings") {
+    const income = sql`(select c.id from categories c join category_groups g on g.id = c.group_id where g.kind = 'income')`;
+    conds.push(
+      or(
+        sql`${t.categoryId} in ${income}`,
+        sql`exists (select 1 from ${schema.transactionSplits} s where s.transaction_id = ${t.id} and s.category_id in ${income})`,
+      ),
+    );
+  }
+  if (q.budgetRow === "bills") {
+    conds.push(
+      sql`${t.amountCents} < 0 and ${t.recurringSeriesId} in (select r.id from recurring_series r where r.kind <> 'income' and (r.category_id is null or r.category_id not in (select id from categories where exclude_from_budget = 1)))`,
     );
   }
   if (q.tagId) {

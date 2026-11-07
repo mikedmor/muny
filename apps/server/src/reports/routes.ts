@@ -1,12 +1,11 @@
 import type { MunyDb } from "@muny/db";
-import { EVERYTHING_ELSE } from "@muny/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
 import { audit } from "../lib/audit.js";
 import { localToday } from "../lib/dates.js";
 import { badRequest, notFound, parse } from "../lib/http.js";
-import { categoryActivity, everythingElseActivity } from "./category.js";
+import { budgetRowActivity, categoryActivity, isBudgetRow } from "./category.js";
 import {
   monthlyReport,
   netWorthDates,
@@ -57,10 +56,9 @@ export function registerReportRoutes(app: FastifyInstance, db: MunyDb) {
     const q = parse(z.object({ month: month.optional(), end: month.optional() }), req.query);
     const selected = q.month ?? thisMonth;
     const end = q.end ?? (selected > thisMonth ? selected : thisMonth);
-    const a =
-      id === EVERYTHING_ELSE
-        ? everythingElseActivity(db, selected, end)
-        : categoryActivity(db, id, selected, end);
+    const a = isBudgetRow(id)
+      ? budgetRowActivity(db, id, selected, end)
+      : categoryActivity(db, id, selected, end);
     if (!a) throw notFound("Category not found");
     return a;
   });

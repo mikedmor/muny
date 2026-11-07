@@ -296,8 +296,13 @@ function forecastMonth(
   };
 }
 
+/** Categories left out of budgets (their bills don't count either). */
+export function excludedCategoryIds(db: Db): string[] {
+  return [...categoryMeta(db).values()].filter((c) => c.excludeFromBudget).map((c) => c.id);
+}
+
 /** Recurring bills/subscriptions charged per month (positive cents). */
-function recurringPaidByMonth(
+export function recurringPaidByMonth(
   db: Db,
   months: string[],
   excludedCategoryIds: string[] = [],

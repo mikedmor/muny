@@ -2,7 +2,7 @@
 
 **Budgets** (under Money) shows a month at a time:
 
-- **Budget basics:** your earnings and your recurring bills and subscriptions. Each can have a target; without one, Muny uses the forecast from your recurring income and bills.
+- **Budget basics:** your earnings and your recurring bills and subscriptions. Each can have a target; without one, Muny uses the forecast from your recurring income and bills. Click **Earnings** to see the money in your income categories month by month, or **Bills & subscriptions** for the charges from your recurring bills; fix a transaction's category right there.
 - **Budget categories:** what you planned to spend in each category, what you spent, and what's left. Click a **Budgeted** amount to set or change it (from this month on). Turn on rollover to carry what's left (or overspent) into the next month. Every category you spent in this month has its own row, budget or not; ones with neither a budget nor spending appear when you show them all. **Everything else** is spending with no category: click it to see those transactions month by month and give each one a category.
 - **Summary and forecast:** what's left this month, and what should still come in or go out before the month ends.
 

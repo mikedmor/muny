@@ -291,3 +291,43 @@ describe("everything else", () => {
     expect(page.items.map((t) => t.id)).toEqual([loose.id]);
   });
 });
+
+describe("earnings and bills pages", () => {
+  it("match the budget rows", async () => {
+    const { client, add } = await setup();
+    const today = localToday();
+    const rows: string[] = ["Date,Description,Amount"];
+    for (let i = 4; i >= 1; i--) {
+      const d = addInterval(today, "monthly", -i).slice(0, 8);
+      rows.push(`${d}05,STREAMCO SUBSCRIPTION,-12.00`, `${d}10,ACME CORP PAYROLL,2500.00`);
+    }
+    await client.post("/api/import/commit", {
+      filename: "history.csv",
+      content: rows.join("\n"),
+      accountMap: { csv: "new" },
+    });
+    const m = addInterval(today, "monthly", -1).slice(0, 7);
+    const pay = await add(`${m}-15`, 30_000, "Paycheck");
+    const b = (await client.get(`/api/budgets/${m}`)).json<BudgetMonth>();
+    expect(b.bills.spentCents).toBe(1200);
+
+    const act = async (id: string) =>
+      (
+        await client.get(`/api/categories/${id}/activity?month=${m}&end=${m}`)
+      ).json<CategoryActivity>();
+    const list = async (row: string) =>
+      (
+        await client.get(`/api/transactions?budgetRow=${row}&from=${m}-01&to=${m}-31`)
+      ).json<TransactionPage>().items;
+
+    const earnings = await act("earnings");
+    expect(earnings.category.kind).toBe("income");
+    expect(earnings.stats.totalCents).toBe(b.income.spentCents);
+    expect((await list("earnings")).map((t) => t.id)).toContain(pay.id);
+
+    const bills = await act("bills");
+    expect(bills.stats).toMatchObject({ count: 1, totalCents: 1200 });
+    expect(bills.months.at(-1)).toEqual({ month: m, cents: 1200 });
+    expect((await list("bills")).map((t) => t.amountCents)).toEqual([-1200]);
+  });
+});

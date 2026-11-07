@@ -1,4 +1,4 @@
-import { type BudgetMonth, EVERYTHING_ELSE, formatMoney } from "@muny/shared";
+import { BILLS, type BudgetMonth, EARNINGS, EVERYTHING_ELSE, formatMoney } from "@muny/shared";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
@@ -109,7 +109,6 @@ function BasicsTable({ b, month }: { b: BudgetMonth; month: string }) {
       actual: f.incomeSoFarCents,
       remaining: incomeTarget - f.incomeSoFarCents,
       ring: [f.incomeSoFarCents, incomeTarget] as const,
-      link: "/recurring",
     },
     {
       key: "bills",
@@ -125,7 +124,6 @@ function BasicsTable({ b, month }: { b: BudgetMonth; month: string }) {
       actual: f.recurringPaidCents,
       remaining: billsTarget - f.recurringPaidCents,
       ring: [f.recurringPaidCents, billsTarget] as const,
-      link: "/recurring",
     },
   ];
   return (
@@ -142,7 +140,12 @@ function BasicsTable({ b, month }: { b: BudgetMonth; month: string }) {
                 {r.icon}
               </span>
               <span className="min-w-0">
-                <Link to={r.link} className="block truncate font-medium hover:underline">
+                <Link
+                  to="/categories/$categoryId"
+                  params={{ categoryId: r.key === "earnings" ? EARNINGS : BILLS }}
+                  search={{ month }}
+                  className="block truncate font-medium underline-offset-2 hover:underline"
+                >
                   {r.name}
                 </Link>
                 <span className="block truncate text-xs text-slate-500">{r.note}</span>

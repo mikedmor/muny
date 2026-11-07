@@ -1,7 +1,14 @@
 import type { MunyDb } from "@muny/db";
-import { type CategoryActivity, EVERYTHING_ELSE } from "@muny/shared";
+import {
+  BILLS,
+  BUDGET_ROWS,
+  type BudgetRowId,
+  type CategoryActivity,
+  EARNINGS,
+  EVERYTHING_ELSE,
+} from "@muny/shared";
 import { sql } from "drizzle-orm";
-import { budgetMonth } from "../budgets/service.js";
+import { budgetMonth, excludedCategoryIds, recurringPaidByMonth } from "../budgets/service.js";
 import {
   addMonths,
   categoryMeta,
@@ -76,26 +83,27 @@ export function categoryActivity(
   };
 }
 
-/**
- * The budget page's "Everything else" row as a category: spending with no
- * category (matched transfers aside), month by month.
- */
-export function everythingElseActivity(
-  db: MunyDb,
-  month: string,
-  end: string,
-  span = 12,
-): CategoryActivity {
-  const first = addMonths(end, -(span - 1));
-  const byMonth = new Map<string, number>();
-  for (const t of monthlyCategoryTotals(db, `${first}-01`, monthEnd(end)))
-    if (t.categoryId === null) byMonth.set(t.month, (byMonth.get(t.month) ?? 0) - t.cents);
+/** A SQL list of ids; "-" keeps it valid when empty (no id is "-"). */
+const idList = (ids: string[]) =>
+  sql.join(
+    ["-", ...ids].map((id) => sql`${id}`),
+    sql`, `,
+  );
 
-  const parts = db.all<{ cents: number }>(sql`
+/** Transactions (or split parts) in a month whose category is in the list, or uncategorized. */
+function partsIn(db: MunyDb, month: string, ids: string[] | "uncategorized") {
+  const nonSplit =
+    ids === "uncategorized"
+      ? sql`t.category_id is null and t.transfer_pair_id is null`
+      : sql`t.category_id in (${idList(ids)})`;
+  const split =
+    ids === "uncategorized" ? sql`sp.category_id is null` : sql`sp.category_id in (${idList(ids)})`;
+  return db
+    .all<{ cents: number }>(sql`
     select t.amount_cents as cents
       from transactions t join accounts a on a.id = t.account_id
      where t.hidden = 0 and a.exclude_from_reports = 0 and a.type <> 'loan'
-       and t.category_id is null and t.transfer_pair_id is null
+       and ${nonSplit}
        and t.posted_date between ${`${month}-01`} and ${monthEnd(month)}
        and not exists (select 1 from transaction_splits x where x.transaction_id = t.id)
     union all
@@ -104,20 +112,88 @@ export function everythingElseActivity(
       join transactions t on t.id = sp.transaction_id
       join accounts a on a.id = t.account_id
      where t.hidden = 0 and a.exclude_from_reports = 0 and a.type <> 'loan'
-       and sp.category_id is null
+       and ${split}
        and t.posted_date between ${`${month}-01`} and ${monthEnd(month)}
-  `);
-  const amounts = parts.map((p) => -Number(p.cents));
+  `)
+    .map((p) => Number(p.cents));
+}
+
+/** Charges from recurring bills and subscriptions in a month (as the budget counts them). */
+function billParts(db: MunyDb, month: string, excluded: string[]) {
+  return db
+    .all<{ cents: number }>(sql`
+      select t.amount_cents as cents
+        from transactions t
+        join recurring_series r on r.id = t.recurring_series_id
+       where t.hidden = 0 and t.amount_cents < 0 and r.kind <> 'income'
+         and (r.category_id is null or r.category_id not in (${idList(excluded)}))
+         and t.posted_date between ${`${month}-01`} and ${monthEnd(month)}
+    `)
+    .map((p) => Number(p.cents));
+}
+
+const BUDGET_ROW_LABELS: Record<BudgetRowId, CategoryActivity["category"]> = {
+  [EVERYTHING_ELSE]: {
+    id: EVERYTHING_ELSE,
+    name: "Everything else",
+    groupName: "Spending with no category",
+    kind: "expense",
+  },
+  [EARNINGS]: {
+    id: EARNINGS,
+    name: "Earnings",
+    groupName: "Money in your income categories",
+    kind: "income",
+  },
+  [BILLS]: {
+    id: BILLS,
+    name: "Bills & subscriptions",
+    groupName: "Charges from your recurring bills and subscriptions",
+    kind: "expense",
+  },
+};
+
+export const isBudgetRow = (id: string): id is BudgetRowId =>
+  (BUDGET_ROWS as readonly string[]).includes(id);
+
+/**
+ * A budget page row as a category, matching the row's numbers: Everything
+ * else (uncategorized spending), Earnings (income categories) and Bills &
+ * subscriptions (charges from recurring bills), month by month.
+ */
+export function budgetRowActivity(
+  db: MunyDb,
+  row: BudgetRowId,
+  month: string,
+  end: string,
+  span = 12,
+): CategoryActivity {
+  const first = addMonths(end, -(span - 1));
+  const months = monthsBetween(first, end);
+  const byMonth = new Map<string, number>();
+  let amounts: number[];
+  if (row === BILLS) {
+    const excluded = excludedCategoryIds(db);
+    for (const [m, cents] of recurringPaidByMonth(db, months, excluded)) byMonth.set(m, cents);
+    amounts = billParts(db, month, excluded).map((c) => -c);
+  } else {
+    const meta = categoryMeta(db);
+    const income = [...meta.values()].filter((c) => c.kind === "income").map((c) => c.id);
+    const sign = row === EARNINGS ? 1 : -1;
+    for (const t of monthlyCategoryTotals(db, `${first}-01`, monthEnd(end))) {
+      const counts =
+        row === EARNINGS
+          ? t.categoryId !== null && meta.get(t.categoryId)?.kind === "income"
+          : t.categoryId === null;
+      if (counts) byMonth.set(t.month, (byMonth.get(t.month) ?? 0) + sign * t.cents);
+    }
+    amounts = partsIn(db, month, row === EARNINGS ? income : "uncategorized").map((c) => sign * c);
+  }
   const total = amounts.reduce((s, x) => s + x, 0);
   return {
-    category: {
-      id: EVERYTHING_ELSE,
-      name: "Everything else",
-      groupName: "Spending with no category",
-      kind: "expense",
-    },
+    category: BUDGET_ROW_LABELS[row],
     month,
-    months: monthsBetween(first, end).map((m) => ({ month: m, cents: byMonth.get(m) ?? 0 })),
+    months: months.map((m) => ({ month: m, cents: byMonth.get(m) ?? 0 })),
     budget: null,
     stats: {
       count: amounts.length,
