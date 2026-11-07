@@ -1,6 +1,5 @@
 import {
   type CardDetailsInput,
-  type CardStatementPreview,
   type CardsReport,
   type CreditCard,
   formatMoney,
@@ -12,7 +11,11 @@ import { FileText, Link2, Pencil } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { LineChart } from "../components/charts.js";
 import { Modal } from "../components/forms.js";
-import { TeachButton } from "../components/TeachStatement.js";
+import {
+  StatementBadge,
+  StatementImporter,
+  useStatementStatus,
+} from "../components/StatementImporter.js";
 import { Alert, Button, Card, cx, Field, PageHeader } from "../components/ui.js";
 import { api } from "../lib/api.js";
 import { keys, useAccounts } from "../lib/queries.js";
@@ -139,247 +142,6 @@ function CardForm({ card, onDone }: { card: CreditCard; onDone: () => void }) {
         <Button type="submit">Save</Button>
       </div>
     </form>
-  );
-}
-
-function toBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result).replace(/^data:[^,]*,/, ""));
-    r.onerror = () => reject(new Error("Couldn't read the file"));
-    r.readAsDataURL(file);
-  });
-}
-
-/** One or more card statement PDFs: each matched to a card by its last 4 digits. */
-function StatementImport({
-  cards,
-  onDone,
-  forCard,
-}: {
-  cards: CreditCard[];
-  onDone: () => void;
-  /** Opened from a card: statements go to it unless their last 4 say otherwise. */
-  forCard?: string;
-}) {
-  const [addTxns, setAddTxns] = useState(true);
-  const qc = useQueryClient();
-  const [items, setItems] = useState<
-    {
-      name: string;
-      base64: string;
-      preview: CardStatementPreview | null;
-      error: string | null;
-      accountId: string;
-    }[]
-  >([]);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const read = async (files: FileList | null) => {
-    if (!files?.length) return;
-    const out: typeof items = [];
-    let i = 0;
-    for (const file of [...files]) {
-      setBusy(`Reading ${++i} of ${files.length}…`);
-      try {
-        const base64 = await toBase64(file);
-        const preview = await api.post<CardStatementPreview>("/api/cards/statements/preview", {
-          pdfBase64: base64,
-        });
-        out.push({
-          name: file.name,
-          base64,
-          preview,
-          error: null,
-          accountId: preview.accountId ?? forCard ?? cards[0]?.accountId ?? "",
-        });
-      } catch (err) {
-        out.push({
-          name: file.name,
-          base64: "",
-          preview: null,
-          error: err instanceof Error ? err.message : "Couldn't read it",
-          accountId: "",
-        });
-      }
-    }
-    out.sort((a, b) =>
-      (a.preview?.statement.closingDate ?? "").localeCompare(
-        b.preview?.statement.closingDate ?? "",
-      ),
-    );
-    setItems(out);
-    setBusy(null);
-  };
-  /** Read every chosen statement again (after teaching Muny a layout). */
-  const reread = async () => {
-    setBusy("Reading again…");
-    const out: typeof items = [];
-    for (const it of items) {
-      if (!it.base64) {
-        out.push(it);
-        continue;
-      }
-      try {
-        const preview = await api.post<CardStatementPreview>("/api/cards/statements/preview", {
-          pdfBase64: it.base64,
-        });
-        out.push({ ...it, preview, accountId: it.accountId || preview.accountId || "" });
-      } catch {
-        out.push(it);
-      }
-    }
-    setItems(out);
-    setBusy(null);
-  };
-  const apply = async () => {
-    setError(null);
-    try {
-      let i = 0;
-      const ok = items.filter((x) => x.preview && x.accountId);
-      for (const it of ok) {
-        setBusy(`Updating from statement ${++i} of ${ok.length}…`);
-        await api.post("/api/cards/statements/apply", {
-          accountId: it.accountId,
-          statement: it.preview?.statement,
-          pdfBase64: it.base64,
-          fileName: it.name,
-          cardName: cards.find((c) => c.accountId === it.accountId)?.name,
-          addTransactions: addTxns,
-        });
-      }
-      await qc.invalidateQueries({ queryKey: keys.accounts });
-      await qc.invalidateQueries({ queryKey: ["documents"] });
-      onDone();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't apply them");
-      setBusy(null);
-    }
-  };
-  return (
-    <div className="space-y-4">
-      {error && <Alert>{error}</Alert>}
-      <p className="text-sm text-slate-600 dark:text-slate-400">
-        Choose one or more card statement PDFs. Muny reads the new balance, minimum payment, due
-        date, credit limit and purchase APR (US statements all use the same labels), and picks the
-        card by its last 4 digits. The newest statement sets the card's figures; each PDF is kept
-        under Insights → Documents.
-      </p>
-      <input
-        type="file"
-        multiple
-        accept="application/pdf,.pdf"
-        disabled={!!busy}
-        onChange={(e) => void read(e.target.files)}
-        className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-brand-600 file:px-3 file:py-1.5 file:text-white"
-      />
-      {busy && <p className="text-sm text-slate-500">{busy}</p>}
-      {items.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[40rem] text-sm">
-            <thead className="text-xs text-slate-500">
-              <tr>
-                <th className="py-1.5 text-left font-medium">File</th>
-                <th className="py-1.5 text-left font-medium">Card</th>
-                <th className="py-1.5 text-right font-medium">Closed</th>
-                <th className="py-1.5 text-right font-medium">Balance</th>
-                <th className="py-1.5 text-right font-medium">Minimum</th>
-                <th className="py-1.5 text-right font-medium">Due</th>
-                <th className="py-1.5 text-right font-medium">Lines</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {items.map((it, k) => {
-                const s = it.preview?.statement;
-                return (
-                  <tr key={it.name}>
-                    <td className="max-w-44 py-2">
-                      <span className="block truncate">{it.name}</span>
-                      {s &&
-                        (s.newBalanceCents === null ||
-                          s.dueDate === null ||
-                          s.minimumPaymentCents === null) && (
-                          <TeachButton
-                            kind="card"
-                            lines={it.preview?.lines ?? []}
-                            onSaved={() => void reread()}
-                          />
-                        )}
-                      {!!it.preview?.templates.length && (
-                        <span className="block text-[11px] text-slate-500">
-                          Read with {it.preview.templates.join(", ")}
-                        </span>
-                      )}
-                    </td>
-                    {s ? (
-                      <>
-                        <td className="py-2">
-                          <select
-                            aria-label={`Card for ${it.name}`}
-                            value={it.accountId}
-                            onChange={(e) =>
-                              setItems((xs) =>
-                                xs.map((x, j) =>
-                                  j === k ? { ...x, accountId: e.target.value } : x,
-                                ),
-                              )
-                            }
-                            className="rounded border border-slate-300 bg-white px-1.5 py-1 text-xs dark:border-slate-700 dark:bg-slate-950"
-                          >
-                            {cards.map((c) => (
-                              <option key={c.accountId} value={c.accountId}>
-                                {c.name}
-                                {c.mask ? ` ••${c.mask}` : ""}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="py-2 text-right whitespace-nowrap">{day(s.closingDate)}</td>
-                        <td className="py-2 text-right tabular-nums">{money(s.newBalanceCents)}</td>
-                        <td className="py-2 text-right tabular-nums">
-                          {money(s.minimumPaymentCents)}
-                        </td>
-                        <td className="py-2 text-right whitespace-nowrap">{day(s.dueDate)}</td>
-                        <td className="py-2 text-right tabular-nums">{s.transactions.length}</td>
-                      </>
-                    ) : (
-                      <td colSpan={6} className="py-2 text-red-600">
-                        {it.error}
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {items.some((x) => x.preview?.statement.transactions.length) && (
-        <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={addTxns}
-            onChange={(e) => setAddTxns(e.target.checked)}
-            className="mt-0.5 accent-brand-600"
-          />
-          <span>
-            Add the statements' transactions to the card
-            <span className="block text-xs text-slate-500">
-              Purchases, payments, interest and fees listed on them; ones already in Muny (same
-              amount within a few days) are skipped. Your rules run on the new ones.
-            </span>
-          </span>
-        </label>
-      )}
-      <div className="flex justify-end gap-2">
-        <Button variant="secondary" onClick={onDone}>
-          Cancel
-        </Button>
-        <Button disabled={!items.some((x) => x.preview) || !!busy} onClick={() => void apply()}>
-          Update cards
-        </Button>
-      </div>
-    </div>
   );
 }
 
@@ -610,9 +372,10 @@ function LinkPayments({ card, onDone }: { card: CreditCard; onDone: () => void }
   );
 }
 
-function CardTile({ card, all }: { card: CreditCard; all: CreditCard[] }) {
+function CardTile({ card }: { card: CreditCard }) {
   const [editing, setEditing] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const statements = useStatementStatus();
   const [linking, setLinking] = useState(false);
   const u = card.utilizationPct;
   const due = card.dueDate ? daysUntil(card.dueDate) : null;
@@ -659,6 +422,7 @@ function CardTile({ card, all }: { card: CreditCard; all: CreditCard[] }) {
           <p className="text-xs text-slate-500">
             {[card.issuer, card.mask && `••${card.mask}`].filter(Boolean).join(" · ")}
           </p>
+          <StatementBadge status={statements.data?.get(card.accountId)} className="block" />
         </div>
         <div className="text-right">
           <p className="text-xs text-slate-500">Owed</p>
@@ -724,7 +488,7 @@ function CardTile({ card, all }: { card: CreditCard; all: CreditCard[] }) {
             <>
               Pay the statement balance of{" "}
               <strong>{formatMoney(card.statementBalanceCents)}</strong>
-              {card.dueDate && <> by {day(card.dueDate)}</>} to avoid interest.
+              {card.dueDate && <> by {day(card.dueDate)}</>} to avoid late fees.
             </>
           )}
           {card.interestThisYearCents > 0 && (
@@ -801,9 +565,9 @@ function CardTile({ card, all }: { card: CreditCard; all: CreditCard[] }) {
         wide
       >
         {uploading && (
-          <StatementImport
-            cards={all}
-            forCard={card.accountId}
+          <StatementImporter
+            forAccount={card.accountId}
+            defaultType="credit"
             onDone={() => setUploading(false)}
           />
         )}
@@ -829,11 +593,9 @@ export function CardsPage() {
             >
               Add a card
             </Link>
-            {r?.cards.length ? (
-              <Button onClick={() => setImporting(true)}>
-                <FileText aria-hidden="true" className="mr-1 inline size-4" /> Import statements
-              </Button>
-            ) : null}
+            <Button onClick={() => setImporting(true)}>
+              <FileText aria-hidden="true" className="mr-1 inline size-4" /> Import statements
+            </Button>
           </span>
         }
       />
@@ -873,17 +635,12 @@ export function CardsPage() {
             <Tile label="Interest this year" value={formatMoney(r.interestThisYearCents)} />
           </div>
           {r.cards.map((c) => (
-            <CardTile key={c.accountId} card={c} all={r.cards} />
+            <CardTile key={c.accountId} card={c} />
           ))}
         </div>
       )}
-      <Modal
-        open={importing}
-        onClose={() => setImporting(false)}
-        title="Import card statements"
-        wide
-      >
-        {importing && r && <StatementImport cards={r.cards} onDone={() => setImporting(false)} />}
+      <Modal open={importing} onClose={() => setImporting(false)} title="Import statements" wide>
+        {importing && <StatementImporter defaultType="credit" onDone={() => setImporting(false)} />}
       </Modal>
     </>
   );

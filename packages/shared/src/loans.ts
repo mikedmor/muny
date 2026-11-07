@@ -370,6 +370,8 @@ export interface DocumentInfo {
   /** Loan statements: the statement date. */
   documentDate: string | null;
   notes: string | null;
+  /** The account a statement belongs to. */
+  accountId: string | null;
   createdAt: number;
 }
 

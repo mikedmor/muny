@@ -948,6 +948,8 @@ export const documents = sqliteTable(
     notes: text(),
     /** Your own folder for uploads, e.g. "Car" or "Taxes / 2026" (statements file themselves). */
     folder: text(),
+    /** The account a statement belongs to (for which statements you have). */
+    accountId: text().references(() => accounts.id, { onDelete: "set null" }),
     encrypted: integer({ mode: "boolean" }).notNull().default(false),
     data: blob({ mode: "buffer" }).notNull(),
     createdAt: createdAt(),

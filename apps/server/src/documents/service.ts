@@ -36,6 +36,7 @@ const info = (r: typeof schema.documents.$inferSelect): DocumentInfo => ({
   lender: r.lender,
   documentDate: r.documentDate,
   notes: r.notes,
+  accountId: r.accountId,
   createdAt: r.createdAt.getTime(),
 });
 
@@ -75,6 +76,7 @@ function taxDocuments(db: MunyDb): DocumentInfo[] {
       lender: wallet.get(d.walletId) ?? null,
       documentDate: `${d.year}-12-31`,
       notes: `${d.kind} from ${wallet.get(d.walletId) ?? "an exchange"}`,
+      accountId: null,
       createdAt: d.uploadedAt,
     });
   const yearsOf = (rows: { y: string | number | null }[]) =>
@@ -107,6 +109,7 @@ function taxDocuments(db: MunyDb): DocumentInfo[] {
     lender: null,
     documentDate: year === thisYear ? null : `${year}-12-31`,
     notes,
+    accountId: null,
     createdAt: Date.now(),
   });
   for (const y of txnYears)
@@ -156,6 +159,7 @@ export function saveDocument(
     documentDate?: string | null;
     notes?: string | null;
     folder?: string | null;
+    accountId?: string | null;
   },
 ): DocumentInfo {
   const sha256 = createHash("sha256").update(input.bytes).digest("hex");
@@ -176,6 +180,8 @@ export function saveDocument(
       ...(input.lender ? { lender: input.lender } : {}),
       ...(input.documentDate ? { documentDate: input.documentDate } : {}),
       ...(input.notes ? { notes: input.notes } : {}),
+      ...(input.accountId ? { accountId: input.accountId } : {}),
+      ...(input.folder ? { folder: input.folder } : {}),
     };
     if (Object.keys(patch).length)
       db.update(schema.documents).set(patch).where(eq(schema.documents.id, existing.id)).run();
@@ -192,6 +198,7 @@ export function saveDocument(
     documentDate: input.documentDate ?? null,
     notes: input.notes ?? null,
     folder: input.folder?.trim() || null,
+    accountId: input.accountId ?? null,
     encrypted: !!secret,
     data: secret ? encryptBytes(secret, input.bytes) : input.bytes,
   };

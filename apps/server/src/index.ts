@@ -10,6 +10,7 @@ import { pairLoanPayments, pairPayPalFunding } from "./ledger/transfers.js";
 import { refreshManualLoans } from "./loans/service.js";
 import { rescanRecurring } from "./recurring/service.js";
 import { markCategoryMoves } from "./savings/buckets.js";
+import { linkStatementDocuments } from "./statements/status.js";
 import { startSyncScheduler } from "./sync/engine.js";
 import { VERSION } from "./version.js";
 
@@ -25,6 +26,7 @@ async function main() {
     pairPayPalFunding(tx);
     markCategoryMoves(tx as unknown as typeof db);
     anchorAllCards(tx as unknown as typeof db);
+    linkStatementDocuments(tx as unknown as typeof db);
     rescanRecurring(tx);
     refreshManualLoans(tx as unknown as typeof db);
   });

@@ -156,6 +156,7 @@ export function registerCardRoutes(app: FastifyInstance, db: MunyDb, secret?: Bu
           kind: "card_statement",
           lender: body.cardName ?? null,
           documentDate: body.statement.closingDate,
+          accountId: body.accountId,
         });
     }
     log(user.id, "card.statement.apply", body.accountId);

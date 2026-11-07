@@ -10,6 +10,11 @@ import { type FormEvent, useState } from "react";
 import { AccountAlertsButton, useAccountAlerts } from "../components/AccountAlerts.js";
 import { BankConnections } from "../components/BankConnections.js";
 import { Checkbox, Modal, MoneyField, SelectField } from "../components/forms.js";
+import {
+  ImportStatementsButton,
+  StatementBadge,
+  useStatementStatus,
+} from "../components/StatementImporter.js";
 import { Alert, Button, Card, cx, Field, PageHeader } from "../components/ui.js";
 import { ApiError } from "../lib/api.js";
 import {
@@ -45,6 +50,7 @@ function formatDate(iso: string | null) {
 export function AccountsPage() {
   const accounts = useAccounts();
   const alerts = useAccountAlerts();
+  const statements = useStatementStatus();
   const [editing, setEditing] = useState<Account | "new" | null>(null);
   const [showHidden, setShowHidden] = useState(false);
 
@@ -60,7 +66,12 @@ export function AccountsPage() {
     <>
       <PageHeader
         title="Accounts"
-        actions={<Button onClick={() => setEditing("new")}>Add account</Button>}
+        actions={
+          <span className="flex flex-wrap gap-2">
+            <ImportStatementsButton />
+            <Button onClick={() => setEditing("new")}>Add account</Button>
+          </span>
+        }
       />
 
       {accounts.isError && <Alert>Couldn't load accounts.</Alert>}
@@ -134,9 +145,14 @@ export function AccountsPage() {
                               {(a.institutionName || a.mask) && " · "}
                               {formatDate(a.lastTransactionDate)}
                             </p>
+                            <StatementBadge
+                              status={statements.data?.get(a.id)}
+                              className="block truncate"
+                            />
                           </div>
                           <Money cents={displayCents(a)} className="shrink-0 font-medium" />
                         </button>
+                        <ImportStatementsButton forAccount={a} variant="icon" />
                         <AccountAlertsButton account={a} settings={alerts.data?.[a.id]} />
                       </li>
                     ))}

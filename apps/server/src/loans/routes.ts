@@ -362,6 +362,7 @@ export function registerLoanRoutes(
           kind: "loan_statement",
           lender: body.lender ?? null,
           documentDate: body.statement.statementDate,
+          accountId,
         });
     }
     log(user.id, "loan.statement.apply", accountId);

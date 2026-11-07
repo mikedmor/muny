@@ -135,7 +135,7 @@ export async function buildApp({
   registerLoanRoutes(app, db, config.secretKey);
   registerDocumentRoutes(app, db, config.secretKey);
   registerCardRoutes(app, db, config.secretKey);
-  registerStatementTemplateRoutes(app, db);
+  registerStatementTemplateRoutes(app, db, config.secretKey);
   registerAssetRoutes(app, db, {
     fetch: priceFetch,
     secretKey: config.secretKey,

@@ -18,12 +18,17 @@ import { Download, Pencil, Plus, X } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { LineChart } from "../components/charts.js";
 import { Modal } from "../components/forms.js";
+import {
+  ImportStatementsButton,
+  StatementBadge,
+  useStatementStatus,
+} from "../components/StatementImporter.js";
 import { Alert, Button, Card, cx, Field, PageHeader } from "../components/ui.js";
 import { api } from "../lib/api.js";
 import { openPlaidLink } from "../lib/bankWidgets.js";
 import { keys, linkApi, useAccounts } from "../lib/queries.js";
 import { LenderLoansForm, LenderPaymentsStrip } from "./loans/LenderLoans.js";
-import { LoanLinkPaymentsButton, LoanStatementButton } from "./loans/LoanStatementImport.js";
+import { LoanLinkPaymentsButton } from "./loans/LoanStatementImport.js";
 import { PayoffPlan } from "./loans/PayoffPlan.js";
 import { StatementImportButton, StatementStatus } from "./loans/StatementImport.js";
 
@@ -920,6 +925,7 @@ function LoanCard({
   fee?: LenderFee;
 }) {
   const qc = useQueryClient();
+  const statements = useStatementStatus();
   const [editing, setEditing] = useState(false);
   const [addingFee, setAddingFee] = useState(false);
   const canAddFee = !embedded && !fee && !!loan.lender && loan.kind !== "mortgage";
@@ -1001,6 +1007,7 @@ function LoanCard({
               .filter(Boolean)
               .join(" · ")}
           </p>
+          <StatementBadge status={statements.data?.get(loan.accountId)} className="block" />
         </div>
         <div className="text-right">
           <p className="text-xs text-slate-500">Owed</p>
@@ -1029,7 +1036,10 @@ function LoanCard({
               !loan.connected &&
               loan.lender && <StatementImportButton lender={loan.lender} loans={[loan]} />
             ) : (
-              <LoanStatementButton loan={loan} />
+              <ImportStatementsButton
+                forAccount={{ id: loan.accountId, name: loan.name, type: "loan" }}
+                variant="link"
+              />
             )}
             {canAddFee && (
               <button
@@ -1270,9 +1280,12 @@ export function LoansPage() {
       <PageHeader
         title="Loans"
         actions={
-          <Button onClick={() => setAdding(true)}>
-            <Plus aria-hidden="true" className="mr-1 inline size-4" /> Add a loan
-          </Button>
+          <span className="flex flex-wrap gap-2">
+            <ImportStatementsButton defaultType="loan" />
+            <Button onClick={() => setAdding(true)}>
+              <Plus aria-hidden="true" className="mr-1 inline size-4" /> Add a loan
+            </Button>
+          </span>
         }
       />
       {q.error && <Alert>{q.error.message}</Alert>}

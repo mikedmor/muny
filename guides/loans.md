@@ -21,7 +21,7 @@ Loans with the same lender share one card on the Loans page, with a tab for each
 
 ### Statements for any loan
 
-Every loan (mortgage, auto, personal…) has **Import statements**: choose one or more statement PDFs and Muny reads the statement and due dates, what you owe, the rate, the regular payment and the last payment, using the labels most servicers print. The newest statement sets the loan's rate, payment and due date (and, for a loan tracked from your payments, what you owe from its date); each one records what you owed that day, for the loan's history. Each PDF is kept under Insights → Documents. A statement covering several loan groups (federal student loans) is imported on the lender's card, below.
+Every loan (mortgage, auto, personal…) has **Import statements** (and so does the top of the page, which can add a loan from its statement): choose one or more statement PDFs and Muny reads the statement and due dates, what you owe, the rate, the regular payment and the last payment, using the labels most servicers print. The newest statement sets the loan's rate, payment and due date (and, for a loan tracked from your payments, what you owe from its date); each one records what you owed that day, for the loan's history. Each PDF is kept under Insights → Documents. A statement covering several loan groups (federal student loans) is imported on the lender's card, below.
 
 If one doesn't read fully, **Teach Muny** under its name works the same way as for cards (see [Credit cards](cards.md)).
 

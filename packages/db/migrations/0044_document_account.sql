@@ -1,0 +1,1 @@
+ALTER TABLE `documents` ADD `account_id` text REFERENCES accounts(id) ON DELETE set null;
