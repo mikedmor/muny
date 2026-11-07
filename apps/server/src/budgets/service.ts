@@ -302,6 +302,24 @@ export const BILL_CATEGORIES = sql`(select id from categories where is_bill = 1 
  * bills and subscriptions, and anything in a bill category (split parts
  * included). A transaction counts once.
  */
+/**
+ * The overall budget for a month. With no overall budget set, it's the category
+ * budgets added up, the same figure the Overview shows.
+ */
+export function overallBudget(b: BudgetMonth): {
+  budgetCents: number | null;
+  availableCents: number | null;
+} {
+  const budget = b.total.budgetCents ?? (b.budgetedCents > 0 ? b.budgetedCents : null);
+  return {
+    budgetCents: budget,
+    availableCents:
+      b.total.budgetCents !== null || budget === null
+        ? b.total.availableCents
+        : budget + b.total.rolloverCents - b.total.spentCents,
+  };
+}
+
 export function billCharges(
   db: Db,
   from: string,

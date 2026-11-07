@@ -3,7 +3,7 @@ import { type MunyDb, schema } from "@muny/db";
 import { addMonthsToMonth, type DataRow, resolveRange } from "@muny/shared";
 import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { listAssets } from "../assets/service.js";
-import { budgetMonth } from "../budgets/service.js";
+import { budgetMonth, overallBudget } from "../budgets/service.js";
 import { cardsReport } from "../cards/service.js";
 import { getCryptoSettings, priceState } from "../crypto/prices.js";
 import { cryptoOverview, listWallets } from "../crypto/service.js";
@@ -210,6 +210,8 @@ const netWorth: Reader = (db, range, today) => {
     debts: p.debtsCents,
     net: p.netCents,
     cash: cash[i]?.cents ?? 0,
+    crypto: p.cryptoCents,
+    estimated: p.estimated,
   }));
 };
 
@@ -254,7 +256,7 @@ const budgets: Reader = (db, range, today) =>
       is_bill: l.isBill,
     });
     return [
-      line(b.total, "total", "Total spending", null),
+      line({ ...b.total, ...overallBudget(b) }, "total", "Total spending", null),
       line(b.income, "income", "Earnings", null),
       line(b.bills, "bills", "Bills & subscriptions", null),
       line(b.other, "other", "Everything else", null),

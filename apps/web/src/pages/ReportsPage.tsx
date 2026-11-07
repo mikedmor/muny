@@ -458,7 +458,10 @@ function NetWorthTab() {
                 <tbody>
                   {[...r.points].reverse().map((p) => (
                     <tr key={p.date} className="border-b border-slate-100 dark:border-slate-800/60">
-                      <td className="px-2 py-1.5">{p.date}</td>
+                      <td className="px-2 py-1.5">
+                        {p.date}
+                        {p.estimated && <span className="ml-1 text-xs text-slate-500">est.</span>}
+                      </td>
                       <td className={cx(td, "text-right")}>{formatMoney(p.assetsCents)}</td>
                       <td className={cx(td, "text-right")}>{formatMoney(p.debtsCents)}</td>
                       <td className={cx(td, "text-right font-medium")}>
@@ -472,8 +475,9 @@ function NetWorthTab() {
           </>
         )}
         <p className="mt-2 text-xs text-slate-500">
-          Past values are worked out from today's balances and your transaction history. Property
-          and other accounts without transactions use the values you've entered over time.
+          Past values are worked out from today's balances and your transaction history. Assets
+          include crypto. Property changes evenly between the values you've entered, so those dates
+          are marked est. in the table.
         </p>
       </Card>
       {r && r.byType.length > 0 && (
@@ -484,7 +488,11 @@ function NetWorthTab() {
               .sort((a, b) => b.cents - a.cents)
               .map((b) => (
                 <li key={b.type} className="flex justify-between py-1.5">
-                  <span>{ACCOUNT_TYPE_LABELS[b.type as AccountType] ?? b.type}</span>
+                  <span>
+                    {b.type === "crypto"
+                      ? "Crypto"
+                      : (ACCOUNT_TYPE_LABELS[b.type as AccountType] ?? b.type)}
+                  </span>
                   <span className="tabular-nums">{formatMoney(b.cents)}</span>
                 </li>
               ))}

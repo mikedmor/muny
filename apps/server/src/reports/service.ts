@@ -12,7 +12,8 @@ import {
   type SpendingReport,
 } from "@muny/shared";
 import { and, eq, gte, isNull, lte, sql } from "drizzle-orm";
-import { budgetMonth } from "../budgets/service.js";
+import { budgetMonth, overallBudget } from "../budgets/service.js";
+import { cryptoValuesOn } from "../crypto/service.js";
 import { listAccounts } from "../ledger/accounts.js";
 import { localToday } from "../lib/dates.js";
 import { listSeries, merchantKey, upcoming } from "../recurring/service.js";
@@ -171,6 +172,7 @@ export function monthlyReport(db: Db, fromMonth: string, toMonth: string): Month
 /** Balances as of a past date: walk transactions back from today, or use snapshots. */
 export function balanceHistory(db: Db, includeExcluded = false) {
   const accounts = listAccounts(db).filter((a) => includeExcluded || !a.excludeFromReports);
+  const spreadable = new Set(accounts.filter((a) => a.type === "asset").map((a) => a.id));
   const t = schema.transactions;
   const txns = db
     .select({ accountId: t.accountId, date: t.postedDate, cents: t.amountCents })
@@ -197,6 +199,18 @@ export function balanceHistory(db: Db, includeExcluded = false) {
       return now - list.filter((x) => x.date > date).reduce((s, x) => s + x.cents, 0);
     const sn = snaps.get(accountId);
     if (sn?.length) {
+      const span = spreadSpan(accountId, date);
+      if (span) {
+        const [before, after] = span;
+        const days = (a: string, b: string) => (Date.parse(a) - Date.parse(b)) / 86_400_000;
+        return (
+          before.cents +
+          Math.round(
+            ((after.cents - before.cents) * days(date, before.date)) /
+              days(after.date, before.date),
+          )
+        );
+      }
       let v = sn[0]?.cents ?? now;
       for (const s of sn) if (s.date <= date) v = s.cents;
       return v;
@@ -204,23 +218,52 @@ export function balanceHistory(db: Db, includeExcluded = false) {
     return now;
   };
 
-  return { accounts, balanceAt };
+  /**
+   * The two recorded values a date falls between, for things valued now and then
+   * (a home, a car): more than a year of change shouldn't land on the day it's
+   * written down. Accounts with transactions or reported balances don't apply.
+   */
+  const spreadSpan = (accountId: string, date: string) => {
+    if (!spreadable.has(accountId) || byAccount.get(accountId)?.length) return null;
+    const sn = snaps.get(accountId) ?? [];
+    const next = sn.findIndex((s) => s.date > date);
+    if (next <= 0) return null;
+    const before = sn[next - 1] as { date: string; cents: number };
+    const after = sn[next] as { date: string; cents: number };
+    return before.date === date ? null : ([before, after] as const);
+  };
+
+  /** Whether this account's value on a date is worked out rather than recorded. */
+  const estimatedAt = (accountId: string, date: string) => spreadSpan(accountId, date) !== null;
+
+  return { accounts, balanceAt, estimatedAt };
 }
 
 export function netWorthReport(db: Db, dates: string[]): NetWorthReport {
-  const { accounts, balanceAt } = balanceHistory(db);
-  const points: NetWorthPoint[] = dates.map((date) => {
-    let assets = 0;
+  const { accounts, balanceAt, estimatedAt } = balanceHistory(db);
+  const crypto = cryptoValuesOn(db, dates);
+  const points: NetWorthPoint[] = dates.map((date, i) => {
+    const cryptoCents = crypto[i] ?? 0;
+    let assets = cryptoCents;
     let debts = 0;
     for (const a of accounts) {
       const b = balanceAt(a.id, a.balanceCents, date);
       if (LIABILITY_TYPES.has(a.type) || b < 0) debts -= b;
       else assets += b;
     }
-    return { date, assetsCents: assets, debtsCents: debts, netCents: assets - debts };
+    return {
+      date,
+      assetsCents: assets,
+      debtsCents: debts,
+      netCents: assets - debts,
+      cryptoCents,
+      estimated: accounts.some((a) => estimatedAt(a.id, date)),
+    };
   });
   const byTypeMap = new Map<string, number>();
   for (const a of accounts) byTypeMap.set(a.type, (byTypeMap.get(a.type) ?? 0) + a.balanceCents);
+  const cryptoNow = cryptoValuesOn(db, [dates[dates.length - 1] ?? ""])[0] ?? 0;
+  if (cryptoNow > 0) byTypeMap.set("crypto", cryptoNow);
   return { points, byType: [...byTypeMap].map(([type, cents]) => ({ type, cents })) };
 }
 
@@ -376,7 +419,7 @@ export function overview(db: Db, today = localToday()): Overview {
     },
     incomeMonthToDateCents: monthly?.incomeCents ?? 0,
     budget: anyBudget
-      ? { budgetCents: b.total.budgetCents ?? b.budgetedCents, spentCents: b.total.spentCents }
+      ? { budgetCents: overallBudget(b).budgetCents, spentCents: b.total.spentCents }
       : null,
     upcoming: upcoming(db, today, addDays(today, 7), today)
       .filter((u) => u.amountCents < 0)

@@ -66,7 +66,7 @@ Enter the home's **original value** (the lower of the purchase price and the ori
 
 ## Assets and equity
 
-On **Assets**, add your home with what it's worth now and what you paid. Update the value now and then (a home value site's estimate is fine); each update is kept, so you see its value over time, and it counts toward net worth. In the mortgage's **Edit details**, pick it as **The home** to see your equity and loan-to-value on both pages.
+On **Assets**, add your home with what it's worth now and what you paid. Update the value now and then (a home value site's estimate is fine); each update is kept, so you see its value over time, and it counts toward net worth. Net worth history spreads a change evenly between two values you've entered, and marks those dates as estimated, so years of change don't land on the day you update it. In the mortgage's **Edit details**, pick it as **The home** to see your equity and loan-to-value on both pages.
 
 For an asset with no loan linked (a car you own outright, say), set **Owed on it** yourself, or click **Paid off**.
 

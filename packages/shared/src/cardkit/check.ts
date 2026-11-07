@@ -88,6 +88,35 @@ function checkQuery(
   return dataset;
 }
 
+/** What this kind of block can't draw without. Hidden values don't count. */
+function missingFields(block: CardBlock): string[] {
+  const info = BLOCK_KIND_INFO[block.kind];
+  if (!info.query) return [];
+  const out: string[] = [];
+  if (!block.query) {
+    // A big number or progress bar can run on formulas alone.
+    if (info.requiresQuery)
+      out.push(`${info.label} needs data: choose a dataset and what to show.`);
+    return out;
+  }
+  for (const query of [block.query, ...(block.layers ?? [])]) {
+    const dims = query.dimensions?.length ?? 0;
+    const measures = (query.measures ?? []).filter((m) => !m.hidden).length;
+    const slots = info.dimensions
+      .slice(0, info.minDimensions)
+      .map((d) => d.label.toLowerCase())
+      .join(" and ");
+    if (dims < info.minDimensions) out.push(`${info.label} needs a field for ${slots}.`);
+    if (measures < info.measures[0])
+      out.push(
+        `${info.label} needs ${info.measures[0] === 1 ? "a value" : `${info.measures[0]} values`} to show.`,
+      );
+    if (dims === 0 && measures === 0 && !query.measures?.length)
+      out.push(`${info.label}: choose a field or a value to show from ${query.dataset}.`);
+  }
+  return [...new Set(out)];
+}
+
 function checkBlock(block: CardBlock, metrics: Set<string>, report: (message: string) => void) {
   const info = BLOCK_KIND_INFO[block.kind];
   if (block.query) checkQuery(block.query, metrics, report);
@@ -109,6 +138,7 @@ function checkBlock(block: CardBlock, metrics: Set<string>, report: (message: st
   if (o.link && !INTERNAL_LINK.test(o.link.to))
     report(`Links go to a page inside Muny, like /budgets, not "${o.link.to}".`);
   if (!info.query && block.query) report(`${info.label} doesn't use data.`);
+  for (const message of missingFields(block)) report(message);
 }
 
 export function checkCardDoc(doc: CardDoc): CardIssue[] {

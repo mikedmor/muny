@@ -122,7 +122,7 @@ export function cardsReport(db: Db, today = localToday()): CardsReport {
           gte(t.postedDate, yearAgo),
           sql`${t.amountCents} < 0`,
           sql`${schema.accounts.type} <> 'credit'`,
-          eq(t.pending, false),
+          // Pending counts: a payment on its way has left your account.
           sql`instr(lower(${t.rawDescription}), lower(${words})) > 0`,
         ),
       )

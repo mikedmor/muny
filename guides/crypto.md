@@ -56,3 +56,5 @@ Muny's numbers are a starting point for you or your accountant, not tax advice.
 ## Request limits
 
 Every call to price and sync services is counted, and Muny stays well under each service's free limits however often anyone presses refresh. Usage is shown in Crypto → Settings → Request limits.
+
+Your crypto counts toward net worth, valued at each date's price. Coins you've hidden don't count.

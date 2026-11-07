@@ -912,6 +912,12 @@ function fillGroups(
 function runQuery(runner: Runner, query: CardQuery): QueryResult {
   const dataset = DATASET_BY_ID.get(query.dataset);
   if (!dataset) throw new ExprError(`There's no dataset called "${query.dataset}".`);
+  if (!query.dimensions?.length && !query.measures?.length)
+    throw new ExprError(
+      `Nothing to show from ${dataset.label}: add dimensions or measures. Its fields: ${dataset.fields
+        .map((f) => f.id)
+        .join(", ")}.`,
+    );
   const { rows, resolved } = loadRows(
     runner,
     dataset,

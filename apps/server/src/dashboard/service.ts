@@ -357,12 +357,8 @@ export function getDashboard(db: Db, userId: string): Dashboard {
   };
 }
 
-export function saveLayout(
-  db: Db,
-  userId: string,
-  cards: string[],
-  columns?: ManualColumns,
-): Dashboard {
+/** Refuse a layout that names unknown cards or holds one twice. */
+export function assertLayout(db: Db, cards: string[], columns?: ManualColumns) {
   const known = knownCards(db);
   const seen = new Set<string>();
   for (const c of cards) {
@@ -377,6 +373,15 @@ export function saveLayout(
     if (new Set(placed).size !== placed.length)
       throw badRequest("Columns can hold each card only once");
   }
+}
+
+export function saveLayout(
+  db: Db,
+  userId: string,
+  cards: string[],
+  columns?: ManualColumns,
+): Dashboard {
+  assertLayout(db, cards, columns);
   write(db, layoutKey(userId), cards);
   if (columns) write(db, columnsKey(userId), columns);
   return getDashboard(db, userId);

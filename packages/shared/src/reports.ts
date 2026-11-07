@@ -39,6 +39,10 @@ export interface NetWorthPoint {
   /** Positive amount owed. */
   debtsCents: number;
   netCents: number;
+  /** The crypto included in assets. */
+  cryptoCents: number;
+  /** Something here sits between two recorded values, so its value is worked out. */
+  estimated: boolean;
 }
 
 export interface NetWorthReport {

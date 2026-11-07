@@ -249,3 +249,40 @@ describe("credit card statements", () => {
     expect(await owed()).toBe(4_010);
   });
 });
+
+describe("a payment on its way", () => {
+  it("counts a pending payment as paid on a hand-added card", async () => {
+    const { client, db } = await makeSignedInApp();
+    const { schema } = await import("@muny/db");
+    const today = localToday();
+    const card = (
+      await client.post("/api/accounts", { name: "Visa", type: "credit", balanceCents: -100_000 })
+    ).json<{ id: string }>();
+    const bank = (
+      await client.post("/api/accounts", {
+        name: "Checking",
+        type: "checking",
+        balanceCents: 500_000,
+      })
+    ).json<{ id: string }>();
+    await client.patch(`/api/cards/${card.id}`, {
+      paymentMatch: "SAMPLE VISA PMT",
+      statementDate: "2020-01-01",
+      statementBalanceCents: 100_000,
+    });
+    const paid = (
+      await client.post("/api/transactions", {
+        accountId: bank.id,
+        postedDate: today,
+        amountCents: -25_000,
+        description: "SAMPLE VISA PMT 123",
+      })
+    ).json<{ id: string }>();
+    db.update(schema.transactions).set({ pending: true }).run();
+    const report = (await client.get("/api/cards")).json<CardsReport>();
+    const visa = report.cards.find((c) => c.accountId === card.id);
+    expect(paid.id).toBeTruthy();
+    expect(visa?.payments[0]?.amountCents).toBe(25_000);
+    expect(visa?.balanceCents).toBe(75_000);
+  });
+});

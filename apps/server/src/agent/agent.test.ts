@@ -262,7 +262,7 @@ describe("reading", () => {
         headers: { authorization: `Bearer ${t.token}` },
         payload:
           tool.name === "query_data"
-            ? { query: { dataset: "budgets" } }
+            ? { query: { dataset: "budgets", measures: [{ id: "n", agg: "count" }] } }
             : tool.name === "preview_card"
               ? { doc: statDoc("budgets") }
               : {},
@@ -285,6 +285,180 @@ describe("reading", () => {
     expect(JSON.stringify(rows)).not.toContain(t.token);
     const activity = (await client.get(`/api/agents/tokens/${t.id}/activity`)).json<unknown[]>();
     expect(activity).toHaveLength(2);
+  });
+});
+
+describe("what the first live test found", () => {
+  it("checks a layout in the dry run too, and says what it would remove", async () => {
+    const { token, call } = await setup();
+    const t = await token(["write:dashboard"]);
+    const bad = await call(t.token, "arrange_dashboard", { cards: ["spending", "not-a-card"] });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().error.message).toContain("not-a-card");
+    const twice = await call(t.token, "arrange_dashboard", { cards: ["spending", "spending"] });
+    expect(twice.statusCode).toBe(400);
+    const ok = (
+      await call(t.token, "arrange_dashboard", { cards: ["spending", "coming-up"] })
+    ).json();
+    expect(ok.wouldRemove).toContain("accounts");
+    expect(ok.wouldRemove).not.toContain("spending");
+    expect(ok.wouldAdd).toEqual(["coming-up"]);
+  });
+
+  it("reports blocks that couldn't draw anything", async () => {
+    const { token, call } = await setup();
+    const t = await token([...READ_ALL, "write:dashboard"]);
+    const blocks: [string, object, RegExp][] = [
+      ["bars", { dataset: "budgets" }, /needs a field|needs a value/],
+      ["bars", { dataset: "budgets", dimensions: [{ field: "name" }] }, /needs a value/],
+      [
+        "heatmap",
+        {
+          dataset: "budgets",
+          dimensions: [{ field: "name" }],
+          measures: [{ id: "n", agg: "count" }],
+        },
+        /needs a field/,
+      ],
+      [
+        "scatter",
+        {
+          dataset: "budgets",
+          dimensions: [{ field: "name" }],
+          measures: [{ id: "n", agg: "count" }],
+        },
+        /2 values/,
+      ],
+      ["table", { dataset: "budgets" }, /choose a field/],
+    ];
+    for (const [kind, query, why] of blocks) {
+      const out = (
+        await call(t.token, "preview_card", {
+          doc: { v: 2, blocks: [{ id: "b", kind, w: 12, query }] },
+        })
+      ).json();
+      expect(out.valid, kind).toBe(false);
+      expect(out.issues.join(" "), kind).toMatch(why);
+    }
+    const missing = (
+      await call(t.token, "preview_card", {
+        doc: { v: 2, blocks: [{ id: "b", kind: "bars", w: 12 }] },
+      })
+    ).json();
+    expect(missing.valid).toBe(false);
+    const saved = await call(t.token, "create_card", {
+      title: "x",
+      dry_run: false,
+      doc: { v: 2, blocks: [{ id: "b", kind: "bars", w: 12, query: { dataset: "budgets" } }] },
+    });
+    expect(saved.statusCode).toBe(400);
+    // A big number can still run on a formula alone.
+    const stat = (
+      await call(t.token, "preview_card", {
+        doc: { v: 2, blocks: [{ id: "b", kind: "stat", w: 6, options: { value: "1 + 1" } }] },
+      })
+    ).json();
+    expect(stat.valid).toBe(true);
+  });
+
+  it("says a query with no fields is a mistake, and lists the fields", async () => {
+    const { token, call } = await setup();
+    const t = await token(READ_ALL);
+    const res = await call(t.token, "query_data", {
+      query: {
+        dataset: "transactions",
+        raw: true,
+        filters: [{ field: "merchant", op: "contains", value: "corner" }],
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.message).toContain("merchant");
+  });
+
+  it("names crypto money as cents and doesn't call unknown costs zero", async () => {
+    const { db, client, token, call } = await setup();
+    db.insert(schema.cryptoWallets).values({ id: "w1", name: "Cold", kind: "manual" }).run();
+    db.insert(schema.cryptoTxns)
+      .values({
+        id: "c1",
+        walletId: "w1",
+        at: Date.parse("2020-01-01T00:00:00Z"),
+        type: "deposit",
+        receivedAsset: "BTC",
+        receivedAmount: "2",
+        externalId: "e1",
+        source: "manual",
+      })
+      .run();
+    db.insert(schema.cryptoPrices)
+      .values({ asset: "BTC", date: "2020-01-01", usd: "10", source: "test" })
+      .run();
+    const broker = (
+      await client.post("/api/accounts", { name: "Broker", type: "investment", balanceCents: 0 })
+    ).json<Account>();
+    db.insert(schema.securities)
+      .values({ id: "s1", symbol: "XYZ", name: "XYZ", type: "equity" })
+      .run();
+    db.insert(schema.investmentHoldings)
+      .values({
+        accountId: broker.id,
+        securityId: "s1",
+        quantity: "1",
+        valueCents: 5000,
+        costBasisCents: null,
+        asOf: "2020-01-01",
+        source: "manual",
+      })
+      .run();
+    const t = await token(READ_ALL);
+    const out = (await call(t.token, "get_investments_summary")).json();
+    expect(out.costBasisCents).toBeNull();
+    expect(out.gainCents).toBeNull();
+    expect(out.unknownCostValueCents).toBe(5000);
+    expect(out.knownCostBasisCents).toBe(0);
+    expect(out.crypto[0]).toMatchObject({ asset: "BTC", amount: "2" });
+    expect(out.crypto[0]).toHaveProperty("valueCents");
+    expect(out.crypto[0]).not.toHaveProperty("value");
+  });
+
+  it("gives one budget figure everywhere", async () => {
+    const { client, token, call } = await setup();
+    const groups = (await client.get("/api/categories")).json<CategoryGroup[]>();
+    const cat = groups.flatMap((g) => g.categories).find((c) => c.name === "Groceries");
+    await client.put("/api/budgets", { categoryId: cat?.id, amountCents: 50_000 });
+    const t = await token(READ_ALL);
+    const status = (await call(t.token, "get_budget_status")).json();
+    const overview = (await call(t.token, "get_financial_overview")).json();
+    expect(status.total.budgetCents).toBe(50_000);
+    expect(status.total.availableCents).toBe(50_000 - 4218);
+    expect(overview.budget.budgetCents).toBe(50_000);
+    const card = (await call(t.token, "preview_card", { doc: builtinCardDoc("budget") })).json();
+    expect(card.preview.values.budget.value).toBe(50_000);
+  });
+
+  it("explains why a built-in card can't be deleted", async () => {
+    const { token, call } = await setup();
+    const t = await token(["write:dashboard"]);
+    const res = await call(t.token, "delete_card", { id: "spending" });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error.message).toContain("built-in");
+  });
+
+  it("keeps the version before a change in the audit log", async () => {
+    const { db, token, call } = await setup();
+    const t = await token(["write:dashboard"]);
+    const doc = builtinCardDoc("budget") as CardDoc;
+    const made = (
+      await call(t.token, "create_card", { title: "Before", doc, dry_run: false })
+    ).json();
+    await call(t.token, "update_card", { id: made.id, title: "After", doc, dry_run: false });
+    const entry = db
+      .select()
+      .from(schema.auditLog)
+      .all()
+      .find((r) => r.action === "dashboard.card_update");
+    expect(entry?.actorType).toBe("agent");
+    expect(entry?.details).toMatchObject({ title: "After", previous: { title: "Before" } });
   });
 });
 

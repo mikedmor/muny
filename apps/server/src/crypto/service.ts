@@ -622,6 +622,97 @@ export function importKoinly(
 // Overview (dashboard)
 // ---------------------------------------------------------------------------
 
+const valueHistoryCache = new WeakMap<object, { key: string; days: string[]; values: number[] }>();
+
+/**
+ * Portfolio value at the end of every priced day. Walking the history takes a
+ * moment, and net worth shows on most pages, so it's kept until a transaction, a
+ * price or the hidden coins change.
+ */
+function cryptoValueHistory(db: Db) {
+  const p = schema.cryptoPrices;
+  const hidden = hiddenAssets(db);
+  const stamp = (rows: unknown) => JSON.stringify(rows);
+  const key = stamp([
+    db
+      .select({ n: sql`count(*)`, at: sql`max(${t.at})` })
+      .from(t)
+      .get(),
+    db
+      .select({ n: sql`count(*)`, at: sql`max(${p.date})` })
+      .from(p)
+      .get(),
+    [...hidden],
+  ]);
+  const hit = valueHistoryCache.get(db);
+  if (hit?.key === key) return hit;
+
+  const byDate = new Map<string, Map<string, string>>();
+  for (const r of db.select({ asset: p.asset, date: p.date, usd: p.usd }).from(p).all()) {
+    const m = byDate.get(r.date) ?? new Map<string, string>();
+    m.set(r.asset, r.usd);
+    byDate.set(r.date, m);
+  }
+  const days = [...byDate.keys()].sort();
+  const txns = db
+    .select({
+      at: t.at,
+      sentAsset: t.sentAsset,
+      sentAmount: t.sentAmount,
+      receivedAsset: t.receivedAsset,
+      receivedAmount: t.receivedAmount,
+      feeAsset: t.feeAsset,
+      feeAmount: t.feeAmount,
+    })
+    .from(t)
+    .orderBy(t.at)
+    .all();
+  const held = new Map<string, string>();
+  const lastPrice = new Map<string, string>();
+  const bump = (a: string | null, amt: string | null, sign: 1 | -1) => {
+    if (!a || isZeroDec(amt)) return;
+    const cur = held.get(a) ?? "0";
+    held.set(a, sign === 1 ? addDec(cur, amt as string) : subDec(cur, amt as string));
+  };
+  const values: number[] = [];
+  let i = 0;
+  for (const d of days) {
+    const endOfDay = Date.parse(`${d}T23:59:59.999Z`);
+    while (i < txns.length && (txns[i]?.at ?? 0) <= endOfDay) {
+      const x = txns[i++] as (typeof txns)[number];
+      bump(x.receivedAsset, x.receivedAmount, 1);
+      bump(x.sentAsset, x.sentAmount, -1);
+      bump(x.feeAsset, x.feeAmount, -1);
+    }
+    for (const [a, usd] of byDate.get(d) ?? []) lastPrice.set(a, usd);
+    let v = 0;
+    for (const [a, amt] of held) {
+      if (hidden.has(a) || isZeroDec(amt)) continue;
+      const usd = a === "USD" ? "1" : lastPrice.get(a);
+      if (usd) v += Math.max(0, valueCents(amt, usd));
+    }
+    values.push(v);
+  }
+  const out = { key, days, values };
+  valueHistoryCache.set(db, out);
+  return out;
+}
+
+/** What your crypto was worth on each date, using the latest price known by then. */
+export function cryptoValuesOn(db: Db, dates: string[]): number[] {
+  const { days, values } = cryptoValueHistory(db);
+  return dates.map((date) => {
+    let lo = 0;
+    let hi = days.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if ((days[mid] as string) <= date) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo === 0 ? 0 : (values[lo - 1] ?? 0);
+  });
+}
+
 export function cryptoOverview(
   db: Db,
   opts: {

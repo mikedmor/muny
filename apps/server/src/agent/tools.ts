@@ -1,5 +1,6 @@
 import {
   type AgentScope,
+  BUILTIN_CARDS,
   BUILTIN_THEMES,
   type CardDoc,
   type CardQuery,
@@ -13,10 +14,11 @@ import {
   themeWarnings,
 } from "@muny/shared";
 import { z } from "zod";
-import { budgetMonth } from "../budgets/service.js";
+import { budgetMonth, overallBudget } from "../budgets/service.js";
 import { cardsReport } from "../cards/service.js";
 import { DATASET_READERS } from "../dashboard/datasets.js";
 import {
+  assertLayout,
   CardDocSchema,
   createCustomCard,
   customCard,
@@ -311,9 +313,10 @@ export const TOOLS: Tool[] = [
         availableCents: l.availableCents,
         averageCents: l.averageCents,
       });
+      const total = overallBudget(b);
       return {
         month: b.month,
-        total: line(b.total),
+        total: { ...line(b.total), ...total },
         income: line(b.income),
         bills: line(b.bills),
         uncategorizedCents: b.uncategorizedCents,
@@ -384,7 +387,8 @@ export const TOOLS: Tool[] = [
   }),
   defineTool({
     name: "get_net_worth_history",
-    description: "Assets, debts and net worth at each month's end.",
+    description:
+      "Assets, debts and net worth at each month's end. Assets include crypto (cryptoCents). estimated is true where a home, vehicle or similar is between two values you recorded, so its value is worked out rather than recorded.",
     scope: "read:accounts",
     input: z.object({ months: z.number().int().min(1).max(120).default(12) }),
     run: (ctx, { months }) => netWorthReport(ctx.db, netWorthDates(months, ctx.today)),
@@ -396,10 +400,16 @@ export const TOOLS: Tool[] = [
     input: z.object({}),
     run: (ctx) => {
       const s = investSummary(ctx.db, ctx.today);
+      // With any cost unknown there's no true total: null, not a misleading partial.
+      const complete = s.unknownCostValueCents === 0;
       return {
         valueCents: s.valueCents,
-        costBasisCents: s.costBasisCents,
-        gainCents: s.gainCents,
+        cashCents: s.cashCents,
+        costBasisCents: complete ? s.costBasisCents : null,
+        gainCents: complete ? s.gainCents : null,
+        knownCostBasisCents: s.costBasisCents,
+        knownCostGainCents: s.gainCents,
+        unknownCostValueCents: s.unknownCostValueCents,
         incomeLast12Cents: s.incomeLast12Cents,
         positions: s.positions.map((p) => ({
           symbol: p.symbol,
@@ -407,12 +417,21 @@ export const TOOLS: Tool[] = [
           type: p.type,
           quantity: p.quantity,
           valueCents: p.valueCents,
-          costBasisCents: p.costBasisCents,
-          gainCents: p.gainCents,
+          costBasisCents: p.type === "cash" ? null : p.costBasisCents,
+          gainCents: p.type === "cash" ? null : p.gainCents,
         })),
-        crypto: DATASET_READERS.crypto_holdings?.(ctx.db, {}, ctx.today).filter(
-          (h) => typeof h.value === "number" && h.value > 0,
-        ),
+        crypto: DATASET_READERS.crypto_holdings?.(ctx.db, {}, ctx.today)
+          .filter((h) => typeof h.value === "number" && h.value > 0)
+          .map((h) => ({
+            asset: h.asset,
+            name: h.name,
+            amount: h.amount,
+            valueCents: h.value,
+            costCents: h.cost,
+            gainCents: h.gain,
+            change24h: h.change_24h,
+            allocation: h.allocation,
+          })),
       };
     },
   }),
@@ -592,6 +611,11 @@ export const TOOLS: Tool[] = [
     write: true,
     input: z.object({ id: z.string().max(64), dry_run: dryRunField }),
     run: (ctx, { id, dry_run }) => {
+      if (BUILTIN_CARDS.some((c) => c.id === id))
+        throw new ToolError(
+          "not_allowed",
+          `${id} is a built-in card, so it can't be deleted. arrange_dashboard takes it off the Overview.`,
+        );
       const card = customCard(ctx.db, id);
       if (!card.createdBy?.startsWith("agent:"))
         throw new ToolError(
@@ -612,12 +636,15 @@ export const TOOLS: Tool[] = [
     write: true,
     input: LayoutSchema.extend({ dry_run: dryRunField }),
     run: (ctx, { cards, columns, dry_run }) => {
+      assertLayout(ctx.db, cards, columns);
       const before = getDashboard(ctx.db, ctx.agent.userId);
       if (dry_run)
         return {
           dryRun: true,
           current: { cards: before.cards, columns: before.columns },
           proposed: { cards, ...(columns ? { columns } : {}) },
+          wouldRemove: before.cards.filter((c) => !cards.includes(c)),
+          wouldAdd: cards.filter((c) => !before.cards.includes(c)),
           note: "Pass dry_run: false to apply this.",
         };
       const out = saveLayout(ctx.db, ctx.agent.userId, cards, columns);

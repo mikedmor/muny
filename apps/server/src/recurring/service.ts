@@ -198,14 +198,91 @@ function keyWords(key: string): Set<string> {
  * stored: update known series, add new ones, link member transactions.
  * Ignored series stay ignored; user-edited fields are kept.
  */
+/** Two merchant names that read as one: a shared word, or the same letters ("Duke Energy", "Dukeenergy"). */
+function sameMerchantName(a: string, b: string): boolean {
+  const wordsA = keyWords(a);
+  const wordsB = keyWords(b);
+  if ([...wordsA].some((w) => wordsB.has(w))) return true;
+  const letters = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "");
+  const within = (words: Set<string>, other: string) =>
+    words.size > 0 && [...words].every((w) => letters(other).includes(w));
+  return within(wordsA, b) || within(wordsB, a);
+}
+
+/** How far a charge can stray from a series. Bills that vary, vary a lot. */
+const amountFits = (
+  cents: number,
+  e: { anchorCents: number; lastAmountCents: number; fixedAmount: boolean },
+) => {
+  const room = e.fixedAmount ? 0.1 : 0.35;
+  return near(cents, e.anchorCents, room) || near(cents, Math.abs(e.lastAmountCents), room);
+};
+
+/**
+ * A bank can reword a merchant from one charge to the next. Left alone, the new
+ * wording either tracks nothing, or joins another account's series that happens to
+ * have that name. Charges like that are read as the running series on their own
+ * account: same direction, a name that fits, an amount that fits, and due by then.
+ */
+function renamedMerchants(tx: Tx, rows: Row[], today: string): Map<string, string> {
+  const s = schema.recurringSeries;
+  const byAccount = new Map<string, Map<string, number>>();
+  const latestOn = new Map<string, string>();
+  for (const r of rows) {
+    if (!r.recurringSeriesId) continue;
+    const counts = byAccount.get(r.recurringSeriesId) ?? new Map<string, number>();
+    counts.set(r.accountId, (counts.get(r.accountId) ?? 0) + 1);
+    byAccount.set(r.recurringSeriesId, counts);
+  }
+  const homeOf = (id: string) =>
+    [...(byAccount.get(id) ?? new Map<string, number>())].sort((a, b) => b[1] - a[1])[0]?.[0];
+  for (const r of rows) {
+    const id = r.recurringSeriesId;
+    if (!id || homeOf(id) !== r.accountId) continue;
+    if (r.postedDate > (latestOn.get(id) ?? "")) latestOn.set(id, r.postedDate);
+  }
+  const series = tx
+    .select()
+    .from(s)
+    .all()
+    .filter((e) => e.status !== "ignored" && e.status !== "cancelled" && latestOn.has(e.id))
+    .map((e) => ({ ...e, home: homeOf(e.id), last: latestOn.get(e.id) as string }))
+    .filter((e) => dayNum(today) - dayNum(e.last) <= grace(e.interval as RecurringInterval));
+
+  const out = new Map<string, string>();
+  for (const r of [...rows].sort((a, b) => a.postedDate.localeCompare(b.postedDate))) {
+    // Already with a series on its own account: nothing to work out.
+    if (r.recurringSeriesId && homeOf(r.recurringSeriesId) === r.accountId) continue;
+    const key = merchantKey(r.payee, r.rawDescription);
+    const cents = Math.abs(r.amountCents);
+    const direction = r.amountCents < 0 ? "out" : "in";
+    const fits = series.filter(
+      (e) => e.home === r.accountId && e.direction === direction && amountFits(cents, e),
+    );
+    if (fits.some((e) => e.matchKey === key)) continue;
+    const target = fits
+      .filter(
+        (e) =>
+          sameMerchantName(key, e.matchKey) &&
+          dayNum(r.postedDate) - dayNum(e.last) >= DAYS[e.interval as RecurringInterval] * 0.5,
+      )
+      .sort((a, b) => b.last.localeCompare(a.last))[0];
+    if (!target) continue;
+    out.set(r.id, target.matchKey);
+    target.last = r.postedDate;
+  }
+  return out;
+}
+
 export function rescanRecurring(tx: Tx, today = localToday()): RecurringScanResult {
   dropLoanSeries(tx);
   dropFundingSeries(tx);
   const rows = loadRows(tx);
   const byId = new Map(rows.map((r) => [r.id, r]));
+  const renamed = renamedMerchants(tx, rows, today);
   const input: RecurringInput[] = rows.map((r) => ({
     id: r.id,
-    key: merchantKey(r.payee, r.rawDescription),
+    key: renamed.get(r.id) ?? merchantKey(r.payee, r.rawDescription),
     date: r.postedDate,
     amountCents: r.amountCents,
     accountId: r.accountId,
@@ -347,7 +424,8 @@ export function rescanRecurring(tx: Tx, today = localToday()): RecurringScanResu
         if (r.recurringSeriesId === null && linkedNow.has(r.id)) return false;
         if ((r.amountCents < 0 ? "out" : "in") !== e.direction) return false;
         const key = keyOf.get(r.id) ?? "";
-        if (key === e.matchKey) return near(Math.abs(r.amountCents), e.anchorCents, 0.3);
+        if (key === e.matchKey)
+          return near(Math.abs(r.amountCents), e.anchorCents, e.fixedAmount ? 0.3 : 0.35);
         // Different wording: demand much more agreement before calling it the same bill.
         return (
           r.accountId === e.accountId &&

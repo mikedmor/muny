@@ -151,7 +151,8 @@ export const DATASETS: DatasetInfo[] = [
     id: "net_worth",
     label: "Net worth history",
     group: "Money",
-    description: "Assets, debts, net worth and cash, weekly over the range you choose.",
+    description:
+      "Assets (including crypto), debts, net worth and cash, weekly over the range you choose.",
     dateField: "date",
     fields: [
       date("date", "Date"),
@@ -159,6 +160,12 @@ export const DATASETS: DatasetInfo[] = [
       money("debts", "Debts"),
       money("net", "Net worth"),
       money("cash", "Cash", "Checking and savings."),
+      money("crypto", "Crypto", "Part of Assets."),
+      bool(
+        "estimated",
+        "Estimated",
+        "A home, vehicle or similar is between two recorded values here, so its value is worked out.",
+      ),
     ],
   },
   {

@@ -11,7 +11,7 @@ export const MAX_BLOCKS = 40;
 export const MAX_METRICS = 40;
 export const MAX_LAYERS = 4;
 export const MAX_MEASURES = 16;
-export const MAX_DIMENSIONS = 4;
+export const MAX_DIMENSIONS = 8;
 export const MAX_FILTERS = 20;
 export const MAX_CALCULATED = 20;
 export const MAX_OUTPUT_ROWS = 2000;
@@ -352,6 +352,10 @@ export interface BlockKindInfo {
   query: boolean;
   /** Dimension slots, in order. */
   dimensions: { label: string; hint: string }[];
+  /** How many of those slots have to be filled. */
+  minDimensions: number;
+  /** Can't work without a query (a big number can run on a formula instead). */
+  requiresQuery: boolean;
   /** How many measures: at least, at most. */
   measures: [number, number];
   /** Wide enough to read by default, in 12ths. */
@@ -361,6 +365,8 @@ export interface BlockKindInfo {
 export const BLOCK_KIND_INFO: Record<BlockKind, BlockKindInfo> = {
   stat: {
     kind: "stat",
+    minDimensions: 0,
+    requiresQuery: false,
     label: "Big number",
     group: "Numbers",
     description: "One number, with an optional comparison and small line.",
@@ -371,6 +377,8 @@ export const BLOCK_KIND_INFO: Record<BlockKind, BlockKindInfo> = {
   },
   progress: {
     kind: "progress",
+    minDimensions: 0,
+    requiresQuery: false,
     label: "Progress bars",
     group: "Numbers",
     description: "How far a value has come towards a target.",
@@ -381,6 +389,8 @@ export const BLOCK_KIND_INFO: Record<BlockKind, BlockKindInfo> = {
   },
   text: {
     kind: "text",
+    minDimensions: 0,
+    requiresQuery: false,
     label: "Text",
     group: "Layout",
     description: "A sentence that can include live values, like {{$spent}}.",
@@ -391,6 +401,8 @@ export const BLOCK_KIND_INFO: Record<BlockKind, BlockKindInfo> = {
   },
   heading: {
     kind: "heading",
+    minDimensions: 0,
+    requiresQuery: false,
     label: "Heading",
     group: "Layout",
     description: "A title, with an optional link.",
@@ -401,6 +413,8 @@ export const BLOCK_KIND_INFO: Record<BlockKind, BlockKindInfo> = {
   },
   divider: {
     kind: "divider",
+    minDimensions: 0,
+    requiresQuery: false,
     label: "Divider",
     group: "Layout",
     description: "A line between sections.",
@@ -411,6 +425,8 @@ export const BLOCK_KIND_INFO: Record<BlockKind, BlockKindInfo> = {
   },
   list: {
     kind: "list",
+    minDimensions: 1,
+    requiresQuery: true,
     label: "List",
     group: "Lists",
     description: "Rows with an icon, a title, a detail and an amount.",
@@ -425,6 +441,8 @@ export const BLOCK_KIND_INFO: Record<BlockKind, BlockKindInfo> = {
   },
   table: {
     kind: "table",
+    minDimensions: 0,
+    requiresQuery: true,
     label: "Table",
     group: "Lists",
     description: "Any columns you like, with an optional total row.",
@@ -440,6 +458,8 @@ export const BLOCK_KIND_INFO: Record<BlockKind, BlockKindInfo> = {
   },
   bars: {
     kind: "bars",
+    minDimensions: 1,
+    requiresQuery: true,
     label: "Ranked bars",
     group: "Charts",
     description: "Compare things by size, largest first.",
@@ -450,6 +470,8 @@ export const BLOCK_KIND_INFO: Record<BlockKind, BlockKindInfo> = {
   },
   column: {
     kind: "column",
+    minDimensions: 1,
+    requiresQuery: true,
     label: "Columns",
     group: "Charts",
     description: "Compare values over time or between things. Can stack.",
@@ -463,6 +485,8 @@ export const BLOCK_KIND_INFO: Record<BlockKind, BlockKindInfo> = {
   },
   line: {
     kind: "line",
+    minDimensions: 1,
+    requiresQuery: true,
     label: "Line",
     group: "Charts",
     description: "Change over time, one or many lines.",
@@ -476,6 +500,8 @@ export const BLOCK_KIND_INFO: Record<BlockKind, BlockKindInfo> = {
   },
   area: {
     kind: "area",
+    minDimensions: 1,
+    requiresQuery: true,
     label: "Area",
     group: "Charts",
     description: "Change over time with the space filled in. Can stack.",
@@ -489,6 +515,8 @@ export const BLOCK_KIND_INFO: Record<BlockKind, BlockKindInfo> = {
   },
   pie: {
     kind: "pie",
+    minDimensions: 1,
+    requiresQuery: true,
     label: "Donut",
     group: "Charts",
     description: "Parts of a whole.",
@@ -499,6 +527,8 @@ export const BLOCK_KIND_INFO: Record<BlockKind, BlockKindInfo> = {
   },
   treemap: {
     kind: "treemap",
+    minDimensions: 1,
+    requiresQuery: true,
     label: "Treemap",
     group: "Charts",
     description: "Parts of a whole as boxes; handles many parts.",
@@ -509,6 +539,8 @@ export const BLOCK_KIND_INFO: Record<BlockKind, BlockKindInfo> = {
   },
   heatmap: {
     kind: "heatmap",
+    minDimensions: 2,
+    requiresQuery: true,
     label: "Heat map",
     group: "Charts",
     description: "Two groupings at once, darker where it's higher.",
@@ -522,6 +554,8 @@ export const BLOCK_KIND_INFO: Record<BlockKind, BlockKindInfo> = {
   },
   scatter: {
     kind: "scatter",
+    minDimensions: 1,
+    requiresQuery: true,
     label: "Scatter",
     group: "Charts",
     description: "Two measures against each other, one dot per row.",
@@ -532,6 +566,8 @@ export const BLOCK_KIND_INFO: Record<BlockKind, BlockKindInfo> = {
   },
   waterfall: {
     kind: "waterfall",
+    minDimensions: 1,
+    requiresQuery: true,
     label: "Waterfall",
     group: "Charts",
     description: "How a total builds up, step by step.",
@@ -542,6 +578,8 @@ export const BLOCK_KIND_INFO: Record<BlockKind, BlockKindInfo> = {
   },
   calendar: {
     kind: "calendar",
+    minDimensions: 1,
+    requiresQuery: true,
     label: "Calendar",
     group: "Lists",
     description: "Dated things on a month you can page through.",
