@@ -37,6 +37,17 @@ export interface Transaction {
   transferPairId: string | null;
   /** Account on the other side of a detected transfer. */
   transferAccountName: string | null;
+  /**
+   * A PayPal purchase paid from a bank: the bank's withdrawal (or PayPal's
+   * funding, when the bank isn't in Muny). Those aren't listed on their own.
+   */
+  fundedFrom: {
+    transactionId: string;
+    /** The paying account; null when only PayPal's side is in Muny. */
+    accountName: string | null;
+    date: string;
+    description: string;
+  } | null;
   /** Recurring series (subscription/bill/income) this belongs to. */
   recurringSeriesId: string | null;
   recurringName: string | null;

@@ -458,7 +458,7 @@ export const useUpdateRecurring = () =>
   useInvalidatingMutation(
     ({ id, ...input }: UpdateRecurringInput & { id: string }) =>
       api.patch<RecurringSeries>(`/api/recurring/${id}`, input),
-    [keys.recurring, keys.transactions],
+    [keys.recurring, keys.transactions, keys.budgets, keys.reports, keys.overview],
   );
 
 export const useCreateRecurring = () =>

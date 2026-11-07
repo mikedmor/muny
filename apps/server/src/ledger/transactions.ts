@@ -1,6 +1,6 @@
 import { type MunyDb, newId, schema } from "@muny/db";
 import { MoneyParseError, parseAmount, type Transaction, type TransactionPage } from "@muny/shared";
-import { and, desc, eq, inArray, like, or, type SQL, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, like, or, type SQL, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -86,7 +86,15 @@ const BulkBody = z.object({
 
 function buildFilters(q: z.infer<typeof ListQuery>): SQL | undefined {
   const conds: (SQL | undefined)[] = [];
-  if (q.accountId) conds.push(eq(t.accountId, q.accountId));
+  // A purchase's funding (bank withdrawal to PayPal) is shown with the purchase.
+  conds.push(isNull(t.fundsTransactionId));
+  if (q.accountId)
+    conds.push(
+      or(
+        eq(t.accountId, q.accountId),
+        sql`exists (select 1 from transactions f where f.funds_transaction_id = ${t.id} and f.account_id = ${q.accountId})`,
+      ),
+    );
   if (q.categoryId === "uncategorized") {
     // A matched transfer with no category counts as categorized (it's a transfer).
     conds.push(
@@ -133,6 +141,8 @@ function buildFilters(q: z.infer<typeof ListQuery>): SQL | undefined {
       sql`${t.rawDescription} like ${pattern} escape '\\'`,
       sql`${t.notes} like ${pattern} escape '\\'`,
       sql`${schema.payees.displayName} like ${pattern} escape '\\'`,
+      // The bank's side of a PayPal purchase ("PAYPAL INST XFER ...").
+      sql`exists (select 1 from transactions f where f.funds_transaction_id = ${t.id} and f.raw_description like ${pattern} escape '\\')`,
     );
     // "15.99" also matches transactions of that amount (either sign).
     let amount: number | undefined;
@@ -221,6 +231,32 @@ export function loadTransactions(db: MunyDb, ids: string[]): Transaction[] {
       : [],
   );
 
+  // Where PayPal purchases' money came from: the bank's side, else PayPal's funding.
+  const funding = db
+    .select({
+      id: t.id,
+      funds: t.fundsTransactionId,
+      accountId: t.accountId,
+      accountName: schema.accounts.name,
+      date: t.postedDate,
+      raw: t.rawDescription,
+    })
+    .from(t)
+    .innerJoin(schema.accounts, eq(schema.accounts.id, t.accountId))
+    .where(inArray(t.fundsTransactionId, ids))
+    .all();
+  const fundedFrom = (r: typeof t.$inferSelect): Transaction["fundedFrom"] => {
+    const mine = funding.filter((f) => f.funds === r.id);
+    const f = mine.find((x) => x.accountId !== r.accountId) ?? mine[0];
+    if (!f) return null;
+    return {
+      transactionId: f.id,
+      accountName: f.accountId !== r.accountId ? f.accountName : null,
+      date: f.date,
+      description: f.raw,
+    };
+  };
+
   const seriesIds = [
     ...new Set(rows.map((r) => r.t.recurringSeriesId).filter((x): x is string => !!x)),
   ];
@@ -265,6 +301,7 @@ export function loadTransactions(db: MunyDb, ids: string[]): Transaction[] {
         manual: r.importHash.startsWith(MANUAL_PREFIX),
         transferPairId: r.transferPairId,
         transferAccountName: r.transferPairId ? (pairAccount.get(r.transferPairId) ?? null) : null,
+        fundedFrom: fundedFrom(r),
         recurringSeriesId: r.recurringSeriesId,
         recurringName: r.recurringSeriesId ? (seriesName.get(r.recurringSeriesId) ?? null) : null,
         tags: tagRows

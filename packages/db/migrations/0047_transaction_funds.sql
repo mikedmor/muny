@@ -1,0 +1,2 @@
+ALTER TABLE `transactions` ADD `funds_transaction_id` text REFERENCES transactions(id) ON DELETE set null;--> statement-breakpoint
+CREATE INDEX `transactions_funds_idx` ON `transactions` (`funds_transaction_id`);

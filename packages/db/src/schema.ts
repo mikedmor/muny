@@ -259,6 +259,13 @@ export const transactions = sqliteTable(
     }),
     /** The user said this isn't a transfer; transfer detection leaves it alone. */
     notTransfer: integer({ mode: "boolean" }).notNull().default(false),
+    /**
+     * The purchase this only paid for (a bank's withdrawal to PayPal, and the
+     * money arriving in PayPal): listed as part of that purchase, not alone.
+     */
+    fundsTransactionId: text().references((): AnySQLiteColumn => transactions.id, {
+      onDelete: "set null",
+    }),
     /** True when the user edited category/payee manually (rules won't override). */
     userModified: integer({ mode: "boolean" }).notNull().default(false),
     createdAt: createdAt(),
@@ -273,6 +280,7 @@ export const transactions = sqliteTable(
     index("transactions_account_posted_idx").on(t.accountId, t.postedDate),
     index("transactions_category_idx").on(t.categoryId),
     index("transactions_payee_idx").on(t.payeeId),
+    index("transactions_funds_idx").on(t.fundsTransactionId),
   ],
 );
 

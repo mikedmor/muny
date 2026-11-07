@@ -1,6 +1,6 @@
 import { type MunyDb, schema } from "@muny/db";
 import { INTERVALS, RECURRING_KINDS, RECURRING_STATUSES } from "@muny/shared";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
@@ -23,6 +23,8 @@ const UpdateBody = z
     expectedAmountCents: z.number().int().safe().optional(),
     categoryId: z.string().max(64).nullable().optional(),
     notes: z.string().trim().max(2000).nullable().optional(),
+    /** With categoryId: also file its charges there (not split ones or transfers). */
+    applyToTransactions: z.boolean().optional(),
   })
   .refine((b) => Object.keys(b).length > 0, "Nothing to update");
 
@@ -103,7 +105,7 @@ export function registerRecurringRoutes(app: FastifyInstance, db: MunyDb) {
   app.patch("/api/recurring/:id", async (req) => {
     const user = requireUser(req);
     const { id } = parse(IdParams, req.params);
-    const body = parse(UpdateBody, req.body);
+    const { applyToTransactions, ...body } = parse(UpdateBody, req.body);
     const current = get(id);
     if (body.categoryId) {
       const c = db
@@ -135,7 +137,24 @@ export function registerRecurringRoutes(app: FastifyInstance, db: MunyDb) {
         .where(eq(schema.transactions.recurringSeriesId, id))
         .run();
     }
-    log(user.id, "recurring.update", id, { fields: Object.keys(body), status: body.status });
+    if (applyToTransactions && "categoryId" in body) {
+      const t = schema.transactions;
+      db.update(t)
+        .set({ categoryId: body.categoryId ?? null, userModified: true })
+        .where(
+          and(
+            eq(t.recurringSeriesId, id),
+            isNull(t.transferPairId),
+            sql`not exists (select 1 from transaction_splits x where x.transaction_id = ${t.id})`,
+          ),
+        )
+        .run();
+    }
+    log(user.id, "recurring.update", id, {
+      fields: Object.keys(body),
+      status: body.status,
+      applyToTransactions,
+    });
     return get(id);
   });
 

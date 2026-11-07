@@ -14,7 +14,7 @@ import type {
   RecurringSeries,
   UpcomingCharge,
 } from "@muny/shared";
-import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { localToday } from "../lib/dates.js";
 
 type Tx = Parameters<Parameters<MunyDb["transaction"]>[0]>[0];
@@ -86,6 +86,8 @@ function loadRows(db: Db): Row[] {
       and(
         eq(t.pending, false),
         eq(t.hidden, false),
+        // A bank's withdrawal that only paid for a PayPal purchase: the purchase recurs.
+        isNull(t.fundsTransactionId),
         sql`${schema.accounts.type} <> 'loan'`,
         or(
           isNull(t.transferPairId),
@@ -128,6 +130,50 @@ function dropLoanSeries(tx: Tx) {
   tx.delete(s).where(inArray(s.id, stale)).run();
 }
 
+/**
+ * Funding (a bank's withdrawal to PayPal for a PayPal purchase) never belongs
+ * to a recurring series: the purchase does. Detach it; a series left with no
+ * charges was only ever that funding (a duplicate of the purchase's series),
+ * so it goes (or, if you edited it, is ignored).
+ */
+function dropFundingSeries(tx: Tx) {
+  const s = schema.recurringSeries;
+  const t = schema.transactions;
+  const hit = [
+    ...new Set(
+      tx
+        .select({ id: t.recurringSeriesId })
+        .from(t)
+        .where(and(isNotNull(t.fundsTransactionId), isNotNull(t.recurringSeriesId)))
+        .all()
+        .map((r) => r.id as string),
+    ),
+  ];
+  if (!hit.length) return;
+  tx.update(t)
+    .set({ recurringSeriesId: null })
+    .where(and(isNotNull(t.fundsTransactionId), inArray(t.recurringSeriesId, hit)))
+    .run();
+  const left = new Set(
+    tx
+      .select({ id: t.recurringSeriesId })
+      .from(t)
+      .where(inArray(t.recurringSeriesId, hit))
+      .all()
+      .map((r) => r.id as string),
+  );
+  const empty = tx
+    .select({ id: s.id, userModified: s.userModified })
+    .from(s)
+    .where(inArray(s.id, hit))
+    .all()
+    .filter((x) => !left.has(x.id));
+  const drop = empty.filter((x) => !x.userModified).map((x) => x.id);
+  const ignore = empty.filter((x) => x.userModified).map((x) => x.id);
+  if (drop.length) tx.delete(s).where(inArray(s.id, drop)).run();
+  if (ignore.length) tx.update(s).set({ status: "ignored" }).where(inArray(s.id, ignore)).run();
+}
+
 const near = (a: number, b: number, pct: number) => Math.abs(a - b) <= Math.max(a, b) * pct;
 
 /** Words too common in bank descriptions to say two merchants are the same. */
@@ -154,6 +200,7 @@ function keyWords(key: string): Set<string> {
  */
 export function rescanRecurring(tx: Tx, today = localToday()): RecurringScanResult {
   dropLoanSeries(tx);
+  dropFundingSeries(tx);
   const rows = loadRows(tx);
   const byId = new Map(rows.map((r) => [r.id, r]));
   const input: RecurringInput[] = rows.map((r) => ({

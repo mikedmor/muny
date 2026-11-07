@@ -330,6 +330,13 @@
       "when": 1794019203224,
       "tag": "0046_category_is_bill",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "6",
+      "when": 1794020749162,
+      "tag": "0047_transaction_funds",
+      "breakpoints": true
     }
   ]
 }

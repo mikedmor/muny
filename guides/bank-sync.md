@@ -57,6 +57,10 @@ The first sync reads up to three years of activity. Amounts are net of PayPal's 
 
 Without a business account, download your activity instead (PayPal → Activity → Statements → **Download**, as CSV) and add it on **Import**; Muny recognises PayPal's format, and importing again only adds what's new.
 
+### Purchases paid through PayPal from your bank
+
+A purchase PayPal pays from your bank shows up three times: the purchase in PayPal, the money arriving in PayPal, and your bank's withdrawal to PayPal (sometimes a day or two apart). Muny treats the arrival and the withdrawal as a transfer and lists the purchase once, under its own date, as **MAIN ACCOUNT → PayPal** (with the day the bank paid, when it differs); its details show the bank's side. Filtering by either account shows it, and searching for the bank's description finds it. A recurring bill or subscription follows the purchase, not the bank's withdrawal.
+
 ## Connecting
 
 On **Accounts → Bank connections**, click **Connect**. After you log in to your bank, choose where each bank account goes. **Link it to an account you already have** (for example one from a Rocket Money import) to keep its history: transactions you already imported are matched instead of duplicated. From then on the account shows the bank's reported balance.

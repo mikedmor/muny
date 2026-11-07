@@ -69,6 +69,21 @@ function formatDay(iso: string) {
   });
 }
 
+/** "MAIN ACCOUNT → PayPal · paid Oct 19": where a PayPal purchase's money came from. */
+function fundedLabel(txn: Transaction) {
+  const f = txn.fundedFrom;
+  if (!f) return null;
+  const from = f.accountName
+    ? `${f.accountName} → ${txn.accountName}`
+    : `${txn.accountName} (bank)`;
+  const [, m, d] = f.date.split("-").map(Number);
+  const when =
+    f.date === txn.postedDate
+      ? ""
+      : ` · paid ${new Date(2000, (m ?? 1) - 1, d ?? 1).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+  return from + when;
+}
+
 function Amount({ cents, className }: { cents: number; className?: string }) {
   return (
     <span
@@ -117,12 +132,16 @@ export function TransactionsPage() {
   const q = useDebounced(search.trim());
   useEffect(() => {
     if ((q || undefined) === urlQ) return;
+    // Only once typing has settled: right after the URL changes (a magnifying
+    // glass, a link) the debounced value is still the old one, and writing it
+    // back would undo that change.
+    if (q !== search.trim()) return;
     void navigate({
       to: "/transactions",
       search: clean({ ...(filters as TransactionSearch), q: q || undefined }),
       replace: true,
     });
-  }, [q, urlQ, filters, navigate]);
+  }, [q, search, urlQ, filters, navigate]);
   const query = useMemo(() => ({ ...filters, q: q || undefined }), [filters, q]);
   const txns = useTransactions(query);
 
@@ -374,7 +393,7 @@ function TransactionRow({
           {txn.pending && <span className="ml-2 text-xs font-normal text-amber-600">pending</span>}
         </p>
         <p className="truncate text-xs text-slate-500">
-          {txn.accountName}
+          {fundedLabel(txn) ?? txn.accountName}
           {txn.transferAccountName &&
             ` ${txn.amountCents < 0 ? "→" : "←"} ${txn.transferAccountName}`}
           {txn.notes && ` · ${txn.notes}`}
@@ -1024,6 +1043,14 @@ function TransactionDetail({
               onFind={onDone}
             />
           </p>
+          {txn.fundedFrom && (
+            <p className="border-t border-slate-200 pt-1.5 text-slate-500 dark:border-slate-800">
+              Paid through {txn.accountName}
+              {txn.fundedFrom.accountName ? ` from ${txn.fundedFrom.accountName}` : ""} on{" "}
+              {formatDay(txn.fundedFrom.date)}
+              <span className="block break-words uppercase">{txn.fundedFrom.description}</span>
+            </p>
+          )}
         </div>
       </div>
       {offer}

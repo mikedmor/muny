@@ -57,6 +57,8 @@ export interface UpdateRecurringInput {
   interval?: Interval;
   expectedAmountCents?: number;
   categoryId?: string | null;
+  /** With categoryId: also file the series' charges there (not split ones or transfers). */
+  applyToTransactions?: boolean;
   notes?: string | null;
 }
 

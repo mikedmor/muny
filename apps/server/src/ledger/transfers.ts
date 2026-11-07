@@ -1,6 +1,6 @@
 import { type MunyDb, schema } from "@muny/db";
 import type { TransferPreview } from "@muny/shared";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 
 type Tx = Parameters<Parameters<MunyDb["transaction"]>[0]>[0];
 type Db = MunyDb | Tx;
@@ -365,6 +365,76 @@ export function pairPayPalFunding(tx: Tx): number {
         ...(internal && !(inRow.userModified && inRow.categoryId) ? { categoryId: internal } : {}),
       })
       .where(eq(t.id, inRow.id))
+      .run();
+    n++;
+  }
+  linkFundedPurchases(tx, paypal, cats.internal);
+  return n;
+}
+
+/**
+ * Tie PayPal's funding (money arriving in PayPal for a purchase, already
+ * treated as a transfer) and the bank withdrawal it's paired with to the
+ * PayPal purchase they paid for: same amount out, within a day. The purchase
+ * is then listed once, showing where the money came from. Returns how many
+ * purchases were linked.
+ */
+export function linkFundedPurchases(
+  tx: Tx,
+  paypal: string[],
+  internal: string | null | undefined,
+): number {
+  if (!paypal.length) return 0;
+  const t = schema.transactions;
+  const rows = tx
+    .select({
+      id: t.id,
+      accountId: t.accountId,
+      postedDate: t.postedDate,
+      amountCents: t.amountCents,
+      categoryId: t.categoryId,
+      pairId: t.transferPairId,
+      notTransfer: t.notTransfer,
+      pending: t.pending,
+      funds: t.fundsTransactionId,
+    })
+    .from(t)
+    .where(inArray(t.accountId, paypal))
+    .all();
+  const funded = new Set(
+    tx
+      .select({ id: t.fundsTransactionId })
+      .from(t)
+      .where(isNotNull(t.fundsTransactionId))
+      .all()
+      .map((r) => r.id as string),
+  );
+  let n = 0;
+  for (const a of rows) {
+    if (a.amountCents <= 0 || a.funds || a.notTransfer || a.pending) continue;
+    // Only money paired with a bank withdrawal (a lone arrival could be a refund).
+    if (!a.pairId) continue;
+    const day = dayNum(a.postedDate);
+    const purchase = rows
+      .filter(
+        (p) =>
+          p.accountId === a.accountId &&
+          p.amountCents === -a.amountCents &&
+          !p.pending &&
+          !p.funds &&
+          !p.pairId &&
+          !funded.has(p.id) &&
+          Math.abs(dayNum(p.postedDate) - day) <= 1,
+      )
+      .sort(
+        (x, y) => Math.abs(dayNum(x.postedDate) - day) - Math.abs(dayNum(y.postedDate) - day),
+      )[0];
+    if (!purchase) continue;
+    funded.add(purchase.id);
+    const ids = [a.id, ...(a.pairId ? [a.pairId] : [])];
+    tx.update(t)
+      .set({ fundsTransactionId: purchase.id })
+      .where(and(inArray(t.id, ids), isNull(t.fundsTransactionId)))
       .run();
     n++;
   }

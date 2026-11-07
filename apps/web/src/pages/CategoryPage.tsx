@@ -21,7 +21,7 @@ import { useRuleOffer } from "../components/RuleOffer.js";
 import { Alert, Button, Card, cx } from "../components/ui.js";
 import { CategoryIcon, MerchantAvatar } from "../components/visuals.js";
 import { api } from "../lib/api.js";
-import { keys, useCategories, useUpdateTransaction } from "../lib/queries.js";
+import { keys, useCategories, useUpdateRecurring, useUpdateTransaction } from "../lib/queries.js";
 
 /**
  * One category, like Rocket Money's category page: 12 months of spending
@@ -72,6 +72,7 @@ export function CategoryPage() {
   const [sort, setSort] = useState<"date" | "amount">("date");
   const [editing, setEditing] = useState(false);
   const update = useUpdateTransaction();
+  const updateSeries = useUpdateRecurring();
   const { offerRule, offerNode, dialog: ruleDialog } = useRuleOffer();
   /** A budget page row (Everything else, Earnings, Bills & subscriptions) rather than a category. */
   const row = (BUDGET_ROWS as readonly string[]).includes(categoryId)
@@ -272,7 +273,24 @@ export function CategoryPage() {
                             <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
                               Pending
                             </span>
-                            Expected {shortDay(s.date)} · {s.kind}
+                            Expected {shortDay(s.date)} ·
+                            <CategorySelect
+                              aria-label={`Category for ${s.name}`}
+                              value={s.categoryId}
+                              onChange={(id) =>
+                                updateSeries.mutate({
+                                  id: s.seriesId,
+                                  categoryId: id,
+                                  applyToTransactions: true,
+                                })
+                              }
+                              className={cx(
+                                "max-w-44 truncate rounded border border-transparent px-1 py-0.5 text-left text-xs hover:border-slate-300 dark:hover:border-slate-700",
+                                s.categoryId
+                                  ? "text-brand-600 dark:text-brand-500"
+                                  : "text-amber-600",
+                              )}
+                            />
                           </span>
                         </span>
                       </span>
