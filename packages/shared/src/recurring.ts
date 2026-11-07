@@ -50,6 +50,8 @@ export interface RecurringSeries {
   priceChange: { fromCents: number; toCents: number; date: string } | null;
   /** A charge the bank shows as pending that looks like this series' next one. */
   pending: { transactionId: string; date: string; amountCents: number } | null;
+  /** Its charges (or income) so far this calendar month. */
+  paidThisMonth: { cents: number; count: number; lastDate: string | null };
 }
 
 export interface UpdateRecurringInput {

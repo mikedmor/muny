@@ -528,6 +528,14 @@ export function listSeries(db: Db, today = localToday(), id?: string): Recurring
       transactionCount: Number(count),
       priceChange,
       pending,
+      paidThisMonth: (() => {
+        const mine = h.filter((x) => x.date.startsWith(today.slice(0, 7)) && x.date <= today);
+        return {
+          cents: mine.reduce((a, x) => a + x.cents, 0),
+          count: mine.length,
+          lastDate: mine[mine.length - 1]?.date ?? null,
+        };
+      })(),
     };
   });
 }

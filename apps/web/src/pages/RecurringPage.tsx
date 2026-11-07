@@ -69,19 +69,6 @@ function SeriesRow({ s, onOpen }: { s: RecurringSeries; onOpen: () => void }) {
               New
             </span>
           )}
-          {s.pending && (
-            <span
-              title="Your bank shows this charge as pending"
-              className="ml-2 rounded bg-violet-100 px-1.5 py-0.5 text-[11px] font-medium text-violet-800 dark:bg-violet-900/40 dark:text-violet-300"
-            >
-              Pending
-            </span>
-          )}
-          {s.late && (
-            <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
-              Late
-            </span>
-          )}
           {s.chargedAfterCancel && (
             <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-medium text-red-800 dark:bg-red-900/40 dark:text-red-300">
               Charged after cancelling
@@ -110,6 +97,7 @@ function SeriesRow({ s, onOpen }: { s: RecurringSeries; onOpen: () => void }) {
           )}
         </p>
       </button>
+      {s.active && s.status !== "cancelled" && <CycleStatus s={s} />}
       <div className="text-right">
         <Money cents={s.expectedAmountCents} className="font-medium" />
         {!s.fixedAmount && <p className="text-[11px] text-slate-500">varies</p>}
@@ -136,6 +124,104 @@ function SeriesRow({ s, onOpen }: { s: RecurringSeries; onOpen: () => void }) {
         </div>
       )}
     </li>
+  );
+}
+
+const PILL = "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium";
+
+/** Where a series stands this month: paid, pending, late or still due. */
+function CycleStatus({ s }: { s: RecurringSeries }) {
+  const today = todayIso();
+  const income = s.kind === "income";
+  if (s.pending)
+    return (
+      <span
+        title={`Your bank shows ${formatMoney(Math.abs(s.pending.amountCents))} pending since ${fmtDay(s.pending.date)}`}
+        className={cx(
+          PILL,
+          "bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300",
+        )}
+      >
+        ⏳ Pending
+      </span>
+    );
+  if (s.late)
+    return (
+      <span
+        title={`Expected ${fmtDay(s.nextDate)} and not seen yet`}
+        className={cx(PILL, "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300")}
+      >
+        Late · due {fmtDay(s.nextDate)}
+      </span>
+    );
+  const paid = s.paidThisMonth;
+  if (paid.count > 0 && paid.lastDate)
+    return (
+      <span
+        title={`${formatMoney(Math.abs(paid.cents))} ${income ? "received" : "paid"} this month${paid.count > 1 ? ` (${paid.count} times)` : ""}; next ${fmtDay(s.nextDate)}`}
+        className={cx(
+          PILL,
+          "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
+        )}
+      >
+        ✓ {income ? "Received" : "Paid"} {fmtDay(paid.lastDate)}
+      </span>
+    );
+  if (s.nextDate.slice(0, 7) === today.slice(0, 7))
+    return (
+      <span
+        className={cx(PILL, "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300")}
+      >
+        {s.nextDate === today ? "Due today" : `Due ${fmtDay(s.nextDate)}`}
+      </span>
+    );
+  return (
+    <span className={cx(PILL, "text-slate-500")} title="Nothing due this month">
+      Next {fmtDay(s.nextDate)}
+    </span>
+  );
+}
+
+/** This month across bills and subscriptions: paid so far, pending, still due. */
+function MonthSummary({ series }: { series: RecurringSeries[] }) {
+  const today = todayIso();
+  const d = parse(today);
+  const monthEnd = iso(new Date(d.getFullYear(), d.getMonth() + 1, 0));
+  const due = useUpcoming(today, monthEnd);
+  const out = series.filter((s) => s.kind !== "income");
+  const paid = out.reduce((a, s) => a - Math.min(0, s.paidThisMonth.cents), 0);
+  const paidN = out.filter((s) => s.paidThisMonth.count > 0).length;
+  const pending = out.reduce((a, s) => a - Math.min(0, s.pending?.amountCents ?? 0), 0);
+  const pendingN = out.filter((s) => s.pending).length;
+  const ids = new Set(out.map((s) => s.id));
+  const left = (due.data ?? []).filter(
+    (u) => !u.pending && u.amountCents < 0 && ids.has(u.seriesId),
+  );
+  const leftCents = left.reduce((a, u) => a - u.amountCents, 0);
+  const lateN = out.filter((s) => s.late).length;
+  return (
+    <div className="mb-4 flex flex-wrap gap-x-6 gap-y-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-900">
+      <span className="font-medium">{d.toLocaleDateString(undefined, { month: "long" })}</span>
+      <span>
+        <span className="text-emerald-700 dark:text-emerald-400">✓ Paid {formatMoney(paid)}</span>{" "}
+        <span className="text-slate-500">({paidN})</span>
+      </span>
+      {pendingN > 0 && (
+        <span>
+          <span className="text-violet-700 dark:text-violet-300">
+            ⏳ Pending {formatMoney(pending)}
+          </span>{" "}
+          <span className="text-slate-500">({pendingN})</span>
+        </span>
+      )}
+      <span>
+        Still due {formatMoney(leftCents)}{" "}
+        <span className="text-slate-500">
+          ({left.length}
+          {lateN > 0 && `, ${lateN} late`})
+        </span>
+      </span>
+    </div>
   );
 }
 
@@ -661,6 +747,7 @@ export function RecurringPage() {
               </Button>
             </div>
           )}
+          {tab === "list" && !reviewOnly && <MonthSummary series={live} />}
           {tab === "list" ? (
             <div className="space-y-6 min-[112rem]:grid min-[112rem]:grid-cols-2 min-[112rem]:items-start min-[112rem]:gap-6 min-[112rem]:space-y-0">
               <Section

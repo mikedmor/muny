@@ -225,6 +225,20 @@ describe("recurring: names that change, and pending charges", () => {
     expect(row?.matchKey).toBe("flix plus");
   });
 
+  it("says what a series has paid this month", async () => {
+    const { client } = await setup();
+    const sf = (await list(client)).find((s) => s.name === "Streamflix") as RecurringSeries;
+    expect(sf.paidThisMonth).toEqual({ cents: 0, count: 0, lastDate: null });
+    await client.post("/api/import/commit", {
+      filename: "more.csv",
+      content: csv([[today, "STREAMFLIX.COM 800-555-0100", "-15.99"]]),
+      accountMap: { csv: sf.accountId },
+    });
+    await client.post("/api/recurring/rescan", {});
+    const now = (await list(client)).find((s) => s.id === sf.id) as RecurringSeries;
+    expect(now.paidThisMonth).toEqual({ cents: -1599, count: 1, lastDate: today });
+  });
+
   it("shows a pending charge as the next one", async () => {
     const { client, db } = await setup();
     const sf = (await list(client)).find((s) => s.name === "Streamflix") as RecurringSeries;
