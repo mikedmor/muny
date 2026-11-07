@@ -5,6 +5,8 @@ import {
   CUSTOM_PREFIX,
   type CustomCard,
   customCardArrangement,
+  fitManualColumns,
+  type ManualColumns,
 } from "@muny/shared";
 import { Link } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -29,6 +31,16 @@ const TIERS = [
 ] as const;
 
 const readTier = () => TIERS.find((t) => window.matchMedia(t.query).matches) ?? null;
+
+/** How many columns this screen shows right now. */
+export const currentColumnCount = () => readTier()?.count ?? 1;
+
+/** The columns' widths. With hand-arranged columns, the last is always the narrow one. */
+export function columnTemplate(count: number, hasSide: boolean) {
+  const tier = TIERS.find((t) => t.count === count);
+  if (!tier) return "minmax(0,1fr)";
+  return hasSide ? tier.side : `repeat(${tier.count}, minmax(0,1fr))`;
+}
 
 function useColumns() {
   const [tier, setTier] = useState(readTier);
@@ -178,31 +190,34 @@ function CardSlot({
   );
 }
 
+/** Everything arrangement needs to know about your cards at this size, heights included. */
+export function arrangeCards(cards: string[], custom: CustomCard[], count: number): ArrangeCard[] {
+  const heights = savedHeights(count);
+  return cards.map((c) => arrangeInfo(c, custom, heights));
+}
+
 /** Your cards in a given number of columns. The Overview, and the preview while customizing. */
 export function BoardColumns({
   cards,
   custom,
   count,
+  manual,
   renderCard,
   highlight,
 }: {
   cards: string[];
   custom: CustomCard[];
   count: number;
+  /** This size's hand arrangement, if it has one. */
+  manual?: string[][];
   renderCard: (card: string) => ReactNode;
   highlight?: string | null;
 }) {
   const { heights, report } = useCardHeights(count, cards.join());
-  const { columns, hasSide } = arrangeColumns(
-    cards.map((c) => arrangeInfo(c, custom, heights)),
-    count,
-  );
-  const tier = TIERS.find((t) => t.count === count);
-  const template = !tier
-    ? "minmax(0,1fr)"
-    : hasSide
-      ? tier.side
-      : `repeat(${tier.count}, minmax(0,1fr))`;
+  const info = cards.map((c) => arrangeInfo(c, custom, heights));
+  const auto = manual ? null : arrangeColumns(info, count);
+  const columns = auto?.columns ?? fitManualColumns(manual ?? [], info, count);
+  const template = columnTemplate(count, auto ? auto.hasSide : true);
   return (
     <div className="grid items-start gap-6" style={{ gridTemplateColumns: template }}>
       {columns.map((column, i) => (
@@ -233,6 +248,7 @@ export function DashboardBoard({
   const tier = useColumns();
   const cards = dashboard.data?.cards ?? [];
   const custom = dashboard.data?.customCards ?? [];
+  const count = tier?.count ?? 1;
 
   return (
     <>
@@ -250,7 +266,8 @@ export function DashboardBoard({
         <BoardColumns
           cards={cards}
           custom={custom}
-          count={tier?.count ?? 1}
+          count={count}
+          manual={dashboard.data?.columns[`${count}` as keyof ManualColumns]}
           renderCard={renderCard}
         />
       </div>

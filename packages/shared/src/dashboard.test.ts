@@ -5,6 +5,7 @@ import {
   BUILTIN_CARDS,
   customCardArrangement,
   DEFAULT_DASHBOARD,
+  fitManualColumns,
   layoutFromSaved,
   moveCard,
 } from "./dashboard.js";
@@ -94,6 +95,45 @@ describe("arrangeColumns", () => {
 
   it("handles no cards", () => {
     expect(arrangeColumns([], 3).columns.flat()).toEqual([]);
+  });
+});
+
+describe("arranging by hand", () => {
+  const cards = [main("a", 10), main("b", 10), side("c", 10), side("d", 10)];
+
+  it("keeps your arrangement, even against the card types", () => {
+    expect(
+      fitManualColumns(
+        [
+          ["c", "a"],
+          ["d", "b"],
+        ],
+        cards,
+        2,
+      ),
+    ).toEqual([
+      ["c", "a"],
+      ["d", "b"],
+    ]);
+  });
+
+  it("drops cards that are gone and repeats, and puts new cards in the shortest column", () => {
+    expect(fitManualColumns([["a", "gone", "b", "a"], ["c"]], cards, 2)).toEqual([
+      ["a", "b"],
+      ["c", "d"],
+    ]);
+    expect(fitManualColumns([[], []], [main("big", 100), main("s1"), main("s2")], 2)).toEqual([
+      ["big"],
+      ["s1", "s2"],
+    ]);
+  });
+
+  it("always has one list per column, even a stale arrangement", () => {
+    expect(fitManualColumns([["a"], ["b"], ["c"], ["d"]], cards, 2)).toEqual([
+      ["a"],
+      ["b", "c", "d"],
+    ]);
+    expect(fitManualColumns([["a"]], cards, 3)).toHaveLength(3);
   });
 });
 

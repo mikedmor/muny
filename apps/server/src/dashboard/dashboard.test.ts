@@ -256,6 +256,47 @@ describe("saving cards", () => {
     expect(after).toHaveLength(before.length);
   });
 
+  it("keeps a hand arrangement for each screen size", async () => {
+    const { client } = await setup();
+    const layout = async () => (await client.get("/api/dashboard")).json<Dashboard>();
+    const cards = ["spending", "accounts", "budget"];
+    const columns = {
+      "2": [["accounts"], ["spending", "budget"]],
+      "1": [["budget", "accounts", "spending"]],
+    };
+    expect((await client.put("/api/dashboard/layout", { cards, columns })).statusCode).toBe(200);
+    expect((await layout()).columns).toEqual(columns);
+
+    // Changing the priority order alone leaves them.
+    await client.put("/api/dashboard/layout", { cards: [...cards].reverse() });
+    expect((await layout()).columns).toEqual(columns);
+
+    // A customized copy takes the original's place at every size.
+    const copy = await client.post("/api/dashboard/cards", {
+      title: "My budget",
+      basedOn: "budget",
+      doc: builtinCardDoc("budget"),
+    });
+    const ref = `${CUSTOM_PREFIX}${copy.json<CustomCard>().id}`;
+    expect((await layout()).columns["2"]?.[1]).toEqual(["spending", ref]);
+    expect((await layout()).columns["1"]?.[0]?.[0]).toBe(ref);
+
+    // Reset goes back to arranging itself.
+    await client.delete("/api/dashboard/layout");
+    expect((await layout()).columns).toEqual({});
+  });
+
+  it("refuses arrangements that don't fit", async () => {
+    const { client } = await setup();
+    const put = async (columns: unknown) =>
+      (await client.put("/api/dashboard/layout", { cards: ["spending", "accounts"], columns }))
+        .statusCode;
+    expect(await put({ "2": [["spending"]] })).toBe(400);
+    expect(await put({ "2": [["spending"], ["budget"]] })).toBe(400);
+    expect(await put({ "2": [["spending"], ["spending"]] })).toBe(400);
+    expect(await put({ "9": [["spending"]] })).toBe(400);
+  });
+
   it("gives a template for every built-in card, and no others", async () => {
     const { client } = await setup();
     const res = await client.get("/api/dashboard/templates/budget");

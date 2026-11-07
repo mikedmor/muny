@@ -213,6 +213,50 @@ export function arrangeColumns(cards: ArrangeCard[], columnCount: number): Arran
   };
 }
 
+/** Columns a screen size has room for: Phone, Laptop, Wide, Ultrawide. */
+export const SCREEN_COLUMN_COUNTS = [1, 2, 3, 4] as const;
+export type ScreenColumnCount = (typeof SCREEN_COLUMN_COUNTS)[number];
+
+/**
+ * Screen sizes arranged by hand: columns of cards, by how many columns that size
+ * has. A size that isn't here arranges itself from the priority order.
+ */
+export type ManualColumns = Partial<Record<`${ScreenColumnCount}`, string[][]>>;
+
+/**
+ * A hand arrangement, made to fit the cards on the Overview now: a card taken off
+ * disappears from it, and a new card goes in the shortest column, so adding a card
+ * never means rearranging by hand again.
+ */
+export function fitManualColumns(
+  manual: string[][],
+  cards: ArrangeCard[],
+  count: number,
+): string[][] {
+  const weight = new Map(cards.map((c) => [c.card, c.weight]));
+  const seen = new Set<string>();
+  const columns: string[][] = Array.from({ length: count }, () => []);
+  // A saved arrangement can't have more columns than the size, but stay safe if it does.
+  manual.forEach((column, i) => {
+    const target = columns[Math.min(i, count - 1)];
+    for (const card of column) {
+      if (!weight.has(card) || seen.has(card)) continue;
+      seen.add(card);
+      target?.push(card);
+    }
+  });
+  const heights = columns.map((column) =>
+    column.reduce((sum, card) => sum + (weight.get(card) ?? 0), 0),
+  );
+  for (const c of cards) {
+    if (seen.has(c.card)) continue;
+    const shortest = heights.indexOf(Math.min(...heights));
+    columns[shortest]?.push(c.card);
+    heights[shortest] = (heights[shortest] ?? 0) + c.weight;
+  }
+  return columns;
+}
+
 /** Move a card to a new position in the priority order. */
 export function moveCard(cards: string[], card: string, toIndex: number): string[] {
   const from = cards.indexOf(card);
@@ -303,6 +347,8 @@ export interface Dashboard {
   cards: string[];
   /** Still the default: you haven't customized it. */
   isDefault: boolean;
+  /** Screen sizes this person arranged by hand. */
+  columns: ManualColumns;
   /** Every custom card in the household, on this layout or not. */
   customCards: CustomCard[];
 }

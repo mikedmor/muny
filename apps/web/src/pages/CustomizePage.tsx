@@ -1,10 +1,13 @@
 import {
+  type CollisionDetection,
   closestCenter,
   DndContext,
   type DragEndEvent,
+  type DragMoveEvent,
   DragOverlay,
   KeyboardSensor,
   PointerSensor,
+  pointerWithin,
   useDraggable,
   useDroppable,
   useSensor,
@@ -18,10 +21,19 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { BUILTIN_CARDS, CUSTOM_PREFIX, type CustomCard } from "@muny/shared";
+import {
+  arrangeColumns,
+  BUILTIN_CARDS,
+  CUSTOM_PREFIX,
+  type CustomCard,
+  fitManualColumns,
+  type ManualColumns,
+} from "@muny/shared";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowDown,
+  ArrowLeft,
+  ArrowRight,
   ArrowUp,
   GripVertical,
   Laptop,
@@ -36,7 +48,13 @@ import {
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useWidth } from "../cardkit/xychart.js";
-import { BoardColumns, describeCard } from "../components/DashboardBoard.js";
+import {
+  arrangeCards,
+  BoardColumns,
+  columnTemplate,
+  currentColumnCount,
+  describeCard,
+} from "../components/DashboardBoard.js";
 import { Alert, Button, buttonClass, Card, cx, PageHeader } from "../components/ui.js";
 import { useAuthStatus } from "../lib/auth.js";
 import { useDashboard, useResetLayout, useSaveLayout } from "../lib/queries.js";
@@ -56,6 +74,153 @@ const SCREENS = [
 ] as const;
 
 const customRef = (c: CustomCard) => `${CUSTOM_PREFIX}${c.id}`;
+
+/** Under the pointer, the card before its column. */
+const manualCollision: CollisionDetection = (args) =>
+  [...pointerWithin(args)].sort(
+    (a, b) => Number(String(a.id).startsWith("mcol:")) - Number(String(b.id).startsWith("mcol:")),
+  );
+
+const moved = (columns: string[][], card: string, column: number, index: number) => {
+  const next = columns.map((list) => list.filter((c) => c !== card));
+  next[column]?.splice(index, 0, card);
+  return next;
+};
+
+/** One card on the page while arranging by hand. */
+function ManualCard({
+  card,
+  title,
+  scale,
+  marker,
+  canLeft,
+  canRight,
+  canUp,
+  canDown,
+  onMove,
+  onRemove,
+  editing,
+  children,
+}: {
+  card: string;
+  title: string;
+  scale: number;
+  marker: "before" | "after" | null;
+  canLeft: boolean;
+  canRight: boolean;
+  canUp: boolean;
+  canDown: boolean;
+  onMove: (by: "left" | "right" | "up" | "down") => void;
+  onRemove: () => void;
+  editing: ReactNode;
+  children: ReactNode;
+}) {
+  const drag = useDraggable({ id: `mcard:${card}` });
+  const drop = useDroppable({ id: `mdrop:${card}` });
+  return (
+    <div
+      ref={(el) => {
+        drag.setNodeRef(el);
+        drop.setNodeRef(el);
+      }}
+      data-manual-card={card}
+      className={cx(
+        "group relative min-w-0 rounded-xl focus-within:z-30 hover:z-30",
+        drag.isDragging && "opacity-40",
+      )}
+    >
+      {marker && (
+        <div
+          aria-hidden="true"
+          className={cx(
+            "absolute inset-x-0 z-20 rounded-full bg-brand-600",
+            marker === "before" ? "-top-3" : "-bottom-3",
+          )}
+          style={{ height: Math.max(3, 3 / scale) }}
+        />
+      )}
+      <div
+        {...drag.listeners}
+        {...drag.attributes}
+        title={`Drag ${title} to another place`}
+        className="cursor-grab touch-none rounded-xl outline-brand-500 hover:outline-2 active:cursor-grabbing"
+      >
+        <div
+          inert
+          className="pointer-events-none min-h-24 rounded-xl bg-slate-100 dark:bg-slate-900"
+        >
+          {children}
+        </div>
+      </div>
+      <div
+        className="absolute top-1 right-1 z-10 flex origin-top-right items-center gap-0.5 rounded-lg border border-slate-200 bg-surface px-1 shadow-sm dark:border-slate-700 dark:bg-slate-900"
+        style={{ transform: `scale(${Math.min(2.5, 1 / scale)})` }}
+      >
+        <span
+          {...drag.listeners}
+          className="max-w-32 cursor-grab touch-none truncate px-1 py-1 text-xs font-medium active:cursor-grabbing"
+        >
+          {title}
+        </span>
+        <span className="hidden items-center gap-0.5 group-focus-within:flex group-hover:flex [@media(hover:none)]:flex">
+          <IconButton
+            label={`Move ${title} left`}
+            disabled={!canLeft}
+            onClick={() => onMove("left")}
+          >
+            <ArrowLeft aria-hidden="true" className="size-3.5" />
+          </IconButton>
+          <IconButton label={`Move ${title} up`} disabled={!canUp} onClick={() => onMove("up")}>
+            <ArrowUp aria-hidden="true" className="size-3.5" />
+          </IconButton>
+          <IconButton
+            label={`Move ${title} down`}
+            disabled={!canDown}
+            onClick={() => onMove("down")}
+          >
+            <ArrowDown aria-hidden="true" className="size-3.5" />
+          </IconButton>
+          <IconButton
+            label={`Move ${title} right`}
+            disabled={!canRight}
+            onClick={() => onMove("right")}
+          >
+            <ArrowRight aria-hidden="true" className="size-3.5" />
+          </IconButton>
+          {editing}
+          <IconButton label={`Remove ${title}`} onClick={onRemove}>
+            <X aria-hidden="true" className="size-4" />
+          </IconButton>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function ManualColumn({
+  index,
+  empty,
+  children,
+}: {
+  index: number;
+  empty: boolean;
+  children: ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: `mcol:${index}` });
+  return (
+    <div
+      ref={setNodeRef}
+      data-manual-column={index}
+      className={cx(
+        "flex min-h-64 min-w-0 flex-col gap-6 rounded-xl",
+        (empty || isOver) && "outline-2 outline-dashed outline-slate-400 dark:outline-slate-600",
+        isOver && "outline-brand-500",
+      )}
+    >
+      {children}
+    </div>
+  );
+}
 
 /** A real card drawn small. It can't be clicked or tabbed into. */
 function Thumbnail({
@@ -267,21 +432,22 @@ export function CustomizePage() {
   const reset = useResetLayout();
   const renderCard = useCardRenderer();
   const custom = dashboard.data?.customCards ?? [];
-  const [cards, setCards] = useState<string[] | null>(null);
-  const [history, setHistory] = useState<string[][]>([]);
+  const [state, setState] = useState<{ cards: string[]; columns: ManualColumns } | null>(null);
+  const [history, setHistory] = useState<{ cards: string[]; columns: ManualColumns }[]>([]);
+  const [marker, setMarker] = useState<{ card: string; side: "before" | "after" } | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [show, setShow] = useState<"all" | "builtin" | "custom">("all");
-  const [screen, setScreen] = useState(1);
+  const [screen, setScreen] = useState(() => currentColumnCount() - 1);
   const { ref: previewRef, width: previewWidth } = useWidth(600);
   const previewContent = useRef<HTMLDivElement>(null);
   const [previewHeight, setPreviewHeight] = useState(400);
 
-  const serverCards = dashboard.data?.cards;
+  const loaded = dashboard.data;
   useEffect(() => {
-    if (serverCards && cards === null) setCards(serverCards);
-  }, [serverCards, cards]);
+    if (loaded && state === null) setState({ cards: loaded.cards, columns: loaded.columns });
+  }, [loaded, state]);
 
   useEffect(() => {
     const el = previewContent.current;
@@ -296,17 +462,27 @@ export function CustomizePage() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  const list = cards ?? [];
-  const change = (next: string[]) => {
-    setHistory((h) => [...h.slice(-49), list]);
-    setCards(next);
+  const list = state?.cards ?? [];
+  const manual = state?.columns ?? {};
+  const commit = (next: { cards: string[]; columns: ManualColumns }) => {
+    if (state) setHistory((h) => [...h.slice(-49), state]);
+    setState(next);
     save.mutate(next);
+  };
+  /** A change to the cards on the page. Taking one off takes it off every size. */
+  const change = (cards: string[]) => {
+    const columns: ManualColumns = {};
+    for (const [size, lists] of Object.entries(manual))
+      columns[size as keyof ManualColumns] = lists?.map((column) =>
+        column.filter((c) => cards.includes(c)),
+      );
+    commit({ cards, columns });
   };
   const undo = () => {
     const prev = history[history.length - 1];
     if (!prev) return;
     setHistory((h) => h.slice(0, -1));
-    setCards(prev);
+    setState(prev);
     save.mutate(prev);
   };
 
@@ -328,11 +504,72 @@ export function CustomizePage() {
       });
   }, [custom, list, search, show]);
 
+  const device = SCREENS[screen] ?? SCREENS[1];
+  const sizeKey = `${device.count}` as keyof ManualColumns;
+  const savedManual = manual[sizeKey];
+  const manualColumns = savedManual
+    ? fitManualColumns(savedManual, arrangeCards(list, custom, device.count), device.count)
+    : null;
+
+  const setManual = (columns: string[][] | null, cards = list) => {
+    const next = { ...manual };
+    if (columns) next[sizeKey] = columns;
+    else delete next[sizeKey];
+    commit({ cards, columns: next });
+  };
+
+  const moveByButton = (card: string, by: "left" | "right" | "up" | "down") => {
+    if (!manualColumns) return;
+    const from = manualColumns.findIndex((column) => column.includes(card));
+    const at = manualColumns[from]?.indexOf(card) ?? 0;
+    if (by === "up") setManual(moved(manualColumns, card, from, at - 1));
+    if (by === "down") setManual(moved(manualColumns, card, from, at + 1));
+    if (by === "left" || by === "right") {
+      const to = from + (by === "left" ? -1 : 1);
+      setManual(moved(manualColumns, card, to, Math.min(at, manualColumns[to]?.length ?? 0)));
+    }
+  };
+
+  const onDragMove = (e: DragMoveEvent) => {
+    const overId = String(e.over?.id ?? "");
+    const pointer = e.activatorEvent as PointerEvent;
+    if (!overId.startsWith("mdrop:") || !e.over || pointer.clientY === undefined) {
+      if (marker) setMarker(null);
+      return;
+    }
+    const y = pointer.clientY + e.delta.y;
+    const side = y > e.over.rect.top + e.over.rect.height / 2 ? "after" : "before";
+    const card = overId.slice(6);
+    if (marker?.card !== card || marker.side !== side) setMarker({ card, side });
+  };
+
   const onDragEnd = ({ active, over }: DragEndEvent) => {
+    const placed = marker;
     setDragging(null);
+    setMarker(null);
     if (!over) return;
     const activeId = String(active.id);
     const overId = String(over.id);
+    if (manualColumns) {
+      const card = activeId.replace(/^(lib|mcard):/, "");
+      const isNew = activeId.startsWith("lib:");
+      const base = isNew ? manualColumns.map((column) => [...column]) : manualColumns;
+      let next: string[][] | null = null;
+      if (overId.startsWith("mcol:")) {
+        const to = Number(overId.slice(5));
+        const rest = base[to]?.filter((c) => c !== card) ?? [];
+        next = moved(base, card, to, rest.length);
+      } else if (overId.startsWith("mdrop:")) {
+        const target = overId.slice(6);
+        if (target === card) return;
+        const to = base.findIndex((column) => column.includes(target));
+        const rest = base[to]?.filter((c) => c !== card) ?? [];
+        const at = rest.indexOf(target) + (placed?.side === "after" ? 1 : 0);
+        next = moved(base, card, to, at);
+      }
+      if (next) setManual(next, isNew ? [...list, card] : list);
+      return;
+    }
     if (activeId.startsWith("lib:")) {
       const card = activeId.slice(4);
       const at = list.indexOf(overId);
@@ -375,9 +612,8 @@ export function CustomizePage() {
     );
   };
 
-  const device = SCREENS[screen] ?? SCREENS[1];
   const scale = previewWidth / device.width;
-  const activeInfo = dragging ? describeCard(dragging.replace(/^lib:/, ""), custom) : null;
+  const activeInfo = dragging ? describeCard(dragging.replace(/^(lib|mcard):/, ""), custom) : null;
   const error = save.error ?? reset.error;
 
   return (
@@ -407,8 +643,8 @@ export function CustomizePage() {
                 )
                   reset.mutate(undefined, {
                     onSuccess: (d) => {
-                      setHistory((h) => [...h, list]);
-                      setCards(d.cards);
+                      if (state) setHistory((h) => [...h, state]);
+                      setState({ cards: d.cards, columns: d.columns });
                     },
                   });
               }}
@@ -429,13 +665,24 @@ export function CustomizePage() {
 
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCenter}
+        collisionDetection={manualColumns ? manualCollision : closestCenter}
         onDragStart={(e) => setDragging(String(e.active.id))}
-        onDragCancel={() => setDragging(null)}
+        onDragMove={onDragMove}
+        onDragCancel={() => {
+          setDragging(null);
+          setMarker(null);
+        }}
         onDragEnd={onDragEnd}
       >
-        <div className="grid items-start gap-6 lg:grid-cols-2 2xl:grid-cols-[22rem_minmax(0,1fr)_22rem]">
-          <section className="min-w-0">
+        <div
+          className={cx(
+            "grid items-start gap-6",
+            manualColumns
+              ? "lg:grid-cols-[minmax(0,1fr)_22rem]"
+              : "lg:grid-cols-2 2xl:grid-cols-[22rem_minmax(0,1fr)_22rem]",
+          )}
+        >
+          <section className={cx("min-w-0", manualColumns && "hidden")}>
             <h2 className="mb-1 font-semibold">On your Overview</h2>
             <p className="mb-3 text-sm text-slate-500">
               Higher in this list means higher on the page. Drag to reorder, or drag a card in from
@@ -475,11 +722,20 @@ export function CustomizePage() {
             </ListDrop>
           </section>
 
-          <section className="min-w-0 lg:order-3 lg:col-span-2 2xl:order-none 2xl:col-span-1">
+          <section
+            className={cx(
+              "min-w-0",
+              !manualColumns && "lg:order-3 lg:col-span-2 2xl:order-none 2xl:col-span-1",
+            )}
+          >
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h2 className="font-semibold">Your page</h2>
-                <p className="text-sm text-slate-500">Live, with your real numbers.</p>
+                <p className="text-sm text-slate-500">
+                  {manualColumns
+                    ? `Drag cards to any column. Only ${device.label} is arranged this way; other sizes keep their own.`
+                    : "Live, with your real numbers."}
+                </p>
               </div>
               <div
                 role="radiogroup"
@@ -494,7 +750,11 @@ export function CustomizePage() {
                     role="radio"
                     aria-checked={screen === i}
                     aria-label={s.label}
-                    title={s.label}
+                    title={
+                      manual[`${s.count}` as keyof ManualColumns]
+                        ? `${s.label}: arranged by hand`
+                        : `${s.label}: arranges itself`
+                    }
                     onClick={() => setScreen(i)}
                     className={cx(
                       "flex items-center gap-1 rounded-md px-2 py-1 text-xs",
@@ -505,8 +765,65 @@ export function CustomizePage() {
                   >
                     <s.icon aria-hidden="true" className="size-3.5" />
                     <span className="hidden sm:inline">{s.label}</span>
+                    {manual[`${s.count}` as keyof ManualColumns] && (
+                      <span
+                        title="Arranged by hand"
+                        className="size-1.5 rounded-full bg-brand-600"
+                      />
+                    )}
                   </button>
                 ))}
+              </div>
+            </div>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-surface px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-900">
+              <div>
+                <span className="font-medium">Columns at {device.label} size</span>
+                <span className="block text-xs text-slate-500">
+                  {manualColumns
+                    ? "Stay exactly where you put them. New cards go in the shortest column."
+                    : "Muny keeps them level, using your priority order."}
+                </span>
+              </div>
+              <div
+                role="radiogroup"
+                aria-label={`How to arrange the ${device.label} size`}
+                className="flex rounded-lg border border-slate-200 p-0.5 dark:border-slate-800"
+              >
+                {(
+                  [
+                    ["auto", "Automatic"],
+                    ["manual", "By hand"],
+                  ] as const
+                ).map(([mode, label]) => {
+                  const on = (mode === "manual") === !!manualColumns;
+                  return (
+                    // biome-ignore lint/a11y/useSemanticElements: a compact segmented control.
+                    <button
+                      key={mode}
+                      type="button"
+                      role="radio"
+                      aria-checked={on}
+                      onClick={() => {
+                        if (on) return;
+                        // Starts from what's showing, so nothing jumps.
+                        setManual(
+                          mode === "manual"
+                            ? arrangeColumns(arrangeCards(list, custom, device.count), device.count)
+                                .columns
+                            : null,
+                        );
+                      }}
+                      className={cx(
+                        "rounded-md px-2.5 py-1 text-xs",
+                        on
+                          ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-700/20 dark:text-brand-500"
+                          : "text-slate-500",
+                      )}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
             <div
@@ -516,17 +833,52 @@ export function CustomizePage() {
             >
               <div
                 ref={previewContent}
-                inert
+                inert={!manualColumns}
                 className="origin-top-left p-4"
                 style={{ width: device.width, transform: `scale(${scale})` }}
               >
-                <BoardColumns
-                  cards={list}
-                  custom={custom}
-                  count={device.count}
-                  renderCard={renderCard}
-                  highlight={hovered}
-                />
+                {manualColumns ? (
+                  <div
+                    className="grid items-start gap-6"
+                    style={{ gridTemplateColumns: columnTemplate(device.count, true) }}
+                  >
+                    {manualColumns.map((column, i) => (
+                      <ManualColumn
+                        // biome-ignore lint/suspicious/noArrayIndexKey: columns have no identity beyond position.
+                        key={i}
+                        index={i}
+                        empty={column.length === 0}
+                      >
+                        {column.map((card, at) => (
+                          <ManualCard
+                            key={card}
+                            card={card}
+                            title={describeCard(card, custom).title}
+                            scale={scale}
+                            marker={marker?.card === card ? marker.side : null}
+                            canLeft={i > 0}
+                            canRight={i < manualColumns.length - 1}
+                            canUp={at > 0}
+                            canDown={at < column.length - 1}
+                            onMove={(by) => moveByButton(card, by)}
+                            onRemove={() => change(list.filter((c) => c !== card))}
+                            editing={editLink(card)}
+                          >
+                            {renderCard(card)}
+                          </ManualCard>
+                        ))}
+                      </ManualColumn>
+                    ))}
+                  </div>
+                ) : (
+                  <BoardColumns
+                    cards={list}
+                    custom={custom}
+                    count={device.count}
+                    renderCard={renderCard}
+                    highlight={hovered}
+                  />
+                )}
               </div>
             </div>
           </section>

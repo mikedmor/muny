@@ -8,11 +8,21 @@ Click **Customize** at the top of the page. Changes save as you make them, and *
 
 - **On your Overview** lists your cards. Higher in the list means higher on the page. Drag a card by its handle to change its priority. Hovering a row also shows arrows, which work from the keyboard too. **✕** takes a card off your Overview.
 - **Your page** is a live picture of the page those cards make, with your real numbers. Switch between Phone, Laptop, Wide and Ultrawide to see each arrangement. Hovering a card in the list outlines it here.
+- **Columns at each size:** every size is **Automatic** or **By hand**, on its own, so your phone can keep its own order while your ultrawide is laid out exactly how you like. See below.
 - **Add a card** shows everything else you could add, with previews. Click **Add**, or drag one into the list exactly where you want it.
 - **✎** edits one of your own cards. On a built-in card, it opens a copy for you to change.
 - **Reset to standard** goes back to the standard Overview. Your own cards stay available to add.
 
 Charts go in the wider columns, filling whichever is shortest, and lists and balances go in the column on the right. On a wide screen, when the lists would make that column much longer than the others, your lowest-priority ones move into the shorter columns. Muny measures your cards to keep the columns level, and settles in the first moments after the page opens, so nothing moves while you're using it. On a phone, everything is one column in exactly your order. Cards with nothing to show (say, Crypto with no coins) take no space until they have something.
+
+### Arranging columns by hand
+
+Choose a size (Phone, Laptop, Wide or Ultrawide), then switch **Columns at this size** to **By hand**. It starts from the arrangement showing, so nothing jumps. Drag any card to any place in any column, or use the arrows on each card. Sizes arranged by hand have a dot beside their name.
+
+- By hand, a card can go in any column, including charts in the narrow right column.
+- A new card goes in the shortest column, and a card you take off goes from every size.
+- Each size is stored separately, and for you alone. Other people in your household keep their own.
+- Switching back to **Automatic** returns that size to your priority order. **Undo** brings the arrangement back if you change your mind.
 
 ## Making your own cards
 

@@ -43,6 +43,7 @@ import type {
   InvestTxn,
   LinkResult,
   LinkStart,
+  ManualColumns,
   MarketIntraday,
   MarketOverview,
   NotificationChannel,
@@ -937,7 +938,8 @@ export const useDashboardSchema = (enabled: boolean) =>
 
 export const useSaveLayout = () =>
   useInvalidatingMutation(
-    (cards: string[]) => api.put<Dashboard>("/api/dashboard/layout", { cards }),
+    (layout: { cards: string[]; columns?: ManualColumns }) =>
+      api.put<Dashboard>("/api/dashboard/layout", layout),
     [dashboardKey],
   );
 

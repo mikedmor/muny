@@ -35,6 +35,7 @@ import {
   MAX_MEASURES,
   MAX_METRICS,
   MAX_OUTPUT_ROWS,
+  type ManualColumns,
   runCardDoc,
   upgradeV1Spec,
 } from "@muny/shared";
@@ -243,8 +244,25 @@ export const CustomCardSchema = z
   })
   .strict();
 
+const cardRef = z.string().min(1).max(80);
+/** One size's arrangement: exactly as many columns as that size has. */
+const manualColumns = (count: number) =>
+  z.array(z.array(cardRef).max(MAX_LAYOUT_CARDS)).length(count).optional();
+
 export const LayoutSchema = z
-  .object({ cards: z.array(z.string().min(1).max(80)).max(MAX_LAYOUT_CARDS) })
+  .object({
+    cards: z.array(cardRef).max(MAX_LAYOUT_CARDS),
+    /** Replaces every size's hand arrangement. Left out, they stay as they are. */
+    columns: z
+      .object({
+        "1": manualColumns(1),
+        "2": manualColumns(2),
+        "3": manualColumns(3),
+        "4": manualColumns(4),
+      })
+      .strict()
+      .optional(),
+  })
   .strict();
 
 /** Refuse a card that could never work, saying exactly why. */
@@ -297,6 +315,7 @@ export function dashboardSchema(): DashboardSchema {
 
 const CARDS_KEY = "dashboard.cards";
 const layoutKey = (userId: string) => `dashboard.layout:${userId}`;
+const columnsKey = (userId: string) => `dashboard.columns:${userId}`;
 
 function read<T>(db: Db, key: string): T | null {
   const row = db.select().from(schema.appSettings).where(eq(schema.appSettings.key, key)).get();
@@ -333,11 +352,17 @@ export function getDashboard(db: Db, userId: string): Dashboard {
     // A custom card someone deleted simply drops out of everyone's layout.
     cards: (saved ?? DEFAULT_DASHBOARD).filter((c) => known.has(c)),
     isDefault: saved === null,
+    columns: read<ManualColumns>(db, columnsKey(userId)) ?? {},
     customCards: listCustomCards(db),
   };
 }
 
-export function saveLayout(db: Db, userId: string, cards: string[]): Dashboard {
+export function saveLayout(
+  db: Db,
+  userId: string,
+  cards: string[],
+  columns?: ManualColumns,
+): Dashboard {
   const known = knownCards(db);
   const seen = new Set<string>();
   for (const c of cards) {
@@ -345,14 +370,21 @@ export function saveLayout(db: Db, userId: string, cards: string[]): Dashboard {
     if (seen.has(c)) throw badRequest(`A layout can hold ${c} only once`);
     seen.add(c);
   }
+  for (const list of Object.values(columns ?? {})) {
+    const placed = (list ?? []).flat();
+    if (placed.some((c) => !seen.has(c)))
+      throw badRequest("Columns can only hold cards on the Overview");
+    if (new Set(placed).size !== placed.length)
+      throw badRequest("Columns can hold each card only once");
+  }
   write(db, layoutKey(userId), cards);
+  if (columns) write(db, columnsKey(userId), columns);
   return getDashboard(db, userId);
 }
 
 export function resetLayout(db: Db, userId: string): Dashboard {
-  db.delete(schema.appSettings)
-    .where(eq(schema.appSettings.key, layoutKey(userId)))
-    .run();
+  for (const key of [layoutKey(userId), columnsKey(userId)])
+    db.delete(schema.appSettings).where(eq(schema.appSettings.key, key)).run();
   return getDashboard(db, userId);
 }
 
@@ -374,9 +406,17 @@ export function createCustomCard(
   write(db, CARDS_KEY, [...cards, card]);
   if (place) {
     const ref = `${CUSTOM_PREFIX}${card.id}`;
-    const layout = getDashboard(db, userId).cards;
+    const { cards: layout, columns } = getDashboard(db, userId);
     const at = input.basedOn ? layout.indexOf(input.basedOn) : -1;
-    saveLayout(db, userId, at >= 0 ? layout.map((c, i) => (i === at ? ref : c)) : [...layout, ref]);
+    if (at < 0) saveLayout(db, userId, [...layout, ref]);
+    else {
+      // A copy sits exactly where the original did, at every size.
+      const swap = (c: string) => (c === input.basedOn ? ref : c);
+      const swapped: ManualColumns = {};
+      for (const [size, list] of Object.entries(columns))
+        swapped[size as keyof ManualColumns] = list?.map((column) => column.map(swap));
+      saveLayout(db, userId, layout.map(swap), swapped);
+    }
   }
   return card;
 }
