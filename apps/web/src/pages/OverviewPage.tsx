@@ -136,8 +136,9 @@ function SpendingCard({ d }: { d: Overview }) {
           currentLabel={thisName}
           previousLabel={lastName}
           dayLabel={(day) => `Day ${day}`}
-          ariaLabel={`Running spending total: ${thisName} so far compared with ${lastName}`}
+          ariaLabel={`Running spending total: ${thisName} so far compared with ${lastName}, against ${formatMoney(d.incomeMonthToDateCents)} earned this month`}
           stack={stack}
+          reference={{ label: "Earned", value: d.incomeMonthToDateCents }}
         />
       </div>
       <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-3 text-sm dark:border-slate-800">

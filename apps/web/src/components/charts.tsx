@@ -766,7 +766,10 @@ export function PaceChart({
   ariaLabel,
   height = 180,
   stack: stackIn,
+  reference,
 }: {
+  /** A level to compare against, drawn across the chart (e.g. what you've earned). */
+  reference?: { label: string; value: number };
   /** Running totals, index 0 = day 1, through today. */
   current: number[];
   /** This month's running total split into parts (e.g. categories), adding up to `current`. */
@@ -790,7 +793,7 @@ export function PaceChart({
   const [focus, setFocus] = useState<string | null>(null);
   const gradId = useId();
   const n = Math.max(days, previous.length, current.length, 2);
-  const hi = Math.max(1, ...current, ...previous);
+  const hi = Math.max(1, ...current, ...previous, reference?.value ?? 0);
   const ticks = niceTicks(hi, 0);
   const top = ticks[ticks.length - 1] ?? hi;
   const plotW = width - PAD.left - PAD.right;
@@ -842,6 +845,22 @@ export function PaceChart({
           </svg>
           {previousLabel}
         </span>
+        {reference && (
+          <span className="inline-flex items-center gap-1.5">
+            <svg width="18" height="6" aria-hidden="true">
+              <line
+                x1="1"
+                x2="17"
+                y1="3"
+                y2="3"
+                stroke="var(--viz-series-3)"
+                strokeWidth="2"
+                strokeDasharray="8 3"
+              />
+            </svg>
+            {reference.label}
+          </span>
+        )}
       </div>
       <div ref={ref} className="relative w-full min-w-0 select-none overflow-visible">
         <svg
@@ -901,6 +920,29 @@ export function PaceChart({
             strokeDasharray="4 3"
             strokeLinejoin="round"
           />
+          {reference && reference.value > 0 && (
+            <g>
+              <line
+                x1={PAD.left}
+                x2={width - PAD.right}
+                y1={y(reference.value)}
+                y2={y(reference.value)}
+                stroke="var(--viz-series-3)"
+                strokeWidth={2}
+                strokeDasharray="8 3"
+              />
+              <text
+                x={width - PAD.right}
+                y={y(reference.value) - 6}
+                textAnchor="end"
+                fontSize={11}
+                fontWeight={500}
+                fill="var(--viz-ink-2)"
+              >
+                {reference.label} {compactMoney(reference.value)}
+              </text>
+            </g>
+          )}
           {stack?.length ? (
             <StackBands
               stack={stack}
