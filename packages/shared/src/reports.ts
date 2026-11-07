@@ -92,11 +92,9 @@ export interface CategoryActivity {
   budget: { budgetCents: number; rolloverCents: number; availableCents: number } | null;
   /** Transactions (or split parts) in this category in the selected month. */
   stats: { count: number; totalCents: number; averageCents: number; largestCents: number };
-  /** "Everything else": the categories it covers in the selected month (plus uncategorized). */
-  categoryIds?: string[];
 }
 
-/** The budget page's "Everything else" row as a category: spending without a budget, and uncategorized. */
+/** The budget page's "Everything else" row as a category: spending with no category. */
 export const EVERYTHING_ELSE = "everything-else";
 
 /** The Spending page: breakdown by category plus a monthly summary. */

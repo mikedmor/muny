@@ -75,25 +75,20 @@ export function CategoryPage() {
       api.get<CategoryActivity>(`/api/categories/${categoryId}/activity?month=${month}&end=${end}`),
     placeholderData: keepPreviousData,
   });
-  const members = activity.data?.month === month ? activity.data.categoryIds : undefined;
-  const filter = virtual
-    ? `categoryIds=${[...(members ?? []), "uncategorized"].join(",")}`
-    : `categoryId=${categoryId}`;
+  /** Transactions API filter: Everything else is uncategorized spending. */
+  const filterId = virtual ? "uncategorized" : categoryId;
   const txns = useQuery({
-    queryKey: [...keys.transactions, "category", categoryId, month, filter],
+    queryKey: [...keys.transactions, "category", filterId, month],
     queryFn: () =>
       api.get<TransactionPage>(
-        `/api/transactions?${filter}&from=${month}-01&to=${monthEnd(month)}&limit=200&offset=0`,
+        `/api/transactions?categoryId=${filterId}&from=${month}-01&to=${monthEnd(month)}&limit=200&offset=0`,
       ),
-    enabled: !virtual || !!members,
     placeholderData: keepPreviousData,
   });
-  const inCategory = useMemo(() => {
-    const set = new Set(members ?? []);
-    return virtual
-      ? (id: string | null) => id === null || set.has(id)
-      : (id: string | null) => id === categoryId;
-  }, [virtual, members, categoryId]);
+  const inCategory = useMemo(
+    () => (id: string | null) => (virtual ? id === null : id === categoryId),
+    [virtual, categoryId],
+  );
   // The budget editor needs the month's full budget line.
   const budget = useQuery({
     queryKey: [...keys.budgets, month],
@@ -287,8 +282,7 @@ export function CategoryPage() {
               </Card>
               {virtual ? (
                 <p className="text-sm text-slate-500">
-                  Change a transaction's category above to move it out of Everything else, or give
-                  its category a budget.
+                  Change a transaction's category above to move it out of Everything else.
                 </p>
               ) : (
                 <Link
@@ -304,11 +298,8 @@ export function CategoryPage() {
             <div className="order-1 space-y-6 lg:order-0">
               {virtual && (
                 <Card className="text-sm text-slate-600 dark:text-slate-300">
-                  Everything else is spending in categories without a budget this month
-                  {a.categoryIds?.length
-                    ? ` (${a.categoryIds.length} categor${a.categoryIds.length === 1 ? "y" : "ies"})`
-                    : ""}
-                  , plus spending with no category. Set budgets on the Budgets page.
+                  Everything else is spending with no category. Pick a category for each transaction
+                  to move it into that category's budget.
                 </Card>
               )}
               {spending && !virtual && (

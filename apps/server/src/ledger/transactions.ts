@@ -27,12 +27,6 @@ const ListQuery = z.object({
   q: z.string().trim().max(200).optional(),
   accountId: id.optional(),
   categoryId: id.optional(),
-  /** Any of these categories (comma-separated; "uncategorized" allowed). */
-  categoryIds: z
-    .string()
-    .max(20_000)
-    .optional()
-    .transform((v) => (v ? v.split(",").filter(Boolean).slice(0, 500) : undefined)),
   tagId: id.optional(),
   from: isoDate.optional(),
   to: isoDate.optional(),
@@ -100,22 +94,6 @@ function buildFilters(q: z.infer<typeof ListQuery>): SQL | undefined {
       or(
         eq(t.categoryId, q.categoryId),
         sql`exists (select 1 from ${schema.transactionSplits} s where s.transaction_id = ${t.id} and s.category_id = ${q.categoryId})`,
-      ),
-    );
-  }
-  if (q.categoryIds?.length) {
-    const ids = q.categoryIds.filter((c) => c !== "uncategorized");
-    const list = sql.join(
-      ["-", ...ids].map((c) => sql`${c}`),
-      sql`, `,
-    );
-    conds.push(
-      or(
-        sql`${t.categoryId} in (${list})`,
-        sql`exists (select 1 from ${schema.transactionSplits} s where s.transaction_id = ${t.id} and s.category_id in (${list}))`,
-        q.categoryIds.includes("uncategorized")
-          ? sql`${t.categoryId} is null and ${t.transferPairId} is null and not exists (select 1 from ${schema.transactionSplits} s where s.transaction_id = ${t.id})`
-          : undefined,
       ),
     );
   }
