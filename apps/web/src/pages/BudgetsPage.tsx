@@ -13,7 +13,13 @@ import { EditBudget, InlineBudget, Ring } from "../components/budget.js";
 import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
 import { CategoryIcon, MerchantAvatar } from "../components/visuals.js";
 import { api } from "../lib/api.js";
-import { keys, useCategories, useUpdateCategory } from "../lib/queries.js";
+import {
+  keys,
+  useCategories,
+  useDeleteBudget,
+  useSetBudget,
+  useUpdateCategory,
+} from "../lib/queries.js";
 
 /**
  * Budgets, laid out like Rocket Money: budget basics (earnings and recurring
@@ -372,6 +378,86 @@ function ExcludedCard({ b }: { b: BudgetMonth }) {
 // Summary & forecast
 // ---------------------------------------------------------------------------
 
+/**
+ * A spending total you set, against what your category budgets add up to: a
+ * bar of how much of it the categories plan, what's unassigned (or how far
+ * over they go), and one click to follow the categories or match them.
+ */
+function Allocation({ b, month }: { b: BudgetMonth; month: string }) {
+  const set = useSetBudget();
+  const del = useDeleteBudget();
+  const total = b.total.budgetCents;
+  const planned = b.budgetedCents;
+  if (total === null || total === planned) return null;
+  const over = planned > total;
+  const diff = Math.abs(planned - total);
+  const width = (v: number) => `${Math.min(100, (v / Math.max(total, planned, 1)) * 100)}%`;
+  const busy = set.isPending || del.isPending;
+  return (
+    <div className="space-y-2 px-4 py-3">
+      <div
+        className="relative h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"
+        role="img"
+        aria-label={`Categories plan ${formatMoney(planned)} of a ${formatMoney(total)} spending budget`}
+      >
+        <div
+          className={cx(
+            "absolute inset-y-0 left-0 rounded-full",
+            over ? "bg-red-500" : "bg-brand-600",
+          )}
+          style={{ width: width(planned) }}
+        />
+        {over && (
+          // Where the spending budget ends.
+          <div
+            className="absolute inset-y-0 w-0.5 bg-white dark:bg-slate-950"
+            style={{ left: width(total) }}
+          />
+        )}
+      </div>
+      <p className="text-xs text-slate-600 dark:text-slate-300">
+        {over ? (
+          <>
+            Your categories add up to <strong>{formatMoney(planned)}</strong>,{" "}
+            <span className="text-red-600 dark:text-red-400">{formatMoney(diff)} more</span> than
+            this spending budget.
+          </>
+        ) : (
+          <>
+            Your categories plan <strong>{formatMoney(planned)}</strong> of it:{" "}
+            <span className="text-amber-700 dark:text-amber-400">{formatMoney(diff)}</span> isn't
+            assigned to a category.
+          </>
+        )}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="secondary"
+          disabled={busy || !b.total.budgetId}
+          onClick={() => b.total.budgetId && del.mutate(b.total.budgetId)}
+        >
+          Follow my categories
+        </Button>
+        <Button
+          variant="ghost"
+          disabled={busy || planned <= 0}
+          onClick={() =>
+            set.mutate({
+              categoryId: null,
+              kind: "spending",
+              amountCents: planned,
+              rollover: b.total.rollover,
+              fromMonth: month,
+            })
+          }
+        >
+          Match categories ({formatMoney(planned)})
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function SummaryCard({ b, month }: { b: BudgetMonth; month: string }) {
   const [editTotal, setEditTotal] = useState(false);
   const budget =
@@ -423,8 +509,14 @@ function SummaryCard({ b, month }: { b: BudgetMonth; month: string }) {
               {b.total.budgetCents != null ? "edit total" : "set a total"}
             </button>
           </dt>
-          <dd className="font-semibold tabular-nums">{formatMoney(budget)}</dd>
+          <dd className="text-right">
+            <span className="font-semibold tabular-nums">{formatMoney(budget)}</span>
+            {b.total.budgetCents == null && budget > 0 && (
+              <span className="block text-[11px] text-slate-500">your categories added up</span>
+            )}
+          </dd>
         </div>
+        <Allocation b={b} month={month} />
         {editTotal && (
           <div className="px-4 py-3">
             <EditBudget line={b.total} month={month} onDone={() => setEditTotal(false)} />
