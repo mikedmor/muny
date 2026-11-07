@@ -173,6 +173,8 @@ export const useUpdateCategory = () =>
       excludeFromBudget?: boolean;
       isBill?: boolean;
       groupId?: string;
+      /** An emoji; null goes back to the automatic one. */
+      icon?: string | null;
     }) => api.patch(`/api/categories/${id}`, input),
     [keys.categories, keys.budgets, keys.overview, keys.reports],
   );

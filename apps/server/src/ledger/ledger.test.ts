@@ -239,6 +239,21 @@ describe("categories", () => {
     ).toEqual([a.id, b.id].sort());
   });
 
+  it("sets and clears a category icon", async () => {
+    const { client } = await makeSignedInApp();
+    const c = (await client.get("/api/categories")).json<CategoryGroup[]>()[0]?.categories[0];
+    if (!c) throw new Error("seed missing");
+    const icon = async () =>
+      (await client.get("/api/categories"))
+        .json<CategoryGroup[]>()
+        .flatMap((g) => g.categories)
+        .find((x) => x.id === c.id)?.icon;
+    expect((await client.patch(`/api/categories/${c.id}`, { icon: "🤖" })).statusCode).toBe(200);
+    expect(await icon()).toBe("🤖");
+    expect((await client.patch(`/api/categories/${c.id}`, { icon: null })).statusCode).toBe(200);
+    expect(await icon()).toBeNull();
+  });
+
   it("refuses to delete a non-empty group", async () => {
     const { client } = await makeSignedInApp();
     const groups = (await client.get("/api/categories")).json<CategoryGroup[]>();

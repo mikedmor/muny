@@ -12,6 +12,7 @@ import { monthLabel } from "./budget.js";
 import { CategorySelect } from "./CategorySelect.js";
 import { Checkbox, Modal, MoneyField, SelectField } from "./forms.js";
 import { Alert, Button } from "./ui.js";
+import { CATEGORY_ICON_CHOICES, categoryIcon } from "./visuals.js";
 
 /**
  * Everything about one category in one dialog: name, group, its budget
@@ -82,6 +83,8 @@ function EditCategoryForm({
   const [isBill, setIsBill] = useState(category.isBill);
   const [inBudget, setInBudget] = useState(!category.excludeFromBudget);
   const [hidden, setHidden] = useState(category.hidden);
+  const [icon, setIcon] = useState<string | null>(category.icon);
+  const groupName = groups.find((g) => g.id === groupId)?.name;
   const [amount, setAmount] = useState<number | null>(line?.budgetCents ?? null);
   const [rollover, setRollover] = useState(line?.rollover ?? false);
   const [busy, setBusy] = useState(false);
@@ -110,6 +113,7 @@ function EditCategoryForm({
       if (isBill !== category.isBill) patch.isBill = isBill;
       if (inBudget === category.excludeFromBudget) patch.excludeFromBudget = !inBudget;
       if (hidden !== category.hidden) patch.hidden = hidden;
+      if ((icon || null) !== category.icon) patch.icon = icon?.trim() || null;
       if (Object.keys(patch).length > 1) await update.mutateAsync(patch);
       if (line && spending) {
         if (amount === null) {
@@ -151,6 +155,53 @@ function EditCategoryForm({
           ))}
         </SelectField>
       </div>
+
+      <fieldset>
+        <legend className="text-sm font-medium text-slate-700 dark:text-slate-300">Icon</legend>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <span
+            aria-hidden="true"
+            className="flex size-10 items-center justify-center rounded-full bg-slate-100 text-xl dark:bg-slate-800"
+          >
+            {icon || categoryIcon(name, groupName)}
+          </span>
+          <input
+            value={icon ?? ""}
+            onChange={(e) => setIcon(e.target.value || null)}
+            maxLength={16}
+            placeholder="Type or paste an emoji"
+            aria-label="Icon (an emoji)"
+            className="w-44 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
+          />
+          {icon && (
+            <button
+              type="button"
+              onClick={() => setIcon(null)}
+              className="text-xs text-brand-600 hover:underline"
+            >
+              Automatic
+            </button>
+          )}
+        </div>
+        <div className="mt-2 flex max-h-24 flex-wrap gap-1 overflow-y-auto">
+          {CATEGORY_ICON_CHOICES.map((i) => (
+            <button
+              key={i}
+              type="button"
+              aria-label={`Use ${i}`}
+              aria-pressed={icon === i}
+              onClick={() => setIcon(i)}
+              className={
+                icon === i
+                  ? "size-8 rounded-lg bg-brand-100 text-lg ring-2 ring-brand-500 dark:bg-brand-700/40"
+                  : "size-8 rounded-lg text-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+              }
+            >
+              {i}
+            </button>
+          ))}
+        </div>
+      </fieldset>
 
       {spending && line && (
         <fieldset className="space-y-3 rounded-lg bg-slate-50 p-3 dark:bg-slate-800/50">
