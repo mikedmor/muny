@@ -171,10 +171,13 @@ function CategoriesTable({ b, month }: { b: BudgetMonth; month: string }) {
   const [showAll, setShowAll] = useState(false);
   const scheduled = b.forecast.scheduledByCategory;
   const lines = b.groups.flatMap((g) => g.lines.map((l) => ({ ...l, groupName: g.name })));
-  // Categories with a budget or spending this month; the rest (nothing budgeted
-  // or spent) until "show more". Uncategorized spending is "Everything else".
+  // Categories with a budget, spending or a scheduled charge this month; the
+  // rest until "show more". Uncategorized spending is "Everything else".
   const budgeted = lines.filter((l) => l.budgetCents !== null);
-  const active = lines.filter((l) => l.budgetCents !== null || l.spentCents !== 0);
+  // Scheduled charges count too: that spending is expected this month.
+  const active = lines.filter(
+    (l) => l.budgetCents !== null || l.spentCents !== 0 || (scheduled[l.categoryId ?? ""] ?? 0) > 0,
+  );
   const quiet = lines.length - active.length;
   const shown = showAll ? lines : active;
   const otherSpent = b.uncategorizedCents;
@@ -264,8 +267,8 @@ function CategoriesTable({ b, month }: { b: BudgetMonth; month: string }) {
         <div className="border-t border-slate-200 px-4 py-2 dark:border-slate-800">
           <Button variant="ghost" onClick={() => setShowAll((s) => !s)}>
             {showAll
-              ? "Hide categories with no budget or spending"
-              : `Show ${quiet} more categor${quiet === 1 ? "y" : "ies"} (no budget or spending)`}
+              ? "Hide categories with no budget, spending or scheduled charges"
+              : `Show ${quiet} more categor${quiet === 1 ? "y" : "ies"} (no budget, spending or scheduled charges)`}
           </Button>
         </div>
       )}

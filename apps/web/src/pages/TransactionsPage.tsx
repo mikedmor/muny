@@ -24,7 +24,7 @@ import {
   Wand2,
   X,
 } from "lucide-react";
-import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { CategorySelect } from "../components/CategorySelect.js";
 import { FindSimilar } from "../components/FindSimilar.js";
 import { Modal, MoneyField, SelectField } from "../components/forms.js";
@@ -126,16 +126,31 @@ export function TransactionsPage() {
       search: clean({ ...(next as TransactionSearch), q: urlQ }),
       replace: true,
     });
-  const [search, setSearch] = useState(urlQ ?? "");
-  // Follow the URL when it changes from outside (e.g. a to-do link).
-  useEffect(() => setSearch(urlQ ?? ""), [urlQ]);
+  const [search, setSearchState] = useState(urlQ ?? "");
+  // Only what you type goes back into the URL. A change that came from the
+  // URL (a magnifying glass, a link) must never be written back: in the
+  // render it arrives, the box and its debounced value still hold the old
+  // search, and writing that would undo the link.
+  const typed = useRef(false);
+  /** The last search this page put in the URL itself (not a link). */
+  const pushed = useRef<string | undefined>(urlQ);
+  const setSearch = (v: string) => {
+    typed.current = true;
+    setSearchState(v);
+  };
+  useEffect(() => {
+    if (urlQ === pushed.current) return; // our own update: keep what's being typed
+    pushed.current = urlQ;
+    typed.current = false;
+    setSearchState(urlQ ?? "");
+  }, [urlQ]);
   const q = useDebounced(search.trim());
   useEffect(() => {
+    if (!typed.current) return;
+    if (q !== search.trim()) return; // still typing
+    typed.current = false;
     if ((q || undefined) === urlQ) return;
-    // Only once typing has settled: right after the URL changes (a magnifying
-    // glass, a link) the debounced value is still the old one, and writing it
-    // back would undo that change.
-    if (q !== search.trim()) return;
+    pushed.current = q || undefined;
     void navigate({
       to: "/transactions",
       search: clean({ ...(filters as TransactionSearch), q: q || undefined }),
