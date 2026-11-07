@@ -157,6 +157,16 @@ function MarketChart({ indexes }: { indexes: MarketQuote[] }) {
       base[i] = r.data?.previousClose ?? r.data?.points[0]?.close ?? null;
     });
     keysList = [...new Set(priceAt.flatMap((m) => [...m.keys()]))].sort();
+    // Like a brokerage, the day ends when the index session does (the VIX, 4:15 PM):
+    // after-hours trading isn't drawn. Pre-market is.
+    const indexEnd = indexes
+      .map((q, i) =>
+        q.symbol.startsWith("^") ? [...(priceAt[i]?.keys() ?? [])].sort().at(-1) : undefined,
+      )
+      .filter((k): k is string => k !== undefined)
+      .sort()
+      .at(-1);
+    if (indexEnd) keysList = keysList.filter((k) => k <= indexEnd);
     labels = keysList.map((k) =>
       new Date(Number(k)).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }),
     );

@@ -136,7 +136,9 @@ function BasicsTable({ b, month }: { b: BudgetMonth; month: string }) {
       key: "other",
       icon: "🛒",
       name: "All other categories",
-      note: "Spending that isn't a bill",
+      // Like Earnings: what's usual, or what was spent once the month is over. (Every
+      // recurring charge counts as a bill, so none are expected here.)
+      note: past ? "Spent outside bills" : `Usually about ${formatMoney(b.other.averageCents)}/mo`,
       line: b.other,
       auto: b.other.averageCents,
       actual: b.other.spentCents,
