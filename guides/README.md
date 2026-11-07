@@ -8,6 +8,7 @@ How to install, set up and use Muny.
 | [Secure access](access.md)                    | HTTPS, Tailscale, reverse proxies, phone install, household members   |
 | [Bank sync](bank-sync.md)                     | Connecting banks automatically through your own Plaid or Teller keys  |
 | [Importing files](importing.md)               | Rocket Money, bank CSV/OFX, brokerage and Koinly exports              |
+| [Budgets](budgets.md)                         | Monthly budgets, the forecast, and leaving categories out             |
 | [Loans](loans.md)                             | Loans: balances, rates, payoff dates and paying extra                 |
 | [Credit cards](cards.md)                      | Limits, statements, due dates and paying cards off                    |
 | [Stocks](stocks.md)                           | Tracking brokerage accounts, holdings and dividends                   |

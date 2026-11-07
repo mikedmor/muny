@@ -82,6 +82,7 @@ export interface CategoryMeta {
   groupName: string;
   kind: "expense" | "income" | "transfer";
   hidden: boolean;
+  excludeFromBudget: boolean;
   groupSort: number;
   sort: number;
 }
@@ -93,6 +94,7 @@ export function categoryMeta(db: Db): Map<string, CategoryMeta> {
         id: schema.categories.id,
         name: schema.categories.name,
         hidden: schema.categories.hidden,
+        excludeFromBudget: schema.categories.excludeFromBudget,
         sort: schema.categories.sortOrder,
         groupId: schema.categoryGroups.id,
         groupName: schema.categoryGroups.name,

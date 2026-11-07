@@ -228,3 +228,31 @@ describe("budgets", () => {
     ).toBe(400);
   });
 });
+
+describe("categories left out of budgets", () => {
+  it("drops their spending from lines, totals and the list", async () => {
+    const { client, cat, add } = await setup();
+    await add("2026-04-02", -6000, "Groceries");
+    await add("2026-04-03", -4500, "Clothing");
+    const before = (await client.get("/api/budgets/2026-04")).json<BudgetMonth>();
+    expect(before.total.spentCents).toBe(10_500);
+    expect(before.excluded).toEqual([]);
+
+    await client.patch(`/api/categories/${cat("Clothing")}`, { excludeFromBudget: true });
+    const after = (await client.get("/api/budgets/2026-04")).json<BudgetMonth>();
+    expect(after.total.spentCents).toBe(6000);
+    expect(lineOf(after, "Clothing")).toBeUndefined();
+    expect(after.excluded).toEqual([
+      expect.objectContaining({ categoryId: cat("Clothing"), name: "Clothing", spentCents: 4500 }),
+    ]);
+    const groups = (await client.get("/api/categories")).json<CategoryGroup[]>();
+    expect(
+      groups.flatMap((g) => g.categories).find((c) => c.id === cat("Clothing"))?.excludeFromBudget,
+    ).toBe(true);
+
+    await client.patch(`/api/categories/${cat("Clothing")}`, { excludeFromBudget: false });
+    expect((await client.get("/api/budgets/2026-04")).json<BudgetMonth>().total.spentCents).toBe(
+      10_500,
+    );
+  });
+});

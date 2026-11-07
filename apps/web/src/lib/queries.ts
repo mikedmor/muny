@@ -162,9 +162,17 @@ export const useCreateCategory = () =>
 
 export const useUpdateCategory = () =>
   useInvalidatingMutation(
-    ({ id, ...input }: { id: string; name?: string; hidden?: boolean; groupId?: string }) =>
-      api.patch(`/api/categories/${id}`, input),
-    [keys.categories],
+    ({
+      id,
+      ...input
+    }: {
+      id: string;
+      name?: string;
+      hidden?: boolean;
+      excludeFromBudget?: boolean;
+      groupId?: string;
+    }) => api.patch(`/api/categories/${id}`, input),
+    [keys.categories, keys.budgets, keys.overview],
   );
 
 export const useDeleteCategory = () =>

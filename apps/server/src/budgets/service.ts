@@ -72,11 +72,17 @@ export function budgetMonth(db: Db, month: string): BudgetMonth {
   let income = 0;
   const incomeByMonth = new Map<string, number>();
   let uncategorized = 0;
+  const excludedSpent = new Map<string, number>();
   for (const t of totals) {
     if (t.categoryId === TRANSFER_KEY) continue;
     const meta = t.categoryId ? cats.get(t.categoryId) : undefined;
     if (t.categoryId && !meta) continue;
     if (meta?.kind === "transfer") continue;
+    if (meta?.excludeFromBudget && t.categoryId) {
+      if (t.month === month)
+        excludedSpent.set(t.categoryId, (excludedSpent.get(t.categoryId) ?? 0) - t.cents);
+      continue;
+    }
     if (meta?.kind === "income") {
       if (t.month === month) income += t.cents;
       incomeByMonth.set(t.month, (incomeByMonth.get(t.month) ?? 0) + t.cents);
@@ -125,7 +131,7 @@ export function budgetMonth(db: Db, month: string): BudgetMonth {
 
   const groups = new Map<string, BudgetGroup & { sort: number }>();
   for (const c of [...cats.values()].sort((a, b) => a.groupSort - b.groupSort || a.sort - b.sort)) {
-    if (c.kind !== "expense") continue;
+    if (c.kind !== "expense" || c.excludeFromBudget) continue;
     const l = line(c.id, c.name);
     // Hidden categories only show if they have a budget or spending.
     if (c.hidden && l.budgetCents === null && l.spentCents === 0) continue;
@@ -148,7 +154,8 @@ export function budgetMonth(db: Db, month: string): BudgetMonth {
   const total = line(null, "Total spending");
 
   // Earnings and bills: an optional fixed target; no target = automatic (the forecast).
-  const billsPaid = recurringPaidByMonth(db, [month, ...prev3]);
+  const excludedIds = [...cats.values()].filter((c) => c.excludeFromBudget).map((c) => c.id);
+  const billsPaid = recurringPaidByMonth(db, [month, ...prev3], excludedIds);
   const basic = (
     kind: "income" | "bills",
     name: string,
@@ -181,7 +188,11 @@ export function budgetMonth(db: Db, month: string): BudgetMonth {
       incomeAverageCents: Math.round(
         prev3.reduce((s, m) => s + (incomeByMonth.get(m) ?? 0), 0) / 3,
       ),
-      isSpending: (categoryId) => categoryId === null || cats.get(categoryId)?.kind === "expense",
+      isSpending: (categoryId) => {
+        if (categoryId === null) return true;
+        const c = cats.get(categoryId);
+        return c?.kind === "expense" && !c.excludeFromBudget;
+      },
     }),
     month,
     total,
@@ -189,6 +200,15 @@ export function budgetMonth(db: Db, month: string): BudgetMonth {
     uncategorizedCents: uncategorized,
     incomeCents: income,
     budgetedCents,
+    excluded: [...cats.values()]
+      .filter((c) => c.excludeFromBudget && c.kind === "expense")
+      .sort((a, b) => a.groupSort - b.groupSort || a.sort - b.sort)
+      .map((c) => ({
+        categoryId: c.id,
+        name: c.name,
+        groupName: c.groupName,
+        spentCents: excludedSpent.get(c.id) ?? 0,
+      })),
   };
 }
 
@@ -253,7 +273,10 @@ function forecastMonth(
       ),
     )
     .all()
-    .filter((r) => series.get(r.seriesId as string)?.kind !== "income")
+    .filter((r) => {
+      const s = series.get(r.seriesId as string);
+      return s?.kind !== "income" && so.isSpending(s?.categoryId ?? null);
+    })
     .reduce((s, r) => s - r.cents, 0);
 
   const projectedSpending = so.spentCents + due;
@@ -274,7 +297,11 @@ function forecastMonth(
 }
 
 /** Recurring bills/subscriptions charged per month (positive cents). */
-function recurringPaidByMonth(db: Db, months: string[]): Map<string, number> {
+function recurringPaidByMonth(
+  db: Db,
+  months: string[],
+  excludedCategoryIds: string[] = [],
+): Map<string, number> {
   const out = new Map<string, number>();
   if (!months.length) return out;
   const sorted = [...months].sort();
@@ -283,6 +310,10 @@ function recurringPaidByMonth(db: Db, months: string[]): Map<string, number> {
       from transactions t
       join recurring_series r on r.id = t.recurring_series_id
      where t.hidden = 0 and t.amount_cents < 0 and r.kind <> 'income'
+       and (r.category_id is null or r.category_id not in (${sql.join(
+         ["-", ...excludedCategoryIds].map((id) => sql`${id}`),
+         sql`, `,
+       )}))
        and t.posted_date between ${`${sorted[0]}-01`} and ${monthEnd(sorted[sorted.length - 1] as string)}
      group by m
   `);

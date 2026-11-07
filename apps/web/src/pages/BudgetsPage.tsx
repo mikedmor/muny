@@ -6,7 +6,7 @@ import { EditBudget, InlineBudget, Ring } from "../components/budget.js";
 import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
 import { CategoryIcon, MerchantAvatar } from "../components/visuals.js";
 import { api } from "../lib/api.js";
-import { keys } from "../lib/queries.js";
+import { keys, useCategories, useUpdateCategory } from "../lib/queries.js";
 
 /**
  * Budgets, laid out like Rocket Money: budget basics (earnings and recurring
@@ -264,6 +264,77 @@ function CategoriesTable({ b, month }: { b: BudgetMonth; month: string }) {
           </Button>
         </div>
       )}
+    </Card>
+  );
+}
+
+/** Categories left out of budgets (reimbursements, business costs…), and leaving one out. */
+function ExcludedCard({ b }: { b: BudgetMonth }) {
+  const groups = useCategories().data ?? [];
+  const update = useUpdateCategory();
+  const [pick, setPick] = useState("");
+  const options = groups
+    .filter((g) => g.kind === "expense")
+    .flatMap((g) =>
+      g.categories.filter((c) => !c.excludeFromBudget).map((c) => ({ ...c, group: g.name })),
+    );
+  return (
+    <Card>
+      <p className="font-semibold">Left out of budgets</p>
+      <p className="mt-1 text-xs text-slate-500">
+        Spending in these categories isn't counted in your budgets, totals or forecast (for example
+        reimbursed work expenses). It still shows in Spending and Reports.
+      </p>
+      {b.excluded.length > 0 && (
+        <ul className="mt-3 divide-y divide-slate-100 text-sm dark:divide-slate-800">
+          {b.excluded.map((c) => (
+            <li key={c.categoryId} className="flex items-center justify-between gap-3 py-2">
+              <span className="min-w-0 truncate">
+                {c.name}
+                <span className="ml-1 text-xs text-slate-500">{c.groupName}</span>
+              </span>
+              <span className="flex shrink-0 items-center gap-3">
+                <span className="tabular-nums text-slate-600 dark:text-slate-300">
+                  {formatMoney(c.spentCents)}
+                </span>
+                <Button
+                  variant="ghost"
+                  disabled={update.isPending}
+                  onClick={() => update.mutate({ id: c.categoryId, excludeFromBudget: false })}
+                >
+                  Include
+                </Button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form
+        className="mt-3 flex flex-wrap gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!pick) return;
+          update.mutate({ id: pick, excludeFromBudget: true });
+          setPick("");
+        }}
+      >
+        <select
+          aria-label="Category to leave out of budgets"
+          value={pick}
+          onChange={(e) => setPick(e.target.value)}
+          className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
+        >
+          <option value="">Leave a category out…</option>
+          {options.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.group} · {c.name}
+            </option>
+          ))}
+        </select>
+        <Button type="submit" variant="secondary" disabled={!pick || update.isPending}>
+          Leave out
+        </Button>
+      </form>
     </Card>
   );
 }
@@ -529,6 +600,7 @@ export function BudgetsPage() {
           <div className="order-2 space-y-6 lg:order-0">
             <BasicsTable b={b} month={month} />
             <CategoriesTable b={b} month={month} />
+            <ExcludedCard b={b} />
           </div>
           <div className="order-1 space-y-6 lg:sticky lg:top-6 lg:order-0">
             <SummaryCard b={b} month={month} />

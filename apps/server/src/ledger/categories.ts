@@ -30,6 +30,7 @@ const CategoryCreate = z.object({
 });
 const CategoryUpdate = CategoryCreate.partial().extend({
   hidden: z.boolean().optional(),
+  excludeFromBudget: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
 });
 
@@ -62,6 +63,7 @@ export function listCategoryGroups(db: MunyDb): CategoryGroup[] {
         icon: c.icon,
         color: c.color,
         hidden: c.hidden,
+        excludeFromBudget: c.excludeFromBudget,
         sortOrder: c.sortOrder,
         transactionCount: Number(n),
       })),

@@ -80,6 +80,8 @@ export interface BudgetMonth {
   incomeCents: number;
   /** Sum of all category budgets this month. */
   budgetedCents: number;
+  /** Categories left out of the budget, with this month's spending in them. */
+  excluded: { categoryId: string; name: string; groupName: string; spentCents: number }[];
 }
 
 export interface SetBudgetInput {

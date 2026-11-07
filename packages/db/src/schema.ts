@@ -181,6 +181,8 @@ export const categories = sqliteTable(
     icon: text(),
     color: text(),
     hidden: integer({ mode: "boolean" }).notNull().default(false),
+    /** Left out of budgets (spending, totals, forecast), e.g. reimbursements. */
+    excludeFromBudget: integer({ mode: "boolean" }).notNull().default(false),
     sortOrder: integer().notNull().default(0),
     createdAt: createdAt(),
   },

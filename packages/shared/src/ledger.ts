@@ -78,6 +78,8 @@ export interface Category {
   icon: string | null;
   color: string | null;
   hidden: boolean;
+  /** Left out of budgets (spending, totals and the forecast). */
+  excludeFromBudget: boolean;
   sortOrder: number;
   transactionCount: number;
 }
