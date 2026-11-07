@@ -157,10 +157,12 @@ export interface ArrangedColumns {
 
 /**
  * Lay cards out in the columns available. One column is simply the priority
- * order. With more, side cards fill the right column in order; each main card
- * goes to the shortest remaining column, so priority still reads top to bottom.
- * Uses each card's typical height rather than measuring, so cards never jump
- * between columns as their numbers load.
+ * order. With more, side cards fill the right column in order, but only up to
+ * their fair share of the page's height, so it can't run on alone past the
+ * others on a wide screen. Main cards then go to the shortest remaining column,
+ * followed by any side cards that didn't fit, so priority still reads top to
+ * bottom. Uses each card's typical height rather than measuring, so cards never
+ * jump between columns as their numbers load.
  */
 export function arrangeColumns(cards: ArrangeCard[], columnCount: number): ArrangedColumns {
   const count = Math.max(1, Math.floor(columnCount));
@@ -169,7 +171,17 @@ export function arrangeColumns(cards: ArrangeCard[], columnCount: number): Arran
   const main = cards.filter((c) => c.placement === "main");
   // With only one kind of card, every column is available to it.
   const hasSide = side.length > 0 && main.length > 0;
-  const flexible = hasSide ? main : cards;
+  const fairShare = cards.reduce((sum, c) => sum + c.weight, 0) / count;
+  const inSide: string[] = [];
+  const overflow: ArrangeCard[] = [];
+  let sideHeight = 0;
+  for (const c of hasSide ? side : []) {
+    if (sideHeight < fairShare) {
+      inSide.push(c.card);
+      sideHeight += c.weight;
+    } else overflow.push(c);
+  }
+  const flexible = hasSide ? [...main, ...overflow] : cards;
   const columns: string[][] = Array.from({ length: hasSide ? count - 1 : count }, () => []);
   const heights = columns.map(() => 0);
   for (const c of flexible) {
@@ -177,7 +189,7 @@ export function arrangeColumns(cards: ArrangeCard[], columnCount: number): Arran
     columns[shortest]?.push(c.card);
     heights[shortest] = (heights[shortest] ?? 0) + c.weight;
   }
-  if (hasSide) columns.push(side.map((c) => c.card));
+  if (hasSide) columns.push(inSide);
   return { columns, hasSide };
 }
 

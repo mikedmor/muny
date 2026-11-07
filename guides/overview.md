@@ -12,7 +12,7 @@ Click **Customize** at the top of the page.
 
 Click **Done** to save, **Cancel** to throw away your changes, or **Reset to standard** to go back to the standard Overview.
 
-Charts go in the wider columns, filling whichever column is shortest, and lists and balances go in the column on the right. On a phone, everything is one column in exactly your order. Cards with nothing to show (say, Crypto with no coins) take no space until they have something.
+Charts go in the wider columns, filling whichever column is shortest, and lists and balances go in the column on the right. On a wide screen, when the lists would make that column much longer than the others, your lowest-priority ones move into the shorter columns. On a phone, everything is one column in exactly your order. Cards with nothing to show (say, Crypto with no coins) take no space until they have something.
 
 ## Making your own cards
 

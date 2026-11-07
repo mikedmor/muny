@@ -49,6 +49,23 @@ describe("arrangeColumns", () => {
     });
   });
 
+  it("stops the right column running on past the others", () => {
+    const lists = [main("a", 30), main("b", 30), main("c", 30)];
+    for (const n of ["u", "v", "w", "x", "y", "z"]) lists.push(side(n, 30));
+    const { columns } = arrangeColumns(lists, 4);
+    // 270 over 4 columns: the right one keeps three, the rest overflow in order.
+    expect(columns[3]).toEqual(["u", "v", "w"]);
+    expect(columns.slice(0, 3)).toEqual([
+      ["a", "x"],
+      ["b", "y"],
+      ["c", "z"],
+    ]);
+    // Always keeps its top card, however tall.
+    expect(arrangeColumns([main("a", 1), side("huge", 500), side("n", 1)], 2).columns[1]).toEqual([
+      "huge",
+    ]);
+  });
+
   it("handles no cards", () => {
     expect(arrangeColumns([], 3).columns.flat()).toEqual([]);
   });
@@ -102,5 +119,21 @@ describe("the standard Overview", () => {
     expect(three[2]?.[0]).toBe("accounts");
     expect(arrangeColumns(standard, 4).columns).toHaveLength(4);
     expect(arrangeColumns(standard, 2).columns[1]).toContain("accounts");
+  });
+
+  it("keeps the columns about level on an ultrawide screen", () => {
+    const weight = new Map(standard.map((c) => [c.card, c.weight]));
+    const { columns } = arrangeColumns(standard, 4);
+    expect(columns.flat().sort()).toEqual([...DEFAULT_DASHBOARD].sort());
+    const heights = columns.map((col) => col.reduce((s, c) => s + (weight.get(c) ?? 0), 0));
+    expect(Math.max(...heights)).toBeLessThanOrEqual(Math.min(...heights) * 1.6);
+    expect(columns[3]?.[0]).toBe("accounts");
+    expect(columns.slice(0, 3).map((c) => c[0])).toEqual(["spending", "calendar", "cash-flow"]);
+  });
+
+  it("leaves every list on the right on a laptop", () => {
+    const right = arrangeColumns(standard, 2).columns[1];
+    expect(right).toContain("recent");
+    expect(right).toContain("budget");
   });
 });
