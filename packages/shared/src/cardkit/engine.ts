@@ -646,14 +646,14 @@ function loadRows(
 
   const { calc, find } = fieldLookup(dataset, { calculated });
   if (calc.size) {
+    const columns = (calculated ?? []).map((c) => {
+      const expr = parseExpr(c.expr);
+      return { id: c.id, expr, type: c.format ?? inferRowType(expr, dataset, calculated, runner) };
+    });
     rows = rows.map((row) => {
       const out = { ...row };
-      for (const c of calculated ?? []) {
-        const expr = parseExpr(c.expr);
-        const type = c.format ?? inferRowType(expr, dataset, calculated, runner);
-        const v = evaluate(expr, runnerRowContext(runner, dataset, calculated, out));
-        out[c.id] = rawFromVal(v, type);
-      }
+      const ctx = runnerRowContext(runner, dataset, calculated, out);
+      for (const c of columns) out[c.id] = rawFromVal(evaluate(c.expr, ctx), c.type);
       return out;
     });
   }

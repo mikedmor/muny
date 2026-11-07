@@ -5,30 +5,31 @@ import type { CardCell, DateBucket } from "./doc.js";
 
 const utc = (iso: string) => new Date(`${iso}T00:00:00Z`);
 
-export function formatDate(iso: string): string {
-  return utc(iso.slice(0, 10)).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-}
+// Making a formatter is slow, and a card can format thousands of dates.
+const LONG_DATE = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+});
+const SHORT_DATE = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  timeZone: "UTC",
+});
+const LONG_MONTH = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
+const SHORT_MONTH = new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" });
 
-function shortDate(iso: string): string {
-  return utc(iso.slice(0, 10)).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-}
+export const formatDate = (iso: string): string => LONG_DATE.format(utc(iso.slice(0, 10)));
 
-export function formatMonth(key: string, short = false): string {
-  return utc(`${key.slice(0, 7)}-15`).toLocaleDateString("en-US", {
-    month: "short",
-    ...(short ? {} : { year: "numeric" }),
-    timeZone: "UTC",
-  });
-}
+const shortDate = (iso: string): string => SHORT_DATE.format(utc(iso.slice(0, 10)));
+
+export const formatMonth = (key: string, short = false): string =>
+  (short ? SHORT_MONTH : LONG_MONTH).format(utc(`${key.slice(0, 7)}-15`));
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
