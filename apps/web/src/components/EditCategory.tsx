@@ -83,7 +83,8 @@ function EditCategoryForm({
 
   const [name, setName] = useState(category.name);
   const [groupId, setGroupId] = useState(category.groupId);
-  const [isBill, setIsBill] = useState(category.isBill);
+  const [isBill, setIsBill] = useState(category.isBill && !category.isHome);
+  const [isHome, setIsHome] = useState(category.isHome);
   const [inBudget, setInBudget] = useState(!category.excludeFromBudget);
   const [hidden, setHidden] = useState(category.hidden);
   const alertRules = useAlertRules();
@@ -119,7 +120,8 @@ function EditCategoryForm({
       const patch: Parameters<typeof update.mutateAsync>[0] = { id: category.id };
       if (name.trim() !== category.name) patch.name = name.trim();
       if (groupId !== category.groupId) patch.groupId = groupId;
-      if (isBill !== category.isBill) patch.isBill = isBill;
+      if (isHome !== category.isHome) patch.isHome = isHome;
+      if (isBill !== (category.isBill && !category.isHome)) patch.isBill = isBill;
       if (inBudget === category.excludeFromBudget) patch.excludeFromBudget = !inBudget;
       if (hidden !== category.hidden) patch.hidden = hidden;
       if ((icon || null) !== category.icon) patch.icon = icon?.trim() || null;
@@ -202,10 +204,22 @@ function EditCategoryForm({
         {spending && (
           <>
             <Checkbox
+              label="Home & utilities"
+              description="Rent, power, water, internet, phone: count it in Home & utilities on Budgets."
+              checked={isHome}
+              onChange={(on) => {
+                setIsHome(on);
+                if (on) setIsBill(false);
+              }}
+            />
+            <Checkbox
               label="Bill or subscription"
               description="Count it in Bills & subscriptions instead of All other categories."
               checked={isBill}
-              onChange={setIsBill}
+              onChange={(on) => {
+                setIsBill(on);
+                if (on) setIsHome(false);
+              }}
             />
             <Checkbox
               label="Count in budgets"

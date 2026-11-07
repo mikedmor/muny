@@ -88,7 +88,7 @@ describe("earnings and bills budgets", () => {
     const month = localToday().slice(0, 7);
     await add(`${month}-01`, 300_000, "Paycheck");
     await client.put("/api/budgets", { categoryId: null, amountCents: 250_000 }); // total spending
-    await client.put("/api/budgets", { categoryId: cat("Electric"), amountCents: 12_000 });
+    await client.put("/api/budgets", { categoryId: cat("Insurance"), amountCents: 12_000 });
     await client.put("/api/budgets", { categoryId: cat("Groceries"), amountCents: 50_000 });
     const b = (await client.get(`/api/budgets/${month}`)).json<BudgetMonth>();
     expect(b.total.budgetCents).toBe(250_000);
@@ -100,7 +100,7 @@ describe("earnings and bills budgets", () => {
     expect(b.bills).toMatchObject({ kind: "bills", budgetCents: 12_000, budgetId: null });
     expect(b.other).toMatchObject({ kind: "other", budgetCents: 50_000, budgetId: null });
     // They can't be set by hand.
-    for (const kind of ["income", "bills", "other"])
+    for (const kind of ["income", "bills", "home", "other"])
       expect(
         (await client.put("/api/budgets", { categoryId: null, kind, amountCents: 1 })).statusCode,
       ).toBe(400);
@@ -302,12 +302,12 @@ describe("earnings and bills pages", () => {
     });
     const m = addInterval(today, "monthly", -1).slice(0, 7);
     const pay = await add(`${m}-15`, 30_000, "Paycheck");
-    // Not recurring, but Electric counts as a bill; a split part in Internet does too.
-    const electric = await add(`${m}-20`, -8000, "Electric");
+    // Not recurring, but Insurance counts as a bill; a split part in Software & Apps does too.
+    const electric = await add(`${m}-20`, -8000, "Insurance");
     const split = await add(`${m}-21`, -5000, null);
     await client.put(`/api/transactions/${split.id}/splits`, {
       splits: [
-        { categoryId: cat("Internet"), amountCents: -3000 },
+        { categoryId: cat("Software & Apps"), amountCents: -3000 },
         { categoryId: cat("Groceries"), amountCents: -2000 },
       ],
     });
@@ -351,8 +351,8 @@ describe("earnings and bills pages", () => {
     // The basics add up category budgets: bill categories, and all the others.
     const put = (name: string, amountCents: number) =>
       client.put("/api/budgets", { categoryId: cat(name), amountCents, fromMonth: m });
-    await put("Electric", 9_000);
-    await put("Internet", 6_000);
+    await put("Insurance", 9_000);
+    await put("Software & Apps", 6_000);
     await put("Groceries", 40_000);
     const sums = (await client.get(`/api/budgets/${m}`)).json<BudgetMonth>();
     expect(sums.bills.budgetCents).toBe(15_000);
@@ -361,7 +361,85 @@ describe("earnings and bills pages", () => {
     expect(sums.income.budgetCents).toBe(sums.income.spentCents);
 
     // Not a bill any more: it drops out.
-    await client.patch(`/api/categories/${cat("Electric")}`, { isBill: false });
+    await client.patch(`/api/categories/${cat("Insurance")}`, { isBill: false });
     expect((await act("bills")).stats.totalCents).toBe(4200);
+  });
+});
+
+describe("home & utilities", () => {
+  it("counts home costs once, apart from bills, recurring or not", async () => {
+    const { client, add, cat } = await setup();
+    const today = localToday();
+    const m = addInterval(today, "monthly", -1).slice(0, 7);
+    // Rent repeats, so it's recurring, but it's a home cost rather than a bill.
+    for (let i = 5; i >= 1; i--) {
+      const d = addInterval(today, "monthly", -i).slice(0, 8);
+      await add(`${d}01`, -150_000, "Rent & Mortgage", { description: "SAMPLE PROPERTY MGMT" });
+      await add(`${d}07`, -1500, "Streaming", { description: "STREAMCO" });
+    }
+    await client.post("/api/recurring/rescan", {});
+    const series = (await client.get("/api/recurring")).json<{ name: string }[]>();
+    expect(series.map((x) => x.name.toLowerCase()).join()).toContain("property");
+    const power = await add(`${m}-12`, -9000, "Electric");
+    // A split: the phone part is a home cost, the rest is groceries.
+    const split = await add(`${m}-14`, -7000, null);
+    await client.put(`/api/transactions/${split.id}/splits`, {
+      splits: [
+        { categoryId: cat("Phone"), amountCents: -4000 },
+        { categoryId: cat("Groceries"), amountCents: -3000 },
+      ],
+    });
+    const b = (await client.get(`/api/budgets/${m}`)).json<BudgetMonth>();
+    expect(b.home).toMatchObject({ kind: "home", name: "Home & utilities", budgetId: null });
+    expect(b.home.spentCents).toBe(150_000 + 9000 + 4000);
+    expect(b.bills.spentCents).toBe(1500);
+    expect(b.other.spentCents).toBe(3000);
+    // Each charge counts in exactly one basic.
+    expect(b.home.spentCents + b.bills.spentCents + b.other.spentCents).toBe(b.total.spentCents);
+
+    const act = async (id: string) =>
+      (
+        await client.get(`/api/categories/${id}/activity?month=${m}&end=${m}`)
+      ).json<CategoryActivity>();
+    const list = async (row: string) =>
+      (
+        await client.get(`/api/transactions?budgetRow=${row}&from=${m}-01&to=${m}-31`)
+      ).json<TransactionPage>().items;
+    const home = await act("home");
+    expect(home.category.name).toBe("Home & utilities");
+    expect(home.stats).toMatchObject({ count: 3, totalCents: b.home.spentCents });
+    expect((await list("home")).map((t) => t.id)).toEqual(
+      expect.arrayContaining([power.id, split.id]),
+    );
+    expect(await list("home")).toHaveLength(3);
+    expect(await list("bills")).toHaveLength(1);
+    expect((await list("other")).map((t) => t.id)).toEqual([split.id]);
+
+    // Its budget adds up the home categories' budgets.
+    const put = (name: string, amountCents: number) =>
+      client.put("/api/budgets", { categoryId: cat(name), amountCents, fromMonth: m });
+    await put("Rent & Mortgage", 150_000);
+    await put("Electric", 10_000);
+    await put("Streaming", 2_000);
+    const sums = (await client.get(`/api/budgets/${m}`)).json<BudgetMonth>();
+    expect(sums.home.budgetCents).toBe(160_000);
+    expect(sums.bills.budgetCents).toBe(2_000);
+    expect(lineOf(sums, "Electric")).toMatchObject({ isHome: true, isBill: false });
+  });
+
+  it("keeps a category a home cost or a bill, not both", async () => {
+    const { client, cat } = await setup();
+    const flags = async (name: string) =>
+      (await client.get("/api/categories"))
+        .json<CategoryGroup[]>()
+        .flatMap((g) => g.categories)
+        .find((c) => c.name === name);
+    expect(await flags("Internet")).toMatchObject({ isHome: true, isBill: false });
+    expect(await flags("Streaming")).toMatchObject({ isHome: false, isBill: true });
+    expect(await flags("Home Maintenance")).toMatchObject({ isHome: false, isBill: false });
+    await client.patch(`/api/categories/${cat("Internet")}`, { isBill: true });
+    expect(await flags("Internet")).toMatchObject({ isHome: false, isBill: true });
+    await client.patch(`/api/categories/${cat("Internet")}`, { isHome: true });
+    expect(await flags("Internet")).toMatchObject({ isHome: true, isBill: false });
   });
 });

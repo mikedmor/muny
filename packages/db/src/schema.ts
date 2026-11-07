@@ -230,6 +230,8 @@ export const categories = sqliteTable(
     excludeFromBudget: integer({ mode: "boolean" }).notNull().default(false),
     /** Counts as a bill (Budgets → Bills & subscriptions), recurring or not. */
     isBill: integer({ mode: "boolean" }).notNull().default(false),
+    /** Counts as Home & utilities on Budgets (rent, power, water, internet...), not as a bill. */
+    isHome: integer({ mode: "boolean" }).notNull().default(false),
     sortOrder: integer().notNull().default(0),
     createdAt: createdAt(),
   },
@@ -419,7 +421,7 @@ export const budgets = sqliteTable(
      * budget), "income" (earnings target) or "bills" (recurring bills budget).
      * Category budgets are always "spending".
      */
-    kind: text({ enum: ["spending", "income", "bills", "other"] })
+    kind: text({ enum: ["spending", "income", "bills", "home", "other"] })
       .notNull()
       .default("spending"),
     /** Unspent money carries into next month (and overspending is deducted). */

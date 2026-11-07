@@ -179,6 +179,7 @@ export const useUpdateCategory = () =>
       hidden?: boolean;
       excludeFromBudget?: boolean;
       isBill?: boolean;
+      isHome?: boolean;
       groupId?: string;
       /** An emoji; null goes back to the automatic one. */
       icon?: string | null;

@@ -82,6 +82,8 @@ export interface Category {
   excludeFromBudget: boolean;
   /** Counts as a bill (Budgets → Bills & subscriptions), recurring or not. */
   isBill: boolean;
+  /** Counts as a home cost (Budgets → Home & utilities). Never also a bill. */
+  isHome: boolean;
   sortOrder: number;
   transactionCount: number;
   /** Nothing uses it: no transactions, split parts, recurring charges, payee defaults, rules or budget. */
@@ -201,7 +203,18 @@ export const DEFAULT_CATEGORIES: { group: string; kind: CategoryKind; categories
   },
 ];
 
-/** Categories that count as bills out of the box (also Rocket Money's "Bills & Utilities"). */
+/** Categories that count as Home & utilities out of the box: what a home needs to run. */
+export const DEFAULT_HOME_CATEGORIES = [
+  "Rent & Mortgage",
+  "Electric",
+  "Gas & Heating",
+  "Water & Sewer",
+  "Trash",
+  "Internet",
+  "Phone",
+];
+
+/** Categories that count as bills out of the box (home categories count as Home & utilities instead). */
 export const DEFAULT_BILL_CATEGORIES = [
   "Rent & Mortgage",
   "Electric",

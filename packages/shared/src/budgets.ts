@@ -1,9 +1,9 @@
-export type BudgetKind = "spending" | "income" | "bills" | "other";
+export type BudgetKind = "spending" | "income" | "bills" | "home" | "other";
 
 export interface BudgetLine {
   /** null for the overall total budget (or the earnings / bills lines). */
   categoryId: string | null;
-  /** "spending" for categories and the total; "income" / "bills" / "other" for the basics. */
+  /** "spending" for categories and the total; "income" / "bills" / "home" / "other" for the basics. */
   kind: BudgetKind;
   name: string;
   budgetId: string | null;
@@ -22,6 +22,8 @@ export interface BudgetLine {
   historyCents: { month: string; cents: number }[];
   /** A bill category (its budget counts toward Bills & subscriptions). */
   isBill: boolean;
+  /** A home category (its budget counts toward Home & utilities). */
+  isHome: boolean;
 }
 
 export interface BudgetGroup {
@@ -74,9 +76,11 @@ export interface BudgetMonth {
   total: BudgetLine;
   /** Earnings: target (budgetCents) vs income received (spentCents). */
   income: BudgetLine;
-  /** Bills & subscriptions: budget vs recurring charges paid (spentCents). */
+  /** Bills & subscriptions: budget vs recurring charges paid (spentCents). Home costs aren't in it. */
   bills: BudgetLine;
-  /** All other categories: spending that isn't a bill (spentCents). */
+  /** Home & utilities: rent, power, water, internet... (spentCents), from the home categories. */
+  home: BudgetLine;
+  /** All other categories: spending that isn't a bill or a home cost (spentCents). */
   other: BudgetLine;
   groups: BudgetGroup[];
   /** Spending with no category (needs categorizing). */

@@ -1,5 +1,5 @@
 import { type MunyDb, newId, schema } from "@muny/db";
-import { DEFAULT_BILL_CATEGORIES, DEFAULT_CATEGORIES } from "@muny/shared";
+import { DEFAULT_BILL_CATEGORIES, DEFAULT_CATEGORIES, DEFAULT_HOME_CATEGORIES } from "@muny/shared";
 import { count, eq } from "drizzle-orm";
 
 const SEEDED_FLAG = "seed.default_categories";
@@ -33,7 +33,9 @@ export function seedDefaultCategories(db: MunyDb): boolean {
               groupId,
               name,
               sortOrder: ci,
-              isBill: DEFAULT_BILL_CATEGORIES.includes(name),
+              isHome: DEFAULT_HOME_CATEGORIES.includes(name),
+              isBill:
+                DEFAULT_BILL_CATEGORIES.includes(name) && !DEFAULT_HOME_CATEGORIES.includes(name),
             })
             .run();
         });

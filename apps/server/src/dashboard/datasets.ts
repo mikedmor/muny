@@ -127,6 +127,7 @@ function transactions(db: MunyDb, range: Range): DataRow[] {
         category_group: meta?.groupName ?? "Uncategorized",
         category_kind: kind,
         is_bill: meta?.isBill ?? false,
+        is_home: meta?.isHome ?? false,
         account: r.account,
         account_id: r.accountId,
         account_type: r.accountType,
@@ -223,6 +224,7 @@ const categories: Reader = (db) =>
     kind: c.kind,
     hidden: c.hidden,
     is_bill: c.isBill,
+    is_home: c.isHome,
     excluded_from_budget: c.excludeFromBudget,
   }));
 
@@ -255,10 +257,12 @@ const budgets: Reader = (db, range, today) =>
       average: l.averageCents,
       has_budget: l.budgetCents !== null,
       is_bill: l.isBill,
+      is_home: l.isHome,
     });
     return [
       line({ ...b.total, ...overallBudget(b) }, "total", "Total spending", null),
       line(b.income, "income", "Earnings", null),
+      line(b.home, "home", "Home & utilities", null),
       line(b.bills, "bills", "Bills & subscriptions", null),
       line(b.other, "other", "Everything else", null),
       ...b.groups.flatMap((g) => g.lines.map((l) => line(l, "category", l.name, g.name))),

@@ -33,6 +33,7 @@ const CategoryUpdate = CategoryCreate.partial().extend({
   hidden: z.boolean().optional(),
   excludeFromBudget: z.boolean().optional(),
   isBill: z.boolean().optional(),
+  isHome: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
 });
 
@@ -76,6 +77,7 @@ export function listCategoryGroups(db: MunyDb): CategoryGroup[] {
         hidden: c.hidden,
         excludeFromBudget: c.excludeFromBudget,
         isBill: c.isBill,
+        isHome: c.isHome,
         sortOrder: c.sortOrder,
         transactionCount: Number(n),
         unused: !used,
@@ -203,8 +205,14 @@ export function registerCategoryRoutes(app: FastifyInstance, db: MunyDb) {
     const groupId = body.groupId ?? current.groupId;
     if (body.groupId) assertGroup(db, body.groupId);
     if (body.name || body.groupId) assertUniqueName(db, groupId, body.name ?? current.name, id);
-    db.update(schema.categories).set(body).where(eq(schema.categories.id, id)).run();
-    log(user.id, "category.update", id, body);
+    // A category is a home cost or a bill, never both: each would count it once more.
+    const patch = {
+      ...body,
+      ...(body.isHome && { isBill: false }),
+      ...(body.isBill && { isHome: false }),
+    };
+    db.update(schema.categories).set(patch).where(eq(schema.categories.id, id)).run();
+    log(user.id, "category.update", id, patch);
     return { ok: true };
   });
 

@@ -7,6 +7,7 @@ import {
   EARNINGS,
   EVERYTHING_ELSE,
   formatMoney,
+  HOME,
   OTHER_SPENDING,
   type Transaction,
   type TransactionPage,
@@ -109,13 +110,23 @@ export function CategoryPage() {
   /** Which part of a (split) transaction belongs here. */
   const inCategory = useMemo(() => {
     if (row === BILLS) return () => true;
+    if (row === HOME) {
+      const home = new Set(
+        (categories.data ?? [])
+          .flatMap((g) => g.categories.filter((c) => c.isHome))
+          .map((c) => c.id),
+      );
+      return (id: string | null) => id !== null && home.has(id);
+    }
     if (row === EVERYTHING_ELSE) return (id: string | null) => id === null;
     if (row === OTHER_SPENDING) {
       // Spending categories that aren't bills, and uncategorized.
       const other = new Set(
         (categories.data ?? [])
           .filter((g) => g.kind === "expense")
-          .flatMap((g) => g.categories.filter((c) => !c.isBill && !c.excludeFromBudget))
+          .flatMap((g) =>
+            g.categories.filter((c) => !c.isBill && !c.isHome && !c.excludeFromBudget),
+          )
           .map((c) => c.id),
       );
       return (id: string | null) => id === null || other.has(id);
@@ -140,7 +151,9 @@ export function CategoryPage() {
   const scheduled = useMemo(() => {
     const kindOf = new Map(
       (categories.data ?? []).flatMap((g) =>
-        g.categories.map((c) => [c.id, { kind: g.kind, excluded: c.excludeFromBudget }] as const),
+        g.categories.map(
+          (c) => [c.id, { kind: g.kind, excluded: c.excludeFromBudget, home: c.isHome }] as const,
+        ),
       ),
     );
     // As the budget counts them: money out in a spending category (or none).
@@ -149,16 +162,19 @@ export function CategoryPage() {
       const k = kindOf.get(id);
       return k?.kind === "expense" && !k.excluded;
     };
+    const home = (id: string | null) => id !== null && !!kindOf.get(id)?.home;
     return (budget.data?.forecast.scheduled ?? []).filter((s) =>
       row === EARNINGS
         ? s.amountCents > 0
-        : row === BILLS
-          ? s.amountCents < 0 && spending(s.categoryId)
-          : row === EVERYTHING_ELSE
-            ? s.amountCents < 0 && s.categoryId === null
-            : row === OTHER_SPENDING
-              ? false // scheduled charges are recurring bills
-              : s.categoryId === categoryId,
+        : row === HOME
+          ? s.amountCents < 0 && spending(s.categoryId) && home(s.categoryId)
+          : row === BILLS
+            ? s.amountCents < 0 && spending(s.categoryId) && !home(s.categoryId)
+            : row === EVERYTHING_ELSE
+              ? s.amountCents < 0 && s.categoryId === null
+              : row === OTHER_SPENDING
+                ? false // scheduled charges are recurring bills
+                : s.categoryId === categoryId,
     );
   }, [budget.data, categories.data, row, categoryId]);
   /** What the pending rows add to this month (spending out, or income in). */
@@ -476,7 +492,9 @@ export function CategoryPage() {
                   {row === EARNINGS &&
                     "Earnings is money in your income categories (pay, interest, refunds you filed as income). Its budget is the income you've received plus what your recurring income should still bring."}
                   {row === OTHER_SPENDING &&
-                    "All other categories is your spending that isn't a bill: everything in your spending categories (and uncategorized) except recurring bills and bill categories. Its budget adds up the budgets of your categories that aren't bills."}
+                    "All other categories is your spending that isn't a bill or a home cost: everything in your spending categories (and uncategorized) except recurring bills, bill categories and home categories. Its budget adds up the budgets of the rest of your categories."}
+                  {row === HOME &&
+                    "Home & utilities is what keeps your home running: rent or mortgage, power, gas, water, trash, internet and phone. It's everything in your home categories, recurring or not, and those charges don't count again in Bills & subscriptions. Its budget adds up the budgets of your home categories."}
                   {row === BILLS && (
                     <>
                       Bills & subscriptions are charges from the recurring bills and subscriptions
@@ -484,7 +502,8 @@ export function CategoryPage() {
                       <Link to="/recurring" className="text-brand-600 hover:underline">
                         Recurring
                       </Link>{" "}
-                      page. Its budget adds up the budgets of your bill categories.
+                      page. Home costs like rent and power count in Home & utilities instead. Its
+                      budget adds up the budgets of your bill categories.
                     </>
                   )}
                 </Card>

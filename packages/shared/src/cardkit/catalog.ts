@@ -88,6 +88,7 @@ export const DATASETS: DatasetInfo[] = [
       text("category_group", "Category group"),
       text("category_kind", "Category type", "expense, income or transfer."),
       bool("is_bill", "Bill category"),
+      bool("is_home", "Home & utilities category"),
       text("account", "Account"),
       text("account_type", "Account type"),
       text("institution", "Institution"),
@@ -180,6 +181,7 @@ export const DATASETS: DatasetInfo[] = [
       text("kind", "Type", "expense, income or transfer."),
       bool("hidden", "Hidden"),
       bool("is_bill", "Bill"),
+      bool("is_home", "Home & utilities"),
       bool("excluded_from_budget", "Left out of budgets"),
     ],
   },
@@ -197,7 +199,7 @@ export const DATASETS: DatasetInfo[] = [
       text(
         "line_type",
         "Line type",
-        "category, total (overall spending), income (earnings), bills or other.",
+        "category, total (overall spending), income (earnings), home, bills or other.",
       ),
       money("budget", "Budgeted"),
       money("spent", "Spent", "For the income line: received."),
@@ -206,6 +208,7 @@ export const DATASETS: DatasetInfo[] = [
       money("average", "Past average", "Average over the previous 3 months."),
       bool("has_budget", "Has a budget"),
       bool("is_bill", "Bill"),
+      bool("is_home", "Home & utilities"),
     ],
   },
   {

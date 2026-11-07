@@ -353,6 +353,23 @@ function GroupCard({
               {group.kind === "expense" && (
                 <button
                   type="button"
+                  onClick={() => updateCategory.mutate({ id: c.id, isHome: !c.isHome })}
+                  title={
+                    c.isHome
+                      ? "Counted in Home & utilities: click to stop"
+                      : "Count this category in Home & utilities on Budgets (instead of Bills)"
+                  }
+                  className={cx(
+                    "hover:underline",
+                    c.isHome && "text-brand-600 dark:text-brand-500",
+                  )}
+                >
+                  {c.isHome ? "Home" : "Not home"}
+                </button>
+              )}
+              {group.kind === "expense" && !c.isHome && (
+                <button
+                  type="button"
                   onClick={() => updateCategory.mutate({ id: c.id, isBill: !c.isBill })}
                   title={
                     c.isBill

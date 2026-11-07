@@ -323,6 +323,7 @@ export const TOOLS: Tool[] = [
         month: b.month,
         total: { ...line(b.total), ...total },
         income: line(b.income),
+        home: line(b.home),
         bills: line(b.bills),
         uncategorizedCents: b.uncategorizedCents,
         forecast: {

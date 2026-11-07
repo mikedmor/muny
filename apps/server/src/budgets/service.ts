@@ -127,6 +127,7 @@ export function budgetMonth(db: Db, month: string): BudgetMonth {
       averageCents: Math.round(prev3.reduce((s, m) => s + spentIn(m, categoryId), 0) / 3),
       historyCents: [...prev3].reverse().map((m) => ({ month: m, cents: spentIn(m, categoryId) })),
       isBill: categoryId ? (cats.get(categoryId)?.isBill ?? false) : false,
+      isHome: categoryId ? (cats.get(categoryId)?.isHome ?? false) : false,
     };
   };
 
@@ -156,11 +157,12 @@ export function budgetMonth(db: Db, month: string): BudgetMonth {
 
   // Earnings and bills: an optional fixed target; no target = automatic (the forecast).
   const billsPaid = billsPaidByMonth(db, [month, ...prev3]);
+  const homePaid = homePaidByMonth(db, [month, ...prev3]);
   const otherSpent = otherSpentByMonth(db, [month, ...prev3]);
   // The basics aren't budgeted by hand: earnings is the income expected this
   // month; bills and all other categories add up their category budgets.
   const basic = (
-    kind: "income" | "bills" | "other",
+    kind: "income" | "bills" | "home" | "other",
     name: string,
     actual: (m: string) => number,
     budgetCents: number | null,
@@ -179,11 +181,13 @@ export function budgetMonth(db: Db, month: string): BudgetMonth {
       averageCents: Math.round(prev3.reduce((s, m) => s + actual(m), 0) / 3),
       historyCents: [...prev3].reverse().map((m) => ({ month: m, cents: actual(m) })),
       isBill: false,
+      isHome: false,
     };
   };
   const categoryLines = groupList.flatMap((g) => g.lines);
-  const sumBudgets = (bill: boolean) => {
-    const ls = categoryLines.filter((l) => l.isBill === bill && l.budgetCents !== null);
+  const basicOf = (l: BudgetLine) => (l.isHome ? "home" : l.isBill ? "bills" : "other");
+  const sumBudgets = (basic: "bills" | "home" | "other") => {
+    const ls = categoryLines.filter((l) => basicOf(l) === basic && l.budgetCents !== null);
     return ls.length ? ls.reduce((s, l) => s + (l.budgetCents ?? 0), 0) : null;
   };
   const forecast = forecastMonth(db, month, {
@@ -202,8 +206,19 @@ export function budgetMonth(db: Db, month: string): BudgetMonth {
 
   return {
     income: basic("income", "Earnings", (m) => incomeByMonth.get(m) ?? 0, expectedIncome),
-    bills: basic("bills", "Bills & subscriptions", (m) => billsPaid.get(m) ?? 0, sumBudgets(true)),
-    other: basic("other", "All other categories", (m) => otherSpent.get(m) ?? 0, sumBudgets(false)),
+    home: basic("home", "Home & utilities", (m) => homePaid.get(m) ?? 0, sumBudgets("home")),
+    bills: basic(
+      "bills",
+      "Bills & subscriptions",
+      (m) => billsPaid.get(m) ?? 0,
+      sumBudgets("bills"),
+    ),
+    other: basic(
+      "other",
+      "All other categories",
+      (m) => otherSpent.get(m) ?? 0,
+      sumBudgets("other"),
+    ),
     forecast,
     month,
     total,
@@ -294,8 +309,19 @@ export const BILL_SERIES = sql`(select r.id from recurring_series r
   where r.kind <> 'income'
     and (r.category_id is null or r.category_id not in (select id from categories where exclude_from_budget = 1)))`;
 
-/** SQL: categories that count as bills (and aren't left out of budgets). */
-export const BILL_CATEGORIES = sql`(select id from categories where is_bill = 1 and exclude_from_budget = 0)`;
+/** SQL: categories that count as Home & utilities (and aren't left out of budgets). */
+export const HOME_CATEGORIES = sql`(select id from categories where is_home = 1 and exclude_from_budget = 0)`;
+
+/** SQL: categories that count as bills (not home costs, not left out of budgets). */
+export const BILL_CATEGORIES = sql`(select id from categories where is_bill = 1 and is_home = 0 and exclude_from_budget = 0)`;
+
+/**
+ * SQL: transaction `t` has nothing in a home category (itself or a split part).
+ * A recurring charge counts as a bill only then: the rent is a home cost even
+ * though it repeats.
+ */
+const NOT_HOME = sql`(coalesce(t.category_id, '-') not in ${HOME_CATEGORIES}
+  and not exists (select 1 from transaction_splits h where h.transaction_id = t.id and h.category_id in ${HOME_CATEGORIES}))`;
 
 /**
  * Bill charges between two dates (positive cents): charges from recurring
@@ -331,7 +357,7 @@ export function billCharges(
         from transactions t join accounts a on a.id = t.account_id
        where t.hidden = 0 and a.exclude_from_reports = 0 and a.type <> 'loan'
          and t.posted_date between ${from} and ${to}
-         and ((t.amount_cents < 0 and t.recurring_series_id in ${BILL_SERIES})
+         and ((t.amount_cents < 0 and t.recurring_series_id in ${BILL_SERIES} and ${NOT_HOME})
            or (t.category_id in ${BILL_CATEGORIES}
                and not exists (select 1 from transaction_splits x where x.transaction_id = t.id)))
       union all
@@ -342,7 +368,7 @@ export function billCharges(
        where t.hidden = 0 and a.exclude_from_reports = 0 and a.type <> 'loan'
          and t.posted_date between ${from} and ${to}
          and sp.category_id in ${BILL_CATEGORIES}
-         and not (t.amount_cents < 0 and coalesce(t.recurring_series_id, '-') in ${BILL_SERIES})
+         and not (t.amount_cents < 0 and coalesce(t.recurring_series_id, '-') in ${BILL_SERIES} and ${NOT_HOME})
     `)
     .map((r) => ({ ...r, cents: Number(r.cents) }));
 }
@@ -371,6 +397,7 @@ export function otherSpending(
          and (t.category_id in ${SPENDING_CATEGORIES}
            or (t.category_id is null and t.transfer_pair_id is null))
          and coalesce(t.category_id, '-') not in ${BILL_CATEGORIES}
+         and coalesce(t.category_id, '-') not in ${HOME_CATEGORIES}
          and not (t.amount_cents < 0 and coalesce(t.recurring_series_id, '-') in ${BILL_SERIES})
       union all
       select t.id as id, t.posted_date as date, -sp.amount_cents as cents
@@ -381,7 +408,8 @@ export function otherSpending(
          and t.posted_date between ${from} and ${to}
          and (sp.category_id in ${SPENDING_CATEGORIES} or sp.category_id is null)
          and coalesce(sp.category_id, '-') not in ${BILL_CATEGORIES}
-         and not (t.amount_cents < 0 and coalesce(t.recurring_series_id, '-') in ${BILL_SERIES})
+         and coalesce(sp.category_id, '-') not in ${HOME_CATEGORIES}
+         and not (t.amount_cents < 0 and coalesce(t.recurring_series_id, '-') in ${BILL_SERIES} and ${NOT_HOME})
     `)
     .map((r) => ({ ...r, cents: Number(r.cents) }));
 }
@@ -392,6 +420,44 @@ export function otherSpentByMonth(db: Db, months: string[]): Map<string, number>
   if (!months.length) return out;
   const sorted = [...months].sort();
   for (const c of otherSpending(db, `${sorted[0]}-01`, monthEnd(sorted.at(-1) as string))) {
+    const m = c.date.slice(0, 7);
+    out.set(m, (out.get(m) ?? 0) + c.cents);
+  }
+  return out;
+}
+
+/** Home & utilities charges between two dates (positive cents): anything in a home category. */
+export function homeCharges(
+  db: Db,
+  from: string,
+  to: string,
+): { id: string; date: string; cents: number }[] {
+  return db
+    .all<{ id: string; date: string; cents: number }>(sql`
+      select t.id as id, t.posted_date as date, -t.amount_cents as cents
+        from transactions t join accounts a on a.id = t.account_id
+       where t.hidden = 0 and a.exclude_from_reports = 0 and a.type <> 'loan'
+         and t.posted_date between ${from} and ${to}
+         and t.category_id in ${HOME_CATEGORIES}
+         and not exists (select 1 from transaction_splits x where x.transaction_id = t.id)
+      union all
+      select t.id as id, t.posted_date as date, -sp.amount_cents as cents
+        from transaction_splits sp
+        join transactions t on t.id = sp.transaction_id
+        join accounts a on a.id = t.account_id
+       where t.hidden = 0 and a.exclude_from_reports = 0 and a.type <> 'loan'
+         and t.posted_date between ${from} and ${to}
+         and sp.category_id in ${HOME_CATEGORIES}
+    `)
+    .map((r) => ({ ...r, cents: Number(r.cents) }));
+}
+
+/** Home & utilities per month (positive cents), for the months given. */
+export function homePaidByMonth(db: Db, months: string[]): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!months.length) return out;
+  const sorted = [...months].sort();
+  for (const c of homeCharges(db, `${sorted[0]}-01`, monthEnd(sorted.at(-1) as string))) {
     const m = c.date.slice(0, 7);
     out.set(m, (out.get(m) ?? 0) + c.cents);
   }

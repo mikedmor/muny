@@ -4,6 +4,7 @@ import {
   EARNINGS,
   EVERYTHING_ELSE,
   formatMoney,
+  HOME,
   OTHER_SPENDING,
 } from "@muny/shared";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
@@ -101,17 +102,28 @@ function Remaining({ cents, muted }: { cents: number | null; muted?: boolean }) 
   );
 }
 
-/** "+ bill category": mark another spending category as a bill (search to find it, or make one). */
-function AddBillCategory() {
+/**
+ * "+ bill category" / "+ home category": count another spending category in
+ * that basic (search to find it, or make one). A category is one or the other.
+ */
+function AddBasicCategory({ basic }: { basic: "bill" | "home" }) {
   const update = useUpdateCategory();
   return (
     <CategorySelect
       value={null}
-      emptyLabel="+ bill category"
+      emptyLabel={`+ ${basic} category`}
       hideEmpty
-      aria-label="Count another category as a bill"
-      filter={(c, g) => g.kind === "expense" && !c.isBill && !c.excludeFromBudget}
-      onChange={(id) => id && update.mutate({ id, isBill: true })}
+      aria-label={
+        basic === "home"
+          ? "Count another category in Home & utilities"
+          : "Count another category as a bill"
+      }
+      filter={(c, g) =>
+        g.kind === "expense" && !c.excludeFromBudget && !(basic === "home" ? c.isHome : c.isBill)
+      }
+      onChange={(id) =>
+        id && update.mutate(basic === "home" ? { id, isHome: true } : { id, isBill: true })
+      }
       className="inline-flex text-brand-600 hover:underline dark:text-brand-500"
     />
   );
@@ -126,9 +138,11 @@ function BasicsTable({ b, month }: { b: BudgetMonth; month: string }) {
   const f = b.forecast;
   const past = f.period === "past";
   const lines = b.groups.flatMap((g) => g.lines);
-  const budgeted = (bill: boolean) =>
-    lines.filter((l) => l.isBill === bill && l.budgetCents !== null).length;
-  const billCount = lines.filter((l) => l.isBill).length;
+  const basicOf = (l: (typeof lines)[number]) => (l.isHome ? "home" : l.isBill ? "bills" : "other");
+  const budgeted = (basic: "home" | "bills" | "other") =>
+    lines.filter((l) => basicOf(l) === basic && l.budgetCents !== null).length;
+  const count = (basic: "home" | "bills") => lines.filter((l) => basicOf(l) === basic).length;
+  const plural = (n: number) => `${n} ${n === 1 ? "category" : "categories"}`;
   const rows = [
     {
       key: "earnings",
@@ -143,18 +157,36 @@ function BasicsTable({ b, month }: { b: BudgetMonth; month: string }) {
       basis: "Income received plus what your recurring income should still bring",
     },
     {
+      key: "home",
+      icon: "🏠",
+      name: "Home & utilities",
+      note: (
+        <>
+          {budgeted("home")
+            ? `Budgets of ${plural(budgeted("home"))}`
+            : count("home")
+              ? "Give your home categories a budget below"
+              : "No home categories yet"}
+          {" · "}
+          <AddBasicCategory basic="home" />
+        </>
+      ),
+      line: b.home,
+      basis: "Your home categories' budgets added up",
+    },
+    {
       key: "bills",
       icon: "🧾",
       name: "Bills & subscriptions",
       note: (
         <>
-          {budgeted(true)
-            ? `Budgets of ${budgeted(true)} bill categor${budgeted(true) === 1 ? "y" : "ies"}`
-            : billCount
+          {budgeted("bills")
+            ? `Budgets of ${plural(budgeted("bills"))}`
+            : count("bills")
               ? "Give your bill categories a budget below"
               : "No bill categories yet"}
           {" · "}
-          <AddBillCategory />
+          <AddBasicCategory basic="bill" />
         </>
       ),
       line: b.bills,
@@ -164,14 +196,14 @@ function BasicsTable({ b, month }: { b: BudgetMonth; month: string }) {
       key: "other",
       icon: "🛒",
       name: "All other categories",
-      note: budgeted(false)
-        ? `Budgets of ${budgeted(false)} other categor${budgeted(false) === 1 ? "y" : "ies"}`
+      note: budgeted("other")
+        ? `Budgets of ${plural(budgeted("other"))}`
         : "Give categories a budget below",
       line: b.other,
       basis: "Your other categories' budgets added up",
     },
   ];
-  const pageFor = { earnings: EARNINGS, bills: BILLS, other: OTHER_SPENDING } as const;
+  const pageFor = { earnings: EARNINGS, home: HOME, bills: BILLS, other: OTHER_SPENDING } as const;
   return (
     <Card className="p-0">
       <TableHead first="Budget basics" />
@@ -197,7 +229,7 @@ function BasicsTable({ b, month }: { b: BudgetMonth; month: string }) {
                   >
                     {r.name}
                   </Link>
-                  <span className="block truncate text-xs text-slate-500">{r.note}</span>
+                  <span className="block text-xs text-slate-500">{r.note}</span>
                 </span>
               </span>
               <span
@@ -267,7 +299,17 @@ function CategoriesTable({ b, month }: { b: BudgetMonth; month: string }) {
                     {l.name}
                   </Link>
                   <span className="block truncate text-xs text-slate-500">
-                    {l.isBill && (
+                    {l.isHome && (
+                      <button
+                        type="button"
+                        onClick={() => updateCategory.mutate({ id, isHome: false })}
+                        title="Counts toward Home & utilities. Click to stop."
+                        className="mr-1.5 rounded bg-brand-50 px-1.5 py-px text-[10px] font-medium text-brand-700 hover:bg-brand-100 dark:bg-brand-700/20 dark:text-brand-500"
+                      >
+                        Home
+                      </button>
+                    )}
+                    {l.isBill && !l.isHome && (
                       <button
                         type="button"
                         onClick={() => updateCategory.mutate({ id, isBill: false })}

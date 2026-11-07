@@ -114,10 +114,12 @@ export const EVERYTHING_ELSE = "everything-else";
 export const EARNINGS = "earnings";
 /** The budget page's "Bills & subscriptions" row as a category: charges from recurring bills. */
 export const BILLS = "bills";
-/** The budget page's "All other categories" row: spending that isn't a bill. */
+/** The budget page's "Home & utilities" row: spending in the home categories. */
+export const HOME = "home";
+/** The budget page's "All other categories" row: spending that isn't a bill or a home cost. */
 export const OTHER_SPENDING = "other-spending";
 /** Budget rows that open as a category page, and what the transactions list filters on. */
-export const BUDGET_ROWS = [EVERYTHING_ELSE, EARNINGS, BILLS, OTHER_SPENDING] as const;
+export const BUDGET_ROWS = [EVERYTHING_ELSE, EARNINGS, HOME, BILLS, OTHER_SPENDING] as const;
 export type BudgetRowId = (typeof BUDGET_ROWS)[number];
 
 /** The Spending page: breakdown by category plus a monthly summary. */

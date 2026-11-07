@@ -6,7 +6,7 @@ import { alias } from "drizzle-orm/sqlite-core";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
-import { BILL_CATEGORIES, BILL_SERIES } from "../budgets/service.js";
+import { BILL_CATEGORIES, BILL_SERIES, HOME_CATEGORIES } from "../budgets/service.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, notFound, parse } from "../lib/http.js";
 import { rememberCategory } from "./memory.js";
@@ -30,7 +30,7 @@ const ListQuery = z.object({
   accountId: id.optional(),
   categoryId: id.optional(),
   /** A budget row's transactions: earnings (income categories) or bills (recurring charges). */
-  budgetRow: z.enum(["earnings", "bills", "other"]).optional(),
+  budgetRow: z.enum(["earnings", "home", "bills", "other"]).optional(),
   tagId: id.optional(),
   from: isoDate.optional(),
   to: isoDate.optional(),
@@ -118,10 +118,20 @@ function buildFilters(q: z.infer<typeof ListQuery>): SQL | undefined {
       ),
     );
   }
+  // Nothing in a home category: a recurring charge is a bill only then.
+  const notHome = sql`coalesce(${t.categoryId}, '-') not in ${HOME_CATEGORIES} and not exists (select 1 from ${schema.transactionSplits} h where h.transaction_id = ${t.id} and h.category_id in ${HOME_CATEGORIES})`;
+  if (q.budgetRow === "home") {
+    conds.push(
+      or(
+        sql`${t.categoryId} in ${HOME_CATEGORIES}`,
+        sql`exists (select 1 from ${schema.transactionSplits} s where s.transaction_id = ${t.id} and s.category_id in ${HOME_CATEGORIES})`,
+      ),
+    );
+  }
   if (q.budgetRow === "bills") {
     conds.push(
       or(
-        sql`${t.amountCents} < 0 and ${t.recurringSeriesId} in ${BILL_SERIES}`,
+        sql`${t.amountCents} < 0 and ${t.recurringSeriesId} in ${BILL_SERIES} and ${notHome}`,
         sql`${t.categoryId} in ${BILL_CATEGORIES}`,
         sql`exists (select 1 from ${schema.transactionSplits} s where s.transaction_id = ${t.id} and s.category_id in ${BILL_CATEGORIES})`,
       ),
@@ -131,11 +141,11 @@ function buildFilters(q: z.infer<typeof ListQuery>): SQL | undefined {
     // Spending that isn't a bill: spending categories or uncategorized, not a bill.
     const spending = sql`(select c.id from categories c join category_groups g on g.id = c.group_id where g.kind = 'expense' and c.exclude_from_budget = 0)`;
     conds.push(
-      sql`not (${t.amountCents} < 0 and coalesce(${t.recurringSeriesId}, '-') in ${BILL_SERIES})`,
+      sql`not (${t.amountCents} < 0 and coalesce(${t.recurringSeriesId}, '-') in ${BILL_SERIES} and ${notHome})`,
       or(
-        sql`${t.categoryId} in ${spending} and ${t.categoryId} not in ${BILL_CATEGORIES}`,
+        sql`${t.categoryId} in ${spending} and ${t.categoryId} not in ${BILL_CATEGORIES} and ${t.categoryId} not in ${HOME_CATEGORIES}`,
         sql`${t.categoryId} is null and ${t.transferPairId} is null`,
-        sql`exists (select 1 from ${schema.transactionSplits} s where s.transaction_id = ${t.id} and (s.category_id is null or (s.category_id in ${spending} and s.category_id not in ${BILL_CATEGORIES})))`,
+        sql`exists (select 1 from ${schema.transactionSplits} s where s.transaction_id = ${t.id} and (s.category_id is null or (s.category_id in ${spending} and s.category_id not in ${BILL_CATEGORIES} and s.category_id not in ${HOME_CATEGORIES})))`,
       ),
     );
   }
