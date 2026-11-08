@@ -115,8 +115,11 @@ function household(today: string): string[][] {
       spend(d, between(1_400, 4_800), "NOODLE BAR", "Dining & Drinks");
     for (const d of [8, 16, 23]) spend(d, between(450, 750), "THE COFFEE SPOT", "Coffee");
     for (const d of [10, 20, 28]) spend(d, between(3_500, 5_600), "QUICKFUEL", "Gas & Fuel");
-    spend(14, between(2_500, 9_000), "BIG BOX STORE", "General Merchandise");
-    if (i % 2 === 0) spend(22, between(1_500, 3_500), "BOOK NOOK", "Hobbies");
+    // Not on a schedule, so they don't look like bills.
+    spend(between(2, 27), between(2_500, 9_000), "BIG BOX STORE", "General Merchandise");
+    if (i % 2 === 0) spend(between(15, 27), between(1_500, 3_500), "BOOK NOOK", "Hobbies");
+    if (i % 3 === 1)
+      spend(between(2, 27), between(4_000, 12_000), "BIG BOX STORE", "General Merchandise");
     if (i === 4) spend(26, 1_842, "INTEREST CHARGE ON PURCHASES", "Fees & Charges");
     // Last month's card bill, paid from checking.
     if (i > 0) {
@@ -208,6 +211,11 @@ export function maybeSeedDemo(db: MunyDb, enabled: boolean, today = localToday()
       if (categoryId) setBudget(tx, { categoryId, amountCents: cents, fromMonth });
     }
     rescanRecurring(tx, today);
+    // A settled household: what Muny found is already confirmed.
+    tx.update(schema.recurringSeries)
+      .set({ status: "confirmed" })
+      .where(eq(schema.recurringSeries.status, "detected"))
+      .run();
   });
   db.insert(schema.appSettings)
     .values({ key: SEEDED, value: { at: new Date().toISOString() } })

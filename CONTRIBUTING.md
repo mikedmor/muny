@@ -1,6 +1,6 @@
 # Contributing
 
-Muny is in early development.
+Thanks for helping. Muny is a stable 1.x release: changes keep existing installs working, and anything that needs people to act on upgrade waits for a major version.
 
 ## Dev setup
 
@@ -46,7 +46,17 @@ Edit `packages/db/src/schema.ts`, then run `pnpm db:generate` (use `--name <what
 - Explain significant technical choices in the pull request description.
 - Update the user guides in [guides/](guides/README.md) when you change how something is set up or used.
 
-## Easy ways to help (once public)
+## Releases
+
+Versions follow [Semantic Versioning](https://semver.org/) and every package in the workspace shares one version. To release:
+
+1. `pnpm version:set 1.2.0`
+2. Move the `[Unreleased]` notes in [CHANGELOG.md](CHANGELOG.md) under `## [1.2.0] - YYYY-MM-DD` and update the links at the bottom.
+3. Commit (`chore(release): 1.2.0`), push, then push the tag: `git tag v1.2.0 && git push origin v1.2.0`.
+
+The Release workflow checks the tag matches `package.json` and has a changelog entry, runs `pnpm check`, publishes `ghcr.io/mikedmor/muny` for amd64 and arm64 (tagged `1.2.0`, `1.2`, `1` and `latest`) and creates the GitHub release from the changelog.
+
+## Easy ways to help
 
 - Add entries to the **alternatives catalog** (paid service → self-hosted/FOSS alternative).
 - Add **CSV import presets** for your bank (with synthetic sample data only).
