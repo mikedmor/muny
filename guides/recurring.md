@@ -51,9 +51,13 @@ Cancelled and inactive series move to **Inactive or cancelled** at the bottom of
 
 ## Keeping charges with their series when the bank renames them
 
-Muny follows a merchant through small renames on its own, but sometimes a bank's feed changes the name completely, and a paycheck or bill stops joining its series. It then shows as late, and the month's expected income or bills count it twice.
+Banks sometimes change what they call a merchant from one charge to the next. Left alone, a paycheck or bill then stops joining its series: it shows as late, and the month's expected income or bills count it twice. Rules prevent that, and Muny sets them up for you:
 
-A rule fixes that for good. Open the series: if one of your rules already matches its charges (say, one that files them as Trash), click **Add to your rule**, and that rule gets the **Count as recurring** action too, so one rule does both. Otherwise click **Add a rule for this**. The rule editor opens already filled in: the series' bank description, its direction and account, and the action **Count as recurring** pointing at the series. Adjust it if you need to, check the matching transactions in the preview, and create it. From then on, anything the rule matches belongs to that series, whatever the merchant is called. Muny applies it straight away and on every later scan. You can also add the **Count as recurring** action to any rule under **Settings → Rules**.
+- **Your own rules come first.** If you already have a rule that's plainly about one series (it matches several of that series' charges and nothing from any other series you're still paying), Muny adds the action **Count as recurring** to it. One rule then files the bill as, say, Trash _and_ keeps it in its series.
+- **Every confirmed series gets a rule.** When a series is confirmed, by you or on its own, and no rule covers it yet, Muny creates one named after it: the steady part of its bank description, money in or out, and its account. Series still marked **New** don't get one until you confirm them.
+- **You're in charge.** Automatic rules appear in **Settings → Rules** like any other, and each one is recorded in the audit log. Edit them freely. If you delete one, or take **Count as recurring** off a rule, Muny won't add it back. Rules for a series you mark **Not recurring** stop doing anything.
+
+Anything a **Count as recurring** rule matches belongs to that series, whatever the merchant is called, on every scan. To check or change a series' rule, open the series: the panel shows which rule keeps it there, with a link to edit it. For a series without one, **Add a rule for this** (or **Add to your rule**) opens the editor already filled in.
 
 ## Adding one by hand
 

@@ -8,7 +8,13 @@ import { loadTransactions } from "../ledger/transactions.js";
 import { audit } from "../lib/audit.js";
 import { localToday } from "../lib/dates.js";
 import { badRequest, notFound, parse } from "../lib/http.js";
-import { createFromTransaction, listSeries, rescanRecurring, upcoming } from "./service.js";
+import {
+  createFromTransaction,
+  forgetSeriesInRules,
+  listSeries,
+  rescanRecurring,
+  upcoming,
+} from "./service.js";
 
 const IdParams = z.object({ id: z.string().min(1).max(64) });
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -165,7 +171,10 @@ export function registerRecurringRoutes(app: FastifyInstance, db: MunyDb) {
     const current = get(id);
     if (current.source !== "manual")
       throw badRequest("Detected items can't be deleted; mark them as ignored instead.");
-    db.delete(s).where(eq(s.id, id)).run();
+    db.transaction((tx) => {
+      forgetSeriesInRules(tx as unknown as MunyDb, id);
+      tx.delete(s).where(eq(s.id, id)).run();
+    });
     log(user.id, "recurring.delete", id);
     return { ok: true };
   });

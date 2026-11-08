@@ -18,6 +18,7 @@ import type {
   UpcomingCharge,
 } from "@muny/shared";
 import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { audit } from "../lib/audit.js";
 import { localToday } from "../lib/dates.js";
 import { notFound } from "../lib/http.js";
 
@@ -293,6 +294,192 @@ function renamedMerchants(tx: Tx, rows: Row[], today: string): Map<string, strin
   return out;
 }
 
+/** Rule + series pairs the person took apart: never put back automatically. */
+export const DECLINED_RULE_SERIES = "rules.recurring.declined";
+
+/**
+ * A rule you made for a bill or paycheck (to file it as Trash, say) is about
+ * that series, so it gets "Count as recurring" by itself. Only when it plainly
+ * is: it matches 3+ of the series' charges, every charge it matches that's in
+ * any series is in this one, most of what it matches is this series, and the
+ * direction agrees. Broad rules ("contains PAYPAL") span several series and
+ * are left alone, and so is any pair the person removed.
+ */
+function adoptRulesForSeries(tx: Tx, rows: Row[]): number {
+  const series = new Map(
+    tx
+      .select()
+      .from(schema.recurringSeries)
+      .all()
+      .filter((x) => x.status !== "ignored")
+      .map((x) => [x.id, x]),
+  );
+  if (!series.size) return 0;
+  const declinedRow = tx
+    .select({ value: schema.appSettings.value })
+    .from(schema.appSettings)
+    .where(eq(schema.appSettings.key, DECLINED_RULE_SERIES))
+    .get();
+  const declined = new Set(
+    Array.isArray(declinedRow?.value) ? (declinedRow.value as string[]) : [],
+  );
+  let adopted = 0;
+  for (const r of tx.select().from(schema.rules).where(eq(schema.rules.enabled, true)).all()) {
+    const actions = r.actions as RuleAction[];
+    if (actions.some((a) => a.type === "setRecurring")) continue;
+    const cond = r.conditions as { match?: "all" | "any"; items?: RuleDefinition["conditions"] };
+    const rule = { match: cond.match ?? "all", conditions: cond.items ?? [] };
+    const matched = rows.filter((x) =>
+      ruleMatches(rule, {
+        description: x.rawDescription,
+        payee: x.payee,
+        amountCents: x.amountCents,
+        accountId: x.accountId,
+      }),
+    );
+    const inSeries = matched.filter((x) => x.recurringSeriesId && series.has(x.recurringSeriesId));
+    const ids = new Set(inSeries.map((x) => x.recurringSeriesId as string));
+    if (ids.size !== 1 || inSeries.length < 3) continue;
+    const sid = [...ids][0] as string;
+    const e = series.get(sid);
+    if (!e || declined.has(`${r.id}:${sid}`)) continue;
+    if (inSeries.length / matched.length < 0.6) continue;
+    const dir = (x: Row) => (x.amountCents < 0 ? "out" : "in");
+    if (matched.some((x) => dir(x) !== e.direction)) continue;
+    tx.update(schema.rules)
+      .set({ actions: [...actions, { type: "setRecurring", seriesId: sid }] })
+      .where(eq(schema.rules.id, r.id))
+      .run();
+    audit(tx as unknown as MunyDb, {
+      actorType: "system",
+      action: "rule.auto_recurring",
+      entityType: "rule",
+      entityId: r.id,
+      details: { seriesId: sid },
+    });
+    adopted++;
+  }
+  return adopted;
+}
+
+/**
+ * The steady part of a bank description, as it literally appears: cut at the
+ * first number or reference marker ("ACME PAYROLL PPD ID: 123" -> "ACME
+ * PAYROLL"). Null when too little is left to be specific.
+ */
+export function steadyDescription(raw: string): string | null {
+  const cut = raw.search(/\d|\b(?:PPD|CCD|WEB|ACH|ID)\b|#|\*/i);
+  const text = (cut >= 0 ? raw.slice(0, cut) : raw).replace(/[\s:;,.-]+$/, "").trim();
+  return text.replace(/[^a-z]/gi, "").length >= 4 ? text : null;
+}
+
+/**
+ * Every confirmed series gets a rule of its own ("Count as recurring"), so its
+ * charges stay with it whatever the bank calls the merchant. Built from the
+ * newest charge: its steady description, direction and account. Skipped when
+ * a rule already places the series, when you removed one before, or when the
+ * rule wouldn't be specific (it would miss most of the series' charges, or
+ * pull in another series' charges).
+ */
+function ensureSeriesRules(tx: Tx, rows: Row[], today: string): number {
+  const placed = new Set<string>();
+  for (const r of tx.select({ actions: schema.rules.actions }).from(schema.rules).all())
+    for (const a of r.actions as RuleAction[])
+      if (a.type === "setRecurring") placed.add(a.seriesId);
+  const declinedRow = tx
+    .select({ value: schema.appSettings.value })
+    .from(schema.appSettings)
+    .where(eq(schema.appSettings.key, DECLINED_RULE_SERIES))
+    .get();
+  const declined = new Set(
+    Array.isArray(declinedRow?.value) ? (declinedRow.value as string[]) : [],
+  );
+  const bySeries = new Map<string, Row[]>();
+  for (const r of rows)
+    if (r.recurringSeriesId)
+      bySeries.set(r.recurringSeriesId, [...(bySeries.get(r.recurringSeriesId) ?? []), r]);
+  let priority = Number(
+    tx
+      .select({ m: sql<number>`coalesce(max(${schema.rules.priority}), 0)` })
+      .from(schema.rules)
+      .get()?.m ?? 0,
+  );
+  const all = tx.select().from(schema.recurringSeries).all();
+  const running = new Set(
+    all
+      .filter((x) => dayNum(today) - dayNum(x.lastDate) <= grace(x.interval as RecurringInterval))
+      .map((x) => x.id),
+  );
+  let made = 0;
+  for (const e of all) {
+    if (e.status !== "confirmed" || placed.has(e.id) || declined.has(`auto:${e.id}`)) continue;
+    const own = (bySeries.get(e.id) ?? []).sort((a, b) => a.postedDate.localeCompare(b.postedDate));
+    const latest = own[own.length - 1];
+    if (!latest || own.length < 2) continue;
+    const words = steadyDescription(latest.rawDescription);
+    if (!words) continue;
+    const conditions: RuleDefinition["conditions"] = [
+      { field: "description", op: "contains", value: words },
+      { field: "direction", value: e.direction === "out" ? "out" : "in" },
+      { field: "account", value: latest.accountId },
+    ];
+    const rule = { match: "all" as const, conditions };
+    const matched = rows.filter((x) =>
+      ruleMatches(rule, {
+        description: x.rawDescription,
+        payee: x.payee,
+        amountCents: x.amountCents,
+        accountId: x.accountId,
+      }),
+    );
+    const mine = matched.filter((x) => x.recurringSeriesId === e.id).length;
+    // Charges of another series still running mean the rule is too broad; an
+    // ended series by the same words is an earlier run of this one.
+    const other = (x: Row) => !!x.recurringSeriesId && x.recurringSeriesId !== e.id;
+    const others = matched.filter(
+      (x) => other(x) && running.has(x.recurringSeriesId as string),
+    ).length;
+    const ended = matched.filter(
+      (x) => other(x) && !running.has(x.recurringSeriesId as string),
+    ).length;
+    // Specific enough: covers most of the series, and nothing of another live one.
+    if (others > 0 || mine < own.length * 0.5 || mine + ended < matched.length * 0.6) continue;
+    priority += 10;
+    const id = newId();
+    tx.insert(schema.rules)
+      .values({
+        id,
+        name: `${e.name} (recurring)`.slice(0, 100),
+        enabled: true,
+        priority,
+        conditions: { match: "all", items: conditions },
+        actions: [{ type: "setRecurring", seriesId: e.id }],
+      })
+      .run();
+    audit(tx as unknown as MunyDb, {
+      actorType: "system",
+      action: "rule.auto_create",
+      entityType: "rule",
+      entityId: id,
+      details: { seriesId: e.id },
+    });
+    placed.add(e.id);
+    made++;
+  }
+  return made;
+}
+
+/** A series is gone: rules stop pointing at it, and a rule left with nothing to do goes too. */
+export function forgetSeriesInRules(db: Db, seriesId: string) {
+  for (const r of db.select().from(schema.rules).all()) {
+    const actions = r.actions as RuleAction[];
+    const kept = actions.filter((a) => !(a.type === "setRecurring" && a.seriesId === seriesId));
+    if (kept.length === actions.length) continue;
+    if (kept.length === 0) db.delete(schema.rules).where(eq(schema.rules.id, r.id)).run();
+    else db.update(schema.rules).set({ actions: kept }).where(eq(schema.rules.id, r.id)).run();
+  }
+}
+
 /**
  * "Count as recurring" rules: which transactions you've said belong to which
  * series. These win over every guess from merchant names, on every scan. The
@@ -345,6 +532,9 @@ export function rescanRecurring(tx: Tx, today = localToday()): RecurringScanResu
   const rows = loadRows(tx);
   const byId = new Map(rows.map((r) => [r.id, r]));
   const renamed = renamedMerchants(tx, rows, today);
+  // Your own rules for a series come first; then every confirmed series gets one.
+  adoptRulesForSeries(tx, rows);
+  ensureSeriesRules(tx, rows, today);
   const ruled = ruleSeriesLinks(tx, rows);
   const keyOfSeriesId = new Map(
     tx

@@ -331,3 +331,123 @@ describe("rules that count transactions as a recurring series", () => {
     expect(bad.statusCode).toBe(400);
   });
 });
+
+describe("each recurring series has a rule of its own", () => {
+  it("adds Count as recurring to your rule for a series, but not to a broad one", async () => {
+    const { db, client, account, add, series } = await setup();
+    const today = "2026-11-08";
+    const scanOn = () => db.transaction((tx) => rescanRecurring(tx, today));
+    const a = await account("Main");
+    for (const m of ["2024-11-08", "2025-10-21", "2026-10-21"])
+      await add(a.id, m, -24_266, "SAMPLE WASTE CO 555-0100");
+    for (const m of ["06", "07", "08", "09", "10"]) {
+      await add(a.id, `2026-${m}-03`, -1_599, "SAMPLE PAY *STREAMCO");
+      await add(a.id, `2026-${m}-09`, -1_099, "SAMPLE PAY *TUNEBOX");
+    }
+    scanOn();
+    const waste = series().find((s) => s.expectedAmountCents === -24_266);
+    expect(waste).toBeDefined();
+    // Your own rule for the bill files it; another rule spans two subscriptions.
+    const make = (name: string, value: string) =>
+      client.post("/api/rules", {
+        name,
+        match: "all",
+        conditions: [{ field: "description", op: "contains", value }],
+        actions: [{ type: "addTag", name: "x" }],
+      });
+    const mine = (await make("Waste", "SAMPLE WASTE")).json<{ id: string }>();
+    const broad = (await make("Pay", "SAMPLE PAY")).json<{ id: string }>();
+    scanOn();
+    const rules = (await client.get("/api/rules")).json<
+      { id: string; actions: { type: string; seriesId?: string }[] }[]
+    >();
+    const wasteRule = rules.find((r) => r.id === mine.id);
+    expect(wasteRule?.actions).toContainEqual({ type: "setRecurring", seriesId: waste?.id });
+    expect(
+      rules.find((r) => r.id === broad.id)?.actions.some((x) => x.type === "setRecurring"),
+    ).toBe(false);
+
+    // Take it off again: it stays off.
+    await client.patch(`/api/rules/${mine.id}`, { actions: [{ type: "addTag", name: "x" }] });
+    scanOn();
+    const again = (await client.get("/api/rules")).json<
+      { id: string; actions: { type: string }[] }[]
+    >();
+    expect(
+      again.find((r) => r.id === mine.id)?.actions.some((x) => x.type === "setRecurring"),
+    ).toBe(false);
+  });
+
+  it("makes a rule for each confirmed series, so a renamed charge stays with it", async () => {
+    const { db, client, account, add, series, seriesOf } = await setup();
+    const today = "2026-11-08";
+    const scanOn = () => db.transaction((tx) => rescanRecurring(tx, today));
+    const main = await account("Main");
+    const desc = "ACME CORP PAYROLL PPD ID: 9000000001";
+    for (const d of [
+      "2026-09-25",
+      "2026-10-02",
+      "2026-10-09",
+      "2026-10-16",
+      "2026-10-23",
+      "2026-10-30",
+    ])
+      await add(main.id, d, 170_925, desc);
+    for (const m of ["06", "07", "08", "09", "10"])
+      await add(main.id, `2026-${m}-12`, -999, "SAMPLE GYM");
+    scanOn();
+    const payroll = series().find((s) => s.expectedAmountCents === 170_925);
+    const gym = series().find((s) => s.expectedAmountCents === -999);
+    await client.patch(`/api/recurring/${payroll?.id}`, { status: "confirmed" });
+    scanOn();
+    type R = {
+      id: string;
+      name: string;
+      conditions: { field: string; value: unknown }[];
+      actions: { type: string; seriesId?: string }[];
+    };
+    const rules = (await client.get("/api/rules")).json<R[]>();
+    const auto = rules.find((r) =>
+      r.actions.some((x) => x.type === "setRecurring" && x.seriesId === payroll?.id),
+    );
+    expect(auto?.conditions).toContainEqual({
+      field: "description",
+      op: "contains",
+      value: "ACME CORP PAYROLL",
+    });
+    // Waiting for review: no rule yet.
+    if (gym?.status === "detected")
+      expect(
+        rules.some((r) =>
+          r.actions.some((x) => x.type === "setRecurring" && x.seriesId === gym.id),
+        ),
+      ).toBe(false);
+
+    // The bank renames the merchant: the rule keeps it in the series.
+    await add(main.id, "2026-11-06", 170_925, desc);
+    const t = schema.transactions;
+    const row = db
+      .select()
+      .from(t)
+      .all()
+      .find((r) => r.postedDate === "2026-11-06");
+    db.insert(schema.payees).values({ id: "p-odd2", displayName: "Zeta Holdings" }).run();
+    db.update(t)
+      .set({ payeeId: "p-odd2", recurringSeriesId: null })
+      .where(sql`${t.id} = ${row?.id}`)
+      .run();
+    scanOn();
+    expect(seriesOf(desc, "2026-11-06")).toBe(payroll?.name);
+    expect(series().find((s) => s.id === payroll?.id)?.late).toBe(false);
+
+    // Delete the automatic rule: it isn't made again.
+    await client.delete(`/api/rules/${auto?.id}`);
+    scanOn();
+    const after = (await client.get("/api/rules")).json<R[]>();
+    expect(
+      after.some((r) =>
+        r.actions.some((x) => x.type === "setRecurring" && x.seriesId === payroll?.id),
+      ),
+    ).toBe(false);
+  });
+});

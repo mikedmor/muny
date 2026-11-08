@@ -6,7 +6,7 @@ import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
 import { audit } from "../lib/audit.js";
 import { notFound, parse } from "../lib/http.js";
-import { rescanRecurring } from "../recurring/service.js";
+import { DECLINED_RULE_SERIES, rescanRecurring } from "../recurring/service.js";
 import {
   applyPlans,
   createRule,
@@ -43,6 +43,34 @@ const PreviewBody = DefinitionSchema.extend({
 });
 const ApplyBody = z.object({ includeEdited: z.boolean().optional() });
 const MoveBody = z.object({ direction: z.enum(["up", "down"]) });
+
+/** Series a rule's "Count as recurring" action points at. */
+const seriesOf = (r: { actions: { type: string; seriesId?: string }[] }) =>
+  r.actions.filter((a) => a.type === "setRecurring" && a.seriesId).map((a) => a.seriesId as string);
+
+/** The person took "Count as recurring" off this rule: don't put it back automatically. */
+function rememberDeclined(
+  db: MunyDb,
+  before: { id: string; actions: { type: string; seriesId?: string }[] },
+  after: { actions: { type: string; seriesId?: string }[] },
+) {
+  const kept = new Set(seriesOf(after));
+  const removed = seriesOf(before).filter((sid) => !kept.has(sid));
+  if (!removed.length) return;
+  const row = db
+    .select({ value: schema.appSettings.value })
+    .from(schema.appSettings)
+    .where(eq(schema.appSettings.key, DECLINED_RULE_SERIES))
+    .get();
+  const list = Array.isArray(row?.value) ? (row.value as string[]) : [];
+  const next = [
+    ...new Set([...list, ...removed.flatMap((sid) => [`${before.id}:${sid}`, `auto:${sid}`])]),
+  ].slice(-500);
+  db.insert(schema.appSettings)
+    .values({ key: DECLINED_RULE_SERIES, value: next })
+    .onConflictDoUpdate({ target: schema.appSettings.key, set: { value: next } })
+    .run();
+}
 
 /** Does this rule place transactions in a recurring series? */
 const placesRecurring = (r: { actions: { type: string }[] }) =>
@@ -95,6 +123,7 @@ export function registerRuleRoutes(app: FastifyInstance, db: MunyDb) {
       .where(eq(schema.rules.id, id))
       .run();
     const updated = getRule(db, id);
+    rememberDeclined(db, current, updated);
     if (placesRecurring(current) || placesRecurring(updated))
       db.transaction((tx) => rescanRecurring(tx));
     log(user.id, "rule.update", id, { fields: Object.keys(body) });
@@ -106,6 +135,7 @@ export function registerRuleRoutes(app: FastifyInstance, db: MunyDb) {
     const { id } = parse(IdParams, req.params);
     const gone = getRule(db, id);
     db.delete(schema.rules).where(eq(schema.rules.id, id)).run();
+    rememberDeclined(db, gone, { actions: [] });
     // Its charges go back to being matched by name.
     if (placesRecurring(gone)) db.transaction((tx) => rescanRecurring(tx));
     log(user.id, "rule.delete", id);
