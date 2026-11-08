@@ -368,9 +368,19 @@ function adoptRulesForSeries(tx: Tx, rows: Row[]): number {
  * PAYROLL"). Null when too little is left to be specific.
  */
 export function steadyDescription(raw: string): string | null {
-  const cut = raw.search(/\d|\b(?:PPD|CCD|WEB|ACH|ID)\b|#|\*/i);
-  const text = (cut >= 0 ? raw.slice(0, cut) : raw).replace(/[\s:;,.-]+$/, "").trim();
-  return text.replace(/[^a-z]/gi, "").length >= 4 ? text : null;
+  const tokens = raw.trim().split(/\s+/);
+  const kept: string[] = [];
+  for (const [i, tok] of tokens.entries()) {
+    // The first word stays even with a digit in it ("SD1 SEWER"); after that,
+    // numbers, dates and reference markers are what changes from charge to charge.
+    if (i > 0 && (/\d/.test(tok) || /^#|^(?:PPD|CCD|WEB|ACH|ID|ID:|REF|CONF)$/i.test(tok))) break;
+    kept.push(tok);
+  }
+  const text = kept
+    .join(" ")
+    .replace(/[\s:;,.*#-]+$/, "")
+    .trim();
+  return text.replace(/[^a-z]/gi, "").length >= 2 && text.length >= 3 ? text : null;
 }
 
 /**
@@ -443,7 +453,7 @@ function ensureSeriesRules(tx: Tx, rows: Row[], today: string): number {
       (x) => other(x) && !running.has(x.recurringSeriesId as string),
     ).length;
     // Specific enough: covers most of the series, and nothing of another live one.
-    if (others > 0 || mine < own.length * 0.5 || mine + ended < matched.length * 0.6) continue;
+    if (others > 0 || mine < 2 || mine + ended < matched.length * 0.6) continue;
     priority += 10;
     const id = newId();
     tx.insert(schema.rules)
@@ -581,8 +591,29 @@ export function rescanRecurring(tx: Tx, today = localToday()): RecurringScanResu
   const owned = (seriesId: string, ids: string[]) =>
     ids.filter((id) => byId.get(id)?.recurringSeriesId === seriesId).length / (ids.length || 1);
 
+  // Newest charge date each rule-held series took from a candidate this scan.
+  const ruledNewest = new Map<string, string>();
   for (const c of candidates) {
+    // Charges a rule holds go to that series. A price change splits them into
+    // several candidates; the newest decides the price, older ones only link.
+    const votes = new Map<string, number>();
+    for (const id of c.transactionIds) {
+      const sid = ruled.get(id);
+      if (sid) votes.set(sid, (votes.get(sid) ?? 0) + 1);
+    }
+    const top = [...votes].sort((a, b) => b[1] - a[1])[0];
+    const held =
+      top && top[1] * 2 >= c.transactionIds.length
+        ? existing.find((e) => e.id === top[0])
+        : undefined;
+    if (held) {
+      const seen = ruledNewest.get(held.id);
+      if (seen && seen >= c.lastDate) continue;
+      ruledNewest.set(held.id, c.lastDate);
+      touched.delete(held.id);
+    }
     const match =
+      held ??
       existing.find(
         (e) =>
           !touched.has(e.id) &&
@@ -749,7 +780,80 @@ export function rescanRecurring(tx: Tx, today = localToday()): RecurringScanResu
     };
     if (Object.keys(dates).length) tx.update(s).set(dates).where(eq(s.id, sid)).run();
   }
+  foldEmptiedSeries(tx, rows, ruled);
   return result;
+}
+
+/**
+ * Two rules sending the same charges to two series say those series are one.
+ * A new (unconfirmed) series left with no charges, because every charge its rule matches
+ * went to one other series, folds into that series: its rules point there, and
+ * it goes.
+ */
+function foldEmptiedSeries(tx: Tx, rows: Row[], ruled: Map<string, string>) {
+  const s = schema.recurringSeries;
+  const t = schema.transactions;
+  const counts = new Map(
+    tx
+      .select({ sid: t.recurringSeriesId, n: sql<number>`count(*)` })
+      .from(t)
+      .where(sql`${t.recurringSeriesId} is not null`)
+      .groupBy(t.recurringSeriesId)
+      .all()
+      .map((x) => [x.sid as string, Number(x.n)]),
+  );
+  const rules = tx.select().from(schema.rules).all();
+  for (const e of tx.select().from(s).all()) {
+    if (e.status !== "detected" || e.source !== "detected" || counts.get(e.id)) continue;
+    const mine = rules.filter((r) =>
+      (r.actions as RuleAction[]).some((a) => a.type === "setRecurring" && a.seriesId === e.id),
+    );
+    if (!mine.length) continue;
+    const dests = new Set<string>();
+    for (const r of mine) {
+      const cond = r.conditions as { match?: "all" | "any"; items?: RuleDefinition["conditions"] };
+      const rule = { match: cond.match ?? "all", conditions: cond.items ?? [] };
+      for (const x of rows) {
+        const sid = ruled.get(x.id);
+        if (
+          sid &&
+          sid !== e.id &&
+          ruleMatches(rule, {
+            description: x.rawDescription,
+            payee: x.payee,
+            amountCents: x.amountCents,
+            accountId: x.accountId,
+          })
+        )
+          dests.add(sid);
+      }
+    }
+    if (dests.size !== 1) continue;
+    const into = [...dests][0] as string;
+    for (const r of mine) {
+      const seen = new Set<string>();
+      const actions = (r.actions as RuleAction[])
+        .map((a) =>
+          a.type === "setRecurring" && a.seriesId === e.id ? { ...a, seriesId: into } : a,
+        )
+        .filter((a) => {
+          if (a.type !== "setRecurring") return true;
+          if (seen.has(a.seriesId)) return false;
+          seen.add(a.seriesId);
+          return true;
+        });
+      tx.update(schema.rules).set({ actions }).where(eq(schema.rules.id, r.id)).run();
+      r.actions = actions;
+    }
+    tx.delete(s).where(eq(s.id, e.id)).run();
+    audit(tx as unknown as MunyDb, {
+      actorType: "system",
+      action: "recurring.merge",
+      entityType: "recurring_series",
+      entityId: into,
+      details: { merged: e.id, name: e.name },
+    });
+  }
 }
 
 /** Confirm, ignore or cancel a series. Ignoring detaches its charges so they read as ordinary transactions. */

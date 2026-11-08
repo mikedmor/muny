@@ -57,7 +57,7 @@ Banks sometimes change what they call a merchant from one charge to the next. Le
 - **Every confirmed series gets a rule.** When a series is confirmed, by you or on its own, and no rule covers it yet, Muny creates one named after it: the steady part of its bank description, money in or out, and its account. Series still marked **New** don't get one until you confirm them.
 - **You're in charge.** Automatic rules appear in **Settings → Rules** like any other, and each one is recorded in the audit log. Edit them freely. If you delete one, or take **Count as recurring** off a rule, Muny won't add it back. Rules for a series you mark **Not recurring** stop doing anything.
 
-Anything a **Count as recurring** rule matches belongs to that series, whatever the merchant is called, on every scan. To check or change a series' rule, open the series: the panel shows which rule keeps it there, with a link to edit it. For a series without one, **Add a rule for this** (or **Add to your rule**) opens the editor already filled in.
+Anything a **Count as recurring** rule matches belongs to that series, whatever the merchant is called, on every scan. When a price change had split one subscription into two, and a rule puts every charge in one of them, the empty **New** copy is folded into the other. To check or change a series' rule, open the series: the panel shows which rule keeps it there, with a link to edit it. For a series without one, **Add a rule for this** (or **Add to your rule**) opens the editor already filled in.
 
 ## Adding one by hand
 
