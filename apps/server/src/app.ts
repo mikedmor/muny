@@ -8,6 +8,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { registerProposalRoutes } from "./agent/proposals.js";
 import { registerAgentSurfaces } from "./agent/surfaces.js";
 import { registerTokenRoutes } from "./agent/tokens.js";
+import { registerAiRoutes } from "./ai/routes.js";
 import { registerAlertRoutes } from "./alerts/routes.js";
 import type { AlertDeps } from "./alerts/service.js";
 import { registerAssetRoutes } from "./assets/routes.js";
@@ -52,6 +53,8 @@ export interface AppDeps {
   alertFetch?: typeof fetch;
   /** Override outbound HTTP for crypto prices (tests). */
   priceFetch?: typeof fetch;
+  /** Override outbound HTTP for the built-in AI provider (tests). */
+  aiFetch?: typeof fetch;
 }
 
 /**
@@ -94,6 +97,7 @@ export async function buildApp({
   providers,
   alertFetch,
   priceFetch,
+  aiFetch,
 }: AppDeps): Promise<FastifyInstance> {
   const syncDeps = { config, providers: providers ?? makeProviders(config) };
   const csp = contentSecurityPolicy(config);
@@ -162,6 +166,7 @@ export async function buildApp({
   registerReportRoutes(app, db);
   registerTrialRoutes(app, db);
   registerSavingsRoutes(app, db);
+  registerAiRoutes(app, db, { secretKey: config.secretKey, fetch: aiFetch });
   const alertDeps: AlertDeps = {
     secretKey: config.secretKey,
     publicUrl: config.publicUrl,

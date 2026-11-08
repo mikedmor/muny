@@ -18,6 +18,7 @@ const ICON: Record<string, string> = {
   connection_error: "🔌",
   trial_ending: "⏳",
   agent_proposal: "📥",
+  ai_review: "🧠",
 };
 
 function when(ms: number) {

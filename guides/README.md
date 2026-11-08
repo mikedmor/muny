@@ -11,11 +11,12 @@ How to install, set up and use Muny.
 | [Budgets](budgets.md)                         | Monthly budgets, the forecast, and leaving categories out                                      |
 | [Your Overview](overview.md)                  | Choose and order your cards, build your own with calculations, or have an assistant write them |
 | [AI assistants](agents.md)                    | Connect Claude or another assistant over MCP, with tokens and permissions                      |
+| [Built-in AI](ai.md)                          | Optional: category suggestions, a monthly review and statement help, and exactly what's sent   |
 | [Themes](themes.md)                           | Light, dark and your own color themes                                                          |
 | [Loans](loans.md)                             | Loans: balances, rates, payoff dates and paying extra                                          |
 | [Credit cards](cards.md)                      | Limits, statements, due dates and paying cards off                                             |
 | [Stocks](stocks.md)                           | Tracking brokerage accounts, holdings and dividends                                            |
-| [Savings](savings.md)                         | Savings accounts (interest, rate, projections) and money saved                                 |
+| [Savings](savings.md)                         | Ways to save, savings accounts (interest, rate, projections) and money saved                   |
 | [Crypto](crypto.md)                           | Wallets, exchanges, prices, cost basis and tax reports                                         |
 | [Rules and documents](rules-and-documents.md) | Rules for transactions, and keeping statements and other files                                 |
 | [Alerts](alerts.md)                           | Alert rules and notification channels (ntfy, Apprise, email, webhook)                          |

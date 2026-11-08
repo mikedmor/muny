@@ -1,6 +1,12 @@
-import { type StatementKind, TEMPLATE_FIELDS, type TemplateFieldType } from "@muny/shared";
+import {
+  type AiTemplateDraft,
+  type StatementKind,
+  TEMPLATE_FIELDS,
+  type TemplateFieldType,
+} from "@muny/shared";
 import { type FormEvent, useState } from "react";
 import { api } from "../lib/api.js";
+import { useAiSettings } from "../pages/settings/AiSettings.js";
 import { Modal } from "./forms.js";
 import { Alert, Button, Field } from "./ui.js";
 
@@ -50,6 +56,35 @@ function Teach({
   const [labels, setLabels] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const fields = TEMPLATE_FIELDS[kind];
+  const ai = useAiSettings().data;
+  const canAsk = !!ai?.enabled && ai.features.statementTemplates;
+  const [asking, setAsking] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  /** Muny AI reads the statement and fills in what it finds; you still check and save. */
+  const fillIn = async () => {
+    setAsking(true);
+    setError(null);
+    setNote(null);
+    try {
+      const d = await api.post<AiTemplateDraft>("/api/ai/statement-template", { kind, lines });
+      if (d.name && !name.trim()) setName(d.name);
+      if (d.matchText) setMatch(d.matchText);
+      setLabels((x) => ({
+        ...x,
+        ...Object.fromEntries(Object.entries(d.fields).map(([k, v]) => [k, v.label])),
+      }));
+      const n = Object.keys(d.fields).length;
+      setNote(
+        n
+          ? `Filled in ${n} of ${fields.length}. Check them before saving.`
+          : "It couldn't find these fields. Pick the lines below instead.",
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't fill it in");
+    } finally {
+      setAsking(false);
+    }
+  };
   const save = async (e: FormEvent) => {
     e.preventDefault();
     const chosen = Object.fromEntries(
@@ -77,6 +112,14 @@ function Teach({
         For each field, pick the line of this statement it's on. Muny remembers the words just
         before the value and reads them from every statement that contains the text below.
       </p>
+      {canAsk && (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" variant="secondary" disabled={asking} onClick={fillIn}>
+            {asking ? "Reading…" : "Fill in with AI"}
+          </Button>
+          {note && <span className="text-sm text-slate-600 dark:text-slate-300">{note}</span>}
+        </div>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
         <Field
           label="Statements that contain"

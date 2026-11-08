@@ -12,6 +12,7 @@ export const ALERT_TYPES = [
   "connection_error",
   "trial_ending",
   "agent_proposal",
+  "ai_review",
 ] as const;
 export type AlertType = (typeof ALERT_TYPES)[number];
 

@@ -11,7 +11,7 @@ import {
   type RuleAction,
   SAVING_KINDS,
 } from "@muny/shared";
-import { and, desc, eq, inArray, lt } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
@@ -31,7 +31,7 @@ import {
 } from "../rules/service.js";
 import { createDiy } from "../savings/routes.js";
 import { createSaving, listSavings, verifySavings } from "../savings/service.js";
-import { defineTool, dryRunField, type Tool, type ToolContext, ToolError } from "./registry.js";
+import { defineTool, dryRunField, type Tool, ToolError } from "./registry.js";
 
 /**
  * Changes to financial data from an assistant never apply directly. A tool works
@@ -533,23 +533,33 @@ function notifyOwner(db: MunyDb, tokenId: string, tokenName: string) {
     .run();
 }
 
+/** Who's asking: an API token, or Muny's own built-in AI (no token). */
+interface Source {
+  tokenId: string | null;
+  tokenName: string;
+}
+
+/** The name Muny's built-in AI files suggestions under. */
+export const MUNY_AI = "Muny AI";
+
 function file(
-  ctx: ToolContext,
+  db: MunyDb,
+  source: Source,
   k: ProposalKind,
   input: Record<string, unknown>,
   preview: Preview,
   reason: string | undefined,
 ) {
-  const token = ctx.db
-    .select({ name: schema.apiTokens.name })
-    .from(schema.apiTokens)
-    .where(eq(schema.apiTokens.id, ctx.agent.tokenId))
-    .get();
-  expireOld(ctx.db);
-  const waiting = ctx.db
+  expireOld(db);
+  const waiting = db
     .select()
     .from(p)
-    .where(and(eq(p.tokenId, ctx.agent.tokenId), eq(p.status, "pending")))
+    .where(
+      and(
+        source.tokenId ? eq(p.tokenId, source.tokenId) : isNull(p.tokenId),
+        eq(p.status, "pending"),
+      ),
+    )
     .all();
   // An assistant retrying shouldn't fill the inbox with copies.
   const same = waiting.find(
@@ -559,14 +569,14 @@ function file(
   if (waiting.length >= MAX_PENDING_PER_TOKEN)
     throw new ToolError(
       "conflict",
-      `This token has ${MAX_PENDING_PER_TOKEN} changes waiting already. Ask its owner to go through the inbox.`,
+      `${source.tokenName} has ${MAX_PENDING_PER_TOKEN} changes waiting already. Go through the inbox first.`,
     );
-  const row = ctx.db
+  const row = db
     .insert(p)
     .values({
       id: newId(),
-      tokenId: ctx.agent.tokenId,
-      tokenName: token?.name ?? "An assistant",
+      tokenId: source.tokenId,
+      tokenName: source.tokenName,
       tool: k.tool,
       input,
       summary: preview.summary.slice(0, 300),
@@ -576,8 +586,36 @@ function file(
     })
     .returning()
     .get();
-  notifyOwner(ctx.db, ctx.agent.tokenId, row.tokenName);
+  notifyOwner(db, source.tokenId ?? "muny-ai", row.tokenName);
   return row;
+}
+
+/**
+ * File a suggestion from Muny itself (the optional built-in AI): the same
+ * preview, checks and inbox as an assistant's, under the name "Muny AI".
+ */
+export function fileFromMuny(
+  db: MunyDb,
+  today: string,
+  tool: string,
+  input: Record<string, unknown>,
+  reason: string,
+): { filed: boolean; summary: string } {
+  const k = KINDS.find((x) => x.tool === tool);
+  if (!k) throw new Error(`Unknown proposal ${tool}`);
+  const parsed = (k.input as z.ZodType).parse(input) as Record<string, unknown>;
+  const prepared = k.prepare ? k.prepare(parsed as never, today) : parsed;
+  const preview = k.preview(db, prepared as never, today);
+  if (k.strict && preview.changes.length === 0) return { filed: false, summary: preview.summary };
+  file(
+    db,
+    { tokenId: null, tokenName: MUNY_AI },
+    k,
+    prepared as Record<string, unknown>,
+    preview,
+    reason,
+  );
+  return { filed: true, summary: preview.summary };
 }
 
 /** The tools that file proposals. None of them change anything on their own. */
@@ -612,7 +650,19 @@ export const PROPOSAL_TOOLS: Tool[] = KINDS.map((k) =>
           ...preview,
           note: "It's already that way, so there's nothing to approve.",
         };
-      const row = file(ctx, k, input as Record<string, unknown>, preview, reason);
+      const token = ctx.db
+        .select({ name: schema.apiTokens.name })
+        .from(schema.apiTokens)
+        .where(eq(schema.apiTokens.id, ctx.agent.tokenId))
+        .get();
+      const row = file(
+        ctx.db,
+        { tokenId: ctx.agent.tokenId, tokenName: token?.name ?? "An assistant" },
+        k,
+        input as Record<string, unknown>,
+        preview,
+        reason,
+      );
       return {
         filed: true,
         id: row.id,

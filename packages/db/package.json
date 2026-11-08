@@ -12,6 +12,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@opentelemetry/api": "1.10.0",
     "better-sqlite3": "^13.0.3",
     "drizzle-orm": "^0.45.4"
   },

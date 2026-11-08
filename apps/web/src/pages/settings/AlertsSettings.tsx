@@ -57,6 +57,11 @@ const RULES: Record<AlertType, { label: string; description: string }> = {
     label: "An assistant suggests a change",
     description: "When changes are waiting in your inbox. It says only that something is waiting.",
   },
+  ai_review: {
+    label: "Monthly money review (AI)",
+    description:
+      "Muny AI's short review of last month, when it's turned on in Settings → AI. It includes amounts: add a channel only if you want them sent there.",
+  },
   trial_ending: {
     label: "Free trial ending",
     description: "A free trial you are tracking is about to turn into a charge.",

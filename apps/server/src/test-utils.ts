@@ -9,6 +9,7 @@ export interface AppOptions {
   env?: Record<string, string>;
   alertFetch?: typeof fetch;
   priceFetch?: typeof fetch;
+  aiFetch?: typeof fetch;
 }
 
 export async function makeApp(env: Record<string, string> = {}, opts: AppOptions = {}) {
@@ -19,6 +20,7 @@ export async function makeApp(env: Record<string, string> = {}, opts: AppOptions
     db,
     alertFetch: opts.alertFetch,
     priceFetch: opts.priceFetch,
+    aiFetch: opts.aiFetch,
   });
   return { app, db, config };
 }
