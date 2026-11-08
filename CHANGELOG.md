@@ -4,10 +4,6 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
-### Changed
-
-- **Savings** opens on your savings accounts again. Ways to save is now the second tab.
-
 ## [1.0.0] - 2026-11-07
 
 The first stable release. Muny covers what Rocket Money does for budgeting and subscriptions, runs in one container on your own hardware, and lets AI assistants work with your data under permissions you set.
