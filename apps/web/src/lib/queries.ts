@@ -299,29 +299,39 @@ export function useRules() {
   return useQuery({ queryKey: keys.rules, queryFn: () => api.get<Rule[]>("/api/rules") });
 }
 
+/** A rule can move charges between recurring series, which shows up across the app. */
+const ruleKeys = [
+  keys.rules,
+  keys.recurring,
+  keys.overview,
+  keys.budgets,
+  keys.reports,
+  keys.transactions,
+];
+
 export const useSaveRule = () =>
   useInvalidatingMutation(
     ({ id, ...input }: RuleInput & { id?: string }) =>
       id ? api.patch<Rule>(`/api/rules/${id}`, input) : api.post<Rule>("/api/rules", input),
-    [keys.rules],
+    ruleKeys,
   );
 
 export const useToggleRule = () =>
   useInvalidatingMutation(
     ({ id, enabled }: { id: string; enabled: boolean }) =>
       api.patch<Rule>(`/api/rules/${id}`, { enabled }),
-    [keys.rules],
+    ruleKeys,
   );
 
 export const useMoveRule = () =>
   useInvalidatingMutation(
     ({ id, direction }: { id: string; direction: "up" | "down" }) =>
       api.post<Rule[]>(`/api/rules/${id}/move`, { direction }),
-    [keys.rules],
+    ruleKeys,
   );
 
 export const useDeleteRule = () =>
-  useInvalidatingMutation((id: string) => api.delete(`/api/rules/${id}`), [keys.rules]);
+  useInvalidatingMutation((id: string) => api.delete(`/api/rules/${id}`), ruleKeys);
 
 export const useApplyRule = () =>
   useInvalidatingMutation(

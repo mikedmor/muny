@@ -6,13 +6,17 @@ import {
   RECURRING_KINDS,
   type RecurringKind,
   type RecurringSeries,
+  type RuleWithCount,
+  type Transaction,
 } from "@muny/shared";
+import { useQuery } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useState } from "react";
 import { CategorySelect } from "../components/CategorySelect.js";
 import { Modal, MoneyField, SelectField } from "../components/forms.js";
 import { type RuleDraft, RuleEditor } from "../components/RuleEditor.js";
 import { UpcomingCalendar } from "../components/UpcomingCalendar.js";
 import { Alert, Button, Card, cx, Field, PageHeader } from "../components/ui.js";
+import { api } from "../lib/api.js";
 import {
   useDeleteRecurring,
   useRecordSaving,
@@ -266,6 +270,95 @@ function Section({
   );
 }
 
+/**
+ * Rules for a series' charges. Builds on a rule you already have for them
+ * (adding "Count as recurring" to it) rather than starting a second one.
+ */
+function SeriesRules({
+  s,
+  latest,
+  onEdit,
+}: {
+  s: RecurringSeries;
+  /** The newest charge (history is oldest first). */
+  latest: Transaction | null;
+  onEdit: (d: RuleDraft) => void;
+}) {
+  const matching = useQuery({
+    queryKey: ["rules", "for-transaction", latest?.id],
+    queryFn: () => api.get<RuleWithCount[]>(`/api/transactions/${latest?.id}/rules`),
+    enabled: !!latest,
+  });
+  const rules = matching.data ?? [];
+  const places = (r: RuleWithCount) =>
+    r.actions.some((a) => a.type === "setRecurring" && a.seriesId === s.id);
+  const already = rules.find((r) => r.enabled && places(r));
+  const existing = rules.find(
+    (r) => r.enabled && !r.actions.some((a) => a.type === "setRecurring"),
+  );
+  const action = { type: "setRecurring" as const, seriesId: s.id };
+  const fresh = (): RuleDraft => {
+    const words = latest ? descriptionWords(latest.rawDescription) : "";
+    return {
+      name: `${s.name} (recurring)`,
+      match: "all",
+      conditions: [
+        { field: "description", op: "contains", value: words || s.name },
+        { field: "direction", value: s.expectedAmountCents < 0 ? "out" : "in" },
+        ...(latest ? [{ field: "account" as const, value: latest.accountId }] : []),
+      ],
+      actions: [action],
+    };
+  };
+  const link = "font-medium text-brand-600 hover:underline dark:text-brand-500";
+  return (
+    <div className="mb-3 rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800/50">
+      {already ? (
+        <>
+          <p className="text-slate-600 dark:text-slate-300">
+            Your rule <span className="font-medium">{already.name}</span> keeps its charges here,
+            whatever the bank calls the merchant.
+          </p>
+          <button type="button" className={cx("mt-1", link)} onClick={() => onEdit(already)}>
+            Edit the rule
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="text-slate-600 dark:text-slate-300">
+            Bank changed what it calls this? A rule keeps its charges here whatever the merchant is
+            named.
+          </p>
+          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+            {existing ? (
+              <>
+                <button
+                  type="button"
+                  className={link}
+                  onClick={() => onEdit({ ...existing, actions: [...existing.actions, action] })}
+                >
+                  Add to your rule “{existing.name}”
+                </button>
+                <button
+                  type="button"
+                  className="text-slate-500 hover:underline"
+                  onClick={() => onEdit(fresh())}
+                >
+                  or make a new rule
+                </button>
+              </>
+            ) : (
+              <button type="button" className={link} onClick={() => onEdit(fresh())}>
+                Add a rule for this
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 /** The steady part of a bank description: words only, no reference numbers or dates. */
 const descriptionWords = (raw: string) =>
   raw
@@ -453,33 +546,7 @@ function SeriesDetail({ s, onDone }: { s: RecurringSeries; onDone: () => void })
       </form>
 
       <section>
-        <div className="mb-3 rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800/50">
-          <p className="text-slate-600 dark:text-slate-300">
-            Bank changed what it calls this? A rule keeps its charges here whatever the merchant is
-            named.
-          </p>
-          <button
-            type="button"
-            className="mt-1 font-medium text-brand-600 hover:underline dark:text-brand-500"
-            onClick={() => {
-              // Oldest first: the newest charge has the wording the bank uses now.
-              const latest = history.data?.at(-1);
-              const words = latest ? descriptionWords(latest.rawDescription) : "";
-              setRuleFor({
-                name: `${s.name} (recurring)`,
-                match: "all",
-                conditions: [
-                  { field: "description", op: "contains", value: words || s.name },
-                  { field: "direction", value: s.expectedAmountCents < 0 ? "out" : "in" },
-                  ...(latest ? [{ field: "account" as const, value: latest.accountId }] : []),
-                ],
-                actions: [{ type: "setRecurring", seriesId: s.id }],
-              });
-            }}
-          >
-            Add a rule for this
-          </button>
-        </div>
+        <SeriesRules s={s} latest={history.data?.at(-1) ?? null} onEdit={setRuleFor} />
         <Modal
           open={ruleFor !== null}
           onClose={() => setRuleFor(null)}
