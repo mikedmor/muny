@@ -4,25 +4,16 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
-### Added
-
-- **Import takes any file.** Drop bank and Rocket Money exports, PDF statements, brokerage and Koinly exports, or photos on one page, and Muny works out which importer each belongs to.
-- **Support development** link in the menu.
-- A notice to reload when Muny was updated while a tab was open, so the version shown is never stale.
-
-### Documentation
-
-- Rewritten README, and new guides: Getting started, Transactions and categories, Recurring bills and subscriptions, Spending, reports and taxes, and Troubleshooting.
-- Budgets, Importing, Savings, Backups, Security and Contributing rewritten or expanded.
-
 ## [1.0.0] - 2026-11-07
 
 The first stable release. Muny covers what Rocket Money does for budgeting and subscriptions, runs in one container on your own hardware, and lets AI assistants work with your data under permissions you set.
 
+Install it with `docker pull ghcr.io/mikedmor/muny:1` and follow the [install guide](https://github.com/mikedmor/muny/blob/main/guides/install.md), or try it first with `MUNY_DEMO=true`.
+
 ### Accounts and transactions
 
-- Bank sync through your own Plaid or Teller keys, on a schedule, plus manual accounts.
-- Import Rocket Money exports, bank CSV and OFX files, brokerage and Koinly exports, with duplicate detection.
+- Bank sync through your own Plaid or Teller keys (and PayPal), on a schedule, plus manual accounts.
+- **Import takes any file:** drop Rocket Money exports, bank CSV/OFX/QFX/QBO files, PDF statements, brokerage and Koinly exports, or photos on one page, and Muny works out which importer each belongs to. Duplicates are always skipped.
 - Automatic categories, your own categories and groups, rules, split transactions, notes, tags, and hiding or leaving things out of budgets.
 - Merchant name cleanup, transfer and card payment matching, search and filters.
 
@@ -61,6 +52,13 @@ The first stable release. Muny covers what Rocket Money does for budgeting and s
 - Alerts in the app and through ntfy, Apprise, email, webhooks or phone push.
 - Household members with owner and view-only roles.
 - Demo mode (`MUNY_DEMO=true`) to try it with a made-up household.
+- A notice to reload when Muny was updated while a tab was open.
+
+### Documentation
+
+- A full set of [guides](https://github.com/mikedmor/muny/blob/main/guides/README.md): install (Docker, Compose, Synology, Unraid), getting started, every feature, backups and troubleshooting.
+
+If Muny saves you a subscription or two, you can [support its development](https://www.paypal.com/paypalme/mikedmor).
 
 [Unreleased]: https://github.com/mikedmor/muny/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/mikedmor/muny/releases/tag/v1.0.0
