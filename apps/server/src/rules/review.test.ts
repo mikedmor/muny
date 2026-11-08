@@ -55,3 +55,25 @@ describe("reviewing rules", () => {
     expect(listSeries(db, TODAY)[0]?.lastDate).toBe("2026-10-12");
   });
 });
+
+describe("moving a rule past the one shown next to it", () => {
+  it("skips rules hidden in between", async () => {
+    const { client } = await makeSignedInApp();
+    const make = async (name: string) =>
+      (
+        await client.post("/api/rules", {
+          name,
+          match: "all",
+          conditions: [{ field: "description", op: "contains", value: name }],
+          actions: [{ type: "addTag", name: "x" }],
+        })
+      ).json<{ id: string }>();
+    const a = await make("Alpha");
+    await make("Bravo");
+    const c = await make("Charlie");
+    // Bravo is in another section on the page: Charlie goes above Alpha in one step.
+    await client.post(`/api/rules/${c.id}/move`, { direction: "up", pastId: a.id });
+    const names = (await client.get("/api/rules")).json<{ name: string }[]>().map((r) => r.name);
+    expect(names).toEqual(["Charlie", "Alpha", "Bravo"]);
+  });
+});

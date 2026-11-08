@@ -11,7 +11,16 @@ import {
   toDecimalString,
 } from "@muny/shared";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Merge, Search, Sparkles, Trash2, TriangleAlert } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronRight,
+  Merge,
+  Search,
+  Sparkles,
+  Trash2,
+  TriangleAlert,
+} from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Checkbox, Modal } from "../../components/forms.js";
 import { type RuleDraft, RuleEditor } from "../../components/RuleEditor.js";
@@ -158,8 +167,6 @@ function Toggle({
 
 const iconButton =
   "rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-30 disabled:hover:bg-transparent dark:hover:bg-slate-800 dark:hover:text-slate-200";
-
-type Filter = "all" | "category" | "recurring" | "automatic" | "off";
 
 function TransfersCard() {
   const [show, setShow] = useState(false);
@@ -371,16 +378,122 @@ function NeedsAttention({
   );
 }
 
-export function RulesSettings() {
-  const rules = useRules();
+/** A rule whose only job is keeping a recurring charge's transactions in its series. */
+const keepsTogether = (r: Rule) =>
+  r.actions.length > 0 && r.actions.every((a) => a.type === "setRecurring");
+
+function RuleRow({
+  rule: r,
+  count,
+  automatic,
+  issues,
+  onEdit,
+  up,
+  down,
+}: {
+  rule: Rule;
+  count: number | undefined;
+  automatic: boolean;
+  issues: string[];
+  onEdit: (r: Rule) => void;
+  /** The rule shown above / below, to move past; arrows only when given. */
+  up?: string | null;
+  down?: string | null;
+}) {
   const toggle = useToggleRule();
   const move = useMoveRule();
   const del = useDeleteRule();
+  const arrows = up !== undefined && down !== undefined;
+  return (
+    <li className="flex items-start gap-3 px-4 py-3">
+      <Toggle
+        checked={r.enabled}
+        label={`${r.enabled ? "Turn off" : "Turn on"} ${r.name}`}
+        onChange={(enabled) => toggle.mutate({ id: r.id, enabled })}
+      />
+      <div className={cx("min-w-0 flex-1", !r.enabled && "opacity-50")}>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <button
+            type="button"
+            onClick={() => onEdit(r)}
+            className="text-left font-medium hover:text-brand-600 hover:underline dark:hover:text-brand-500"
+          >
+            {r.name}
+          </button>
+          {automatic && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
+              <Sparkles className="size-3" aria-hidden="true" />
+              Made by Muny
+            </span>
+          )}
+          {count !== undefined && (
+            <span className="text-xs text-slate-500 tabular-nums">
+              {count === 0
+                ? "matches nothing yet"
+                : `${count.toLocaleString()} transaction${count === 1 ? "" : "s"}`}
+            </span>
+          )}
+        </div>
+        <RuleSummary rule={r} />
+        {issues.map((text) => (
+          <p
+            key={text}
+            className="mt-1 flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400"
+          >
+            <TriangleAlert className="size-3" aria-hidden="true" />
+            {text}
+          </p>
+        ))}
+      </div>
+      <div className="flex shrink-0 items-center">
+        {arrows && (
+          <>
+            <button
+              type="button"
+              aria-label={`Move ${r.name} up`}
+              disabled={!up || move.isPending}
+              onClick={() => up && move.mutate({ id: r.id, direction: "up", pastId: up })}
+              className={iconButton}
+            >
+              <ArrowUp className="size-4" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              aria-label={`Move ${r.name} down`}
+              disabled={!down || move.isPending}
+              onClick={() => down && move.mutate({ id: r.id, direction: "down", pastId: down })}
+              className={iconButton}
+            >
+              <ArrowDown className="size-4" aria-hidden="true" />
+            </button>
+          </>
+        )}
+        <button
+          type="button"
+          aria-label={`Delete ${r.name}`}
+          className={cx(iconButton, "hover:text-red-600 dark:hover:text-red-400")}
+          onClick={() => {
+            if (
+              window.confirm(`Delete the rule “${r.name}”? Transactions keep their current values.`)
+            )
+              del.mutate(r.id);
+          }}
+        >
+          <Trash2 className="size-4" aria-hidden="true" />
+        </button>
+      </div>
+    </li>
+  );
+}
+
+export function RulesSettings() {
+  const rules = useRules();
   const run = useApplyRule();
   const [editing, setEditing] = useState<RuleDraft | null>(null);
   const [includeEdited, setIncludeEdited] = useState(false);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
+  const [onlyOff, setOnlyOff] = useState(false);
+  const [groupOpen, setGroupOpen] = useState(false);
   const describe = useDescribe();
   const list = rules.data ?? [];
   const review = useQuery({
@@ -399,25 +512,31 @@ export function RulesSettings() {
         return c.identical ? `Same conditions as “${other}”` : `Clashes with “${other}”`;
       });
 
-  const places = (r: Rule) => r.actions.some((a) => a.type === "setRecurring");
-  const files = (r: Rule) => r.actions.some((a) => a.type !== "setRecurring");
-  const filters: { id: Filter; label: string; test: (r: Rule) => boolean }[] = [
-    { id: "all", label: "All", test: () => true },
-    { id: "category", label: "Filing", test: files },
-    { id: "recurring", label: "Recurring", test: places },
-    { id: "automatic", label: "Made by Muny", test: (r) => automatic.has(r.id) },
-    { id: "off", label: "Off", test: (r) => !r.enabled },
-  ];
   const q = query.trim().toLowerCase();
-  const active = filters.find((f) => f.id === filter) ?? filters[0];
-  const shown = list.filter((r) => {
-    if (!active?.test(r)) return false;
+  const visible = (r: Rule) => {
+    if (onlyOff && r.enabled) return false;
     if (!q) return true;
     const d = describe(r);
     return [r.name, ...d.when, ...d.does].some((t) => t.toLowerCase().includes(q));
-  });
-  // Order only means something in the whole list.
-  const canMove = filter === "all" && !q;
+  };
+  const own = list.filter((r) => !keepsTogether(r)).filter(visible);
+  const together = list.filter(keepsTogether);
+  const togetherShown = together.filter(visible);
+  // A search that finds one of these opens the section.
+  const open = groupOpen || ((!!q || onlyOff) && togetherShown.length > 0);
+  const offCount = list.filter((r) => !r.enabled).length;
+  const row = (r: Rule, arrows?: { up: string | null; down: string | null }) => (
+    <RuleRow
+      key={r.id}
+      rule={r}
+      count={review.data?.counts[r.id]}
+      automatic={automatic.has(r.id)}
+      issues={issuesFor(r.id)}
+      onEdit={setEditing}
+      up={arrows?.up}
+      down={arrows?.down}
+    />
+  );
 
   return (
     <section className="space-y-4">
@@ -466,122 +585,73 @@ export function RulesSettings() {
                 className="w-full rounded-lg border border-slate-300 bg-surface py-1.5 pr-3 pl-8 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 dark:border-slate-700 dark:bg-slate-950"
               />
             </label>
-            <div role="tablist" aria-label="Show" className="flex flex-wrap gap-1">
-              {filters.map((f) => {
-                const n = list.filter(f.test).length;
-                if (f.id !== "all" && n === 0) return null;
-                return (
-                  <button
-                    key={f.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={filter === f.id}
-                    onClick={() => setFilter(f.id)}
-                    className={cx(
-                      "rounded-full px-3 py-1 text-xs font-medium",
-                      filter === f.id
-                        ? "bg-brand-600 text-on-brand"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700",
-                    )}
-                  >
-                    {f.label} <span className="tabular-nums opacity-70">{n}</span>
-                  </button>
-                );
-              })}
-            </div>
+            {offCount > 0 && (
+              <button
+                type="button"
+                aria-pressed={onlyOff}
+                onClick={() => setOnlyOff(!onlyOff)}
+                className={cx(
+                  "rounded-full px-3 py-1 text-xs font-medium",
+                  onlyOff
+                    ? "bg-brand-600 text-on-brand"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700",
+                )}
+              >
+                Only rules that are off <span className="tabular-nums opacity-70">{offCount}</span>
+              </button>
+            )}
           </div>
 
-          {shown.length === 0 ? (
-            <p className="px-4 py-6 text-center text-sm text-slate-500">No rules match.</p>
+          {own.length === 0 ? (
+            <p className="px-4 py-6 text-center text-sm text-slate-500">
+              {q || onlyOff ? "None of your rules match." : "No rules of your own yet."}
+            </p>
           ) : (
             <ul className="divide-y divide-slate-200 dark:divide-slate-800">
-              {shown.map((r) => {
-                const i = list.indexOf(r);
-                const count = review.data?.counts[r.id];
-                return (
-                  <li key={r.id} className="flex items-start gap-3 px-4 py-3">
-                    <Toggle
-                      checked={r.enabled}
-                      label={`${r.enabled ? "Turn off" : "Turn on"} ${r.name}`}
-                      onChange={(enabled) => toggle.mutate({ id: r.id, enabled })}
-                    />
-                    <div className={cx("min-w-0 flex-1", !r.enabled && "opacity-50")}>
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <button
-                          type="button"
-                          onClick={() => setEditing(r)}
-                          className="text-left font-medium hover:text-brand-600 hover:underline dark:hover:text-brand-500"
-                        >
-                          {r.name}
-                        </button>
-                        {automatic.has(r.id) && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700 dark:bg-brand-950/40 dark:text-brand-300">
-                            <Sparkles className="size-3" aria-hidden="true" />
-                            Made by Muny
-                          </span>
-                        )}
-                        {count !== undefined && (
-                          <span className="text-xs text-slate-500 tabular-nums">
-                            {count === 0
-                              ? "matches nothing yet"
-                              : `${count.toLocaleString()} transaction${count === 1 ? "" : "s"}`}
-                          </span>
-                        )}
-                      </div>
-                      <RuleSummary rule={r} />
-                      {issuesFor(r.id).map((text) => (
-                        <p
-                          key={text}
-                          className="mt-1 flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400"
-                        >
-                          <TriangleAlert className="size-3" aria-hidden="true" />
-                          {text}
-                        </p>
-                      ))}
-                    </div>
-                    <div className="flex shrink-0 items-center">
-                      {canMove && (
-                        <>
-                          <button
-                            type="button"
-                            aria-label={`Move ${r.name} up`}
-                            disabled={i === 0 || move.isPending}
-                            onClick={() => move.mutate({ id: r.id, direction: "up" })}
-                            className={iconButton}
-                          >
-                            <ArrowUp className="size-4" aria-hidden="true" />
-                          </button>
-                          <button
-                            type="button"
-                            aria-label={`Move ${r.name} down`}
-                            disabled={i === list.length - 1 || move.isPending}
-                            onClick={() => move.mutate({ id: r.id, direction: "down" })}
-                            className={iconButton}
-                          >
-                            <ArrowDown className="size-4" aria-hidden="true" />
-                          </button>
-                        </>
-                      )}
-                      <button
-                        type="button"
-                        aria-label={`Delete ${r.name}`}
-                        className={cx(iconButton, "hover:text-red-600 dark:hover:text-red-400")}
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              `Delete the rule “${r.name}”? Transactions keep their current values.`,
-                            )
-                          )
-                            del.mutate(r.id);
-                        }}
-                      >
-                        <Trash2 className="size-4" aria-hidden="true" />
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
+              {own.map((r, i) =>
+                row(r, { up: own[i - 1]?.id ?? null, down: own[i + 1]?.id ?? null }),
+              )}
             </ul>
+          )}
+
+          {together.length > 0 && (
+            <div className="border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                aria-expanded={open}
+                onClick={() => setGroupOpen(!open)}
+                className="flex w-full items-start gap-3 bg-slate-50 px-4 py-3 text-left hover:bg-slate-100 dark:bg-slate-900/60 dark:hover:bg-slate-800/60"
+              >
+                <ChevronRight
+                  className={cx("mt-0.5 size-4 shrink-0 transition-transform", open && "rotate-90")}
+                  aria-hidden="true"
+                />
+                <span className="min-w-0">
+                  <span className="font-medium">Keeping recurring charges together</span>{" "}
+                  <span className="text-xs text-slate-500 tabular-nums">
+                    {q || onlyOff
+                      ? `${togetherShown.length} of ${together.length}`
+                      : together.length}{" "}
+                    rules
+                  </span>
+                  <span className="block text-xs text-slate-500">
+                    One rule per bill, subscription or paycheck keeps its transactions in its
+                    series, even when the bank renames the merchant. Muny makes these for each
+                    confirmed recurring charge, so you rarely need to change them.
+                  </span>
+                </span>
+              </button>
+              {open &&
+                (togetherShown.length ? (
+                  <ul className="divide-y divide-slate-200 border-t border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+                    {togetherShown.map((r) => row(r))}
+                  </ul>
+                ) : (
+                  <p className="border-t border-slate-200 px-4 py-4 text-center text-sm text-slate-500 dark:border-slate-800">
+                    None of these match.
+                  </p>
+                ))}
+            </div>
           )}
         </Card>
       )}

@@ -325,8 +325,8 @@ export const useToggleRule = () =>
 
 export const useMoveRule = () =>
   useInvalidatingMutation(
-    ({ id, direction }: { id: string; direction: "up" | "down" }) =>
-      api.post<Rule[]>(`/api/rules/${id}/move`, { direction }),
+    ({ id, direction, pastId }: { id: string; direction: "up" | "down"; pastId?: string }) =>
+      api.post<Rule[]>(`/api/rules/${id}/move`, { direction, pastId }),
     ruleKeys,
   );
 

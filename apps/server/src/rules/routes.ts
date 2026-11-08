@@ -48,7 +48,11 @@ const PreviewBody = DefinitionSchema.extend({
   limit: z.number().int().min(1).max(200).optional(),
 });
 const ApplyBody = z.object({ includeEdited: z.boolean().optional() });
-const MoveBody = z.object({ direction: z.enum(["up", "down"]) });
+const MoveBody = z.object({
+  direction: z.enum(["up", "down"]),
+  /** Move past this rule (the next one shown) instead of the next one in the whole list. */
+  pastId: z.string().min(1).max(64).optional(),
+});
 
 /** Series a rule's "Count as recurring" action points at. */
 const seriesOf = (r: { actions: { type: string; seriesId?: string }[] }) =>
@@ -172,16 +176,24 @@ export function registerRuleRoutes(app: FastifyInstance, db: MunyDb) {
   app.post("/api/rules/:id/move", async (req) => {
     const user = requireUser(req);
     const { id } = parse(IdParams, req.params);
-    const { direction } = parse(MoveBody, req.body);
+    const { direction, pastId } = parse(MoveBody, req.body);
     db.transaction((tx) => {
       const rules = listRules(tx);
       const i = rules.findIndex((r) => r.id === id);
       if (i === -1) return;
-      const j = direction === "up" ? i - 1 : i + 1;
-      if (j < 0 || j >= rules.length) return;
-      // Renumber everything so equal priorities can't make the swap a no-op.
       const order = rules.map((r) => r.id);
-      [order[i], order[j]] = [order[j] as string, order[i] as string];
+      if (pastId) {
+        // Take it out and put it just above (up) or below (down) that rule.
+        if (pastId === id || !order.includes(pastId)) return;
+        order.splice(i, 1);
+        const k = order.indexOf(pastId);
+        order.splice(direction === "up" ? k : k + 1, 0, id);
+      } else {
+        const j = direction === "up" ? i - 1 : i + 1;
+        if (j < 0 || j >= rules.length) return;
+        [order[i], order[j]] = [order[j] as string, order[i] as string];
+      }
+      // Renumber everything so equal priorities can't make the swap a no-op.
       order.forEach((rid, n) => {
         tx.update(schema.rules)
           .set({ priority: (n + 1) * 10 })
