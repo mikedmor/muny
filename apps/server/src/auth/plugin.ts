@@ -33,6 +33,16 @@ const VIEWER_WRITES = new Set([
   "PUT /api/theme/selected",
 ]);
 
+/** The path part of a URL, %-decoded the way the router reads it. */
+function decodedPath(url: string): string {
+  const path = url.split("?")[0] ?? "";
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+}
+
 /** Header the web client sends on every mutating request (see SECURITY.md). */
 export const CSRF_HEADER = "x-muny-csrf";
 
@@ -51,7 +61,12 @@ export function registerAuth(app: FastifyInstance, db: MunyDb) {
   app.decorateRequest("user", null);
 
   app.addHook("onRequest", async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!req.url.startsWith("/api/") || req.url.startsWith("/api/v1/")) return;
+    // Decide by the route the router matched, never the raw URL: the router
+    // decodes %-escapes, so "/%61pi/accounts" reaches "/api/accounts" while its
+    // raw text doesn't start with "/api/". With no match, the decoded path
+    // decides, so unknown API paths still say "sign in" rather than "not found".
+    const route = req.routeOptions.url ?? decodedPath(req.url);
+    if (!route.startsWith("/api/") || route.startsWith("/api/v1/")) return;
 
     // CSRF: a custom header can't be sent cross-site without a CORS preflight,
     // which this server never approves.
@@ -70,7 +85,7 @@ export function registerAuth(app: FastifyInstance, db: MunyDb) {
       }
     }
 
-    const routeKey = `${req.method} ${req.routeOptions.url ?? req.url.split("?")[0]}`;
+    const routeKey = `${req.method} ${route}`;
     if (!req.user && !PUBLIC_ROUTES.has(routeKey)) throw unauthorized();
     if (
       req.user?.role === "viewer" &&

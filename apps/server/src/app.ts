@@ -108,6 +108,14 @@ export async function buildApp({
         ? false
         : {
             level: config.logLevel,
+            // Invite links carry their token in the path: logged URLs mask it.
+            serializers: {
+              req: (req: { method?: string; url?: string; ip?: string }) => ({
+                method: req.method,
+                url: (req.url ?? "").replace(/(\/api\/invites\/)[^/?#]+/, "$1[redacted]"),
+                remoteAddress: req.ip,
+              }),
+            },
             // Never log credentials or session tokens.
             redact: {
               paths: [

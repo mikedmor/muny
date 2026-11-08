@@ -79,9 +79,16 @@ export function fromDecimal(text: string): Rat | null {
 export const fromNumber = (v: number): Rat | null =>
   Number.isFinite(v) ? fromDecimal(String(v)) : null;
 
+/** Past this many bits a result is nonsense for money, and nested powers could freeze the server. */
+const MAX_POW_BITS = 4096;
+const bits = (v: bigint) => (v < 0n ? -v : v).toString(16).length * 4;
+
 /** Whole powers only, within reason. */
 export function pow(a: Rat, exponent: Rat): Rat | null {
   if (exponent.d !== 1n || exponent.n > 64n || exponent.n < -64n) return null;
+  // Checked before computing: pow(pow(pow(1e999, 64), 64), 64) would need ~10^8 digits.
+  const e = Number(exponent.n < 0n ? -exponent.n : exponent.n);
+  if (Math.max(bits(a.n), bits(a.d)) * e > MAX_POW_BITS) return null;
   if (exponent.n >= 0n) return make(a.n ** exponent.n, a.d ** exponent.n);
   return a.n === 0n ? null : make(a.d ** -exponent.n, a.n ** -exponent.n);
 }

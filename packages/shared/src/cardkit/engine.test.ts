@@ -85,6 +85,26 @@ describe("exact arithmetic", () => {
     expect(R.fromDecimal("")).toBeNull();
   });
 
+  it("refuses powers too big to be money, before computing them", () => {
+    expect(R.pow(R.rat(2), R.rat(10))).toEqual(R.rat(1024));
+    expect(R.pow(R.fromCents(110), R.rat(12))).not.toBeNull();
+    const huge = R.fromDecimal("1e999") as R.Rat;
+    const start = Date.now();
+    expect(R.pow(huge, R.rat(64))).toBeNull();
+    // Nested powers through a formula are refused at the first step that's too big.
+    const out = runCardDoc(
+      {
+        v: 2,
+        metrics: [{ id: "x", label: "x", expr: "pow(pow(pow(1e300, 64), 64), 64)" }],
+        blocks: [],
+      } as unknown as CardDoc,
+      () => [],
+      "2026-11-07",
+    );
+    expect(Date.now() - start).toBeLessThan(2000);
+    expect(out).toBeDefined();
+  });
+
   it("doesn't grow without limit", () => {
     let v = R.ONE;
     for (let i = 3; i < 400; i += 2) v = R.add(v, R.div(R.ONE, R.rat(i)) as R.Rat);

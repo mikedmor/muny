@@ -154,3 +154,24 @@ describe("RateLimiter", () => {
     expect(rl.hit("k", 1001)).toBe(0);
   });
 });
+
+describe("no way around signing in", () => {
+  it("rejects encoded and odd spellings of protected routes", async () => {
+    const { app, client } = await makeSignedInApp();
+    await client.post("/api/accounts", { name: "Checking", type: "checking", balanceCents: 1234 });
+    // The router decodes %-escapes: "/%61pi" is "/api", and must still need a session.
+    for (const url of [
+      "/%61pi/accounts",
+      "/%61%70%69/accounts",
+      "/api/v1/../accounts",
+      "/api/v1/%2e%2e/accounts",
+      "/api/accounts/",
+      "/api/export/muny.json",
+      "/%61pi/export/muny.json",
+    ]) {
+      const r = await app.inject({ method: "GET", url });
+      expect([401, 404], url).toContain(r.statusCode);
+      expect(r.body, url).not.toContain("Checking");
+    }
+  });
+});
