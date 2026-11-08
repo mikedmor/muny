@@ -1,22 +1,6 @@
 # Savings
 
-**Savings** (in the menu, under Wealth) opens on **Ways to save**, next to the savings accounts, money saved and self-hosting tabs.
-
-![Ways to save: duplicate subscriptions, price rises, self-hosted replacements and more, ranked by yearly saving](images/ways-to-save.png)
-
-## Ways to save
-
-Muny looks through your own data for money you could keep, and lists what it finds with the biggest yearly saving first. It uses fixed rules, not AI, and nothing leaves Muny. Each one says how it was worked out; **Show the numbers** shows the figures behind it, and **Go there** opens the page to act on it.
-
-- **Doubled up:** two or more subscriptions in the same category (say, several streaming services). The saving is the cheapest one, since dropping any one saves at least that.
-- **Charged after cancelling:** a subscription you marked cancelled that charged again.
-- **Price went up:** a fixed-price subscription that rose in the last year. Asking for the old price or a cheaper plan wins it back.
-- **Self-host it:** a subscription with a self-hosted or free alternative in Muny's catalog (running costs aren't counted).
-- **Card interest:** interest charged on a credit card this year, at this year's pace. Paying the statement balance in full each month stops it.
-- **Loan payoff order:** with two or more loans, what you'd save by sending each paid-off loan's payment to the highest-rate loan left (it uses the loans in your payoff plan).
-- **Idle cash:** checking holding more than a month and a half of your spending while a savings account pays interest. This one is labelled a rough guess.
-
-Every amount is an estimate per year. Some overlap (a subscription can be doubled up and replaceable), so the total at the top is the most it could be. **Hide** puts one away; it comes back under "you've hidden", and a new situation (like another price rise) shows again on its own. Assistants see the same list with the `get_savings_opportunities` tool.
+**Savings** (in the menu, under Wealth) opens on your **Savings accounts**, with tabs for **Ways to save**, **Money saved** and self-hosting beside it.
 
 ## Savings accounts
 
@@ -44,6 +28,22 @@ How each category's amount is worked out:
 - **Follow the transfers my bank reports** (banks that post a transfer for each move): enter what each category holds now; Muny follows its moves from then on. Deposits your bank's automations put straight into a category may not say which one they went to: update that category's balance now and then.
 
 Any savings account can have a plan: **Plan this account** under it on Savings.
+
+## Ways to save
+
+![Ways to save: duplicate subscriptions, price rises, self-hosted replacements and more, ranked by yearly saving](images/ways-to-save.png)
+
+Muny looks through your own data for money you could keep, and lists what it finds with the biggest yearly saving first. It uses fixed rules, not AI, and nothing leaves Muny. Each one says how it was worked out; **Show the numbers** shows the figures behind it, and **Go there** opens the page to act on it.
+
+- **Doubled up:** two or more subscriptions in the same category (say, several streaming services). The saving is the cheapest one, since dropping any one saves at least that.
+- **Charged after cancelling:** a subscription you marked cancelled that charged again.
+- **Price went up:** a fixed-price subscription that rose in the last year. Asking for the old price or a cheaper plan wins it back.
+- **Self-host it:** a subscription with a self-hosted or free alternative in Muny's catalog (running costs aren't counted).
+- **Card interest:** interest charged on a credit card this year, at this year's pace. Paying the statement balance in full each month stops it.
+- **Loan payoff order:** with two or more loans, what you'd save by sending each paid-off loan's payment to the highest-rate loan left (it uses the loans in your payoff plan).
+- **Idle cash:** checking holding more than a month and a half of your spending while a savings account pays interest. This one is labelled a rough guess.
+
+Every amount is an estimate per year. Some overlap (a subscription can be doubled up and replaceable), so the total at the top is the most it could be. **Hide** puts one away; it comes back under "you've hidden", and a new situation (like another price rise) shows again on its own. Assistants see the same list with the `get_savings_opportunities` tool.
 
 ## Money saved
 

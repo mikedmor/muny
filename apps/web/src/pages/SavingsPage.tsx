@@ -670,8 +670,8 @@ function CostsTab() {
 // ---------------------------------------------------------------------------
 
 const TABS = [
-  ["opportunities", "Ways to save"],
   ["accounts", "Savings accounts"],
+  ["opportunities", "Ways to save"],
   ["savings", "Money saved"],
   ["alternatives", "Self-host alternatives"],
   ["costs", "Self-hosting costs"],
@@ -680,7 +680,7 @@ type Tab = (typeof TABS)[number][0];
 
 export function SavingsPage() {
   const fromHash = () =>
-    (TABS.find(([k]) => `#${k}` === window.location.hash)?.[0] ?? "opportunities") as Tab;
+    (TABS.find(([k]) => `#${k}` === window.location.hash)?.[0] ?? "accounts") as Tab;
   const [tab, setTab] = useState<Tab>(fromHash);
   useEffect(() => {
     const on = () => setTab(fromHash());
