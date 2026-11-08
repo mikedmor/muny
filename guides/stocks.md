@@ -77,6 +77,11 @@ Both send only ticker symbols, never your holdings.
 - **Cash** includes money market and sweep funds (such as Fidelity's SPAXX).
 - **Holdings** shows each security across all accounts. Click a row to see how much of it each account holds.
 
-## Coming next
+## Limits
 
-- Tax lots worked out from your trades: realized gains, dividends on the Taxes page, and a check against your 1099-B.
+- Realized gains from stock sales aren't worked out yet, so the Taxes page doesn't include them. Use your broker's 1099-B.
+- Values are only as fresh as your last sync or import.
+
+---
+
+[← All guides](README.md)

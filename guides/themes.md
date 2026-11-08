@@ -23,3 +23,7 @@ Cards and charts take their colors from the theme, including the ones you build 
 ## Sharing a theme, or asking an assistant for one
 
 Under **Share, paste, or ask an AI assistant**, you can copy a theme as JSON or paste one in. A theme contains only a name and colors, so it's safe to paste from anywhere: Muny accepts nothing else. Ask an assistant for "a Muny theme as JSON" and show it the fields from the box on that page.
+
+---
+
+[← All guides](README.md)

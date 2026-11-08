@@ -1,25 +1,61 @@
-# Muny guides
+# Muny documentation
 
-How to install, set up and use Muny.
+Everything you need to install, set up and use Muny. New here? Start with **[Install](install.md)**, then **[Getting started](getting-started.md)**.
 
-| Guide                                         | What it covers                                                                                 |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| [Install](install.md)                         | Running Muny with Docker, on a Synology NAS or any Docker host                                 |
-| [Secure access](access.md)                    | HTTPS, Tailscale, reverse proxies, phone install, household members                            |
-| [Bank sync](bank-sync.md)                     | Connecting banks automatically through your own Plaid or Teller keys                           |
-| [Importing files](importing.md)               | Rocket Money, bank CSV/OFX, brokerage and Koinly exports                                       |
-| [Budgets](budgets.md)                         | Monthly budgets, the forecast, and leaving categories out                                      |
-| [Your Overview](overview.md)                  | Choose and order your cards, build your own with calculations, or have an assistant write them |
-| [AI assistants](agents.md)                    | Connect Claude or another assistant over MCP, with tokens and permissions                      |
-| [Built-in AI](ai.md)                          | Optional: category suggestions, a monthly review and statement help, and exactly what's sent   |
-| [Themes](themes.md)                           | Light, dark and your own color themes                                                          |
-| [Loans](loans.md)                             | Loans: balances, rates, payoff dates and paying extra                                          |
-| [Credit cards](cards.md)                      | Limits, statements, due dates and paying cards off                                             |
-| [Stocks](stocks.md)                           | Tracking brokerage accounts, holdings and dividends                                            |
-| [Savings](savings.md)                         | Ways to save, savings accounts (interest, rate, projections) and money saved                   |
-| [Crypto](crypto.md)                           | Wallets, exchanges, prices, cost basis and tax reports                                         |
-| [Rules and documents](rules-and-documents.md) | Rules for transactions, and keeping statements and other files                                 |
-| [Alerts](alerts.md)                           | Alert rules and notification channels (ntfy, Apprise, email, webhook)                          |
-| [Backups and export](backups.md)              | Automatic backups, restoring, and exporting your data                                          |
+## Setting up
 
-Something missing or wrong? Open an issue on GitHub.
+| Guide                                 | What it covers                                                                                   |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| [Install](install.md)                 | Docker, Docker Compose, Synology, Unraid, demo mode and every setting                            |
+| [Getting started](getting-started.md) | Your first hour: accounts, categories, recurring bills and a budget                              |
+| [Secure access](access.md)            | HTTPS and access from anywhere with Tailscale, reverse proxies, the phone app, household members |
+| [Bank sync](bank-sync.md)             | Plaid, Teller and PayPal with your own keys, and how merchants and pending charges are handled   |
+| [Importing files](importing.md)       | Rocket Money, bank CSV/OFX/QFX/QBO, statements, brokerage and Koinly exports                     |
+
+## Everyday money
+
+| Guide                                             | What it covers                                                                 |
+| ------------------------------------------------- | ------------------------------------------------------------------------------ |
+| [Transactions and categories](transactions.md)    | Searching, filtering, splits, notes, tags, bulk edits and categories           |
+| [Recurring bills and subscriptions](recurring.md) | What Muny finds, what's due and paid, price rises, cancelling, free trials     |
+| [Budgets](budgets.md)                             | Budget basics, category budgets, rollover, the forecast and leaving things out |
+| [Rules and documents](rules-and-documents.md)     | Rules that file transactions, statements and your document folders             |
+| [Alerts](alerts.md)                               | What Muny watches for, phone notifications, ntfy, Apprise, email and webhooks  |
+
+## Debts and wealth
+
+| Guide                        | What it covers                                                       |
+| ---------------------------- | -------------------------------------------------------------------- |
+| [Loans and assets](loans.md) | Loans, payoff plans, student loan statements, your home and car      |
+| [Credit cards](cards.md)     | Limits, statements, due dates, interest and paying cards off         |
+| [Savings](savings.md)        | Ways to save, savings accounts, money saved and self-hosting         |
+| [Stocks](stocks.md)          | Brokerage accounts, holdings, cost basis, history and the watch list |
+| [Crypto](crypto.md)          | Wallets, exchanges, prices, cost basis and tax reports               |
+
+## Insights and customizing
+
+| Guide                                     | What it covers                                                        |
+| ----------------------------------------- | --------------------------------------------------------------------- |
+| [Your Overview](overview.md)              | Choosing and arranging cards, and building your own with calculations |
+| [Spending, reports and taxes](reports.md) | Monthly spending, longer reports, net worth and the tax year          |
+| [Themes](themes.md)                       | Light, dark and your own color themes                                 |
+
+## AI
+
+| Guide                      | What it covers                                                                               |
+| -------------------------- | -------------------------------------------------------------------------------------------- |
+| [AI assistants](agents.md) | Connect Claude or another assistant over MCP, with tokens, permissions and an approval inbox |
+| [Built-in AI](ai.md)       | Optional category suggestions, a monthly review and statement help, and exactly what's sent  |
+
+## Running Muny
+
+| Guide                                         | What it covers                                                        |
+| --------------------------------------------- | --------------------------------------------------------------------- |
+| [Backups and export](backups.md)              | Automatic backups, restoring, moving servers, upgrading and exporting |
+| [Troubleshooting and FAQ](troubleshooting.md) | Common problems and how to fix them                                   |
+| [Changelog](../CHANGELOG.md)                  | What changed in each version                                          |
+| [Security](../SECURITY.md)                    | The security model and how to report a vulnerability                  |
+
+---
+
+Something missing or wrong? [Open an issue](https://github.com/mikedmor/muny/issues). Muny is free and open source; if it's useful to you, you can [support its development](https://www.paypal.com/paypalme/mikedmor).

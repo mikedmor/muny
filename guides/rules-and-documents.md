@@ -32,3 +32,7 @@ Search by name, lender, year or folder; open, download or delete. Files are stor
 - **New account…:** make the account from the statement (name and type; the last 4 digits come from the statement).
 
 Each account then shows its **last statement** date, and how many monthly statements are missing (between your first statement and now), so you can see which ones to download. A student loan statement covering several loans is read with **Import statements** on the lender's card on Loans.
+
+---
+
+[← All guides](README.md)

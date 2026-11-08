@@ -1,23 +1,88 @@
 # Budgets
 
-**Budgets** (under Money) shows a month at a time:
+**Budgets** (under Money) shows one month at a time: what you planned, what you've spent, what's left, and where the month is heading. Use the arrows at the top to move between months.
 
-- **Budget basics** are worked out, not typed in: **Earnings** is the income received plus what your recurring income should still bring; **Home & utilities** adds up the budgets of your home categories (rent or mortgage, electric, gas, water, trash, internet and phone out of the box, marked **Home**; **+ home category** adds another, and clicking a **Home** tag removes it); **Bills & subscriptions** adds up the budgets of your bill categories (marked **Bill** in the list; **+ bill category** marks another, and clicking a **Bill** tag unmarks it); **All other categories** adds up the budgets of every other category. Their actual amounts are what came in, the bills paid, and everything else you spent. Click **Earnings** to see the money in your income categories month by month, **Home & utilities** for everything in your home categories, **All other categories** for your spending outside bills and home costs, or **Bills & subscriptions** for your bills: charges from recurring bills and subscriptions, plus anything in a bill category. Each charge counts in one of these only: rent repeats every month, but it counts in Home & utilities, not in Bills & subscriptions. A category is a home cost or a bill, not both; marking it one unmarks the other.
-- **Budget categories:** what you planned to spend in each category, what you spent, and what's left. Click a **Budgeted** amount to set or change it (from this month on). Turn on rollover to carry what's left (or overspent) into the next month. Every category you spent in this month, or with a recurring charge still scheduled, has its own row, budget or not; the rest appear when you show them all. **Everything else** is spending with no category: click it to see those transactions month by month and give each one a category.
-- **Summary and forecast:** what's left this month, and what should still come in or go out before the month ends. The spending budget is your category budgets added up, unless you set a total. When a total you set doesn't match your categories, a bar shows how much of it they plan and what's unassigned (or how far over they go); **Follow my categories** goes back to adding them up, and **Match categories** sets the total to their sum.
+![Budgets: Earnings, Home & utilities, Bills & subscriptions and each category against its budget](images/budgets.png)
 
-Click a category to see its months and transactions; change a transaction's category right there. To use a category you don't have yet, type its name in any category picker and choose **+ Create "…"**, then the group it belongs in: it's made and picked in one go. **+ bill category** on the Bills row has the same search. Recurring charges (or income) still expected this month are listed at the top, marked **Pending** with the date they're expected; they appear only on these pages, not on Transactions, until the real charge arrives.
+## Budget basics
 
-Refunds lower a category's spending, split transactions count in each of their categories, and transfers between your own accounts never count.
+The four rows at the top add up for you. You never type their budgets in.
+
+| Basic                     | Budget                                                                                | Actual                                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| **Earnings**              | Income received so far, plus what your recurring income should still bring this month | Money in your income categories                                                                |
+| **Home & utilities**      | The budgets of your home categories added up                                          | Everything in those categories: rent or mortgage, electric, gas, water, trash, internet, phone |
+| **Bills & subscriptions** | The budgets of your bill categories added up                                          | Charges from recurring bills and subscriptions, plus anything in a bill category               |
+| **All other categories**  | The budgets of every other category added up                                          | Everything else you spent                                                                      |
+
+Each charge counts in exactly one of these. Rent repeats every month, so Muny detects it as recurring, but it counts in Home & utilities, not Bills & subscriptions. Together the three spending rows always add up to your total spending.
+
+**Which categories count where:**
+
+- Categories marked **Home** count in Home & utilities. Rent & Mortgage, Electric, Gas & Heating, Water & Sewer, Trash, Internet and Phone are marked to start with. **+ home category** on the row adds another, and clicking a **Home** tag removes it.
+- Categories marked **Bill** count in Bills & subscriptions. **+ bill category** adds another; clicking a **Bill** tag removes it.
+- A category is a home cost or a bill, never both: marking it one unmarks the other.
+
+Click any basic to open it like a category, with its months and transactions.
+
+## Budget categories
+
+Each row shows what you planned, what you spent and what's left, with a ring for how much is used.
+
+- **Set or change a budget:** click the **Budgeted** amount. A change applies from that month on, so past months keep their budgets.
+- **Rollover:** carries what's left (or what you overspent) into the next month.
+- **Scheduled charges:** recurring charges still expected this month are shown under the category ("$65.00 more scheduled").
+- Categories you spent in, or with a charge scheduled, always have a row. The rest appear when you show them all.
+- **Everything else** is spending with no category. Click it to give each transaction one.
+
+Click a category to see its months and transactions, and change any transaction's category right there. Recurring charges still expected this month are listed at the top, marked **Pending** with their expected date. They appear only on these pages, not on Transactions, until the real charge arrives.
+
+## Summary and forecast
+
+The side panel shows what's left this month, and what should still come in or go out before it ends:
+
+- **Spending budget:** your category budgets added up, unless you set a total yourself. When a total you set doesn't match your categories, a bar shows how much of it they cover and what's unassigned (or how far over they go). **Follow my categories** goes back to adding them up, and **Match categories** sets the total to their sum.
+- **By the end of the month:** income so far plus what's expected, and spending so far plus bills still due, giving the projected amount left over. Everyday spending beyond today isn't guessed at.
+- **Still to come:** each recurring charge and paycheck expected for the rest of the month.
+
+## How spending is counted
+
+- Refunds lower the category they came back to.
+- Split transactions count in each of their categories.
+- Transfers between your own accounts, including card payments and moves to savings, never count.
+- Hidden transactions and accounts excluded from reports never count.
 
 ## Leaving things out
 
-- **A transaction:** hide it (on Transactions). Hidden transactions don't count anywhere.
-- **An account:** turn on **Exclude from reports** in the account's settings (for example a business account).
-- **A category:** in **Left out of budgets** (under the category table), pick a category and click **Leave out**, or use **In budget / Not budgeted** next to it in **Settings → Categories**. Its spending no longer counts toward budgets, the total, bills or the forecast; the card still shows how much went to it this month, with **Include** to count it again. It still appears in Spending and Reports. Useful for reimbursed work expenses or money you set aside on purpose.
+- **A transaction:** hide it on Transactions. Hidden transactions don't count anywhere.
+- **An account:** turn on **Exclude from reports** in the account's settings, for example for a business account.
+- **A category:** under **Left out of budgets**, pick a category and click **Leave out**, or use **In budget / Not budgeted** in **Settings → Categories**. Its spending no longer counts toward budgets, the total, bills or the forecast, though it still appears in Spending and Reports. Useful for reimbursed work expenses or money you set aside on purpose. **Include** counts it again.
 
 ## Managing categories
 
-**Settings → Categories** lists every category by group. Click a name to rename it, use **Move…** to put it in another group, **Hide** to stop offering it, **Home / Not home** to count it in Home & utilities, and **Bill / Not a bill** to choose whether it counts in Bills & subscriptions. On a category's own page, **Edit budget** (or **Set a budget**, or the ✎ next to its name) opens all of this in one dialog: name, group, icon (search about 1,900 icons by name, like "robot" or "water", or paste any emoji; **Automatic** goes back to the icon guessed from the name), monthly budget and rollover, **Home & utilities**, **Bill or subscription**, **Count in budgets**, **Budget alerts**, **Hide**, and **Delete category…**.
+**Settings → Categories** lists every category by group:
 
-**Delete** shows what uses the category and lets you pick where it goes: its transactions, split parts, recurring charges, payee defaults and rules move to the category you choose (search for it, or create a new one), and its budget moves too if that category doesn't have one. Choose **Uncategorized** to leave them without a category instead; rules then stop setting a category, and a rule that did nothing else is deleted. Categories that nothing uses are marked **unused**, and **Delete unused…** removes them all at once.
+| Option                       | What it does                      |
+| ---------------------------- | --------------------------------- |
+| Click the name               | Rename it                         |
+| **Move…**                    | Put it in another group           |
+| **Hide**                     | Stop offering it in pickers       |
+| **Home / Not home**          | Count it in Home & utilities      |
+| **Bill / Not a bill**        | Count it in Bills & subscriptions |
+| **In budget / Not budgeted** | Leave it out of budgets           |
+
+On a category's own page, **Edit budget** (or the ✎ beside its name) opens everything in one dialog: name, group, icon, monthly budget and rollover, Home & utilities, Bill or subscription, Count in budgets, Budget alerts, Hide and **Delete category…**. For the icon, search about 1,900 icons by name (like "robot" or "water"), paste any emoji, or choose **Automatic** to use the one guessed from the name.
+
+To use a category you don't have yet, type its name in any category picker and choose **+ Create "…"**, then the group it belongs in.
+
+**Deleting a category** shows what uses it and lets you pick where it goes: its transactions, split parts, recurring charges, payee defaults and rules move to the category you choose, and its budget moves too if that category doesn't have one. Choose **Uncategorized** to leave them without a category; rules then stop setting one, and a rule that did nothing else is deleted. Categories nothing uses are marked **unused**, and **Delete unused…** removes them all at once.
+
+## Related
+
+- [Recurring](recurring.md): what feeds Bills & subscriptions and the forecast.
+- [Alerts](alerts.md): get told when a budget reaches 80% or 100%.
+- [Spending, reports and taxes](reports.md): the longer view.
+
+---
+
+[← All guides](README.md)

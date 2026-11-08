@@ -72,3 +72,7 @@ If a bank needs you to log in again (a password change or expired consent), the 
 Muny names the merchant from the bank's description, dropping card prefixes, store and reference numbers, dates, phone numbers and the city and state ("POS DEBIT WD7 FT. WORTH TX" becomes **WD7**). A new charge whose description looks like earlier ones (the same words, ignoring numbers and dates) gets the merchant those already have, so a merchant you renamed keeps its name. If a merchant's name changes, its recurring bill or subscription keeps its charges instead of starting over.
 
 On the Recurring page each bill, subscription and income shows where it stands this month: **✓ Paid** (or **Received**) with the date, **⏳ Pending** when your bank shows the charge as pending, **Due** with the date it's expected, **Late** when that date has passed without a charge, or **Next** when nothing is due until a later month. The line above the list adds up what's been paid this month, what's pending, and what's still due. Pending charges also show in the upcoming list with a ⏳.
+
+---
+
+[← All guides](README.md)

@@ -2,6 +2,8 @@
 
 **Savings** (in the menu, under Wealth) opens on **Ways to save**, next to the savings accounts, money saved and self-hosting tabs.
 
+![Ways to save: duplicate subscriptions, price rises, self-hosted replacements and more, ranked by yearly saving](images/ways-to-save.png)
+
 ## Ways to save
 
 Muny looks through your own data for money you could keep, and lists what it finds with the biggest yearly saving first. It uses fixed rules, not AI, and nothing leaves Muny. Each one says how it was worked out; **Show the numbers** shows the figures behind it, and **Go there** opens the page to act on it.
@@ -45,8 +47,33 @@ Any savings account can have a plan: **Plan this account** under it on Savings.
 
 ## Money saved
 
-What cancelling subscriptions, negotiating bills and replacing services with self-hosted alternatives has saved you, checked against your actual transactions.
+The savings ledger records what cancelling, downgrading and negotiating have saved you, and checks it against your bank data rather than taking it on trust.
 
-## Self-host alternatives and costs
+- **From Recurring:** on a subscription or bill, **I cancelled it** or **Price went down** records the saving for you (see [Recurring](recurring.md#changing-a-series)).
+- **By hand:** **Record a saving** for anything else, with what it cost before and after, monthly, yearly or one-time.
 
-Suggestions for subscriptions you could replace with self-hosted or DIY tools, and what running those yourself costs (power, hardware, domains), so the savings are net.
+Each saving is one of **Cancelled**, **Downgraded**, **Negotiated**, **Replaced (DIY)** or **Other**, and shows where it stands:
+
+| Status                 | Meaning                                                              |
+| ---------------------- | -------------------------------------------------------------------- |
+| **Waiting to confirm** | Recorded, but no bill has come due yet to prove it                   |
+| **✓ Confirmed**        | The charge stopped (or dropped to the new price) when it should have |
+| **⚠ Still charged**    | A charge arrived after you cancelled. You get an alert too           |
+
+The tiles at the top total what you're saving each month (confirmed, plus what's waiting), what you've saved so far, and the yearly rate. A saving that isn't linked to a bank charge can't be checked automatically, so you confirm it yourself.
+
+## Self-host alternatives
+
+Muny ships with a catalog of self-hosted and free alternatives to paid services: cloud storage, streaming, password managers, photo backup and more. **Subscriptions you could self-host** lists the ones you pay for that have an alternative, with a link to each project, the setup effort, and what you'd give up.
+
+**Your switches** tracks a replacement from start to finish: **Idea → Testing → Migrated → Paid plan cancelled** (or **Abandoned**). Setting **Paid plan cancelled** records the saving and marks the subscription cancelled, so Muny can confirm the charge stops.
+
+## Self-hosting costs
+
+Self-hosting isn't free, so **What self-hosting costs you** keeps the running costs: power, hardware, domains, hosting or a VPS, off-site storage, and software or licenses. They're taken off your replacement savings, so the figure you see is what you really save.
+
+The catalog is maintained by the community. If you know a good alternative it's missing, see [CONTRIBUTING.md](../CONTRIBUTING.md).
+
+---
+
+[← All guides](README.md)

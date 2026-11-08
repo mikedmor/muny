@@ -132,5 +132,10 @@ Back up first (Muny keeps automatic backups in `data/backups`; see [Backups](bac
 
 ## Next steps
 
+- [Getting started](getting-started.md): a tour of your first hour.
 - [Secure access](access.md): keep Muny private and get HTTPS.
 - [Importing files](importing.md) or [Bank sync](bank-sync.md): bring in your accounts.
+
+---
+
+[← All guides](README.md)

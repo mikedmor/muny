@@ -39,3 +39,7 @@ Open Muny in your phone's browser and use **Add to Home Screen** (or **Install a
 ## Household members
 
 Settings → Household & account → **Invite someone** creates a one-time link, valid for 7 days, for a **member** (full access) or a **viewer** (read-only). Muny doesn't send email; share the link yourself. Only the owner manages the household and backups.
+
+---
+
+[← All guides](README.md)

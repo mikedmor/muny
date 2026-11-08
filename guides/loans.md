@@ -84,3 +84,7 @@ After the first lookup, values over a month old are looked up again when you ope
 ## Payments and spending
 
 A payment from checking to a loan counts as spending under its category (for example "Loan Payment"). When the loan account is also connected, the money arriving there is matched to that payment as a transfer, and the loan's own entries (interest it charges, payments it receives) aren't counted again as spending, bills or income.
+
+---
+
+[← All guides](README.md)

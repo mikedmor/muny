@@ -1,6 +1,8 @@
 # AI assistants
 
-Muny can talk to AI assistants like Claude through MCP (the Model Context Protocol). An assistant can answer questions about your money, and build Overview cards and themes for you. Muny itself calls no AI service. Nothing connects until you create a token for it.
+Muny can talk to AI assistants like Claude through MCP (the Model Context Protocol). An assistant can answer questions about your money, build Overview cards and themes for you, and suggest changes that wait for your approval. Nothing connects until you create a token for it.
+
+Here the assistant runs elsewhere and connects to Muny. Muny can also use an AI model itself for a few jobs, which is separate and off by default: see [Built-in AI](ai.md).
 
 ## What an assistant can and can't do
 
@@ -75,3 +77,7 @@ The same tools are available as a REST API, with the same token and permissions:
 - `GET /api/v1/openapi.json` describes them all.
 
 Money is always integer cents, so 12345 means $123.45.
+
+---
+
+[← All guides](README.md)

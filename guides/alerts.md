@@ -33,3 +33,7 @@ Add a **channel** on Alerts → Settings, and tick it for the alerts you want se
 - **Webhook:** Muny POSTs JSON `{ event, type, severity, title, body, url, createdAt }`. With a secret, it adds `X-Muny-Signature: sha256=<HMAC of the body>`.
 
 Set `MUNY_PUBLIC_URL` (for example `https://muny.your-tailnet.ts.net`) so alerts include a link that opens Muny. Use **Send test** on a channel to check it works.
+
+---
+
+[← All guides](README.md)

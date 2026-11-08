@@ -2,6 +2,8 @@
 
 The Overview shows your cards in as many columns as your screen has room for: one on a phone, two on a laptop, and three or four on wide monitors. You choose which cards appear and their priority; Muny arranges them. Each person in a household has their own.
 
+![The Overview with spending, accounts, cards and loans](images/overview.png)
+
 ## Customizing
 
 Click **Customize** at the top of the page. Changes save as you make them, and **Undo** steps back through them.
@@ -82,3 +84,7 @@ A card is a description, not a program, and can't run code, change anything or s
 ## Cards from an AI assistant
 
 In the card editor, **JSON or AI** gives you a prompt to copy into any assistant. It describes everything a card can be, including every dataset and function, and contains none of your financial data. Describe the card you want, as complicated as you like, then paste the assistant's answer back in. It goes on the canvas so you can check it and adjust it before saving.
+
+---
+
+[← All guides](README.md)

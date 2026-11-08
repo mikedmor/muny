@@ -27,3 +27,7 @@ Nothing else is ever sent, and Muny never sends anything in the background excep
 ## Costs
 
 Hosted providers charge per use. Suggesting categories for 60 transactions and a monthly review are small requests, but check your provider's pricing. With Ollama it's free, at the speed of your own hardware.
+
+---
+
+[← All guides](README.md)

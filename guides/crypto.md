@@ -4,7 +4,8 @@
 
 ## Getting your history in
 
-- **Koinly:** import Koinly's **Transaction History** CSV on Crypto → Wallets → **Import file**, once for each year you have. Re-importing never duplicates.
+- **Koinly:** in Koinly, open **Transactions** and export them all (every year, on any plan), then drop the CSV on Muny's **Import** page or use Crypto → Wallets → **Import file**. Koinly's yearly **Transaction History** report from Tax reports works too, one file per year. Muny matches each Koinly wallet to one of yours by name, and re-importing never duplicates.
+- **Wallet and exchange sync:** see below.
 - **By hand:** add wallets and transactions yourself.
 
 ## Prices
@@ -58,3 +59,7 @@ Muny's numbers are a starting point for you or your accountant, not tax advice.
 Every call to price and sync services is counted, and Muny stays well under each service's free limits however often anyone presses refresh. Usage is shown in Crypto → Settings → Request limits.
 
 Your crypto counts toward net worth, valued at each date's price. Coins you've hidden don't count.
+
+---
+
+[← All guides](README.md)
