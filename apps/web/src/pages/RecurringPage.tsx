@@ -277,9 +277,12 @@ function Section({
 function SeriesRules({
   s,
   latest,
+  loading,
   onEdit,
 }: {
   s: RecurringSeries;
+  /** The charges are still loading, so there is nothing to look rules up by yet. */
+  loading: boolean;
   /** The newest charge (history is oldest first). */
   latest: Transaction | null;
   onEdit: (d: RuleDraft) => void;
@@ -311,6 +314,18 @@ function SeriesRules({
     };
   };
   const link = "font-medium text-brand-600 hover:underline dark:text-brand-500";
+  // Wait for the answer rather than offering "Add a rule" for a moment first.
+  if (loading || matching.isLoading)
+    return (
+      <div
+        className="mb-3 animate-pulse rounded-lg bg-slate-50 p-3 dark:bg-slate-800/50"
+        role="status"
+        aria-label="Checking rules"
+      >
+        <div className="h-4 w-4/5 rounded bg-slate-200 dark:bg-slate-700" />
+        <div className="mt-2 h-4 w-1/3 rounded bg-slate-200 dark:bg-slate-700" />
+      </div>
+    );
   return (
     <div className="mb-3 rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800/50">
       {already ? (
@@ -546,7 +561,12 @@ function SeriesDetail({ s, onDone }: { s: RecurringSeries; onDone: () => void })
       </form>
 
       <section>
-        <SeriesRules s={s} latest={history.data?.at(-1) ?? null} onEdit={setRuleFor} />
+        <SeriesRules
+          s={s}
+          latest={history.data?.at(-1) ?? null}
+          loading={history.isLoading}
+          onEdit={setRuleFor}
+        />
         <Modal
           open={ruleFor !== null}
           onClose={() => setRuleFor(null)}
