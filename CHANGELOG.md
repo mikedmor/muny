@@ -4,6 +4,10 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-08
+
+Recurring charges and rules work together: a paycheck or bill stays with its series when the bank renames it, and the Rules page shows what needs tidying and fixes it in one click.
+
 ### Added
 
 - **Rules can count transactions as recurring.** The new **Count as recurring** action keeps a paycheck or bill in its series even when the bank renames the merchant, so it's never shown as late or counted twice in the month's expected income. **Add a rule for this** on any recurring series opens the rule editor already filled in.
@@ -12,7 +16,10 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ### Fixed
 
+- A paycheck renamed by the bank no longer shows as late, or counts twice in the month’s expected income.
 - A series held by a rule keeps the price of its newest charges, instead of one from years ago, and a price change no longer leaves an empty duplicate behind.
+- Muny’s rules for two series with the same name (a paycheck and a small deposit, two loans with one servicer) say which is which, by account or amount, and keep them apart.
+- Opening a recurring charge no longer offers “Add a rule” for a moment before showing the rule it already has.
 
 ## [1.0.0] - 2026-11-07
 
@@ -70,5 +77,6 @@ Install it with `docker pull ghcr.io/mikedmor/muny:1` and follow the [install gu
 
 If Muny saves you a subscription or two, you can [support its development](https://www.paypal.com/paypalme/mikedmor).
 
-[Unreleased]: https://github.com/mikedmor/muny/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/mikedmor/muny/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/mikedmor/muny/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/mikedmor/muny/releases/tag/v1.0.0

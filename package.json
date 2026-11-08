@@ -1,6 +1,6 @@
 {
   "name": "muny",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Self-hosted personal finance and subscription manager with AI agent access",
   "license": "AGPL-3.0-only",
