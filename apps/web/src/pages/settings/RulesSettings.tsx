@@ -391,9 +391,8 @@ function NeedsAttention({
   );
 }
 
-/** A rule whose only job is keeping a recurring charge's transactions in its series. */
-const keepsTogether = (r: Rule) =>
-  r.actions.length > 0 && r.actions.every((a) => a.type === "setRecurring");
+/** A rule that keeps a recurring charge's transactions in its series (whatever else it does). */
+const keepsTogether = (r: Rule) => r.actions.some((a) => a.type === "setRecurring");
 
 function RuleRow({
   rule: r,
@@ -640,7 +639,7 @@ export function RulesSettings() {
                   aria-hidden="true"
                 />
                 <span className="min-w-0">
-                  <span className="font-medium">Keeping recurring charges together</span>{" "}
+                  <span className="font-medium">Recurring charges</span>{" "}
                   <span className="text-xs text-slate-500 tabular-nums">
                     {q || onlyOff
                       ? `${togetherShown.length} of ${together.length}`
@@ -648,16 +647,21 @@ export function RulesSettings() {
                     rules
                   </span>
                   <span className="block text-xs text-slate-500">
-                    One rule per bill, subscription or paycheck keeps its transactions in its
-                    series, even when the bank renames the merchant. Muny makes these for each
-                    confirmed recurring charge, so you rarely need to change them.
+                    Rules that keep a bill, subscription or paycheck's transactions in its series,
+                    even when the bank renames the merchant. Some also set the category. Muny makes
+                    one for each confirmed recurring charge that has none.
                   </span>
                 </span>
               </button>
               {open &&
                 (togetherShown.length ? (
                   <ul className="divide-y divide-slate-200 border-t border-slate-200 dark:divide-slate-800 dark:border-slate-800">
-                    {togetherShown.map((r) => row(r))}
+                    {togetherShown.map((r, i) =>
+                      row(r, {
+                        up: togetherShown[i - 1]?.id ?? null,
+                        down: togetherShown[i + 1]?.id ?? null,
+                      }),
+                    )}
                   </ul>
                 ) : (
                   <p className="border-t border-slate-200 px-4 py-4 text-center text-sm text-slate-500 dark:border-slate-800">

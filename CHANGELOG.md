@@ -8,7 +8,7 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 - **Rules can count transactions as recurring.** The new **Count as recurring** action keeps a paycheck or bill in its series even when the bank renames the merchant, so it's never shown as late or counted twice in the month's expected income. **Add a rule for this** on any recurring series opens the rule editor already filled in.
 - **Every confirmed recurring series gets a rule of its own.** Muny adds **Count as recurring** to a rule you already have for that series, or creates one for it when none exists. Automatic changes are audited, and deleting or undoing one is remembered.
-- **A tidier Rules page.** Your own rules first, with the rules that keep recurring charges in their series tucked into their own section; search, "Made by Muny" on automatic rules, how many transactions each rule matches, and readable When / Then. Rules that do one job between them can be combined in one click, after a check that nothing would be filed differently. One rule can count transactions toward several recurring series, each going to the series on its own account, so a paycheck split across accounts needs one rule.
+- **A tidier Rules page.** Your own rules first, with rules for recurring charges in their own section; search, "Made by Muny" on automatic rules, how many transactions each rule matches, and readable When / Then. Rules that do one job between them can be combined in one click, after a check that nothing would be filed differently. One rule can count transactions toward several recurring series, each going to the series on its own account, so a paycheck split across accounts needs one rule.
 
 ### Fixed
 
