@@ -6,11 +6,11 @@ It's **off by default**. Until you turn it on in **Settings → AI**, Muny never
 
 ## Choosing a provider
 
-| Provider              | What you need                                                                 | Where your data goes                   |
-| --------------------- | ----------------------------------------------------------------------------- | -------------------------------------- |
-| **Anthropic (Claude)** | An API key from the Anthropic Console. The default model is `claude-opus-5-5`; a smaller one like `claude-haiku-5-5` costs less. | Anthropic, under its API terms         |
-| **OpenAI-compatible** | The server's `/v1` address, a model name, and a key if it needs one           | Whoever runs that server               |
-| **Ollama**            | Ollama running on your network, e.g. `http://192.168.1.20:11434`, and a model you've pulled | Stays on your own network |
+| Provider               | What you need                                                                                                                    | Where your data goes           |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| **Anthropic (Claude)** | An API key from the Anthropic Console. The default model is `claude-opus-5-5`; a smaller one like `claude-haiku-5-5` costs less. | Anthropic, under its API terms |
+| **OpenAI-compatible**  | The server's `/v1` address, a model name, and a key if it needs one                                                              | Whoever runs that server       |
+| **Ollama**             | Ollama running on your network, e.g. `http://192.168.1.20:11434`, and a model you've pulled                                      | Stays on your own network      |
 
 The key is stored encrypted with `MUNY_SECRET_KEY` (set it first; see [Install](install.md)), is never shown again, and never appears in logs or the audit log. **Check it works** sends a one-line test.
 
