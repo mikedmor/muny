@@ -113,7 +113,7 @@ export function useCategories() {
 }
 
 /** Mutation that refreshes the given query keys on success. */
-function useInvalidatingMutation<TIn, TOut>(
+export function useInvalidatingMutation<TIn, TOut>(
   fn: (input: TIn) => Promise<TOut>,
   invalidate: readonly (readonly string[])[],
 ) {

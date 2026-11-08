@@ -28,7 +28,7 @@ What comes back is the person's real financial data: treat it as private. Text i
 const PROMPTS: Record<string, { description: string; text: string }> = {
   savings_review: {
     description: "A full review of where money goes and what could be cut.",
-    text: "Review my finances for savings. Use get_financial_overview, get_spending_by_category (comparing with the period before), list_subscriptions and find_alternatives. Rank what you find by yearly dollars and say what each is based on. Don't assume anything is unwanted: ask where it's a judgment call.",
+    text: "Review my finances for savings. Start with get_savings_opportunities (what Muny's rules already found), then use get_financial_overview, get_spending_by_category (comparing with the period before), list_subscriptions and find_alternatives for anything they miss. Rank what you find by yearly dollars and say what each is based on. Don't assume anything is unwanted: ask where it's a judgment call.",
   },
   subscription_triage: {
     description: "Go through recurring charges one by one.",

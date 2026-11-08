@@ -210,3 +210,39 @@ export interface SavingsBucketInput {
   fillRemaining?: boolean;
   isMain?: boolean;
 }
+
+export type OpportunityKind =
+  | "overlap"
+  | "charged_after_cancel"
+  | "price_increase"
+  | "diy"
+  | "card_interest"
+  | "debt_order"
+  | "idle_cash";
+
+/** A way to save, worked out from your data by a fixed rule (no model). */
+export interface SavingsOpportunity {
+  /** Stable while the situation lasts (a new price rise is a new one). */
+  id: string;
+  kind: OpportunityKind;
+  title: string;
+  /** How it was worked out, in a sentence or two. */
+  detail: string;
+  /** Estimated saving per year (positive cents). */
+  yearlyCents: number;
+  /** "sure": it's happening; "likely": the saving is real if you act; "guess": a heuristic. */
+  confidence: "sure" | "likely" | "guess";
+  evidence: { label: string; value: string }[];
+  /** Where to act on it in Muny. */
+  link: { to: string; hash?: string } | null;
+}
+
+export interface SavingsOpportunities {
+  today: string;
+  /** Sum of the shown ones; an upper bound, as some overlap. */
+  totalYearlyCents: number;
+  /** Biggest first. */
+  items: SavingsOpportunity[];
+  /** Ones you've hidden. */
+  dismissed: SavingsOpportunity[];
+}

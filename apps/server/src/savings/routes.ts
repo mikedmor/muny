@@ -6,8 +6,10 @@ import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, notFound, parse } from "../lib/http.js";
+import { readPlan } from "../loans/routes.js";
 import { savingsAccountsReport, setAccountApy, setSavingsPlan } from "./accounts.js";
 import { bucketsFor, setBuckets, setPlanMode } from "./buckets.js";
+import { savingsOpportunities, setDismissed } from "./opportunities.js";
 import {
   alternativeSuggestions,
   createSaving,
@@ -170,6 +172,21 @@ export function registerSavingsRoutes(app: FastifyInstance, db: MunyDb) {
   app.get("/api/savings", async () => listSavings(db));
   app.get("/api/savings/summary", async () => savingsSummary(db));
   app.get("/api/savings/alternatives", async () => alternativeSuggestions(db));
+  app.get("/api/savings/opportunities", async () => savingsOpportunities(db, readPlan(db)));
+  app.post("/api/savings/opportunities/dismiss", async (req) => {
+    const user = requireUser(req);
+    const body = parse(
+      z.object({ id: z.string().min(1).max(4000), dismissed: z.boolean() }),
+      req.body,
+    );
+    setDismissed(db, body.id, body.dismissed);
+    log(
+      user.id,
+      body.dismissed ? "opportunity.dismiss" : "opportunity.restore",
+      body.id.slice(0, 64),
+    );
+    return { ok: true };
+  });
 
   app.post("/api/savings", async (req, reply) => {
     const user = requireUser(req);

@@ -33,9 +33,11 @@ import {
 import { investSummary } from "../invest/service.js";
 import { listAccounts } from "../ledger/accounts.js";
 import { audit } from "../lib/audit.js";
+import { readPlan } from "../loans/routes.js";
 import { loansReport } from "../loans/service.js";
 import { listSeries } from "../recurring/service.js";
 import { netWorthDates, netWorthReport, overview, spendingReport } from "../reports/service.js";
+import { savingsOpportunities } from "../savings/opportunities.js";
 import { alternativeSuggestions, listSavings, savingsSummary } from "../savings/service.js";
 import {
   createTheme,
@@ -356,6 +358,29 @@ export const TOOLS: Tool[] = [
         effectiveDate: s.effectiveDate,
       })),
     }),
+  }),
+  defineTool({
+    name: "get_savings_opportunities",
+    description:
+      "Ways to save money, worked out by Muny's rules from this person's data and ranked by yearly saving: duplicate subscriptions, charges after a cancellation, price rises, self-hosted replacements, card interest, loan payoff order and idle cash. Each says how it was worked out and how sure it is. Amounts are yearly estimates in cents; some overlap, so the total is an upper bound.",
+    scope: "read:summary",
+    input: z.object({ include_dismissed: z.boolean().default(false) }),
+    run: (ctx, { include_dismissed }) => {
+      const o = savingsOpportunities(ctx.db, readPlan(ctx.db), ctx.today);
+      const shape = (x: (typeof o.items)[number]) => ({
+        kind: x.kind,
+        title: x.title,
+        detail: x.detail,
+        yearlyCents: x.yearlyCents,
+        confidence: x.confidence,
+        evidence: x.evidence,
+      });
+      return {
+        totalYearlyCents: o.totalYearlyCents,
+        items: o.items.map(shape),
+        ...(include_dismissed ? { dismissed: o.dismissed.map(shape) } : {}),
+      };
+    },
   }),
   defineTool({
     name: "find_alternatives",

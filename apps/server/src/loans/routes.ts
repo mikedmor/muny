@@ -72,7 +72,7 @@ const Plan = z.object({
 const PLAN_KEY = "loans.plan";
 
 /** The saved payoff plan, with defaults for anything missing. */
-function readPlan(db: MunyDb): LoanPlanSettings {
+export function readPlan(db: MunyDb): LoanPlanSettings {
   const row = db
     .select()
     .from(schema.appSettings)

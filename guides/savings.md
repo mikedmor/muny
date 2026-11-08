@@ -1,6 +1,20 @@
 # Savings
 
-**Savings** (in the menu, under Wealth) has three tabs.
+**Savings** (in the menu, under Wealth) opens on **Ways to save**, next to the savings accounts, money saved and self-hosting tabs.
+
+## Ways to save
+
+Muny looks through your own data for money you could keep, and lists what it finds with the biggest yearly saving first. It uses fixed rules, not AI, and nothing leaves Muny. Each one says how it was worked out; **Show the numbers** shows the figures behind it, and **Go there** opens the page to act on it.
+
+- **Doubled up:** two or more subscriptions in the same category (say, several streaming services). The saving is the cheapest one, since dropping any one saves at least that.
+- **Charged after cancelling:** a subscription you marked cancelled that charged again.
+- **Price went up:** a fixed-price subscription that rose in the last year. Asking for the old price or a cheaper plan wins it back.
+- **Self-host it:** a subscription with a self-hosted or free alternative in Muny's catalog (running costs aren't counted).
+- **Card interest:** interest charged on a credit card this year, at this year's pace. Paying the statement balance in full each month stops it.
+- **Loan payoff order:** with two or more loans, what you'd save by sending each paid-off loan's payment to the highest-rate loan left (it uses the loans in your payoff plan).
+- **Idle cash:** checking holding more than a month and a half of your spending while a savings account pays interest. This one is labelled a rough guess.
+
+Every amount is an estimate per year. Some overlap (a subscription can be doubled up and replaceable), so the total at the top is the most it could be. **Hide** puts one away; it comes back under "you've hidden", and a new situation (like another price rise) shows again on its own. Assistants see the same list with the `get_savings_opportunities` tool.
 
 ## Savings accounts
 
