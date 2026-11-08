@@ -808,7 +808,14 @@ function Activity({ accounts }: { accounts: { id: string; name: string }[] }) {
   );
 }
 
-function ImportDialog({ onClose }: { onClose: () => void }) {
+/** Brokerage CSVs: positions and account history. Exported for the Import page. */
+export function ImportDialog({
+  onClose,
+  initialFile,
+}: {
+  onClose: () => void;
+  initialFile?: File;
+}) {
   const [content, setContent] = useState<string | null>(null);
   const [preview, setPreview] = useState<InvestImportPreview | null>(null);
   const [targets, setTargets] = useState<Record<string, string>>({});
@@ -817,8 +824,15 @@ function ImportDialog({ onClose }: { onClose: () => void }) {
   const summary = useInvestSummary();
   const commit = useInvestImport();
 
-  const onFile = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const started = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once, for the file it opened with.
+  useEffect(() => {
+    if (started.current || !initialFile) return;
+    started.current = true;
+    void pick(initialFile);
+  }, []);
+  const onFile = (e: ChangeEvent<HTMLInputElement>) => void pick(e.target.files?.[0]);
+  const pick = async (file: File | undefined) => {
     if (!file) return;
     setError(null);
     setPreview(null);

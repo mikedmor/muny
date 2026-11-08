@@ -10,9 +10,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { CsvMappingCard } from "../components/CsvMappingCard.js";
-import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
+import { Alert, Button, Card, PageHeader } from "../components/ui.js";
 import { api } from "../lib/api.js";
 import { keys, useAccounts } from "../lib/queries.js";
+import { ImportHub } from "./ImportHub.js";
 
 interface LoadedFile {
   filename: string;
@@ -43,7 +44,6 @@ export function ImportPage() {
   const [map, setMap] = useState<Record<string, AccountTarget>>({});
   const [csv, setCsv] = useState<CsvMapping | undefined>();
   const [applyBalances, setApplyBalances] = useState<Set<string>>(new Set());
-  const [dragging, setDragging] = useState(false);
 
   const preview = useMutation({
     mutationFn: (req: LoadedFile & { csv?: CsvMapping }) =>
@@ -151,64 +151,23 @@ export function ImportPage() {
           </div>
         </Card>
       ) : !file ? (
-        <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
-          <label
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragging(true);
-            }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragging(false);
-              const f = e.dataTransfer.files[0];
+        <>
+          <ImportHub
+            onTransactions={(f) => void load(f)}
+            chooseTransactions={() => inputRef.current?.click()}
+          />
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".csv,.ofx,.qfx,.qbo,text/csv"
+            className="sr-only"
+            aria-label="Choose a bank or Rocket Money file"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
               if (f) void load(f);
             }}
-            className={cx(
-              "flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-16 text-center transition-colors",
-              dragging
-                ? "border-brand-500 bg-brand-50 dark:bg-brand-700/10"
-                : "border-slate-300 bg-surface hover:border-brand-500 dark:border-slate-700 dark:bg-slate-900",
-            )}
-          >
-            <span className="text-3xl" aria-hidden>
-              ⇪
-            </span>
-            <span className="mt-2 font-medium">Drop a file here or click to choose</span>
-            <span className="mt-1 text-sm text-slate-500">
-              Rocket Money export, bank CSV, or OFX / QFX / QBO
-            </span>
-            <input
-              ref={inputRef}
-              type="file"
-              accept=".csv,.ofx,.qfx,.qbo,text/csv"
-              className="sr-only"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void load(f);
-              }}
-            />
-          </label>
-          <Card>
-            <h2 className="font-semibold">Moving from Rocket Money</h2>
-            <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-400">
-              <li>In Rocket Money on the web, open Transactions.</li>
-              <li>Set the date range to all time.</li>
-              <li>Click Export and save the CSV.</li>
-              <li>Drop it here. You'll review everything before anything is saved.</li>
-            </ol>
-            <h2 className="mt-5 font-semibold">From your bank</h2>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-              Download activity from your bank's website. Prefer <strong>OFX</strong>,{" "}
-              <strong>QFX</strong> or <strong>QBO</strong> (often labelled "Quicken" or "Money"):
-              they include the balance. CSV works too, with presets for Chase, Ally and PayPal.
-            </p>
-            <p className="mt-3 text-xs text-slate-500">
-              Re-importing is safe: transactions already in Muny, including ones from Rocket Money
-              with the same date and amount, are skipped.
-            </p>
-          </Card>
-        </div>
+          />
+        </>
       ) : (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">

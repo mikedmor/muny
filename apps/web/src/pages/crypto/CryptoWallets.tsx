@@ -11,7 +11,7 @@ import {
   formatMoney,
 } from "@muny/shared";
 import { Link } from "@tanstack/react-router";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { CoinIcon, WalletIcon } from "../../components/coins.js";
 import { Modal, SelectField } from "../../components/forms.js";
 import { Alert, Button, Card, cx, Field } from "../../components/ui.js";
@@ -28,7 +28,7 @@ const KIND_LABEL: Record<CryptoWalletKind, string> = {
   manual: "Wallet",
 };
 
-export function ImportKoinly({ onDone }: { onDone: () => void }) {
+export function ImportKoinly({ onDone, initialFile }: { onDone: () => void; initialFile?: File }) {
   const [content, setContent] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
   const [preview, setPreview] = useState<CryptoImportPreview | null>(null);
@@ -58,6 +58,13 @@ export function ImportKoinly({ onDone }: { onDone: () => void }) {
       )
     : 0;
 
+  const started = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once, for the file it opened with.
+  useEffect(() => {
+    if (started.current || !initialFile) return;
+    started.current = true;
+    void pick(initialFile);
+  }, []);
   const pick = async (file: File | undefined) => {
     if (!file) return;
     setError(null);

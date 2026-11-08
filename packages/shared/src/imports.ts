@@ -112,3 +112,10 @@ export interface ImportResult {
   /** Imported transactions changed by your rules. */
   rulesApplied: number;
 }
+
+/** What a file dropped on the Import page is, and so which importer reads it. */
+export interface ImportFileKind {
+  kind: "transactions" | "brokerage" | "crypto";
+  /** e.g. "Rocket Money export", "Fidelity export". */
+  label: string;
+}

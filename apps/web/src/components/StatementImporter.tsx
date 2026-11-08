@@ -8,7 +8,7 @@ import {
 } from "@muny/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText, FileUp } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.js";
 import { useAccounts } from "../lib/queries.js";
 import { Modal } from "./forms.js";
@@ -84,8 +84,11 @@ const inputCls =
 export function StatementImporter({
   forAccount,
   defaultType,
+  initialFiles,
   onDone,
 }: {
+  /** Files picked already (the Import page): read straight away. */
+  initialFiles?: File[];
   /** Opened from an account: statements go to it unless their last 4 say otherwise. */
   forAccount?: string;
   /** The type for new accounts when the statement doesn't say. */
@@ -139,7 +142,7 @@ export function StatementImporter({
   const preview = (base64: string) =>
     api.post<StatementPreview>("/api/statements/preview", { pdfBase64: base64 });
 
-  const read = async (files: FileList | null) => {
+  const read = async (files: FileList | File[] | null) => {
     if (!files?.length) return;
     const out: Item[] = [];
     let i = 0;
@@ -169,6 +172,14 @@ export function StatementImporter({
   };
 
   /** Read every statement again (after teaching Muny a layout); keeps your choices. */
+  const started = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once, for the files it opened with.
+  useEffect(() => {
+    if (started.current || !initialFiles?.length) return;
+    started.current = true;
+    void read(initialFiles);
+  }, []);
+
   const reread = async () => {
     setBusy("Reading again…");
     const out: Item[] = [];

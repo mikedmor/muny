@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
 import { audit } from "../lib/audit.js";
 import { parse } from "../lib/http.js";
+import { detectImportFile } from "./detect.js";
 import { commitImport, previewImport } from "./service.js";
 
 const MAX_CONTENT = 20 * 1024 * 1024; // 20 MB of text
@@ -58,6 +59,16 @@ const CommitBody = ImportBody.extend({
 });
 
 export function registerImportRoutes(app: FastifyInstance, db: MunyDb) {
+  /** Which importer a text file belongs to (nothing is saved). */
+  app.post("/api/import/detect", async (req) => {
+    requireUser(req);
+    const body = parse(
+      z.object({ content: z.string().max(20_000_000), filename: z.string().max(300).optional() }),
+      req.body,
+    );
+    return detectImportFile(body.content, body.filename);
+  });
+
   app.post("/api/import/preview", async (req) => {
     requireUser(req);
     return previewImport(db, parse(ImportBody, req.body));

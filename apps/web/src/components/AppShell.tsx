@@ -1,4 +1,4 @@
-import type { CurrentUser } from "@muny/shared";
+import { type CurrentUser, SUPPORT_URL } from "@muny/shared";
 import { Link, Outlet } from "@tanstack/react-router";
 import {
   ArrowLeftRight,
@@ -12,6 +12,7 @@ import {
   CreditCard,
   FolderOpen,
   HandCoins,
+  Heart,
   House,
   Import,
   Landmark,
@@ -32,6 +33,7 @@ import { useNotifications } from "../lib/queries.js";
 import { ThemeProvider } from "../lib/theme.js";
 import { DemoBanner } from "./DemoNotice.js";
 import { ThemeTryBar } from "./ThemeSettings.js";
+import { UpdateNotice } from "./UpdateNotice.js";
 import { cx } from "./ui.js";
 
 /** The menu, in groups. Icons: Lucide (ISC license), drawn at one size and weight. */
@@ -228,6 +230,15 @@ function UserBox({ user, onNavigate }: { user: CurrentUser; onNavigate?: () => v
           </>
         )}
       </p>
+      <a
+        href={SUPPORT_URL}
+        target="_blank"
+        rel="noreferrer"
+        title="Muny is free and open source. A donation helps keep it going."
+        className="mt-1 inline-flex items-center gap-1.5 px-2 text-[11px] text-slate-400 hover:text-pink-600 dark:text-slate-500 dark:hover:text-pink-400"
+      >
+        <Heart aria-hidden="true" className="size-3" /> Support development
+      </a>
     </div>
   );
 }
@@ -313,6 +324,7 @@ function Shell({ user }: { user: CurrentUser }) {
             You have view-only access to this household.
           </p>
         )}
+        <UpdateNotice />
         <DemoBanner />
         <Outlet />
       </main>

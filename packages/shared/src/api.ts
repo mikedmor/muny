@@ -65,3 +65,6 @@ export interface InviteCreated {
 export type InviteStatus =
   | { valid: true; role: "member" | "viewer"; expiresAt: number }
   | { valid: false };
+
+/** Where people can support Muny's development (shown in the app and the README). */
+export const SUPPORT_URL = "https://www.paypal.com/paypalme/mikedmor";

@@ -16,7 +16,9 @@ export function useMeta() {
   return useQuery({
     queryKey: ["meta"],
     queryFn: () => api.get<MetaResponse>("/api/meta"),
-    staleTime: Number.POSITIVE_INFINITY,
+    // Re-checked now and then, so an update shows up in an open tab.
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: true,
   });
 }
 
