@@ -8,9 +8,13 @@ A rule finds transactions and does something to them: sets the category, renames
 - **After changing a category** (on Transactions, or a category page, including a pending charge there): a note appears at the bottom right, "Changed category to …". Click **+ Rule** to make a rule for transactions like it, already filled in.
 - **Create a rule** works in two steps. First, how it finds transactions: by name (bank description or merchant name: contains, is, starts with, ends with), amount, money in or out, and account. The matching transactions are listed as you go. **Continue**, then choose what it does, name it, and whether to change the transactions it already matches (optionally including ones you changed by hand).
 
-All rules, their order and the full editor (several names, "any of") are in **Settings → Rules**.
+All rules, their order and the full editor (several names, "any of") are in **Settings → Rules**. Each rule shows what it looks for (**When**), what it does (**Then**) and how many transactions it matches. Search by name, merchant or category, or narrow the list to rules that file transactions, rules for recurring charges, rules **Made by Muny** (the ones it creates for each confirmed recurring series), or rules that are off. Click a rule's name to edit it, use the switch to turn it on or off, and the arrows to change its order.
 
-While you make or edit a rule, Muny warns when you already have the same rule, or another rule matches the same transactions (saying how many, and whether it files them differently), with **Edit this rule instead** to change the one you have. When rules disagree, the one higher in the list wins. **Settings → Rules** also marks rules that clash: the same rule twice, or two rules that file the same transactions differently, with how many transactions they share and which one wins.
+While you make or edit a rule, Muny warns when you already have the same rule, or another rule matches the same transactions (saying how many, and whether it files them differently), with **Edit this rule instead** to change the one you have. When rules disagree, the one higher in the list wins. **Settings → Rules** lists anything to tidy up at the top:
+
+- **Two rules that do one job.** Often your own rule for a merchant and the rule Muny made for its recurring series. **Combine** turns them into one: your rule keeps its name and place, and gets both rules' actions, with the conditions that keep every transaction filed exactly as before. Muny only offers this when nothing would change, and checks again when you click. **Combine all** does every pair.
+- **The same rule twice:** **Delete the lower one**.
+- **Rules that clash:** two rules file the same transactions differently. It says how many they share and which one wins (the higher one), with buttons to edit either.
 
 ## Documents
 

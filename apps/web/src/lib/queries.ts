@@ -333,6 +333,14 @@ export const useMoveRule = () =>
 export const useDeleteRule = () =>
   useInvalidatingMutation((id: string) => api.delete(`/api/rules/${id}`), ruleKeys);
 
+/** Combine two rules the review found can be one, or every such pair. */
+export const useCombineRules = () =>
+  useInvalidatingMutation(
+    (body: { keepId: string; removeId: string } | { all: true }) =>
+      api.post<{ combined: number }>("/api/rules/combine", body),
+    ruleKeys,
+  );
+
 export const useApplyRule = () =>
   useInvalidatingMutation(
     ({ id, includeEdited }: { id?: string; includeEdited: boolean }) =>

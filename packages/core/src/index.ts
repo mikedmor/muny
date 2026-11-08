@@ -22,3 +22,4 @@ export * from "./invest/history.js";
 export * from "./payees/normalize.js";
 export * from "./recurring/detect.js";
 export * from "./rules/engine.js";
+export * from "./rules/review.js";

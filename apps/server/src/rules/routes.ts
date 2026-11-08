@@ -9,6 +9,7 @@ import { notFound, parse } from "../lib/http.js";
 import { DECLINED_RULE_SERIES, rescanRecurring } from "../recurring/service.js";
 import {
   applyPlans,
+  combineRules,
   createRule,
   DefinitionSchema,
   evaluateRules,
@@ -17,12 +18,17 @@ import {
   previewOf,
   ruleConflicts,
   ruleOverlaps,
+  ruleReview,
   rulesForTransaction,
   storeDefinition,
   validateReferences,
 } from "./service.js";
 
 const IdParams = z.object({ id: z.string().min(1).max(64) });
+const CombineBody = z.union([
+  z.object({ keepId: z.string().min(1).max(64), removeId: z.string().min(1).max(64) }),
+  z.object({ all: z.literal(true) }),
+]);
 const name = z.string().trim().min(1, "Name is required").max(100);
 
 const CreateBody = DefinitionSchema.extend({ name, enabled: z.boolean().optional() });
@@ -93,6 +99,26 @@ export function registerRuleRoutes(app: FastifyInstance, db: MunyDb) {
   app.get("/api/rules/conflicts", async (req) => {
     requireUser(req);
     return ruleConflicts(db);
+  });
+
+  /** Match counts, automatic rules, rules that can be combined, and clashes. */
+  app.get("/api/rules/review", async (req) => {
+    requireUser(req);
+    return ruleReview(db);
+  });
+
+  /** Combine a pair of rules the review offered (or every such pair). */
+  app.post("/api/rules/combine", async (req) => {
+    const user = requireUser(req);
+    const body = parse(CombineBody, req.body);
+    const done = db.transaction((tx) => {
+      const out = combineRules(tx, "keepId" in body ? body : undefined);
+      if (out.length) rescanRecurring(tx);
+      return out;
+    });
+    if ("keepId" in body && !done.length) throw notFound("Those rules can no longer be combined");
+    for (const c of done) log(user.id, "rule.combine", c.keepId, { removed: c.removeId });
+    return { combined: done.length };
   });
 
   app.post("/api/rules", async (req, reply) => {

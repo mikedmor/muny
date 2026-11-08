@@ -139,3 +139,29 @@ export interface RuleConflict {
   /** What the first would do differently (the same disagreement, seen from the second). */
   firstConflicts: string[];
 }
+
+/**
+ * Two rules that can be one: `removeId` goes, and `keepId` (keeping its name
+ * and place in the list) takes on the conditions of `conditionsFrom` and the
+ * actions of both. Only offered when every transaction comes out as before.
+ */
+export interface RuleCombine {
+  keepId: string;
+  removeId: string;
+  conditionsFrom: string;
+  actions: RuleAction[];
+  /** Transactions both rules match. */
+  sharedCount: number;
+}
+
+/** Everything the Rules page needs to show how the rules are doing. */
+export interface RuleReview {
+  /** Transactions each rule matches, by rule id. */
+  counts: Record<string, number>;
+  /** Rules Muny made by itself (for a recurring series). */
+  automaticIds: string[];
+  /** Pairs that can be combined into one rule. */
+  combine: RuleCombine[];
+  /** Duplicates, and rules that file the same transactions differently. */
+  conflicts: RuleConflict[];
+}

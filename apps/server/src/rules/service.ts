@@ -1,12 +1,20 @@
-import { applyRules, type RuleFacts, type RuleTarget, ruleMatches } from "@muny/core";
+import {
+  applyRules,
+  findCombinable,
+  type RuleFacts,
+  type RuleTarget,
+  ruleMatches,
+} from "@muny/core";
 import { type MunyDb, newId, schema } from "@muny/db";
 import {
   AMOUNT_OPS,
   type Rule,
+  type RuleCombine,
   type RuleConflict,
   type RuleDefinition,
   type RuleOverlap,
   type RulePreview,
+  type RuleReview,
   type RuleWithCount,
   TEXT_OPS,
 } from "@muny/shared";
@@ -433,4 +441,54 @@ export function ruleConflicts(db: Db): RuleConflict[] {
         });
     }
   return out;
+}
+
+/**
+ * The Rules page in one go: how many transactions each rule matches, which
+ * ones Muny made itself, pairs that can be combined, and clashes.
+ */
+export function ruleReview(db: Db): RuleReview {
+  const rules = listRules(db);
+  const facts = loadCandidates(db).map((c) => c.facts);
+  const counts: Record<string, number> = {};
+  for (const r of rules) counts[r.id] = facts.filter((f) => ruleMatches(r, f)).length;
+  const automaticIds = db
+    .select({ id: schema.auditLog.entityId })
+    .from(schema.auditLog)
+    .where(eq(schema.auditLog.action, "rule.auto_create"))
+    .all()
+    .map((x) => x.id as string)
+    .filter((x) => x in counts);
+  return {
+    counts,
+    automaticIds,
+    combine: findCombinable(rules, facts),
+    conflicts: ruleConflicts(db),
+  };
+}
+
+/**
+ * Combine two rules the review found can be one (all pairs when none is
+ * named). Checked again here, against the transactions as they are now.
+ * Returns what was combined.
+ */
+export function combineRules(tx: Tx, only?: { keepId: string; removeId: string }): RuleCombine[] {
+  const done: RuleCombine[] = [];
+  const facts = loadCandidates(tx).map((c) => c.facts);
+  // One pair at a time, checked again after each: combining one changes the next.
+  for (let pass = 0; pass < 100; pass++) {
+    const c = findCombinable(listRules(tx), facts).find(
+      (x) => !only || (x.keepId === only.keepId && x.removeId === only.removeId),
+    );
+    if (!c) break;
+    const src = getRule(tx, c.conditionsFrom);
+    tx.update(schema.rules)
+      .set(storeDefinition({ match: src.match, conditions: src.conditions, actions: c.actions }))
+      .where(eq(schema.rules.id, c.keepId))
+      .run();
+    tx.delete(schema.rules).where(eq(schema.rules.id, c.removeId)).run();
+    done.push(c);
+    if (only) break;
+  }
+  return done;
 }
