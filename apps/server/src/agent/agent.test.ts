@@ -101,6 +101,56 @@ describe("tokens", () => {
     expect(none.statusCode).toBe(401);
   });
 
+  it("can be removed for good once they no longer work", async () => {
+    const { db, token, call, client } = await setup();
+    const t = await token(["read:summary"]);
+    await call(t.token, "get_financial_overview");
+    db.insert(schema.agentProposals)
+      .values({
+        id: "left-behind",
+        tokenId: t.id,
+        tokenName: "Test",
+        tool: "set_category",
+        input: {},
+        summary: "A suggestion",
+        changes: [],
+        warnings: [],
+      })
+      .run();
+    const url = `/api/agents/tokens/${t.id}/permanent`;
+    const ids = async () =>
+      (await client.get("/api/agents/tokens")).json<{ id: string }[]>().map((x) => x.id);
+
+    // Still working: revoke it first.
+    expect((await client.delete(url)).statusCode).toBe(409);
+    expect(await ids()).toContain(t.id);
+
+    await client.delete(`/api/agents/tokens/${t.id}`);
+    expect((await client.delete(url)).statusCode).toBe(200);
+    expect(await ids()).not.toContain(t.id);
+    expect((await call(t.token, "get_financial_overview")).statusCode).toBe(401);
+    expect((await client.delete(url)).statusCode).toBe(404);
+
+    // What it did is still on record, and its suggestion is still in the inbox.
+    const a = schema.auditLog;
+    const log = db.select().from(a).all();
+    expect(log.some((r) => r.actorType === "agent" && r.actorId === t.id)).toBe(true);
+    expect(log.some((r) => r.action === "agent.token_remove" && r.entityId === t.id)).toBe(true);
+    expect(db.select().from(schema.agentProposals).all()[0]).toMatchObject({
+      id: "left-behind",
+      tokenId: null,
+      tokenName: "Test",
+      status: "pending",
+    });
+
+    // An expired token doesn't need revoking.
+    const old = await token(["read:summary"], { expiresInDays: 1 });
+    db.update(schema.apiTokens)
+      .set({ expiresAt: new Date(Date.now() - 1000) })
+      .run();
+    expect((await client.delete(`/api/agents/tokens/${old.id}/permanent`)).statusCode).toBe(200);
+  });
+
   it("can't reach the web app, and a session can't reach the agent routes", async () => {
     const { app, token, client } = await setup();
     const t = await token(READ_ALL);

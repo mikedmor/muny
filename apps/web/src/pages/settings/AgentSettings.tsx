@@ -55,6 +55,10 @@ function TokenRow({ token }: { token: ApiToken }) {
     mutationFn: () => api.delete(`/api/agents/tokens/${token.id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: key }),
   });
+  const remove = useMutation({
+    mutationFn: () => api.delete(`/api/agents/tokens/${token.id}/permanent`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: key }),
+  });
   const expired = token.expiresAt !== null && token.expiresAt <= Date.now();
   const dead = !!token.revokedAt || expired;
   return (
@@ -101,8 +105,30 @@ function TokenRow({ token }: { token: ApiToken }) {
               Revoke
             </Button>
           )}
+          {dead && (
+            <Button
+              variant="secondary"
+              className="px-2 py-1 text-xs"
+              disabled={remove.isPending}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    `Remove "${token.name}" for good? It leaves this list and can't be brought back. Its past activity stays in Muny's audit log.`,
+                  )
+                )
+                  remove.mutate();
+              }}
+            >
+              Remove
+            </Button>
+          )}
         </div>
       </div>
+      {remove.isError && (
+        <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+          Couldn't remove this token. Try again.
+        </p>
+      )}
       {open && (
         <div className="mt-2">
           <Activity id={token.id} />

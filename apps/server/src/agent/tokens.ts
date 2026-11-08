@@ -13,7 +13,7 @@ import { z } from "zod";
 import { requireOwner } from "../auth/plugin.js";
 import { RateLimiter } from "../auth/rate-limit.js";
 import { audit } from "../lib/audit.js";
-import { HttpError, notFound, parse } from "../lib/http.js";
+import { conflict, HttpError, notFound, parse } from "../lib/http.js";
 
 /**
  * Bearer tokens for assistants and scripts. They only work on the agent surfaces
@@ -144,6 +144,23 @@ export function registerTokenRoutes(app: FastifyInstance, db: MunyDb) {
       .get();
     if (!done) throw notFound("Token not found");
     log(user.id, "agent.token_revoke", id);
+    return { ok: true };
+  });
+
+  /**
+   * Remove a token that no longer works from the list for good. A live one has
+   * to be revoked first. What it did stays in the audit log, and suggestions it
+   * left in the inbox stay there under its name.
+   */
+  app.delete("/api/agents/tokens/:id/permanent", async (req) => {
+    const user = requireOwner(req);
+    const { id } = parse(IdParams, req.params);
+    const row = db.select().from(t).where(eq(t.id, id)).get();
+    if (!row) throw notFound("Token not found");
+    if (!row.revokedAt && !(row.expiresAt && row.expiresAt.getTime() <= Date.now()))
+      throw conflict("Revoke this token before removing it");
+    db.delete(t).where(eq(t.id, id)).run();
+    log(user.id, "agent.token_remove", id, { name: row.name });
     return { ok: true };
   });
 

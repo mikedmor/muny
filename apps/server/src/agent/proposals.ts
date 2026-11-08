@@ -556,7 +556,10 @@ function file(
     .from(p)
     .where(
       and(
-        source.tokenId ? eq(p.tokenId, source.tokenId) : isNull(p.tokenId),
+        // No token means Muny's own AI, or a token since removed: the name tells them apart.
+        source.tokenId
+          ? eq(p.tokenId, source.tokenId)
+          : and(isNull(p.tokenId), eq(p.tokenName, source.tokenName)),
         eq(p.status, "pending"),
       ),
     )

@@ -42,7 +42,7 @@ Only the household's owner can do this.
 
 **Use an HTTPS address.** MCP doesn't work reliably over plain HTTP, and a token sent that way can be read by others on the same network. Tailscale's HTTPS address is the easiest way to get one (see [Secure access](access.md)). The **Agents** page warns you when you've opened Muny without SSL, and the command it gives you uses whichever address you opened it from, so open Muny at your HTTPS address first. Don't expose Muny to the public internet for this.
 
-To cut off a token, click **Revoke**. It stops working straight away.
+To cut off a token, click **Revoke**. It stops working straight away. A revoked or expired token stays listed so you can still see its activity; click **Remove** to take it off the list for good. Its past activity stays in Muny's audit log, and anything it suggested stays in your inbox under its name.
 
 ## Approving what an assistant suggests
 

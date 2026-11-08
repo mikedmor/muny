@@ -4,6 +4,10 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+### Added
+
+- **Remove old agent tokens.** A revoked or expired token can now be taken off the Agents page for good. Its past activity stays in the audit log.
+
 ## [1.1.0] - 2026-11-08
 
 Recurring charges and rules work together: a paycheck or bill stays with its series when the bank renames it, and the Rules page shows what needs tidying and fixes it in one click.
