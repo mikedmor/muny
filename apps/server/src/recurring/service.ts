@@ -428,32 +428,45 @@ function ensureSeriesRules(tx: Tx, rows: Row[], today: string): number {
     if (!latest || own.length < 2) continue;
     const words = steadyDescription(latest.rawDescription);
     if (!words) continue;
-    const conditions: RuleDefinition["conditions"] = [
+    const base: RuleDefinition["conditions"] = [
       { field: "description", op: "contains", value: words },
       { field: "direction", value: e.direction === "out" ? "out" : "in" },
       { field: "account", value: latest.accountId },
     ];
-    const rule = { match: "all" as const, conditions };
-    const matched = rows.filter((x) =>
-      ruleMatches(rule, {
-        description: x.rawDescription,
-        payee: x.payee,
-        amountCents: x.amountCents,
-        accountId: x.accountId,
-      }),
-    );
-    const mine = matched.filter((x) => x.recurringSeriesId === e.id).length;
-    // Charges of another series still running mean the rule is too broad; an
-    // ended series by the same words is an earlier run of this one.
-    const other = (x: Row) => !!x.recurringSeriesId && x.recurringSeriesId !== e.id;
-    const others = matched.filter(
-      (x) => other(x) && running.has(x.recurringSeriesId as string),
-    ).length;
-    const ended = matched.filter(
-      (x) => other(x) && !running.has(x.recurringSeriesId as string),
-    ).length;
-    // Specific enough: covers most of the series, and nothing of another live one.
-    if (others > 0 || mine < 2 || mine + ended < matched.length * 0.6) continue;
+    // Two series can share a description (two loans with one servicer): then
+    // the rule also names a price range around this one's amount.
+    const anchor = Math.abs(latest.amountCents);
+    const ranged: RuleDefinition["conditions"] = [
+      ...base,
+      { field: "amount", op: "gte", value: Math.floor((anchor * 4) / 5) },
+      { field: "amount", op: "lte", value: Math.ceil((anchor * 5) / 4) },
+    ];
+    const conditions = [base, ranged].find((conds) => {
+      const matched = rows.filter((x) =>
+        ruleMatches(
+          { match: "all", conditions: conds },
+          {
+            description: x.rawDescription,
+            payee: x.payee,
+            amountCents: x.amountCents,
+            accountId: x.accountId,
+          },
+        ),
+      );
+      const mine = matched.filter((x) => x.recurringSeriesId === e.id).length;
+      // Charges of another series still running mean the rule is too broad; an
+      // ended series by the same words is an earlier run of this one.
+      const other = (x: Row) => !!x.recurringSeriesId && x.recurringSeriesId !== e.id;
+      const others = matched.filter(
+        (x) => other(x) && running.has(x.recurringSeriesId as string),
+      ).length;
+      const ended = matched.filter(
+        (x) => other(x) && !running.has(x.recurringSeriesId as string),
+      ).length;
+      // Specific enough: covers some of the series, and nothing of another live one.
+      return others === 0 && mine >= 2 && mine + ended >= matched.length * 0.6;
+    });
+    if (!conditions) continue;
     priority += 10;
     const id = newId();
     tx.insert(schema.rules)

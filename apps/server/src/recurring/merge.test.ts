@@ -132,3 +132,47 @@ describe("the steady part of a bank description", () => {
     expect(steadyDescription("12345")).toBeNull();
   });
 });
+
+describe("two series with one bank description", () => {
+  it("each get a rule, told apart by amount", async () => {
+    const ctx = await makeSignedInApp();
+    const { db, client } = ctx;
+    const scan = () => db.transaction((tx) => rescanRecurring(tx, TODAY));
+    const acct = (
+      await client.post("/api/accounts", { name: "Main", type: "checking", balanceCents: 0 })
+    ).json<Account>();
+    for (const m of ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10"]) {
+      for (const [day, cents] of [
+        ["16", -7_539],
+        ["29", -22_461],
+      ] as const)
+        await client.post("/api/transactions", {
+          accountId: acct.id,
+          postedDate: `${m}-${day}`,
+          amountCents: cents,
+          description: "SAMPLE LOAN SERVICER PMT 0001",
+        });
+    }
+    scan();
+    const loans = listSeries(db, TODAY);
+    expect(loans).toHaveLength(2);
+    for (const l of loans) await client.patch(`/api/recurring/${l.id}`, { status: "confirmed" });
+    scan();
+    type R = {
+      conditions: { field: string; op?: string; value: unknown }[];
+      actions: { type: string; seriesId?: string }[];
+    };
+    const rules = (await client.get("/api/rules")).json<R[]>();
+    for (const l of loans) {
+      const r = rules.find((x) => x.actions.some((a) => a.seriesId === l.id));
+      expect(r?.conditions.filter((c) => c.field === "amount")).toHaveLength(2);
+    }
+    // Rescans keep each payment where it was.
+    scan();
+    expect(
+      listSeries(db, TODAY)
+        .map((x) => x.expectedAmountCents)
+        .sort(),
+    ).toEqual([-22_461, -7_539]);
+  });
+});
