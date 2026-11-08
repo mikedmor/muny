@@ -159,6 +159,7 @@ describe("two series with one bank description", () => {
     for (const l of loans) await client.patch(`/api/recurring/${l.id}`, { status: "confirmed" });
     scan();
     type R = {
+      name: string;
       conditions: { field: string; op?: string; value: unknown }[];
       actions: { type: string; seriesId?: string }[];
     };
@@ -167,6 +168,11 @@ describe("two series with one bank description", () => {
       const r = rules.find((x) => x.actions.some((a) => a.seriesId === l.id));
       expect(r?.conditions.filter((c) => c.field === "amount")).toHaveLength(2);
     }
+    // Named so the two can be told apart.
+    expect(rules.map((r) => r.name).sort()).toEqual([
+      "Sample Loan Servicer · $224.61 (recurring)",
+      "Sample Loan Servicer · $75.39 (recurring)",
+    ]);
     // Rescans keep each payment where it was.
     scan();
     expect(

@@ -17,6 +17,7 @@ import type {
   RuleDefinition,
   UpcomingCharge,
 } from "@muny/shared";
+import { formatMoney } from "@muny/shared";
 import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { audit } from "../lib/audit.js";
 import { localToday } from "../lib/dates.js";
@@ -420,6 +421,48 @@ function ensureSeriesRules(tx: Tx, rows: Row[], today: string): number {
       .filter((x) => dayNum(today) - dayNum(x.lastDate) <= grace(x.interval as RecurringInterval))
       .map((x) => x.id),
   );
+  // Series can share a name (a paycheck and a bonus deposit, two loans): then
+  // the rule's name says which, by account or else by amount.
+  const accountName = new Map(
+    tx
+      .select({ id: schema.accounts.id, name: schema.accounts.name })
+      .from(schema.accounts)
+      .all()
+      .map((a) => [a.id, a.name]),
+  );
+  const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  const ruleName = (e: (typeof all)[number]) => {
+    const twins = all.filter(
+      (x) => x.id !== e.id && x.status !== "ignored" && same(x.name, e.name),
+    );
+    const acct = e.accountId ? accountName.get(e.accountId) : undefined;
+    const label = !twins.length
+      ? e.name
+      : acct && twins.every((x) => x.accountId !== e.accountId)
+        ? `${e.name} · ${acct}`
+        : `${e.name} · ${formatMoney(Math.abs(e.expectedAmountCents))}`;
+    return `${label.slice(0, 88)} (recurring)`;
+  };
+  // Muny's own rules still under their first name follow along.
+  const automatic = new Set(
+    tx
+      .select({ id: schema.auditLog.entityId })
+      .from(schema.auditLog)
+      .where(eq(schema.auditLog.action, "rule.auto_create"))
+      .all()
+      .map((x) => x.id),
+  );
+  const byId = new Map(all.map((x) => [x.id, x]));
+  for (const r of tx.select().from(schema.rules).all()) {
+    const actions = r.actions as RuleAction[];
+    const only = actions.length === 1 ? actions[0] : undefined;
+    if (!automatic.has(r.id) || only?.type !== "setRecurring") continue;
+    const e = byId.get(only.seriesId);
+    if (!e || r.name !== `${e.name} (recurring)`.slice(0, 100)) continue;
+    const name = ruleName(e);
+    if (name !== r.name)
+      tx.update(schema.rules).set({ name }).where(eq(schema.rules.id, r.id)).run();
+  }
   let made = 0;
   for (const e of all) {
     if (e.status !== "confirmed" || placed.has(e.id) || declined.has(`auto:${e.id}`)) continue;
@@ -472,7 +515,7 @@ function ensureSeriesRules(tx: Tx, rows: Row[], today: string): number {
     tx.insert(schema.rules)
       .values({
         id,
-        name: `${e.name} (recurring)`.slice(0, 100),
+        name: ruleName(e),
         enabled: true,
         priority,
         conditions: { match: "all", items: conditions },

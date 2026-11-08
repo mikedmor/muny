@@ -43,8 +43,15 @@ function useDescribe() {
   const categories = useCategories();
   const accounts = useAccounts();
   const recurring = useRecurring();
-  const seriesName = (id: string) =>
-    recurring.data?.find((x) => x.id === id)?.name ?? "a removed recurring charge";
+  const seriesName = (id: string) => {
+    const s = recurring.data?.find((x) => x.id === id);
+    if (!s) return "a removed recurring charge";
+    // Two series by one name (a paycheck and a small deposit): say which by amount.
+    const twin = recurring.data?.some(
+      (x) => x.id !== id && x.name.trim().toLowerCase() === s.name.trim().toLowerCase(),
+    );
+    return twin ? `${s.name}, ${formatMoney(Math.abs(s.expectedAmountCents))}` : s.name;
+  };
   const catName = (id: string) =>
     categories.data?.flatMap((g) => g.categories).find((c) => c.id === id)?.name ?? "?";
   const accName = (id: string) => accounts.data?.find((a) => a.id === id)?.name ?? "?";
