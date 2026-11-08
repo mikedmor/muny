@@ -35,6 +35,11 @@ const EnvSchema = z.object({
     .min(0)
     .max(24 * 365)
     .default(24),
+  /** Start a fresh install with a made-up household to try Muny ("true" or "1"). */
+  MUNY_DEMO: z
+    .enum(["true", "false", "1", "0", ""])
+    .optional()
+    .transform((v) => v === "true" || v === "1"),
   /** Hours between automatic bank syncs; 0 turns scheduled sync off. */
   MUNY_SYNC_INTERVAL_HOURS: z.coerce
     .number()
@@ -91,6 +96,8 @@ export interface Config {
   backupKeep: number;
   backupIntervalHours: number;
   syncIntervalHours: number;
+  /** MUNY_DEMO: fill a fresh install with a made-up household. */
+  demo: boolean;
   plaid: PlaidConfig | null;
   teller: TellerConfig | null;
 }
@@ -117,6 +124,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     publicUrl: e.MUNY_PUBLIC_URL,
     backupDir: e.MUNY_BACKUP_DIR ? resolve(e.MUNY_BACKUP_DIR) : resolve(dataDir, "backups"),
     backupKeep: e.MUNY_BACKUP_KEEP,
+    demo: e.MUNY_DEMO,
     backupIntervalHours: e.MUNY_BACKUP_INTERVAL_HOURS,
     syncIntervalHours: e.MUNY_SYNC_INTERVAL_HOURS,
     plaid:

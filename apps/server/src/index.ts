@@ -5,6 +5,7 @@ import { buildApp } from "./app.js";
 import { anchorAllCards } from "./cards/service.js";
 import { loadConfig } from "./config.js";
 import { startBackupScheduler } from "./data/backups.js";
+import { maybeSeedDemo } from "./demo/seed.js";
 import { repairRawAchPayees, repairStubPayees } from "./ledger/payees.js";
 import { seedDefaultCategories } from "./ledger/seed.js";
 import { pairLoanPayments, pairPayPalFunding } from "./ledger/transfers.js";
@@ -20,6 +21,7 @@ async function main() {
   const db = openDb({ filename: config.dbFile, migrationsFolder: config.migrationsDir });
   seedDefaultCategories(db);
   ensureAlertRules(db);
+  maybeSeedDemo(db, config.demo);
   repairRawAchPayees(db);
   repairStubPayees(db);
   // Cheap (well under a second for years of history); picks up detection improvements after upgrades.

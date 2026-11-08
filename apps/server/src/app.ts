@@ -22,6 +22,7 @@ import { registerCryptoRoutes } from "./crypto/routes.js";
 import { registerDashboardRoutes } from "./dashboard/routes.js";
 import { registerBackupRoutes } from "./data/backups.js";
 import { registerExportRoutes } from "./data/export.js";
+import { registerDemoRoutes } from "./demo/routes.js";
 import { registerDocumentRoutes } from "./documents/routes.js";
 import { registerImportRoutes } from "./import/routes.js";
 import { registerInvestRoutes } from "./invest/routes.js";
@@ -134,7 +135,8 @@ export async function buildApp({
   });
 
   registerAuth(app, db);
-  registerAuthRoutes(app, db);
+  registerAuthRoutes(app, db, config.demo);
+  registerDemoRoutes(app, db);
   registerHouseholdRoutes(app, db);
   registerAccountRoutes(app, db);
   registerCategoryRoutes(app, db);

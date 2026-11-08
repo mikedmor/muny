@@ -1,5 +1,6 @@
+import { StartClean } from "../../components/DemoNotice.js";
 import { Alert, Button, Card } from "../../components/ui.js";
-import { useMeta } from "../../lib/auth.js";
+import { useAuthStatus, useMeta } from "../../lib/auth.js";
 import { useBackups, useCreateBackup } from "../../lib/queries.js";
 
 function fmtBytes(n: number) {
@@ -16,9 +17,11 @@ export function DataSettings() {
   const create = useCreateBackup();
   const meta = useMeta();
   const b = backups.data;
+  const owner = useAuthStatus().data?.user?.role === "owner";
 
   return (
     <section className="space-y-6">
+      <StartClean owner={owner} />
       <div>
         <h2 className="text-lg font-semibold">Export</h2>
         <p className="mb-3 text-sm text-slate-500">Your data is yours. Take it anywhere.</p>

@@ -30,6 +30,7 @@ import { useState } from "react";
 import { useLogout, useMeta } from "../lib/auth.js";
 import { useNotifications } from "../lib/queries.js";
 import { ThemeProvider } from "../lib/theme.js";
+import { DemoBanner } from "./DemoNotice.js";
 import { ThemeTryBar } from "./ThemeSettings.js";
 import { cx } from "./ui.js";
 
@@ -312,6 +313,7 @@ function Shell({ user }: { user: CurrentUser }) {
             You have view-only access to this household.
           </p>
         )}
+        <DemoBanner />
         <Outlet />
       </main>
     </div>

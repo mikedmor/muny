@@ -3,6 +3,7 @@ import type { AuthStatusResponse } from "@muny/shared";
 import { count, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { maybeSeedDemo } from "../demo/seed.js";
 import { seedDefaultCategories } from "../ledger/seed.js";
 import { audit } from "../lib/audit.js";
 import { conflict, HttpError, parse, unauthorized } from "../lib/http.js";
@@ -28,7 +29,7 @@ const SetupBody = z.object({
 });
 const LoginBody = z.object({ email, password: z.string().min(1).max(256) });
 
-export function registerAuthRoutes(app: FastifyInstance, db: MunyDb) {
+export function registerAuthRoutes(app: FastifyInstance, db: MunyDb, demo = false) {
   // 10 attempts per 15 minutes per IP and per email.
   const limiter = new RateLimiter(10, 15 * 60 * 1000);
 
@@ -60,6 +61,7 @@ export function registerAuthRoutes(app: FastifyInstance, db: MunyDb) {
     });
     if (!created) throw conflict("Muny is already set up. Sign in instead.");
     seedDefaultCategories(db);
+    if (demo) maybeSeedDemo(db, true);
 
     audit(db, {
       actorType: "user",
