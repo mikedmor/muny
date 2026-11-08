@@ -152,6 +152,10 @@ export interface RuleCombine {
   actions: RuleAction[];
   /** Transactions both rules match. */
   sharedCount: number;
+  /** Charges no rule placed that join a series on their own account (earlier runs of it). */
+  joins: number;
+  /** One-off charges far from a series' usual amount (a bonus) that leave it. */
+  leaves: number;
 }
 
 /** Everything the Rules page needs to show how the rules are doing. */

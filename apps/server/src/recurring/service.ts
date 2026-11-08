@@ -7,6 +7,7 @@ import {
   type RecurringInput,
   type RecurringInterval,
   ruleMatches,
+  seriesPicker,
 } from "@muny/core";
 import { type MunyDb, newId, schema } from "@muny/db";
 import type {
@@ -549,18 +550,24 @@ export function forgetSeriesInRules(db: Db, seriesId: string) {
 /**
  * "Count as recurring" rules: which transactions you've said belong to which
  * series. These win over every guess from merchant names, on every scan. The
- * first matching rule (by priority) decides; rules for ignored or missing
- * series are skipped.
+ * first matching rule (by priority) decides; a rule naming several series (a
+ * paycheck split across accounts) puts each transaction in the one it fits.
+ * Rules for ignored or missing series are skipped.
  */
 function ruleSeriesLinks(tx: Tx, rows: Row[]): Map<string, string> {
-  const live = new Set(
-    tx
-      .select({ id: schema.recurringSeries.id, status: schema.recurringSeries.status })
-      .from(schema.recurringSeries)
-      .all()
-      .filter((x) => x.status !== "ignored")
-      .map((x) => x.id),
+  const series = tx
+    .select()
+    .from(schema.recurringSeries)
+    .all()
+    .filter((x) => x.status !== "ignored");
+  const pick = seriesPicker(
+    series.map((x) => ({
+      id: x.id,
+      accountId: x.accountId,
+      amountCents: Math.abs(x.expectedAmountCents),
+    })),
   );
+  const live = new Set(series.map((x) => x.id));
   const rules = tx
     .select()
     .from(schema.rules)
@@ -569,14 +576,19 @@ function ruleSeriesLinks(tx: Tx, rows: Row[]): Map<string, string> {
     .all()
     .map((r) => {
       const cond = r.conditions as { match?: "all" | "any"; items?: RuleDefinition["conditions"] };
-      const target = (r.actions as RuleAction[]).find((a) => a.type === "setRecurring");
       return {
         match: cond.match ?? "all",
         conditions: cond.items ?? [],
-        seriesId: target?.type === "setRecurring" ? target.seriesId : null,
+        seriesIds: [
+          ...new Set(
+            (r.actions as RuleAction[]).flatMap((a) =>
+              a.type === "setRecurring" && live.has(a.seriesId) ? [a.seriesId] : [],
+            ),
+          ),
+        ],
       };
     })
-    .filter((r): r is typeof r & { seriesId: string } => !!r.seriesId && live.has(r.seriesId));
+    .filter((r) => r.seriesIds.length > 0);
   const out = new Map<string, string>();
   if (!rules.length) return out;
   for (const r of rows) {
@@ -586,8 +598,14 @@ function ruleSeriesLinks(tx: Tx, rows: Row[]): Map<string, string> {
       amountCents: r.amountCents,
       accountId: r.accountId,
     };
-    const hit = rules.find((rule) => ruleMatches(rule, facts));
-    if (hit) out.set(r.id, hit.seriesId);
+    for (const rule of rules) {
+      if (!ruleMatches(rule, facts)) continue;
+      const sid = pick(rule.seriesIds, facts);
+      if (sid) {
+        out.set(r.id, sid);
+        break;
+      }
+    }
   }
   return out;
 }

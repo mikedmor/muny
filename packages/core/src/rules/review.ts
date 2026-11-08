@@ -1,5 +1,13 @@
 import type { RuleAction, RuleCombine, RuleDefinition } from "@muny/shared";
-import { applyRules, type RuleFacts, type RuleTarget, ruleMatches } from "./engine.js";
+import {
+  applyRules,
+  type RuleFacts,
+  type RuleTarget,
+  ruleMatches,
+  type SeriesFit,
+  type SeriesPick,
+  seriesPicker,
+} from "./engine.js";
 
 export interface ReviewRule extends RuleDefinition {
   id: string;
@@ -15,15 +23,17 @@ const BLANK: RuleTarget = {
   seriesId: null,
 };
 
-const outcome = (rules: ReviewRule[], f: RuleFacts) => {
-  const n = applyRules(rules, f, BLANK).next;
-  return JSON.stringify([
-    n.categoryId,
-    n.payeeName?.toLowerCase() ?? null,
-    n.hidden,
-    n.seriesId,
-    n.tags.map((t) => t.toLowerCase()).sort(),
-  ]);
+const outcome = (rules: ReviewRule[], f: RuleFacts, pick?: SeriesPick) => {
+  const n = applyRules(rules, f, BLANK, pick).next;
+  return {
+    filed: JSON.stringify([
+      n.categoryId,
+      n.payeeName?.toLowerCase() ?? null,
+      n.hidden,
+      n.tags.map((t) => t.toLowerCase()).sort(),
+    ]),
+    seriesId: n.seriesId,
+  };
 };
 
 /** Both rules' actions in one list; null when they'd set the same thing two ways. */
@@ -34,6 +44,9 @@ function unionActions(a: RuleAction[], b: RuleAction[]): RuleAction[] | null {
     if (x.type === "addTag") {
       if (!out.some((y) => y.type === "addTag" && y.name.toLowerCase() === x.name.toLowerCase()))
         out.push(x);
+    } else if (x.type === "setRecurring") {
+      // Several series are fine: each transaction goes to the one it fits.
+      if (!out.some((y) => y.type === "setRecurring" && y.seriesId === x.seriesId)) out.push(x);
     } else if (!same) out.push(x);
     else if (JSON.stringify(same) !== JSON.stringify(x)) return null;
   }
@@ -50,7 +63,21 @@ const automatic = (r: ReviewRule) => / \(recurring\)$/.test(r.name);
  * one rule (or where one simply repeats the other), checked against every
  * transaction so nothing would be filed differently afterwards.
  */
-export function findCombinable(rules: ReviewRule[], facts: RuleFacts[]): RuleCombine[] {
+export function findCombinable(
+  rules: ReviewRule[],
+  facts: RuleFacts[],
+  /** Recurring series, to place transactions as the scan does (and allow joins). */
+  series?: SeriesFit[],
+): RuleCombine[] {
+  const pick = series ? seriesPicker(series) : undefined;
+  const seriesById = new Map((series ?? []).map((x) => [x.id, x]));
+  const near = (f: RuleFacts, id: string) => {
+    const x = seriesById.get(id);
+    return !!x && Math.abs(Math.abs(f.amountCents) - x.amountCents) * 4 <= x.amountCents;
+  };
+  // A charge joining a series: on its account, within a quarter of its amount.
+  const joinsFit = (f: RuleFacts, id: string) =>
+    near(f, id) && seriesById.get(id)?.accountId === f.accountId;
   const live = rules.filter((r) => r.enabled && r.conditions.length > 0);
   const matched = live.map((r) => {
     const set = new Set<number>();
@@ -72,7 +99,7 @@ export function findCombinable(rules: ReviewRule[], facts: RuleFacts[]): RuleCom
       for (const x of ma) if (mb.has(x)) shared++;
       if (!shared) continue;
       const touched = [...new Set([...ma, ...mb])].map((k) => facts[k] as RuleFacts);
-      const before = touched.map((f) => outcome(live, f));
+      const before = touched.map((f) => outcome(live, f, pick));
       // Keep the person's own rule (name, place) when one of them is automatic.
       const keeps = automatic(a) && !automatic(b) ? [b, a] : [a, b];
       const [keep, drop] = keeps as [ReviewRule, ReviewRule];
@@ -91,13 +118,34 @@ export function findCombinable(rules: ReviewRule[], facts: RuleFacts[]): RuleCom
         const after = live
           .filter((r) => r.id !== drop.id)
           .map((r) => (r.id === keep.id ? merged : r));
-        if (touched.every((f, k) => outcome(after, f) === before[k])) {
+        // Filed the same, in the same series; or a charge no rule placed now
+        // joins a series it fits on its own account (an earlier run of it).
+        let joins = 0;
+        let leaves = 0;
+        const same = touched.every((f, k) => {
+          const [x, y] = [before[k], outcome(after, f, pick)];
+          if (!x || x.filed !== y.filed) return false;
+          if (x.seriesId === y.seriesId) return true;
+          if (x.seriesId === null && y.seriesId !== null && joinsFit(f, y.seriesId)) {
+            joins++;
+            return true;
+          }
+          // A one-off far from the series' usual amount (a bonus) leaves it.
+          if (x.seriesId !== null && y.seriesId === null && pick && !near(f, x.seriesId)) {
+            leaves++;
+            return true;
+          }
+          return false;
+        });
+        if (same) {
           out.push({
             keepId: keep.id,
             removeId: drop.id,
             conditionsFrom: src.id,
             actions,
             sharedCount: shared,
+            joins,
+            leaves,
           });
           removed.add(drop.id);
           kept.add(keep.id);

@@ -349,6 +349,12 @@ export function RuleEditor({ initial, onDone }: { initial: RuleDraft; onDone: ()
             </button>
           </div>
         ))}
+        {actions.filter((a) => a.type === "setRecurring").length > 1 && (
+          <p className="text-xs text-slate-500">
+            Each transaction goes to the recurring charge on its own account (the closest in amount
+            when several share an account), as with a paycheck split across accounts.
+          </p>
+        )}
         <button
           type="button"
           onClick={() => setActions((as) => [...as, blankAction("setCategory")])}

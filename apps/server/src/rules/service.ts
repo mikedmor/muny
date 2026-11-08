@@ -4,6 +4,9 @@ import {
   type RuleFacts,
   type RuleTarget,
   ruleMatches,
+  type SeriesFit,
+  type SeriesPick,
+  seriesPicker,
 } from "@muny/core";
 import { type MunyDb, newId, schema } from "@muny/db";
 import {
@@ -18,7 +21,7 @@ import {
   type RuleWithCount,
   TEXT_OPS,
 } from "@muny/shared";
-import { asc, eq, inArray, sql } from "drizzle-orm";
+import { asc, eq, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { upsertPayee, upsertTag } from "../ledger/transactions.js";
 import { badRequest, notFound } from "../lib/http.js";
@@ -206,6 +209,22 @@ function loadCandidates(db: Db, ids?: string[]): Candidate[] {
   }));
 }
 
+/** Recurring series as rules see them: where and how much. */
+function seriesFits(db: Db): SeriesFit[] {
+  const s = schema.recurringSeries;
+  return db
+    .select({ id: s.id, accountId: s.accountId, cents: s.expectedAmountCents })
+    .from(s)
+    .where(ne(s.status, "ignored"))
+    .all()
+    .map((x) => ({ id: x.id, accountId: x.accountId, amountCents: Math.abs(x.cents) }));
+}
+
+/** Picks which of a rule's recurring series a transaction belongs to (by account, then amount). */
+export function seriesPickerFor(db: Db): SeriesPick {
+  return seriesPicker(seriesFits(db));
+}
+
 export interface Plan {
   candidate: Candidate;
   next: RuleTarget;
@@ -231,8 +250,9 @@ export function evaluateRules(
   const plans: Plan[] = [];
   let skippedEdited = 0;
   if (rules.length === 0) return { matched, plans, skippedEdited };
+  const pick = seriesPickerFor(db);
   for (const c of loadCandidates(db, opts.ids)) {
-    const r = applyRules(rules, c.facts, c.current);
+    const r = applyRules(rules, c.facts, c.current, pick);
     if (r.matched === 0) continue;
     matched.push(c);
     if (c.userModified && !opts.includeEdited) {
@@ -462,7 +482,7 @@ export function ruleReview(db: Db): RuleReview {
   return {
     counts,
     automaticIds,
-    combine: findCombinable(rules, facts),
+    combine: findCombinable(rules, facts, seriesFits(db)),
     conflicts: ruleConflicts(db),
   };
 }
@@ -477,7 +497,7 @@ export function combineRules(tx: Tx, only?: { keepId: string; removeId: string }
   const facts = loadCandidates(tx).map((c) => c.facts);
   // One pair at a time, checked again after each: combining one changes the next.
   for (let pass = 0; pass < 100; pass++) {
-    const c = findCombinable(listRules(tx), facts).find(
+    const c = findCombinable(listRules(tx), facts, seriesFits(tx)).find(
       (x) => !only || (x.keepId === only.keepId && x.removeId === only.removeId),
     );
     if (!c) break;

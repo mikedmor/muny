@@ -226,6 +226,20 @@ function TransfersCard() {
   );
 }
 
+/** What combining changes, in words: nothing, or the few charges that move. */
+function combineEffects(c: RuleCombine) {
+  const n = (k: number, one: string, many: string) =>
+    `${k.toLocaleString()} ${k === 1 ? one : many}`;
+  const parts = [
+    c.joins > 0 &&
+      `${n(c.joins, "earlier charge that no rule placed joins", "earlier charges that no rule placed join")} its recurring series (same account, same amount)`,
+    c.leaves > 0 &&
+      `${n(c.leaves, "one-off far from the usual amount leaves", "one-offs far from the usual amount leave")} the series, keeping its category`,
+  ].filter(Boolean);
+  if (!parts.length) return "Nothing is filed differently.";
+  return `Categories stay the same; ${parts.join(", and ")}.`;
+}
+
 /** Rules that need a look: pairs that can be one rule, and rules that clash. */
 function NeedsAttention({
   list,
@@ -264,8 +278,7 @@ function NeedsAttention({
           <>
             {quote(name(c.keepId))} and {quote(name(c.removeId))} match the same{" "}
             {c.sharedCount.toLocaleString()} transaction{c.sharedCount === 1 ? "" : "s"} and do one
-            job between them. Combined, {quote(name(c.keepId))} does both, and nothing is filed
-            differently.
+            job between them. Combined, {quote(name(c.keepId))} does both. {combineEffects(c)}
           </>
         ),
         preview:
