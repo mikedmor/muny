@@ -8,7 +8,13 @@ const facts = {
   amountCents: -550,
   accountId: "a1",
 };
-const base = { categoryId: null, payeeName: "Blue Bottle", tags: [], hidden: false };
+const base = {
+  categoryId: null,
+  payeeName: "Blue Bottle",
+  tags: [],
+  hidden: false,
+  seriesId: null,
+};
 
 describe("rules engine", () => {
   it("matches text case-insensitively with all/any", () => {
@@ -77,6 +83,7 @@ describe("rules engine", () => {
       payeeName: "Blue Bottle Coffee",
       tags: ["treats"],
       hidden: true,
+      seriesId: null,
     });
   });
 
@@ -89,5 +96,24 @@ describe("rules engine", () => {
       },
     ];
     expect(applyRules(rules, facts, { ...base, categoryId: "coffee" }).changed).toBe(false);
+  });
+
+  it("puts matching transactions in a recurring series, the first rule winning", () => {
+    const rules: RuleDefinition[] = [
+      {
+        match: "all",
+        conditions: [{ field: "payee", op: "contains", value: "bottle" }],
+        actions: [{ type: "setRecurring", seriesId: "weekly" }],
+      },
+      {
+        match: "all",
+        conditions: [{ field: "payee", op: "contains", value: "blue" }],
+        actions: [{ type: "setRecurring", seriesId: "other" }],
+      },
+    ];
+    const r = applyRules(rules, facts, base);
+    expect(r.next.seriesId).toBe("weekly");
+    expect(r.changed).toBe(true);
+    expect(applyRules(rules, facts, { ...base, seriesId: "weekly" }).changed).toBe(false);
   });
 });

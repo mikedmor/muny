@@ -22,6 +22,7 @@ import {
   useCategories,
   useDeleteRule,
   useMoveRule,
+  useRecurring,
   useRules,
   useToggleRule,
   useTransferPreview,
@@ -36,6 +37,9 @@ const NEW_RULE: RuleDraft = {
 function useDescribe() {
   const categories = useCategories();
   const accounts = useAccounts();
+  const recurring = useRecurring();
+  const seriesName = (id: string) =>
+    recurring.data?.find((x) => x.id === id)?.name ?? "a removed recurring charge";
   const catName = (id: string) =>
     categories.data?.flatMap((g) => g.categories).find((c) => c.id === id)?.name ?? "?";
   const accName = (id: string) => accounts.data?.find((a) => a.id === id)?.name ?? "?";
@@ -63,6 +67,8 @@ function useDescribe() {
         return `tag #${a.name}`;
       case "hide":
         return "hide";
+      case "setRecurring":
+        return `recurring → ${seriesName(a.seriesId)}`;
     }
   };
   return (r: Rule) => ({

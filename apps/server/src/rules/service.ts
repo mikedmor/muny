@@ -38,6 +38,7 @@ export const ActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("setPayee"), name: z.string().trim().min(1).max(100) }),
   z.object({ type: z.literal("addTag"), name: z.string().trim().min(1).max(40) }),
   z.object({ type: z.literal("hide") }),
+  z.object({ type: z.literal("setRecurring"), seriesId: id }),
 ]);
 
 export const DefinitionSchema = z.object({
@@ -55,6 +56,15 @@ export function validateReferences(db: Db, def: RuleDefinition) {
       .where(eq(schema.categories.id, a.categoryId))
       .get();
     if (!c) throw badRequest("Unknown category in rule action", { categoryId: a.categoryId });
+  }
+  for (const a of def.actions) {
+    if (a.type !== "setRecurring") continue;
+    const s = db
+      .select({ id: schema.recurringSeries.id })
+      .from(schema.recurringSeries)
+      .where(eq(schema.recurringSeries.id, a.seriesId))
+      .get();
+    if (!s) throw badRequest("Unknown recurring charge in rule action", { seriesId: a.seriesId });
   }
   for (const c of def.conditions) {
     if (c.field !== "account") continue;
@@ -144,6 +154,7 @@ function loadCandidates(db: Db, ids?: string[]): Candidate[] {
       amountCents: t.amountCents,
       categoryId: t.categoryId,
       hidden: t.hidden,
+      recurringSeriesId: t.recurringSeriesId,
       userModified: t.userModified,
       postedDate: t.postedDate,
       payee: schema.payees.displayName,
@@ -178,6 +189,7 @@ function loadCandidates(db: Db, ids?: string[]): Candidate[] {
       payeeName: r.payee,
       tags: tagsBy.get(r.id) ?? [],
       hidden: r.hidden,
+      seriesId: r.recurringSeriesId,
     },
     userModified: r.userModified,
     hasSplits: Boolean(r.hasSplits),
@@ -216,7 +228,16 @@ export function evaluateRules(
     if (r.matched === 0) continue;
     matched.push(c);
     if (c.userModified && !opts.includeEdited) {
-      skippedEdited++;
+      // Hand edits are about category, name, tags and hiding; which series it
+      // belongs to still follows the rule.
+      const left =
+        r.next.categoryId !== c.current.categoryId ||
+        (r.next.payeeName ?? "").toLowerCase() !== (c.current.payeeName ?? "").toLowerCase() ||
+        r.next.hidden !== c.current.hidden ||
+        r.next.tags.length !== c.current.tags.length;
+      if (left) skippedEdited++;
+      if (r.next.seriesId !== c.current.seriesId)
+        plans.push({ candidate: c, next: { ...c.current, seriesId: r.next.seriesId } });
       continue;
     }
     const next = c.hasSplits ? { ...r.next, categoryId: c.current.categoryId } : r.next;
@@ -224,6 +245,7 @@ export function evaluateRules(
       next.categoryId !== c.current.categoryId ||
       (next.payeeName ?? "").toLowerCase() !== (c.current.payeeName ?? "").toLowerCase() ||
       next.hidden !== c.current.hidden ||
+      next.seriesId !== c.current.seriesId ||
       next.tags.length !== c.current.tags.length;
     if (changed) plans.push({ candidate: c, next });
   }
@@ -269,6 +291,8 @@ export function applyPlans(tx: Tx, plans: Plan[]): number {
     const update: Partial<typeof t.$inferInsert> = {};
     if (next.categoryId !== c.current.categoryId) update.categoryId = next.categoryId;
     if (next.hidden !== c.current.hidden) update.hidden = next.hidden;
+    // The recurring scan keeps it there from now on (see ruleSeriesLinks).
+    if (next.seriesId !== c.current.seriesId) update.recurringSeriesId = next.seriesId;
     if (
       next.payeeName &&
       next.payeeName.toLowerCase() !== (c.current.payeeName ?? "").toLowerCase()

@@ -2,7 +2,7 @@
 
 ## Rules
 
-A rule finds transactions and does something to them: sets the category, renames the merchant, adds a tag, or ignores them everywhere (left out of totals and reports). New transactions always run your rules.
+A rule finds transactions and does something to them: sets the category, renames the merchant, adds a tag, ignores them everywhere (left out of totals and reports), or counts them as one of your [recurring](recurring.md#keeping-charges-with-their-series-when-the-bank-renames-them) bills, subscriptions or paychecks. New transactions always run your rules.
 
 - **From a transaction:** open it. If no rule applies yet, click **Add rule** (+). If rules apply, **Rules** (→) lists them, with how many transactions each matches; click one to change it, or **Add rule** for another.
 - **After changing a category** (on Transactions, or a category page, including a pending charge there): a note appears at the bottom right, "Changed category to …". Click **+ Rule** to make a rule for transactions like it, already filled in.

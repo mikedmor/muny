@@ -16,7 +16,7 @@ import {
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useState } from "react";
 import { api } from "../lib/api.js";
-import { useAccounts, useApplyRule, useSaveRule } from "../lib/queries.js";
+import { useAccounts, useApplyRule, useRecurring, useSaveRule } from "../lib/queries.js";
 import { CategorySelect } from "./CategorySelect.js";
 import { Checkbox } from "./forms.js";
 import { Alert, Button, cx, Field } from "./ui.js";
@@ -38,6 +38,7 @@ const ACTION_LABELS: Record<RuleAction["type"], string> = {
   setPayee: "Rename merchant to",
   addTag: "Add tag",
   hide: "Hide transaction",
+  setRecurring: "Count as recurring",
 };
 
 function blankCondition(field: CondField): RuleCondition {
@@ -63,6 +64,8 @@ function blankAction(type: RuleAction["type"]): RuleAction {
       return { type, name: "" };
     case "hide":
       return { type };
+    case "setRecurring":
+      return { type, seriesId: "" };
   }
 }
 
@@ -76,6 +79,7 @@ function conditionValid(c: RuleCondition) {
 function actionValid(a: RuleAction) {
   if (a.type === "setCategory") return a.categoryId !== "";
   if (a.type === "setPayee" || a.type === "addTag") return a.name.trim() !== "";
+  if (a.type === "setRecurring") return a.seriesId !== "";
   return true;
 }
 
@@ -116,6 +120,7 @@ export type RuleDraft = Partial<Pick<Rule, "id" | "name" | "enabled">> & RuleDef
 
 export function RuleEditor({ initial, onDone }: { initial: RuleDraft; onDone: () => void }) {
   const accounts = useAccounts();
+  const recurring = useRecurring();
   const save = useSaveRule();
   const apply = useApplyRule();
   const [name, setName] = useState(initial.name ?? "");
@@ -306,6 +311,25 @@ export function RuleEditor({ initial, onDone }: { initial: RuleDraft; onDone: ()
                 emptyLabel="Choose a category…"
                 className={cx(ctl, "min-w-0 flex-1 basis-40")}
               />
+            )}
+            {a.type === "setRecurring" && (
+              <select
+                aria-label="Recurring charge"
+                value={a.seriesId}
+                onChange={(e) => setAct(i, { ...a, seriesId: e.target.value })}
+                className={cx(ctl, "min-w-0 flex-1 basis-40")}
+              >
+                <option value="">Choose a recurring charge or income…</option>
+                {(recurring.data ?? [])
+                  .filter((x) => x.status !== "ignored" && (x.active || x.id === a.seriesId))
+                  .sort((x, y) => x.name.localeCompare(y.name))
+                  .map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name} · {formatMoney(Math.abs(x.expectedAmountCents))}
+                      {x.accountName ? ` · ${x.accountName}` : ""}
+                    </option>
+                  ))}
+              </select>
             )}
             {(a.type === "setPayee" || a.type === "addTag") && (
               <input

@@ -69,6 +69,8 @@ function toSimple(d: RuleDraft): Simple | null {
   }
   const kinds = d.actions.map((a) => a.type);
   if (new Set(kinds).size !== kinds.length) return null;
+  // The quick form has no place for it: those rules open in the full editor.
+  if (kinds.includes("setRecurring")) return null;
   for (const a of d.actions) {
     if (a.type === "setCategory") s.category = { on: true, id: a.categoryId || null };
     else if (a.type === "setPayee") s.rename = { on: true, value: a.name };

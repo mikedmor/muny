@@ -6,15 +6,18 @@ import {
   normalizeDescription,
   type RecurringInput,
   type RecurringInterval,
+  ruleMatches,
 } from "@muny/core";
 import { type MunyDb, newId, schema } from "@muny/db";
 import type {
   RecurringKind,
   RecurringScanResult,
   RecurringSeries,
+  RuleAction,
+  RuleDefinition,
   UpcomingCharge,
 } from "@muny/shared";
-import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { localToday } from "../lib/dates.js";
 import { notFound } from "../lib/http.js";
 
@@ -290,15 +293,73 @@ function renamedMerchants(tx: Tx, rows: Row[], today: string): Map<string, strin
   return out;
 }
 
+/**
+ * "Count as recurring" rules: which transactions you've said belong to which
+ * series. These win over every guess from merchant names, on every scan. The
+ * first matching rule (by priority) decides; rules for ignored or missing
+ * series are skipped.
+ */
+function ruleSeriesLinks(tx: Tx, rows: Row[]): Map<string, string> {
+  const live = new Set(
+    tx
+      .select({ id: schema.recurringSeries.id, status: schema.recurringSeries.status })
+      .from(schema.recurringSeries)
+      .all()
+      .filter((x) => x.status !== "ignored")
+      .map((x) => x.id),
+  );
+  const rules = tx
+    .select()
+    .from(schema.rules)
+    .where(eq(schema.rules.enabled, true))
+    .orderBy(asc(schema.rules.priority), asc(schema.rules.createdAt))
+    .all()
+    .map((r) => {
+      const cond = r.conditions as { match?: "all" | "any"; items?: RuleDefinition["conditions"] };
+      const target = (r.actions as RuleAction[]).find((a) => a.type === "setRecurring");
+      return {
+        match: cond.match ?? "all",
+        conditions: cond.items ?? [],
+        seriesId: target?.type === "setRecurring" ? target.seriesId : null,
+      };
+    })
+    .filter((r): r is typeof r & { seriesId: string } => !!r.seriesId && live.has(r.seriesId));
+  const out = new Map<string, string>();
+  if (!rules.length) return out;
+  for (const r of rows) {
+    const facts = {
+      description: r.rawDescription,
+      payee: r.payee,
+      amountCents: r.amountCents,
+      accountId: r.accountId,
+    };
+    const hit = rules.find((rule) => ruleMatches(rule, facts));
+    if (hit) out.set(r.id, hit.seriesId);
+  }
+  return out;
+}
+
 export function rescanRecurring(tx: Tx, today = localToday()): RecurringScanResult {
   dropLoanSeries(tx);
   dropFundingSeries(tx);
   const rows = loadRows(tx);
   const byId = new Map(rows.map((r) => [r.id, r]));
   const renamed = renamedMerchants(tx, rows, today);
+  const ruled = ruleSeriesLinks(tx, rows);
+  const keyOfSeriesId = new Map(
+    tx
+      .select({ id: schema.recurringSeries.id, key: schema.recurringSeries.matchKey })
+      .from(schema.recurringSeries)
+      .all()
+      .map((x) => [x.id, x.key]),
+  );
+  const ruledKey = (id: string) => {
+    const sid = ruled.get(id);
+    return sid ? keyOfSeriesId.get(sid) : undefined;
+  };
   const input: RecurringInput[] = rows.map((r) => ({
     id: r.id,
-    key: renamed.get(r.id) ?? merchantKey(r.payee, r.rawDescription),
+    key: ruledKey(r.id) ?? renamed.get(r.id) ?? merchantKey(r.payee, r.rawDescription),
     date: r.postedDate,
     amountCents: r.amountCents,
     accountId: r.accountId,
@@ -436,6 +497,8 @@ export function rescanRecurring(tx: Tx, today = localToday()): RecurringScanResu
     const newer = rows
       .filter((r) => {
         if (r.postedDate <= e.lastDate || claimed.has(r.id)) return false;
+        // A rule said where this one goes.
+        if (ruled.has(r.id) && ruled.get(r.id) !== e.id) return false;
         if (r.recurringSeriesId !== null && r.recurringSeriesId !== e.id) return false;
         if (r.recurringSeriesId === null && linkedNow.has(r.id)) return false;
         if ((r.amountCents < 0 ? "out" : "in") !== e.direction) return false;
@@ -468,6 +531,33 @@ export function rescanRecurring(tx: Tx, today = localToday()): RecurringScanResu
       newer.map((r) => r.id),
     );
     result.updated++;
+  }
+
+  // Rules have the last word: their charges belong to their series, and the
+  // series' dates follow them, so a renamed paycheck is never "late".
+  const bySeries = new Map<string, Row[]>();
+  for (const [id, sid] of ruled) {
+    const r = byId.get(id);
+    if (r) bySeries.set(sid, [...(bySeries.get(sid) ?? []), r]);
+  }
+  for (const [sid, list] of bySeries) {
+    const e = tx.select().from(s).where(eq(s.id, sid)).get();
+    if (!e) continue;
+    link(
+      sid,
+      list.map((r) => r.id),
+    );
+    const sorted = [...list].sort((a, b) => a.postedDate.localeCompare(b.postedDate));
+    const newest = sorted[sorted.length - 1] as Row;
+    const oldest = sorted[0] as Row;
+    const dates = {
+      ...(newest.postedDate > e.lastDate && {
+        lastDate: newest.postedDate,
+        lastAmountCents: newest.amountCents,
+      }),
+      ...(oldest.postedDate < e.firstDate && { firstDate: oldest.postedDate }),
+    };
+    if (Object.keys(dates).length) tx.update(s).set(dates).where(eq(s.id, sid)).run();
   }
   return result;
 }

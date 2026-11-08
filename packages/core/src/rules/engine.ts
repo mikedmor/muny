@@ -14,6 +14,8 @@ export interface RuleTarget {
   payeeName: string | null;
   tags: string[];
   hidden: boolean;
+  /** The recurring series it belongs to. */
+  seriesId: string | null;
 }
 
 function textMatch(haystack: string | null, op: TextOp, needle: string): boolean {
@@ -70,6 +72,7 @@ export function applyRules(
   const next: RuleTarget = { ...current, tags: [...current.tags] };
   let categorySet = false;
   let payeeSet = false;
+  let seriesSet = false;
   let matched = 0;
   for (const rule of rules) {
     if (!ruleMatches(rule, facts)) continue;
@@ -86,6 +89,9 @@ export function applyRules(
           next.tags.push(a.name);
       } else if (a.type === "hide") {
         next.hidden = true;
+      } else if (a.type === "setRecurring" && !seriesSet) {
+        next.seriesId = a.seriesId;
+        seriesSet = true;
       }
     }
   }
@@ -93,6 +99,7 @@ export function applyRules(
     next.categoryId !== current.categoryId ||
     (next.payeeName ?? "").toLowerCase() !== (current.payeeName ?? "").toLowerCase() ||
     next.hidden !== current.hidden ||
+    next.seriesId !== current.seriesId ||
     next.tags.length !== current.tags.length;
   return { next, changed, matched };
 }

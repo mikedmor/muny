@@ -1,5 +1,6 @@
 import { schema } from "@muny/db";
 import type { Account, RecurringSeries } from "@muny/shared";
+import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { overview } from "../reports/service.js";
 import { makeSignedInApp } from "../test-utils.js";
@@ -162,5 +163,171 @@ describe("merchants the bank rewords", () => {
     scan();
     const after = series().find((s) => s.id === prime?.id);
     expect(after?.lastDate).toBe("2026-10-03");
+  });
+});
+
+describe("a paycheck the bank renames", () => {
+  it("keeps this week's check with the weekly series, not an old one by the new name", async () => {
+    const { db, account, add, scan, series, seriesOf } = await setup();
+    const main = await account("Main");
+    const side = await account("Side");
+    const desc = "ACME CORP PAYROLL PPD ID: 9000000001";
+    // A year ago the same employer was named "Acme Corp" (an old, finished series).
+    for (const d of ["2025-06-06", "2025-06-13", "2025-06-20", "2025-06-27", "2025-07-04"])
+      await add(main.id, d, 150_000, "ACME CORP DIRECT DEP");
+    // Every Friday since: the weekly paycheck.
+    for (const d of [
+      "2026-09-25",
+      "2026-10-02",
+      "2026-10-09",
+      "2026-10-16",
+      "2026-10-23",
+      "2026-10-30",
+    ])
+      await add(main.id, d, 170_925, desc);
+    // A small weekly split into another account, under the employer's payroll name.
+    for (const d of ["2026-09-30", "2026-10-07", "2026-10-14", "2026-10-21", "2026-10-28"])
+      await add(side.id, d, 5_000, "ACME CORP PAYROLL");
+    scan();
+    const payroll = series().find((s) => s.expectedAmountCents === 170_925);
+    expect(payroll?.lastDate).toBe("2026-10-30");
+
+    // This Friday's check arrives with the bank calling the merchant "Acme Corp".
+    await add(main.id, "2026-11-06", 170_925, desc);
+    const t = schema.transactions;
+    const old = db
+      .select()
+      .from(t)
+      .all()
+      .find((r) => r.rawDescription === "ACME CORP DIRECT DEP");
+    const row = db
+      .select()
+      .from(t)
+      .all()
+      .find((r) => r.postedDate === "2026-11-06");
+    db.update(t).set({ payeeId: old?.payeeId }).where(sql`${t.id} = ${row?.id}`).run();
+    scan();
+    scan();
+
+    expect(seriesOf(desc, "2026-11-06")).toBe(payroll?.name);
+    const after = series().find((s) => s.id === payroll?.id);
+    expect(after?.lastDate).toBe("2026-11-06");
+    expect(after?.late).toBe(false);
+  });
+});
+
+describe("a paycheck renamed back to an old series' name", () => {
+  it("joins the running weekly series, as in real payroll history", async () => {
+    const { db, account, add, series, seriesOf } = await setup();
+    const today = "2026-11-08";
+    const scanOn = () => db.transaction((tx) => rescanRecurring(tx, today));
+    const main = await account("Main");
+    const side = await account("Side");
+    const third = await account("Third");
+    const fridays = (from: string, to: string) => {
+      const out: string[] = [];
+      for (
+        let d = new Date(`${from}T00:00:00Z`);
+        d.toISOString().slice(0, 10) <= to;
+        d.setUTCDate(d.getUTCDate() + 7)
+      )
+        out.push(d.toISOString().slice(0, 10));
+      return out;
+    };
+    // Sep 2024 to Jul 2025: the employer was "ACME CORP" (a long, finished series).
+    for (const d of fridays("2024-09-06", "2025-07-25")) {
+      await add(main.id, d, 159_500, "ACME CORP");
+      await add(third.id, d, 5_000, "ACME CORP");
+    }
+    // From Aug 2025: "ACME CORP PAYROLL", weekly, plus splits into two other accounts.
+    for (const d of fridays("2025-08-01", "2026-10-30")) {
+      await add(main.id, d, 170_925, "ACME CORP PAYROLL");
+      await add(third.id, d, 5_000, "ACME CORP PAYROLL SAMPLE,PERSON");
+    }
+    for (const d of fridays("2025-07-30", "2026-10-28"))
+      await add(side.id, d, 5_000, "ACME CORP PAYROLL");
+    scanOn();
+    const payroll = series().find((s) => s.expectedAmountCents === 170_925);
+    expect(payroll?.lastDate).toBe("2026-10-30");
+
+    // This Friday the bank names it "Acme Corp" again.
+    await add(main.id, "2026-11-06", 170_925, "ACME CORP");
+    scanOn();
+    scanOn();
+    expect(seriesOf("ACME CORP", "2026-11-06")).toBe(payroll?.name);
+    expect(series().find((s) => s.id === payroll?.id)?.late).toBe(false);
+  });
+});
+
+describe("rules that count transactions as a recurring series", () => {
+  it("link a renamed paycheck to its series, so income isn't counted twice", async () => {
+    const { db, client, account, add, series, seriesOf } = await setup();
+    const today = "2026-11-08";
+    const scanOn = () => db.transaction((tx) => rescanRecurring(tx, today));
+    const main = await account("Main");
+    for (const d of [
+      "2026-09-25",
+      "2026-10-02",
+      "2026-10-09",
+      "2026-10-16",
+      "2026-10-23",
+      "2026-10-30",
+    ])
+      await add(main.id, d, 170_925, "ACME CORP PAYROLL PPD ID: 9000000001");
+    scanOn();
+    const payroll = series().find((s) => s.expectedAmountCents === 170_925);
+    expect(payroll).toBeDefined();
+
+    // The bank's feed starts calling it something no name check could connect.
+    await add(main.id, "2026-11-06", 170_925, "ACME CORP PAYROLL PPD ID: 9000000001");
+    const t = schema.transactions;
+    const row = db
+      .select()
+      .from(t)
+      .all()
+      .find((r) => r.postedDate === "2026-11-06");
+    const odd = db
+      .insert(schema.payees)
+      .values({ id: "p-odd", displayName: "Zeta Holdings" })
+      .returning()
+      .get();
+    db.update(t).set({ payeeId: odd.id }).where(sql`${t.id} = ${row?.id}`).run();
+    // Unlink it, as a scan that failed to match would leave it.
+    db.update(t).set({ recurringSeriesId: null }).where(sql`${t.id} = ${row?.id}`).run();
+
+    // The rule: what the description says, not what the merchant is called.
+    const preview = (
+      await client.post("/api/rules/preview", {
+        match: "all",
+        conditions: [{ field: "description", op: "contains", value: "ACME CORP PAYROLL" }],
+        actions: [{ type: "setRecurring", seriesId: payroll?.id }],
+      })
+    ).json<{ matched: number; wouldChange: number }>();
+    expect(preview).toMatchObject({ matched: 7, wouldChange: 1 });
+    const made = await client.post("/api/rules", {
+      name: "Paycheck",
+      match: "all",
+      conditions: [{ field: "description", op: "contains", value: "ACME CORP PAYROLL" }],
+      actions: [{ type: "setRecurring", seriesId: payroll?.id }],
+    });
+    expect(made.statusCode).toBe(201);
+    scanOn();
+    scanOn();
+
+    expect(seriesOf("ACME CORP PAYROLL PPD ID: 9000000001", "2026-11-06")).toBe(payroll?.name);
+    const after = series().find((s) => s.id === payroll?.id);
+    expect(after).toMatchObject({ lastDate: "2026-11-06", late: false });
+    // Expected income: Nov 13, 20 and 27 only, not a second Nov 6 check.
+    const o = overview(db, today);
+    expect(o.spending.incomeExpectedCents).toBe(3 * 170_925);
+
+    // A rule for a series that doesn't exist is refused.
+    const bad = await client.post("/api/rules", {
+      name: "Nope",
+      match: "all",
+      conditions: [{ field: "description", op: "contains", value: "X" }],
+      actions: [{ type: "setRecurring", seriesId: "missing" }],
+    });
+    expect(bad.statusCode).toBe(400);
   });
 });

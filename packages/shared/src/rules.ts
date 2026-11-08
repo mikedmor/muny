@@ -38,7 +38,9 @@ export type RuleAction =
   | { type: "setCategory"; categoryId: string }
   | { type: "setPayee"; name: string }
   | { type: "addTag"; name: string }
-  | { type: "hide" };
+  | { type: "hide" }
+  /** Count matching transactions as this recurring series, whatever the bank calls the merchant. */
+  | { type: "setRecurring"; seriesId: string };
 
 export interface RuleDefinition {
   match: "all" | "any";

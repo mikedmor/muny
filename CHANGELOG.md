@@ -4,6 +4,10 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+### Added
+
+- **Rules can count transactions as recurring.** The new **Count as recurring** action keeps a paycheck or bill in its series even when the bank renames the merchant, so it's never shown as late or counted twice in the month's expected income. **Add a rule for this** on any recurring series opens the rule editor already filled in.
+
 ## [1.0.0] - 2026-11-07
 
 The first stable release. Muny covers what Rocket Money does for budgeting and subscriptions, runs in one container on your own hardware, and lets AI assistants work with your data under permissions you set.

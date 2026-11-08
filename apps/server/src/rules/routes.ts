@@ -44,6 +44,10 @@ const PreviewBody = DefinitionSchema.extend({
 const ApplyBody = z.object({ includeEdited: z.boolean().optional() });
 const MoveBody = z.object({ direction: z.enum(["up", "down"]) });
 
+/** Does this rule place transactions in a recurring series? */
+const placesRecurring = (r: { actions: { type: string }[] }) =>
+  r.actions.some((a) => a.type === "setRecurring");
+
 export function registerRuleRoutes(app: FastifyInstance, db: MunyDb) {
   const log = (userId: string, action: string, entityId?: string, details?: unknown) =>
     audit(db, {
@@ -66,6 +70,7 @@ export function registerRuleRoutes(app: FastifyInstance, db: MunyDb) {
   app.post("/api/rules", async (req, reply) => {
     const user = requireUser(req);
     const rule = createRule(db, parse(CreateBody, req.body));
+    if (placesRecurring(rule)) db.transaction((tx) => rescanRecurring(tx));
     log(user.id, "rule.create", rule.id);
     return reply.code(201).send(rule);
   });
@@ -89,15 +94,20 @@ export function registerRuleRoutes(app: FastifyInstance, db: MunyDb) {
       })
       .where(eq(schema.rules.id, id))
       .run();
+    const updated = getRule(db, id);
+    if (placesRecurring(current) || placesRecurring(updated))
+      db.transaction((tx) => rescanRecurring(tx));
     log(user.id, "rule.update", id, { fields: Object.keys(body) });
-    return getRule(db, id);
+    return updated;
   });
 
   app.delete("/api/rules/:id", async (req) => {
     const user = requireUser(req);
     const { id } = parse(IdParams, req.params);
-    getRule(db, id);
+    const gone = getRule(db, id);
     db.delete(schema.rules).where(eq(schema.rules.id, id)).run();
+    // Its charges go back to being matched by name.
+    if (placesRecurring(gone)) db.transaction((tx) => rescanRecurring(tx));
     log(user.id, "rule.delete", id);
     return { ok: true };
   });
@@ -123,6 +133,8 @@ export function registerRuleRoutes(app: FastifyInstance, db: MunyDb) {
           .run();
       });
     });
+    // Order decides which rule wins when two place the same charge.
+    if (listRules(db).some(placesRecurring)) db.transaction((tx) => rescanRecurring(tx));
     log(user.id, "rule.move", id, { direction });
     return listRules(db);
   });

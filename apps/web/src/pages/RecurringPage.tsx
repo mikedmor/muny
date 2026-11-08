@@ -10,6 +10,7 @@ import {
 import { type FormEvent, useEffect, useState } from "react";
 import { CategorySelect } from "../components/CategorySelect.js";
 import { Modal, MoneyField, SelectField } from "../components/forms.js";
+import { type RuleDraft, RuleEditor } from "../components/RuleEditor.js";
 import { UpcomingCalendar } from "../components/UpcomingCalendar.js";
 import { Alert, Button, Card, cx, Field, PageHeader } from "../components/ui.js";
 import {
@@ -265,7 +266,16 @@ function Section({
   );
 }
 
+/** The steady part of a bank description: words only, no reference numbers or dates. */
+const descriptionWords = (raw: string) =>
+  raw
+    .replace(/\b(ppd|ccd|web|id|ach)\b.*$/i, "")
+    .replace(/[^a-z&' ]+/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
 function SeriesDetail({ s, onDone }: { s: RecurringSeries; onDone: () => void }) {
+  const [ruleFor, setRuleFor] = useState<RuleDraft | null>(null);
   const update = useUpdateRecurring();
   const del = useDeleteRecurring();
   const history = useRecurringHistory(s.id);
@@ -443,6 +453,41 @@ function SeriesDetail({ s, onDone }: { s: RecurringSeries; onDone: () => void })
       </form>
 
       <section>
+        <div className="mb-3 rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800/50">
+          <p className="text-slate-600 dark:text-slate-300">
+            Bank changed what it calls this? A rule keeps its charges here whatever the merchant is
+            named.
+          </p>
+          <button
+            type="button"
+            className="mt-1 font-medium text-brand-600 hover:underline dark:text-brand-500"
+            onClick={() => {
+              // Oldest first: the newest charge has the wording the bank uses now.
+              const latest = history.data?.at(-1);
+              const words = latest ? descriptionWords(latest.rawDescription) : "";
+              setRuleFor({
+                name: `${s.name} (recurring)`,
+                match: "all",
+                conditions: [
+                  { field: "description", op: "contains", value: words || s.name },
+                  { field: "direction", value: s.expectedAmountCents < 0 ? "out" : "in" },
+                  ...(latest ? [{ field: "account" as const, value: latest.accountId }] : []),
+                ],
+                actions: [{ type: "setRecurring", seriesId: s.id }],
+              });
+            }}
+          >
+            Add a rule for this
+          </button>
+        </div>
+        <Modal
+          open={ruleFor !== null}
+          onClose={() => setRuleFor(null)}
+          title="Count as recurring"
+          wide
+        >
+          {ruleFor && <RuleEditor initial={ruleFor} onDone={() => setRuleFor(null)} />}
+        </Modal>
         <h3 className="mb-2 text-sm font-semibold">
           History{" "}
           <span className="font-normal text-slate-500">

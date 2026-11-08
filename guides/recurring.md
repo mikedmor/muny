@@ -49,6 +49,12 @@ Click a series to edit its name, kind, how often it repeats, its amount and cate
 
 Cancelled and inactive series move to **Inactive or cancelled** at the bottom of the list.
 
+## Keeping charges with their series when the bank renames them
+
+Muny follows a merchant through small renames on its own, but sometimes a bank's feed changes the name completely, and a paycheck or bill stops joining its series. It then shows as late, and the month's expected income or bills count it twice.
+
+A rule fixes that for good. Open the series and click **Add a rule for this**. The rule editor opens already filled in: the series' bank description, its direction and account, and the action **Count as recurring** pointing at the series. Adjust it if you need to, check the matching transactions in the preview, and create it. From then on, anything the rule matches belongs to that series, whatever the merchant is called. Muny applies it straight away and on every later scan. You can also add the **Count as recurring** action to any rule under **Settings → Rules**.
+
 ## Adding one by hand
 
 For something Muny didn't spot, open one of its transactions and use **Repeats** to make it recurring, choosing how often.
