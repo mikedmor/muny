@@ -175,7 +175,7 @@ function SpendingCard({ d }: { d: Overview }) {
               {formatMoney(s.monthToDateCents + s.billsExpectedCents)}
             </dd>
             <dd className="text-xs text-slate-500 tabular-nums">
-              +{formatMoney(s.billsExpectedCents)} in recurring bills still due
+              Includes {formatMoney(s.billsExpectedCents)} in recurring bills still due
             </dd>
           </div>
         )}
