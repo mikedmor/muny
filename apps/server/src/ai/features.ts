@@ -6,7 +6,7 @@ import {
   type StatementKind,
   TEMPLATE_FIELDS,
 } from "@muny/shared";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { fileFromMuny } from "../agent/proposals.js";
 import { budgetMonth } from "../budgets/service.js";
@@ -16,7 +16,7 @@ import { monthlyReport, spendingReport } from "../reports/service.js";
 import { addMonths, categoryMeta, monthEnd } from "../reports/spending.js";
 import { savingsOpportunities } from "../savings/opportunities.js";
 import { readField } from "../statements/templates.js";
-import { askJson, askText } from "./call.js";
+import { type AiCall, AiCallError, askJson, askText } from "./call.js";
 import { aiConnection } from "./settings.js";
 
 /**
@@ -28,6 +28,8 @@ import { aiConnection } from "./settings.js";
 export interface AiDeps {
   secretKey: Buffer | undefined;
   fetch?: typeof fetch;
+  /** For tests: how to wait between tries. */
+  sleep?: (seconds: number) => Promise<void>;
 }
 
 /** Account and card numbers out: any run of 6 or more digits. */
@@ -73,6 +75,7 @@ export async function suggestCategories(
     {
       ...conn,
       fetch: deps.fetch,
+      sleep: deps.sleep,
       effort: "low",
       maxTokens: 4000,
       system:
@@ -161,11 +164,14 @@ export async function writeReview(
   deps: AiDeps,
   month: string,
   today = localToday(),
+  wait: Pick<AiCall, "mode" | "onWait"> = {},
 ): Promise<string> {
   const conn = aiConnection(db, deps.secretKey, "monthlyReview");
   const text = await askText({
     ...conn,
+    ...wait,
     fetch: deps.fetch,
+    sleep: deps.sleep,
     effort: "medium",
     maxTokens: 2000,
     system:
@@ -175,8 +181,10 @@ export async function writeReview(
   if (!text) throw new Error("The review came back empty.");
   const body = text.slice(0, 2000);
   const dedupeKey = `ai_review:${month}`;
-  // Writing it again replaces the month's review.
-  db.delete(schema.notifications).where(eq(schema.notifications.dedupeKey, dedupeKey)).run();
+  // Writing it again replaces the month's review, and it's no longer missing.
+  db.delete(schema.notifications)
+    .where(inArray(schema.notifications.dedupeKey, [dedupeKey, missedKey(month)]))
+    .run();
   db.insert(schema.notifications)
     .values({
       id: newId(),
@@ -192,7 +200,12 @@ export async function writeReview(
 }
 
 /** Early each month, last month's review (once), if it's turned on and the alert is on. */
-export async function monthlyReviewIfDue(db: MunyDb, deps: AiDeps, today = localToday()) {
+export async function monthlyReviewIfDue(
+  db: MunyDb,
+  deps: AiDeps,
+  today = localToday(),
+  onWait?: AiCall["onWait"],
+) {
   if (Number(today.slice(8)) > 7) return false;
   const rule = db
     .select({ enabled: schema.alertRules.enabled })
@@ -217,19 +230,65 @@ export async function monthlyReviewIfDue(db: MunyDb, deps: AiDeps, today = local
   } catch {
     return false; // off, or not set up
   }
-  await writeReview(db, deps, month, today);
+  try {
+    // Nobody's waiting on it: sit out a busy server or a model download, within limits.
+    await writeReview(db, deps, month, today, { mode: "background", onWait });
+  } catch (err) {
+    if (err instanceof AiCallError) noteMissedReview(db, month, err, today);
+    throw err;
+  }
   return true;
+}
+
+const missedKey = (month: string) => `ai_review_missed:${month}`;
+
+/**
+ * Say once a month that the review couldn't be written yet, and why. It's
+ * tried again every hour through the 7th, and the note goes when it lands.
+ */
+function noteMissedReview(db: MunyDb, month: string, err: AiCallError, today: string) {
+  const more = Number(today.slice(8)) < 7;
+  db.insert(schema.notifications)
+    .values({
+      id: newId(),
+      ruleType: "ai_review",
+      dedupeKey: missedKey(month),
+      severity: "warning",
+      title: `Couldn't write your ${monthName(month)} money review yet`,
+      body: `${err.message} ${
+        more
+          ? "Muny will keep trying every hour until the 7th."
+          : "You can write it from Settings → AI once the AI server is ready."
+      }`.slice(0, 2000),
+      link: "/settings#ai",
+    })
+    .onConflictDoNothing()
+    .run();
 }
 
 export function startAiScheduler(
   db: MunyDb,
   deps: AiDeps,
-  log: { warn: (o: object, msg: string) => void },
+  log: { warn: (o: object, msg: string) => void; info?: (o: object, msg: string) => void },
 ) {
-  const tick = () =>
-    void monthlyReviewIfDue(db, deps).catch((err) =>
-      log.warn({ err: err instanceof Error ? err.message : "unknown" }, "Monthly AI review failed"),
-    );
+  let running = false;
+  const tick = () => {
+    // A background review can wait out a busy server for a while; don't start a second one.
+    if (running) return;
+    running = true;
+    void monthlyReviewIfDue(db, deps, localToday(), (reason, seconds) =>
+      log.info?.({ reason, seconds }, "Monthly AI review waiting on the AI server"),
+    )
+      .catch((err) =>
+        log.warn(
+          { err: err instanceof Error ? err.message : "unknown" },
+          "Monthly AI review failed",
+        ),
+      )
+      .finally(() => {
+        running = false;
+      });
+  };
   const first = setTimeout(tick, 90_000);
   const timer = setInterval(tick, 60 * 60_000);
   first.unref();
@@ -262,6 +321,7 @@ export async function draftTemplate(
     {
       ...conn,
       fetch: deps.fetch,
+      sleep: deps.sleep,
       effort: "medium",
       maxTokens: 3000,
       system:

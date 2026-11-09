@@ -56,6 +56,8 @@ export interface AppDeps {
   priceFetch?: typeof fetch;
   /** Override outbound HTTP for the built-in AI provider (tests). */
   aiFetch?: typeof fetch;
+  /** Override waiting between AI retries (tests). */
+  aiSleep?: (seconds: number) => Promise<void>;
 }
 
 /**
@@ -99,6 +101,7 @@ export async function buildApp({
   alertFetch,
   priceFetch,
   aiFetch,
+  aiSleep,
 }: AppDeps): Promise<FastifyInstance> {
   const syncDeps = { config, providers: providers ?? makeProviders(config) };
   const csp = contentSecurityPolicy(config);
@@ -176,7 +179,7 @@ export async function buildApp({
   registerReportRoutes(app, db);
   registerTrialRoutes(app, db);
   registerSavingsRoutes(app, db);
-  registerAiRoutes(app, db, { secretKey: config.secretKey, fetch: aiFetch });
+  registerAiRoutes(app, db, { secretKey: config.secretKey, fetch: aiFetch, sleep: aiSleep });
   const alertDeps: AlertDeps = {
     secretKey: config.secretKey,
     publicUrl: config.publicUrl,

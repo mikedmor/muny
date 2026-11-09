@@ -10,6 +10,7 @@ export interface AppOptions {
   alertFetch?: typeof fetch;
   priceFetch?: typeof fetch;
   aiFetch?: typeof fetch;
+  aiSleep?: (seconds: number) => Promise<void>;
 }
 
 export async function makeApp(env: Record<string, string> = {}, opts: AppOptions = {}) {
@@ -21,6 +22,7 @@ export async function makeApp(env: Record<string, string> = {}, opts: AppOptions
     alertFetch: opts.alertFetch,
     priceFetch: opts.priceFetch,
     aiFetch: opts.aiFetch,
+    aiSleep: opts.aiSleep,
   });
   return { app, db, config };
 }

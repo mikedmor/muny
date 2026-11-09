@@ -17,6 +17,9 @@ async function guard<T>(fn: () => Promise<T>): Promise<T> {
     return await fn();
   } catch (err) {
     if (err instanceof AiSetupError) throw new HttpError(409, err.message);
+    // Worth trying again later (busy, downloading, no computer free): say when.
+    if (err instanceof AiCallError && err.retryAfter !== undefined)
+      throw new HttpError(503, err.message, { retryAfter: err.retryAfter, code: err.code });
     if (err instanceof AiCallError) throw new HttpError(502, err.message);
     throw err;
   }
@@ -73,6 +76,7 @@ export function registerAiRoutes(app: FastifyInstance, db: MunyDb, deps: AiDeps)
       const reply = await askText({
         ...conn,
         fetch: deps.fetch,
+        sleep: deps.sleep,
         effort: "low",
         maxTokens: 200,
         system: "Reply with the single word OK.",

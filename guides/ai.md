@@ -26,6 +26,23 @@ Each feature can be turned off on its own.
 
 Nothing else is ever sent, and Muny never sends anything in the background except the monthly review you turned on.
 
+## When the AI server is busy
+
+A server on your network may be shared, asleep, or still downloading a model. With Ollama or an OpenAI-compatible server, Muny reads what the server says about why it can't answer yet, rather than giving up straight away:
+
+| The server says                                                       | When you press a button                                               | The monthly review                             |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------- |
+| It's downloading the model                                            | Shows the progress, like "downloading to DESKTOP (42%)", and the wait | Waits it out, up to 30 minutes in all          |
+| It's busy (with a place in line)                                      | Waits by itself if it's 15 seconds or less; otherwise says how long   | Waits, up to 10 minutes at a time, a few times |
+| No computer is connected                                              | Says so, and to try again in about a minute                           | Tries again every minute, a few times          |
+| A computer failed partway                                             | Sends it again once, 5 seconds later                                  | The same                                       |
+| It doesn't have the model, or the key is wrong                        | Says so: choose another model, or enter a new key                     | Doesn't try again until you fix it             |
+| Anything else that asks to wait (a `429` or `503` with `Retry-After`) | Treated like "busy"                                                   | Treated like "busy"                            |
+
+If the monthly review still can't be written, you get one notification saying why. Muny keeps trying every hour until the 7th, and that notification disappears once the review arrives.
+
+For a server that wants to say this: answer `503` (or `502` when a machine failed) with a `Retry-After` header and a JSON body like `{"code": "busy", "retry_after": 35, "details": {"position": 2, "eta_secs": 35}}`. The codes Muny knows are `model_downloading` (with `model`, `machine`, `percent` and `eta_secs` in `details`), `busy`, `no_machines`, `machine_failed`, `model_unavailable` (`404`) and `bad_key` (`401`). Muny goes by the code and numbers, never the `error` text.
+
 ## Costs
 
 Hosted providers charge per use. Suggesting categories for 60 transactions and a monthly review are small requests, but check your provider's pricing. With Ollama it's free, at the speed of your own hardware.
