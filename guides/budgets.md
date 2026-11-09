@@ -42,7 +42,7 @@ Click a category to see its months and transactions, and change any transaction'
 The side panel shows what's left this month, and what should still come in or go out before it ends:
 
 - **Spending budget:** your category budgets added up, unless you set a total yourself. When a total you set doesn't match your categories, a bar shows how much of it they cover and what's unassigned (or how far over they go). **Follow my categories** goes back to adding them up, and **Match categories** sets the total to their sum.
-- **By the end of the month:** income so far plus what's expected, and spending so far plus bills still due, giving the projected amount left over. Everyday spending beyond today isn't guessed at.
+- **By the end of the month:** income so far plus what's expected, and spending so far plus bills still due, giving the projected amount left over. Everyday spending beyond today isn't guessed at. Below it, **If every budget is fully used** shows what would be left if you also spent all the room remaining in your budgets. A budget you've gone over adds nothing, and an overall total, if you've set one, is the limit instead of the categories.
 - **Still to come:** each recurring charge and paycheck expected for the rest of the month.
 
 ## How spending is counted

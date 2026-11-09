@@ -68,6 +68,10 @@ export interface BudgetForecast {
   /** Income so far + recurring income still expected. */
   projectedIncomeCents: number;
   projectedLeftoverCents: number;
+  /** Projected spending plus all the room left in your budgets. Null: past month, or no budgets. */
+  fullBudgetSpendingCents: number | null;
+  /** What's left if every budget gets fully used. Null: past month, or no budgets. */
+  fullBudgetLeftoverCents: number | null;
 }
 
 export interface BudgetMonth {

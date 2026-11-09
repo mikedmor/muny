@@ -203,6 +203,18 @@ export function budgetMonth(db: Db, month: string): BudgetMonth {
   // Earnings: received so far plus what recurring income should still bring (past: received).
   const expectedIncome =
     forecast.period === "past" ? forecast.incomeSoFarCents : forecast.projectedIncomeCents;
+  const fullSpending =
+    forecast.period === "past"
+      ? null
+      : fullBudgetSpending(
+          forecast.projectedSpendingCents,
+          categoryLines,
+          forecast.scheduledByCategory,
+          total,
+        );
+  forecast.fullBudgetSpendingCents = fullSpending;
+  forecast.fullBudgetLeftoverCents =
+    fullSpending === null ? null : forecast.projectedIncomeCents - fullSpending;
 
   return {
     income: basic("income", "Earnings", (m) => incomeByMonth.get(m) ?? 0, expectedIncome),
@@ -301,7 +313,34 @@ function forecastMonth(
     projectedSpendingCents: projectedSpending,
     projectedIncomeCents: projectedIncome,
     projectedLeftoverCents: projectedIncome - projectedSpending,
+    // Needs the budgets: filled in by budgetMonth.
+    fullBudgetSpendingCents: null,
+    fullBudgetLeftoverCents: null,
   };
+}
+
+type BudgetRoom = Pick<BudgetLine, "categoryId" | "budgetCents" | "rolloverCents" | "spentCents">;
+
+/**
+ * Spending if every budget gets fully used: what's already projected, plus the
+ * room each budget has left after what's spent and what's still scheduled (so a
+ * bill isn't counted twice, and a budget gone over adds nothing). An overall
+ * total, when set, is the limit instead of the categories. Null with no budgets.
+ */
+export function fullBudgetSpending(
+  projectedCents: number,
+  lines: BudgetRoom[],
+  scheduledByCategory: Record<string, number>,
+  total: BudgetRoom,
+): number | null {
+  if (total.budgetCents !== null)
+    return Math.max(projectedCents, total.budgetCents + total.rolloverCents);
+  const budgeted = lines.filter((l) => l.budgetCents !== null);
+  if (!budgeted.length) return null;
+  return budgeted.reduce((sum, l) => {
+    const committed = l.spentCents + (scheduledByCategory[l.categoryId ?? ""] ?? 0);
+    return sum + Math.max(0, (l.budgetCents as number) + l.rolloverCents - committed);
+  }, projectedCents);
 }
 
 /** SQL: recurring bills and subscriptions (not income; category not left out of budgets). */

@@ -6,6 +6,7 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ### Added
 
+- Budgets show what would be left over if every budget gets fully used, beside the projection from bills alone.
 - A **Muny AI** Overview card with quick questions and your latest review, available while AI is on.
 - **Ask Muny**: ask about your money in plain words, answered from read-only lookups of your own data. Off by default, under **Settings → AI**.
 - Built-in AI can tidy merchant names (one inbox item to approve) and write a mid-month check-in on how budgets are pacing.

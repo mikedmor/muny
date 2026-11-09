@@ -11,6 +11,7 @@ import type {
 import { describe, expect, it } from "vitest";
 import { localToday } from "../lib/dates.js";
 import { makeSignedInApp } from "../test-utils.js";
+import { fullBudgetSpending } from "./service.js";
 
 // Synthetic data only.
 
@@ -79,6 +80,64 @@ describe("budget forecast", () => {
     const last = addInterval(today, "monthly", -1).slice(0, 7);
     const p = (await client.get(`/api/budgets/${last}`)).json<BudgetMonth>().forecast;
     expect(p).toMatchObject({ period: "past", scheduled: [], recurringPaidCents: 1200 });
+  });
+});
+
+describe("if every budget is fully used", () => {
+  const line = (categoryId: string | null, budgetCents: number | null, spentCents: number) => ({
+    categoryId,
+    budgetCents,
+    spentCents,
+    rolloverCents: 0,
+  });
+  const noTotal = line(null, null, 0);
+
+  it("adds the room left in each budget, once", () => {
+    expect(
+      fullBudgetSpending(
+        100_000,
+        [
+          line("groceries", 50_000, 20_000), // 30,000 of room
+          line("insurance", 12_000, 20_000), // over: none
+          line("coffee", null, 1_000), // no budget: nothing to use up
+          line("internet", 7_500, 0), // 7,500 still scheduled: none
+          line("power", 30_000, 10_000), // 15,000 scheduled: 5,000 of room
+        ],
+        { internet: 7_500, power: 15_000 },
+        noTotal,
+      ),
+    ).toBe(135_000);
+  });
+
+  it("counts rollover as room, and a total as the limit", () => {
+    const rolled = { ...line("travel", 10_000, 0), rolloverCents: 5_000 };
+    expect(fullBudgetSpending(0, [rolled], {}, noTotal)).toBe(15_000);
+    const lines = [line("groceries", 50_000, 20_000)];
+    expect(fullBudgetSpending(40_000, lines, {}, line(null, 100_000, 0))).toBe(100_000);
+    // A total already blown stays at what's projected.
+    expect(fullBudgetSpending(40_000, lines, {}, line(null, 10_000, 0))).toBe(40_000);
+    expect(fullBudgetSpending(40_000, [line("coffee", null, 500)], {}, noTotal)).toBeNull();
+  });
+
+  it("shows on this month, not on a finished one or with no budgets", async () => {
+    const { client, add, cat } = await setup();
+    const month = localToday().slice(0, 7);
+    const get = async (m: string) =>
+      (await client.get(`/api/budgets/${m}`)).json<BudgetMonth>().forecast;
+    await add(`${month}-01`, 300_000, "Paycheck");
+    await add(`${month}-01`, -20_000, "Groceries");
+    expect(await get(month)).toMatchObject({
+      fullBudgetSpendingCents: null,
+      fullBudgetLeftoverCents: null,
+    });
+    await client.put("/api/budgets", { categoryId: cat("Groceries"), amountCents: 50_000 });
+    expect(await get(month)).toMatchObject({
+      projectedLeftoverCents: 280_000,
+      fullBudgetSpendingCents: 50_000,
+      fullBudgetLeftoverCents: 250_000,
+    });
+    const last = addInterval(localToday(), "monthly", -1).slice(0, 7);
+    expect((await get(last)).fullBudgetLeftoverCents).toBeNull();
   });
 });
 

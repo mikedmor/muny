@@ -711,6 +711,28 @@ function ForecastBlock({ b }: { b: BudgetMonth }) {
             {signed(net)}
           </dd>
         </div>
+        {f.fullBudgetLeftoverCents !== null && f.fullBudgetSpendingCents !== null && (
+          <div>
+            <div className="flex justify-between gap-3">
+              <dt className="font-medium">If every budget is fully used</dt>
+              <dd
+                className={cx(
+                  "font-semibold tabular-nums",
+                  f.fullBudgetLeftoverCents < 0
+                    ? "text-red-600 dark:text-red-400"
+                    : "text-emerald-700 dark:text-emerald-400",
+                )}
+              >
+                {signed(f.fullBudgetLeftoverCents)}
+              </dd>
+            </div>
+            <p className="text-xs text-slate-500">
+              {f.fullBudgetSpendingCents > f.projectedSpendingCents
+                ? `With another ${formatMoney(f.fullBudgetSpendingCents - f.projectedSpendingCents)} spent from what's left in your budgets`
+                : "Your budgets have no room left beyond what's above"}
+            </p>
+          </div>
+        )}
       </dl>
     </div>
   );
