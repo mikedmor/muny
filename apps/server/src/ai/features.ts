@@ -8,14 +8,16 @@ import {
 } from "@muny/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { fileFromMuny } from "../agent/proposals.js";
+import { fileFromMuny, MUNY_AI } from "../agent/proposals.js";
 import { budgetMonth } from "../budgets/service.js";
 import { localToday } from "../lib/dates.js";
+import { onTransactionsAdded } from "../lib/events.js";
 import { readPlan } from "../loans/routes.js";
 import { monthlyReport, spendingReport } from "../reports/service.js";
 import { addMonths, categoryMeta, monthEnd } from "../reports/spending.js";
 import { savingsOpportunities } from "../savings/opportunities.js";
 import { readField } from "../statements/templates.js";
+import { describeChange, openChange, runAsChange } from "../undo/track.js";
 import { type AiCall, AiCallError, askJson, askText } from "./call.js";
 import { aiConnection } from "./settings.js";
 
@@ -46,8 +48,14 @@ export async function suggestCategories(
   db: MunyDb,
   deps: AiDeps,
   today = localToday(),
+  wait: Pick<AiCall, "mode" | "onWait"> = {},
 ): Promise<AiCategorizeResult> {
-  const conn = aiConnection(db, deps.secretKey, "categorize");
+  const conn = aiConnection(
+    db,
+    deps.secretKey,
+    wait.mode === "background" ? "autoCategorize" : "categorize",
+  );
+  if (wait.mode === "background") aiConnection(db, deps.secretKey, "categorize");
   const from = `${addMonths(today.slice(0, 7), -3)}-01`;
   const rows = db.all<{ id: string; name: string; cents: number }>(sql`
     select t.id as id, coalesce(p.display_name, t.raw_description) as name, t.amount_cents as cents
@@ -58,6 +66,11 @@ export async function suggestCategories(
        and a.exclude_from_reports = 0
        and t.posted_date >= ${from}
        and not exists (select 1 from transaction_splits s where s.transaction_id = t.id)
+       -- Already waiting in the inbox, or turned down: not again.
+       and not exists (
+         select 1 from agent_proposals ap, json_each(ap.input, '$.transaction_ids') j
+          where ap.tool = 'categorize_transactions' and ap.status in ('pending', 'rejected')
+            and j.value = t.id)
      order by t.posted_date desc
      limit ${MAX_CATEGORIZE}`);
   if (!rows.length) return { considered: 0, suggested: 0, filed: 0 };
@@ -74,6 +87,7 @@ export async function suggestCategories(
   const answer = await askJson(
     {
       ...conn,
+      ...wait,
       fetch: deps.fetch,
       sleep: deps.sleep,
       effort: "low",
@@ -118,6 +132,73 @@ export async function suggestCategories(
   };
 }
 
+export interface BudgetIdea {
+  categoryId: string;
+  name: string;
+  /** Spent in the month reviewed. */
+  spentCents: number;
+  /** The median of the three months before. */
+  usualCents: number;
+  /** The usual, rounded up to $10. */
+  amountCents: number;
+}
+
+/**
+ * The one budget worth suggesting after a month: the category that jumped
+ * most above its usual (the median of the three months before), at least 30%
+ * and $50 over. Budget: the usual, rounded up to $10, unless the category's
+ * budget is already that low. Worked out here, not by the model.
+ */
+export function budgetIdea(db: MunyDb, month: string, today = localToday()): BudgetIdea | null {
+  const spend = (m: string) =>
+    new Map(
+      spendingReport(db, `${m}-01`, monthEnd(m), "category")
+        .items.filter((i) => i.id)
+        .map((i) => [i.id as string, i]),
+    );
+  const now = spend(month);
+  const before = [1, 2, 3].map((k) => spend(addMonths(month, -k)));
+  const budgets = new Map(
+    budgetMonth(db, today.slice(0, 7))
+      .groups.flatMap((g) => g.lines)
+      .filter((l) => l.categoryId)
+      .map((l) => [l.categoryId as string, l.budgetCents]),
+  );
+  const cats = categoryMeta(db);
+  // Turned down in the last three months: leave it be.
+  const declined = new Set(
+    db
+      .all<{ category: string }>(sql`
+        select json_extract(input, '$.category') as category from agent_proposals
+         where tool = 'set_budget' and status = 'rejected' and token_name = ${MUNY_AI}
+           and decided_at > ${Date.now() - 90 * 86_400_000}`)
+      .map((r) => r.category),
+  );
+  let best: (BudgetIdea & { jump: number }) | null = null;
+  for (const [id, item] of now) {
+    if (cats.get(id)?.kind !== "expense" || declined.has(id)) continue;
+    const past = before.map((m) => Math.max(0, m.get(id)?.cents ?? 0)).sort((a, b) => a - b);
+    const usual = past[1] ?? 0;
+    const jump = item.cents - usual;
+    if (usual <= 0 || item.cents < usual * 1.3 || jump < 5_000) continue;
+    const amount = Math.ceil(usual / 1_000) * 1_000;
+    const budget = budgets.get(id);
+    if (budget != null && budget <= amount) continue;
+    if (!best || jump > best.jump)
+      best = {
+        categoryId: id,
+        name: item.name,
+        spentCents: item.cents,
+        usualCents: usual,
+        amountCents: amount,
+        jump,
+      };
+  }
+  if (!best) return null;
+  const { jump: _, ...idea } = best;
+  return idea;
+}
+
 const monthName = (m: string) =>
   new Date(`${m}-15T00:00:00`).toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
@@ -152,6 +233,11 @@ export function reviewFacts(db: MunyDb, month: string, today = localToday()): st
       ? `Ways to save Muny found: ${ways.map((w) => `${w.title} (about ${formatMoney(w.yearlyCents)} a year)`).join("; ")}`
       : "Ways to save Muny found: none",
   ];
+  const idea = budgetIdea(db, month, today);
+  if (idea)
+    lines.push(
+      `Budget Muny suggests, waiting in the inbox to approve: ${idea.name} at ${formatMoney(idea.amountCents)} a month (it was ${formatMoney(idea.spentCents)} this month, usually about ${formatMoney(idea.usualCents)})`,
+    );
   return lines.join("\n");
 }
 
@@ -175,18 +261,11 @@ export async function writeReview(
     effort: "medium",
     maxTokens: 2000,
     system:
-      "You write a short, plain monthly money review for a household, from figures their own finance app worked out. Use only the numbers given and don't invent any. Be warm and direct, not preachy. Plain text, under 150 words in all: 3 or 4 short lines, each on its own line starting with '- ', then a last line starting 'Next month: ' with the one thing most worth doing. No headings, bold or other markdown.",
+      "You write a short, plain monthly money review for a household, from figures their own finance app worked out. Use only the numbers given and don't invent any. Be warm and direct, not preachy. Plain text, under 150 words in all: 3 or 4 short lines, each on its own line starting with '- ', then a last line starting 'Next month: ' with the one thing most worth doing. No headings, bold or other markdown. If the figures include a budget Muny suggests, make the Next month line about it.",
     prompt: reviewFacts(db, month, today),
   });
   if (!text) throw new Error("The review came back empty.");
-  // Plain lines for every channel: no markdown emphasis or headings, no blank lines.
-  const body = text
-    .replace(/\*\*|__/g, "")
-    .split(/\r?\n/)
-    .map((l) => l.replace(/^#+\s*/, "").trim())
-    .filter(Boolean)
-    .join("\n")
-    .slice(0, 2000);
+  const body = tidyReview(text).slice(0, 2000);
   const dedupeKey = `ai_review:${month}`;
   // Writing it again replaces the month's review, and it's no longer missing.
   db.delete(schema.notifications)
@@ -200,10 +279,56 @@ export async function writeReview(
       severity: "info",
       title: `Your ${monthName(month)} money review`,
       body,
-      link: "/savings",
+      link: "/reports#reviews",
     })
     .run();
+  // Kept for Reports → Reviews, apart from notifications (which can be cleared).
+  db.insert(schema.aiReviews)
+    .values({ month, body })
+    .onConflictDoUpdate({ target: schema.aiReviews.month, set: { body, createdAt: new Date() } })
+    .run();
+  const idea = budgetIdea(db, month, today);
+  if (idea)
+    fileFromMuny(
+      db,
+      today,
+      "set_budget",
+      { category: idea.categoryId, amount_cents: idea.amountCents },
+      `${idea.name} came to ${formatMoney(idea.spentCents)} in ${monthName(month)}, against about ${formatMoney(idea.usualCents)} most months. A budget keeps an eye on it.`,
+    );
   return body;
+}
+
+/**
+ * The review as plain lines for every channel: "- " points, then "Next
+ * month: ...". No markdown. A model that wrote a paragraph anyway gets a
+ * point per sentence, and a "Next month:" inside the text its own line.
+ */
+export function tidyReview(text: string): string {
+  const lines = text
+    .replace(/\*\*|__/g, "")
+    .split(/\r?\n/)
+    .map((l) => l.replace(/^#+\s*/, "").trim())
+    .filter(Boolean);
+  const bullet = (l: string) => /^[-•*]\s/.test(l);
+  const at = lines.findIndex((l) => /^next month:/i.test(l));
+  let body = at >= 0 ? lines.slice(0, at) : lines;
+  let next = at >= 0 ? lines.slice(at).join(" ") : null;
+  if (!next && !body.some(bullet)) {
+    const m = body.join(" ").match(/^(.*?)\s*(Next month:.*)$/i);
+    if (m?.[2]) {
+      body = m[1] ? [m[1]] : [];
+      next = m[2];
+    }
+  }
+  if (body.length && !body.some(bullet))
+    body = body
+      .join(" ")
+      .split(/(?<=[.!?])\s+(?=[A-Z$"“(])/)
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .map((p) => `- ${p}`);
+  return [...body, ...(next ? [next.replace(/^next month:\s*/i, "Next month: ")] : [])].join("\n");
 }
 
 /** Early each month, last month's review (once), if it's turned on and the alert is on. */
@@ -271,6 +396,79 @@ function noteMissedReview(db: MunyDb, month: string, err: AiCallError, today: st
     })
     .onConflictDoNothing()
     .run();
+}
+
+/**
+ * Suggest categories by itself, after new transactions arrive. Runs in the
+ * background (waiting out a busy server), as its own change in the history
+ * so its inbox items can be undone apart from the sync that started it.
+ */
+export async function autoCategorize(
+  db: MunyDb,
+  deps: AiDeps,
+  onWait?: AiCall["onWait"],
+): Promise<AiCategorizeResult | null> {
+  try {
+    aiConnection(db, deps.secretKey, "autoCategorize");
+    aiConnection(db, deps.secretKey, "categorize");
+  } catch {
+    return null; // off, or not set up
+  }
+  const id = openChange(db, { actorType: "system", actorName: MUNY_AI });
+  return runAsChange(id, async () => {
+    const out = await suggestCategories(db, deps, localToday(), { mode: "background", onWait });
+    if (out.filed) describeChange(db, `Suggested categories for ${out.suggested} new transactions`);
+    return out;
+  });
+}
+
+/** After a sync or import, wait for things to settle (more may follow), then suggest. */
+export function startAutoCategorize(
+  db: MunyDb,
+  deps: AiDeps,
+  log: { warn: (o: object, msg: string) => void; info?: (o: object, msg: string) => void },
+  settleMs = 2 * 60_000,
+) {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let running = false;
+  let again = false;
+  const run = () => {
+    timer = null;
+    if (running) {
+      again = true;
+      return;
+    }
+    running = true;
+    // Not part of whichever request's sync set this off.
+    void runAsChange(null, () =>
+      autoCategorize(db, deps, (reason, seconds) =>
+        log.info?.({ reason, seconds }, "Category suggestions waiting on the AI server"),
+      ),
+    )
+      .catch((err) =>
+        log.warn(
+          { err: err instanceof Error ? err.message : "unknown" },
+          "Suggesting categories after a sync failed",
+        ),
+      )
+      .finally(() => {
+        running = false;
+        if (again) {
+          again = false;
+          schedule();
+        }
+      });
+  };
+  const schedule = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(run, settleMs);
+    timer.unref?.();
+  };
+  const off = onTransactionsAdded(() => schedule());
+  return () => {
+    off();
+    if (timer) clearTimeout(timer);
+  };
 }
 
 export function startAiScheduler(

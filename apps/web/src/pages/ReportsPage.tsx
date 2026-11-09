@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ColumnChart, LineChart, RankedBars, TableToggle } from "../components/charts.js";
 import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
 import { api } from "../lib/api.js";
+import { ReviewsTab } from "./reports/ReviewsTab.js";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -70,6 +71,7 @@ const TABS = [
   ["trends", "Trends"],
   ["cash-flow", "Cash flow"],
   ["net-worth", "Net worth"],
+  ["reviews", "Reviews"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
@@ -547,6 +549,7 @@ export function ReportsPage() {
       {tab === "trends" && <TrendsTab />}
       {tab === "cash-flow" && <CashFlowTab />}
       {tab === "net-worth" && <NetWorthTab />}
+      {tab === "reviews" && <ReviewsTab />}
     </>
   );
 }

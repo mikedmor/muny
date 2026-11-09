@@ -3,6 +3,7 @@ import {
   AI_DEFAULT_BASE_URLS,
   AI_DEFAULT_MODELS,
   type AiFeatures,
+  type AiModelJob,
   type AiProvider,
   type AiSettings,
   type AiSettingsInput,
@@ -23,6 +24,7 @@ interface Stored {
   model: string;
   baseUrl: string | null;
   features: AiFeatures;
+  models: Partial<Record<AiModelJob, string>>;
   /** encryptJson({ key }) */
   keyEnc: string | null;
 }
@@ -32,7 +34,17 @@ const DEFAULTS: Stored = {
   provider: "anthropic",
   model: AI_DEFAULT_MODELS.anthropic,
   baseUrl: null,
-  features: { categorize: true, monthlyReview: true, statementTemplates: true },
+  // The ones that send more, or send on their own, start off.
+  features: {
+    categorize: true,
+    monthlyReview: true,
+    statementTemplates: true,
+    autoCategorize: false,
+    merchantNames: true,
+    midMonthCheckin: false,
+    ask: false,
+  },
+  models: {},
   keyEnc: null,
 };
 
@@ -43,7 +55,12 @@ function read(db: MunyDb): Stored {
     .where(eq(schema.appSettings.key, KEY))
     .get();
   const v = (row?.value ?? {}) as Partial<Stored>;
-  return { ...DEFAULTS, ...v, features: { ...DEFAULTS.features, ...v.features } };
+  return {
+    ...DEFAULTS,
+    ...v,
+    features: { ...DEFAULTS.features, ...v.features },
+    models: { ...v.models },
+  };
 }
 
 function write(db: MunyDb, s: Stored) {
@@ -73,7 +90,12 @@ export function updateAiSettings(
     ...(input.model !== undefined && { model: input.model.trim() }),
     ...(input.baseUrl !== undefined && { baseUrl: input.baseUrl?.trim() || null }),
     features: { ...now.features, ...input.features },
+    models: { ...now.models },
   };
+  for (const [job, model] of Object.entries(input.models ?? {}) as [AiModelJob, string][]) {
+    if (model.trim()) next.models[job] = model.trim();
+    else delete next.models[job];
+  }
   // A new provider starts from its own suggested model, unless one was given.
   if (input.provider && input.provider !== now.provider && input.model === undefined)
     next.model = AI_DEFAULT_MODELS[input.provider];
@@ -104,14 +126,17 @@ export function aiConnection(
   if (!s.enabled) throw new AiSetupError("Turn on AI in Settings → AI first.");
   if (feature && !s.features[feature])
     throw new AiSetupError("That AI feature is turned off in Settings → AI.");
-  if (!s.model) throw new AiSetupError("Choose a model in Settings → AI.");
+  // Suggesting categories by itself is the categorize job.
+  const job = (feature === "autoCategorize" ? "categorize" : feature) as AiModelJob | undefined;
+  const model = (job && s.models[job]) || s.model;
+  if (!model) throw new AiSetupError("Choose a model in Settings → AI.");
   let apiKey: string | null = null;
   if (s.keyEnc && secret) apiKey = decryptJson<{ key: string }>(secret, s.keyEnc).key;
   if (!apiKey && s.provider === "anthropic")
     throw new AiSetupError("Add your Anthropic API key in Settings → AI.");
   return {
     provider: s.provider,
-    model: s.model,
+    model,
     baseUrl: s.baseUrl ?? AI_DEFAULT_BASE_URLS[s.provider],
     apiKey,
   };

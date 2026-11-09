@@ -6,6 +6,7 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ### Added
 
+- Built-in AI can suggest categories by itself after a sync or import, offers a rule once you've approved a merchant into a category three times, and suggests a budget from the monthly review. You can choose a model per job, and past reviews are kept in **Reports → Reviews**.
 - **Undo for anything.** After a change, an **Undo** bar appears at the bottom of the page (or press Ctrl+Z), and **Settings → History** lists every change from the last 60 days, by you, your household or an assistant, to undo or redo. Muny asks first when something was changed since, or when undoing would remove more than the change added.
 - **Remove old agent tokens.** A revoked or expired token can now be taken off the Agents page for good. Its past activity stays in the audit log.
 - **Anticipated spending.** The Spent this month chart continues your spending to the end of the month, rising on the due date of each recurring bill still to come. Hover over a day to see its transactions, or what's expected on it.

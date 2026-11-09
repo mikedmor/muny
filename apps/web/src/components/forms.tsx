@@ -118,19 +118,22 @@ export function Checkbox({
   checked,
   onChange,
   description,
+  disabled,
 }: {
   label: string;
   checked: boolean;
   onChange: (v: boolean) => void;
   description?: string;
+  disabled?: boolean;
 }) {
   const id = useId();
   return (
-    <div className="flex items-start gap-3">
+    <div className={`flex items-start gap-3 ${disabled ? "opacity-50" : ""}`}>
       <input
         id={id}
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
         className="mt-0.5 size-4 rounded border-slate-300 accent-brand-600"
       />

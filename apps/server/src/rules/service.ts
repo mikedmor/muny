@@ -292,6 +292,18 @@ export function rulesForTransaction(db: Db, transactionId: string): RuleWithCoun
     }));
 }
 
+/** An enabled rule already puts this transaction in that category. */
+export function ruleSetsCategory(db: Db, transactionId: string, categoryId: string): boolean {
+  const c = loadCandidates(db, [transactionId])[0];
+  if (!c) return false;
+  return listRules(db).some(
+    (r) =>
+      r.enabled &&
+      r.actions.some((a) => a.type === "setCategory" && a.categoryId === categoryId) &&
+      ruleMatches(r, c.facts),
+  );
+}
+
 export function previewOf(e: Evaluation, limit = 10): RulePreview {
   return {
     matched: e.matched.length,

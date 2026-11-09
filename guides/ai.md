@@ -24,7 +24,17 @@ Each feature can be turned off on its own.
 - **Monthly money review.** In the first week of each month, Muny writes a short review of last month and leaves it as a notification. It sends only totals: income and spending for last month and the month before, your biggest categories, budgets you went over, and what [Ways to save](savings.md#ways-to-save) found. No transactions, merchants, accounts or balances. It goes to the channels you choose for **Monthly money review (AI)** under Alerts settings (in-app only unless you add one; the review includes amounts). **Write last month's review** makes one now, replacing that month's.
 - **Fill in Teach Muny.** When a statement doesn't read fully and you open **Teach Muny**, **Fill in with AI** sends that statement's text (long numbers hidden) and fills in the labels it finds. Muny keeps only labels that really find a value on that statement, and you still check and save the template.
 
-Nothing else is ever sent, and Muny never sends anything in the background except the monthly review you turned on.
+Nothing else is ever sent, and Muny never sends anything in the background except the features you turned on.
+
+## Letting it help on its own
+
+- **Do it after every sync or import** (off by default). A couple of minutes after a bank sync or import brings in new transactions, Muny suggests categories by itself. Anything already in the inbox or that you turned down is left out.
+- **Rules from what you approve.** Once you've approved three transactions from one merchant into one category, Muny offers a rule in the inbox, so the next ones sort themselves. It offers each once.
+- **A budget from the review.** When a category jumped well above its usual (the median of the three months before), the review suggests a budget at that usual amount, rounded up to $10. Muny works the number out itself, and the budget waits in the inbox. If you turn it down, Muny leaves that category alone for three months.
+- **Past reviews** are kept in **Reports → Reviews**.
+- **A model per job.** Under each feature in **Settings → AI** you can name a different model, on the same provider and server. A small, fast model suits categories; a larger one suits the review. Leave it blank to use the main model.
+
+Everything these do can be undone from [Settings → History](undo.md).
 
 ## When the AI server is busy
 

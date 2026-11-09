@@ -14,6 +14,7 @@ export { localToday };
 
 import { applyInvestmentSync, investSyncSince } from "../invest/service.js";
 import { applyMerchantMemory } from "../ledger/memory.js";
+import { transactionsAdded } from "../lib/events.js";
 import { applyLoanTerms, refreshManualLoans } from "../loans/service.js";
 import { rescanRecurring } from "../recurring/service.js";
 import { runRulesOn } from "../rules/service.js";
@@ -411,6 +412,7 @@ export async function syncConnection(
       syncCursor: result.cursor,
       institutionName: conn.institutionName ?? info.institutionName,
     });
+    if (summary.added > 0) transactionsAdded(db);
     return summary;
   } catch (e) {
     const pe =

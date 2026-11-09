@@ -11,7 +11,7 @@ import {
   type RuleAction,
   SAVING_KINDS,
 } from "@muny/shared";
-import { and, desc, eq, inArray, isNull, lt } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
@@ -27,6 +27,7 @@ import {
   createRule,
   evaluateRules,
   previewOf,
+  ruleSetsCategory,
   validateReferences,
 } from "../rules/service.js";
 import { createDiy } from "../savings/routes.js";
@@ -132,9 +133,11 @@ const KINDS: ProposalKind[] = [
           : {}),
       };
     },
-    apply: (db, { transaction_ids, category }) => {
+    apply: (db, { transaction_ids, category }, today) => {
       const cat = resolveCategory(db, category);
-      return bulkUpdateTransactions(db, transaction_ids, { categoryId: cat.id });
+      const out = bulkUpdateTransactions(db, transaction_ids, { categoryId: cat.id });
+      offerRules(db, transaction_ids, cat, today);
+      return out;
     },
   }),
   kind({
@@ -620,6 +623,52 @@ export function fileFromMuny(
     reason,
   );
   return { filed: true, summary: preview.summary };
+}
+
+/** How many of a merchant's transactions in one category before Muny offers a rule. */
+export const RULE_OFFER_AFTER = 3;
+
+/**
+ * After approving categories: a merchant that now has a few transactions in
+ * that category, with no rule doing it, gets a rule offered in the inbox, so
+ * the next ones sort themselves. Once per merchant and category, approved or not.
+ */
+function offerRules(
+  db: MunyDb,
+  transactionIds: string[],
+  cat: { id: string; name: string },
+  today: string,
+) {
+  const payees = db.all<{ name: string; sample: string; n: number }>(sql`
+    select p.display_name as name, max(t2.id) as sample, count(t2.id) as n
+      from payees p
+      join transactions t2 on t2.payee_id = p.id and t2.category_id = ${cat.id}
+     where p.id in (select payee_id from transactions where id in (${sql.join(
+       transactionIds.map((id) => sql`${id}`),
+       sql`, `,
+     )}))
+     group by p.id`);
+  for (const p of payees) {
+    if (p.n < RULE_OFFER_AFTER || ruleSetsCategory(db, p.sample, cat.id)) continue;
+    const name = `${p.name} → ${cat.name}`;
+    const asked = db.get<{ n: number }>(sql`
+      select count(*) as n from agent_proposals
+       where tool = 'create_rule' and json_extract(input, '$.name') = ${name}`);
+    if (asked?.n) continue;
+    fileFromMuny(
+      db,
+      today,
+      "create_rule",
+      {
+        name,
+        match: "all",
+        conditions: [{ field: "payee", op: "equals", value: p.name }],
+        actions: [{ type: "setCategory", category: cat.id }],
+        apply_to_existing: true,
+      },
+      `You've put ${p.n} ${p.name} transactions in ${cat.name}. With this rule, new ones go there by themselves.`,
+    );
+  }
 }
 
 /** The tools that file proposals. None of them change anything on their own. */

@@ -1245,3 +1245,11 @@ export const changeLog = sqliteTable(
   },
   (t) => [index("change_log_changeset_idx").on(t.changesetId)],
 );
+
+/** The built-in AI's monthly reviews, one per month (Reports → Reviews). */
+export const aiReviews = sqliteTable("ai_reviews", {
+  /** YYYY-MM, the month reviewed. */
+  month: text().primaryKey(),
+  body: text().notNull(),
+  createdAt: createdAt(),
+});

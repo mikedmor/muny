@@ -1,9 +1,11 @@
 import {
   AI_DEFAULT_BASE_URLS,
+  AI_MODEL_JOBS,
   AI_PROVIDER_LABELS,
   AI_PROVIDERS,
   type AiCategorizeResult,
   type AiFeatures,
+  type AiModelJob,
   type AiProvider,
   type AiSettingsInput,
   type AiSettings as Settings,
@@ -11,7 +13,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useState } from "react";
 import { Checkbox, SelectField } from "../../components/forms.js";
-import { Alert, Button, Card, Field } from "../../components/ui.js";
+import { Alert, Button, Card, cx, Field } from "../../components/ui.js";
 import { api } from "../../lib/api.js";
 import { useAuthStatus } from "../../lib/auth.js";
 
@@ -26,12 +28,25 @@ export const aiKey = ["ai-settings"] as const;
 export const useAiSettings = () =>
   useQuery({ queryKey: aiKey, queryFn: () => api.get<Settings>("/api/ai") });
 
-const FEATURES: { key: keyof AiFeatures; label: string; sends: string }[] = [
+const FEATURES: {
+  key: keyof AiFeatures;
+  label: string;
+  sends: string;
+  /** Only with this one on. */
+  under?: keyof AiFeatures;
+}[] = [
   {
     key: "categorize",
     label: "Suggest categories",
     sends:
-      "Sends up to 60 recent uncategorized transactions (merchant or description, with long numbers hidden, and amount) and your category names. Suggestions go to Alerts → Inbox.",
+      "Sends up to 60 recent uncategorized transactions (merchant or description, with long numbers hidden, and amount) and your category names, leaving out any already in the inbox or turned down. Suggestions go to Alerts → Inbox.",
+  },
+  {
+    key: "autoCategorize",
+    under: "categorize",
+    label: "Do it after every sync or import",
+    sends:
+      "The same, by itself, a couple of minutes after a bank sync or import brings in new transactions. If the AI server is busy, it waits.",
   },
   {
     key: "monthlyReview",
@@ -75,7 +90,12 @@ export function AiSettings() {
     onSuccess: () => qc.invalidateQueries(),
   });
   if (!s.data) return s.isError ? <Alert>Couldn't load AI settings.</Alert> : null;
-  const v = { ...s.data, ...draft, features: { ...s.data.features, ...draft.features } };
+  const v = {
+    ...s.data,
+    ...draft,
+    features: { ...s.data.features, ...draft.features },
+    models: { ...s.data.models, ...draft.models },
+  };
   const provider = v.provider as AiProvider;
   const set = (patch: AiSettingsInput) => setDraft((d) => ({ ...d, ...patch }));
   const submit = (e: FormEvent) => {
@@ -174,14 +194,36 @@ export function AiSettings() {
           <fieldset className="space-y-3">
             <legend className="mb-2 text-sm font-medium">What it does</legend>
             {FEATURES.map((f) => (
-              <Checkbox
-                key={f.key}
-                label={f.label}
-                description={f.sends}
-                checked={v.features[f.key]}
-                onChange={(on) => set({ features: { ...draft.features, [f.key]: on } })}
-              />
+              <div key={f.key} className={cx(f.under && "ml-7")}>
+                <Checkbox
+                  label={f.label}
+                  description={f.sends}
+                  checked={v.features[f.key]}
+                  disabled={!!f.under && !v.features[f.under]}
+                  onChange={(on) => set({ features: { ...draft.features, [f.key]: on } })}
+                />
+                {v.features[f.key] && (AI_MODEL_JOBS as readonly string[]).includes(f.key) && (
+                  <label className="mt-1.5 ml-7 flex max-w-sm items-center gap-2 text-xs text-slate-500">
+                    Model
+                    <input
+                      value={
+                        draft.models?.[f.key as AiModelJob] ?? v.models[f.key as AiModelJob] ?? ""
+                      }
+                      placeholder={`${v.model || "The model above"} (the same)`}
+                      disabled={!owner}
+                      onChange={(e) =>
+                        set({ models: { ...draft.models, [f.key]: e.target.value } })
+                      }
+                      className="min-w-0 flex-1 rounded-md border border-slate-300 bg-surface px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-950"
+                    />
+                  </label>
+                )}
+              </div>
             ))}
+            <p className="text-xs text-slate-500">
+              A model for one job uses the same provider, address and key. Leave it blank to use the
+              model above: a small, fast one suits suggesting categories, a larger one the review.
+            </p>
           </fieldset>
 
           {save.error && <Alert>{save.error.message}</Alert>}

@@ -1,5 +1,5 @@
 import { openDb } from "@muny/db";
-import { startAiScheduler } from "./ai/features.js";
+import { startAiScheduler, startAutoCategorize } from "./ai/features.js";
 import { ensureAlertRules, startAlertScheduler } from "./alerts/service.js";
 import { buildApp } from "./app.js";
 import { anchorAllCards } from "./cards/service.js";
@@ -59,6 +59,7 @@ async function main() {
   startSyncScheduler(db, app.syncDeps, app.log);
   startAlertScheduler(db, app.alertDeps, app.log);
   startAiScheduler(db, { secretKey: config.secretKey }, app.log);
+  startAutoCategorize(db, { secretKey: config.secretKey }, app.log);
   startChangePruner(db);
   if (config.plaid) app.log.info({ env: config.plaid.env }, "Plaid sync enabled");
   if (config.teller) app.log.info({ env: config.teller.env }, "Teller sync enabled");

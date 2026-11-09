@@ -4,6 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
 import { audit } from "../lib/audit.js";
+import { transactionsAdded } from "../lib/events.js";
 import { parse } from "../lib/http.js";
 import { detectImportFile } from "./detect.js";
 import { commitImport, previewImport } from "./service.js";
@@ -78,6 +79,7 @@ export function registerImportRoutes(app: FastifyInstance, db: MunyDb) {
     const user = requireUser(req);
     const body = parse(CommitBody, req.body);
     const result = commitImport(db, body, user.id);
+    if (result.imported > 0) transactionsAdded(db);
     // Never log file contents; only the summary.
     audit(db, {
       actorType: "user",

@@ -1,5 +1,6 @@
-import type { MunyDb } from "@muny/db";
-import { AI_PROVIDERS, type AiSettings } from "@muny/shared";
+import { type MunyDb, schema } from "@muny/db";
+import { AI_MODEL_JOBS, AI_PROVIDERS, type AiReview, type AiSettings } from "@muny/shared";
+import { desc } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireOwner, requireUser } from "../auth/plugin.js";
@@ -53,8 +54,13 @@ export function registerAiRoutes(app: FastifyInstance, db: MunyDb, deps: AiDeps)
             categorize: z.boolean().optional(),
             monthlyReview: z.boolean().optional(),
             statementTemplates: z.boolean().optional(),
+            autoCategorize: z.boolean().optional(),
+            merchantNames: z.boolean().optional(),
+            midMonthCheckin: z.boolean().optional(),
+            ask: z.boolean().optional(),
           })
           .optional(),
+        models: z.partialRecord(z.enum(AI_MODEL_JOBS), z.string().trim().max(100)).optional(),
         key: z.string().max(500).nullable().optional(),
       }),
       req.body,
@@ -108,6 +114,17 @@ export function registerAiRoutes(app: FastifyInstance, db: MunyDb, deps: AiDeps)
     const text = await guard(() => writeReview(db, deps, month));
     log(user.id, "ai.review", { month });
     return { month, text };
+  });
+
+  /** Every monthly review written, newest first (they stay after AI is turned off). */
+  app.get("/api/ai/reviews", async (req): Promise<AiReview[]> => {
+    requireUser(req);
+    return db
+      .select()
+      .from(schema.aiReviews)
+      .orderBy(desc(schema.aiReviews.month))
+      .all()
+      .map((r) => ({ month: r.month, body: r.body, createdAt: r.createdAt.getTime() }));
   });
 
   app.post("/api/ai/statement-template", async (req) => {
