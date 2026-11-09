@@ -1,10 +1,11 @@
 import type { HouseholdInfo, InviteCreated, UserRole } from "@muny/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { SelectField } from "../../components/forms.js";
 import { Alert, Button, Card, Field } from "../../components/ui.js";
 import { ApiError, api } from "../../lib/api.js";
 import { useAuthStatus } from "../../lib/auth.js";
+import { copyText } from "../../lib/clipboard.js";
 
 const ROLE_LABEL: Record<UserRole, string> = {
   owner: "Owner",
@@ -80,6 +81,7 @@ export function HouseholdSettings() {
   const [role, setRole] = useState<"member" | "viewer">("member");
   const [created, setCreated] = useState<InviteCreated | null>(null);
   const [copied, setCopied] = useState(false);
+  const linkField = useRef<HTMLInputElement>(null);
   const invite = useMutation({
     mutationFn: () => api.post<InviteCreated>("/api/household/invites", { role }),
     onSuccess: (i) => {
@@ -190,6 +192,7 @@ export function HouseholdSettings() {
               </p>
               <div className="flex gap-2">
                 <input
+                  ref={linkField}
                   readOnly
                   value={link}
                   aria-label="Invite link"
@@ -199,7 +202,11 @@ export function HouseholdSettings() {
                 <Button
                   variant="secondary"
                   onClick={() => {
-                    void navigator.clipboard?.writeText(link).then(() => setCopied(true));
+                    void copyText(link).then((ok) => {
+                      setCopied(ok);
+                      // Couldn't copy: select the link so Ctrl+C (or a long press) does it.
+                      if (!ok) linkField.current?.select();
+                    });
                   }}
                 >
                   {copied ? "Copied" : "Copy"}

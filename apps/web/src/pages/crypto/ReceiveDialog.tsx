@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CoinIcon } from "../../components/coins.js";
 import { Alert } from "../../components/ui.js";
 import { api } from "../../lib/api.js";
+import { copyText } from "../../lib/clipboard.js";
 
 /** Where to receive into a synced wallet: the address with a QR code (drawn in the browser). */
 
@@ -22,7 +23,7 @@ export function Receive({ id }: { id: string }) {
     queryFn: () => api.get<ReceiveInfo>(`/api/crypto/wallets/${id}/receive`),
   });
   const [qr, setQr] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
   const address = q.data?.address;
   useEffect(() => {
     if (!address) return;
@@ -55,14 +56,14 @@ export function Receive({ id }: { id: string }) {
               type="button"
               aria-label="Copy address"
               onClick={() => {
-                void navigator.clipboard?.writeText(d.address as string).then(() => {
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 1500);
+                void copyText(d.address as string).then((ok) => {
+                  setCopied(ok ? "Copied" : "Select it to copy");
+                  setTimeout(() => setCopied(null), ok ? 1500 : 3000);
                 });
               }}
               className="rounded-lg border border-slate-300 px-2 py-1 text-xs dark:border-slate-700"
             >
-              {copied ? "Copied" : "Copy"}
+              {copied ?? "Copy"}
             </button>
           </div>
           {qr && (
