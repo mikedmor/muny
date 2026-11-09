@@ -25,6 +25,8 @@ Click a transaction to open its details:
 | **Delete**             | Removes it permanently, after you confirm. For bank-synced transactions, hiding is usually better, since the bank may send it again.                                                    |
 | **Rules**              | Lists the rules that apply to it, or **Add rule** to make one from it.                                                                                                                  |
 
+The bottom of a transaction's window shows the bank's own wording and its **Source**: where Muny got it, such as Plaid, a statement upload, a Rocket Money import, or added by hand.
+
 ## Changing many at once
 
 Tick the transactions you want, then **Set category…** or **Add tag** to change them all together.

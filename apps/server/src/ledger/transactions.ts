@@ -20,6 +20,28 @@ import {
 const t = schema.transactions;
 const MANUAL_PREFIX = "manual:";
 
+const SYNC_SOURCES: Record<string, string> = {
+  plaid: "Plaid",
+  teller: "Teller",
+  paypal: "PayPal",
+  simplefin: "SimpleFIN",
+};
+const FILE_SOURCES: Record<string, string> = {
+  csv: "CSV import",
+  ofx: "OFX import",
+  qfx: "QFX import",
+  rocket_money: "Rocket Money import",
+};
+
+/** Where a transaction came from, in words, from how it was recorded. */
+function sourceLabel(importHash: string, batchSource: string | undefined): string {
+  if (importHash.startsWith(MANUAL_PREFIX)) return "Added by hand";
+  if (importHash.startsWith("stmt:")) return "Statement upload";
+  const provider = SYNC_SOURCES[importHash.split(":")[0] ?? ""];
+  if (provider) return provider;
+  return (batchSource && FILE_SOURCES[batchSource]) || "Imported file";
+}
+
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 const cents = z.number().int().safe();
 const id = z.string().min(1).max(64);
@@ -280,6 +302,18 @@ export function loadTransactions(db: MunyDb, ids: string[]): Transaction[] {
     };
   };
 
+  const batchIds = [...new Set(rows.map((r) => r.t.importBatchId).filter((x): x is string => !!x))];
+  const batchSource = new Map(
+    batchIds.length
+      ? db
+          .select({ id: schema.importBatches.id, source: schema.importBatches.source })
+          .from(schema.importBatches)
+          .where(inArray(schema.importBatches.id, batchIds))
+          .all()
+          .map((b) => [b.id, b.source])
+      : [],
+  );
+
   const seriesIds = [
     ...new Set(rows.map((r) => r.t.recurringSeriesId).filter((x): x is string => !!x)),
   ];
@@ -322,6 +356,10 @@ export function loadTransactions(db: MunyDb, ids: string[]): Transaction[] {
         pending: r.pending,
         hidden: r.hidden,
         manual: r.importHash.startsWith(MANUAL_PREFIX),
+        source: sourceLabel(
+          r.importHash,
+          r.importBatchId ? batchSource.get(r.importBatchId) : undefined,
+        ),
         transferPairId: r.transferPairId,
         transferAccountName: r.transferPairId ? (pairAccount.get(r.transferPairId) ?? null) : null,
         fundedFrom: fundedFrom(r),

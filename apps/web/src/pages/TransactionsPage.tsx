@@ -1058,6 +1058,7 @@ function TransactionDetail({
               onFind={onDone}
             />
           </p>
+          <p className="text-slate-500">Source: {txn.source}</p>
           {txn.fundedFrom && (
             <p className="border-t border-slate-200 pt-1.5 text-slate-500 dark:border-slate-800">
               Paid through {txn.accountName}

@@ -34,6 +34,8 @@ export interface Transaction {
   hidden: boolean;
   /** Manually entered (editable date/amount) vs imported/synced. */
   manual: boolean;
+  /** Where it came from, in words: "Plaid", "Statement upload", "Added by hand". */
+  source: string;
   transferPairId: string | null;
   /** Account on the other side of a detected transfer. */
   transferAccountName: string | null;

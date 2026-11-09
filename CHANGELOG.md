@@ -9,9 +9,16 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 - **Remove old agent tokens.** A revoked or expired token can now be taken off the Agents page for good. Its past activity stays in the audit log.
 - **Anticipated spending.** The Spent this month chart continues your spending to the end of the month, rising on the due date of each recurring bill still to come. Hover over a day to see its transactions, or what's expected on it.
 
+- **See where a transaction came from.** Its window now shows the source: your bank sync provider, a statement upload, a file import or added by hand.
+
 ### Changed
 
 - **Split totals into colored parts** is now off by default. If you turned it on yourself, it stays on.
+
+### Fixed
+
+- The rule editor no longer gets cut off at the bottom on shorter windows.
+- Closing a window opened from inside a transaction, or choosing a rule under **Rules applied**, no longer closes the transaction as well.
 
 ## [1.1.0] - 2026-11-08
 
