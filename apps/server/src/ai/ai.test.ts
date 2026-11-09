@@ -144,7 +144,12 @@ describe("built-in AI", () => {
     const { client, seen } = await setup(() => ({
       json: {
         choices: [
-          { message: { content: "- You spent less than the month before.\n- Keep it up." } },
+          {
+            message: {
+              content:
+                "## Review\n- You spent **less** than the month before.\n\n- Keep it up.\nNext month: keep going.",
+            },
+          },
         ],
       },
     }));
@@ -157,7 +162,10 @@ describe("built-in AI", () => {
     });
     const r = await client.post("/api/ai/review", {});
     expect(r.statusCode).toBe(200);
-    expect(r.json<{ text: string }>().text).toContain("You spent less");
+    // Plain lines for every channel: markdown and blank lines dropped.
+    expect(r.json<{ text: string }>().text).toBe(
+      "Review\n- You spent less than the month before.\n- Keep it up.\nNext month: keep going.",
+    );
     expect(seen[0]?.url).toBe("https://ai.example.test/v1/chat/completions");
     expect(seen[0]?.headers.authorization).toBe(`Bearer ${KEY}`);
     // Writing it again replaces it.

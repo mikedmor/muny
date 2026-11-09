@@ -175,11 +175,18 @@ export async function writeReview(
     effort: "medium",
     maxTokens: 2000,
     system:
-      "You write a short, plain monthly money review for a household, from figures their own finance app worked out. Use only the numbers given and don't invent any. Be warm and direct, not preachy. Plain text: 3 to 5 short lines, each starting with '- ', under 150 words in all, ending with the one thing most worth doing next month.",
+      "You write a short, plain monthly money review for a household, from figures their own finance app worked out. Use only the numbers given and don't invent any. Be warm and direct, not preachy. Plain text, under 150 words in all: 3 or 4 short lines, each on its own line starting with '- ', then a last line starting 'Next month: ' with the one thing most worth doing. No headings, bold or other markdown.",
     prompt: reviewFacts(db, month, today),
   });
   if (!text) throw new Error("The review came back empty.");
-  const body = text.slice(0, 2000);
+  // Plain lines for every channel: no markdown emphasis or headings, no blank lines.
+  const body = text
+    .replace(/\*\*|__/g, "")
+    .split(/\r?\n/)
+    .map((l) => l.replace(/^#+\s*/, "").trim())
+    .filter(Boolean)
+    .join("\n")
+    .slice(0, 2000);
   const dedupeKey = `ai_review:${month}`;
   // Writing it again replaces the month's review, and it's no longer missing.
   db.delete(schema.notifications)
