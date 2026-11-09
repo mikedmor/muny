@@ -99,7 +99,7 @@ export function makeCtx(base: Omit<ChainCtx, "get" | "post">, provider: BudgetPr
     if (res.status === 429) throw new SyncError(`${host} rate limit hit; try again later`);
     if (res.status === 401 || res.status === 403)
       throw new SyncError(
-        `${host} refused the request (HTTP ${res.status}). Check the API key or server in Crypto → Settings.`,
+        `${host} refused the request (HTTP ${res.status}). Check the API key or server in Settings → API.`,
       );
     if (res.status === 400 || res.status === 404)
       throw new SyncError(`${host} didn't accept this address (HTTP ${res.status})`);

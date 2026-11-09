@@ -11,6 +11,8 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 - **See where a transaction came from.** Its window now shows the source: your bank sync provider, a statement upload, a file import or added by hand.
 
+- **Know when an API runs out.** A new alert tells you when a service reaches its daily or monthly limit. Anything that relies on it, like syncing a wallet or updating prices, is turned off with a note saying how long until it resets.
+
 ### Changed
 
 - **Settings → API** is the one place for every outside service: crypto prices, Blockscout, wallet servers, home and vehicle values and stock extras, each showing whether it's set up and folding away once its key is saved, with request limits for all of them alongside. Crypto's Settings tab keeps cost basis and NFT images, and Assets no longer has a Settings tab.

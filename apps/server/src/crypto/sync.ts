@@ -14,7 +14,7 @@ import { type MunyDb, newId, schema } from "@muny/db";
 import type { CryptoSyncResult } from "@muny/shared";
 import { and, eq, sql } from "drizzle-orm";
 import { decryptJson, encryptJson } from "../lib/crypto.js";
-import type { BudgetProvider } from "./budget.js";
+import { type BudgetProvider, limitFor } from "./budget.js";
 import { algorand } from "./chains/algorand.js";
 import { blockbook } from "./chains/blockbook.js";
 import { blockcypher, unsupported } from "./chains/blockcypher.js";
@@ -324,6 +324,16 @@ const EXCHANGES: Record<
   gemini: { adapter: gemini, budget: "gemini", label: "Gemini" },
   binance_us: { adapter: binanceus, budget: "binanceus", label: "Binance US" },
 };
+/** The limit stopping this wallet from syncing, if its service has hit one. */
+export function walletLimit(db: MunyDb, wallet: { chain: string | null; exchange: string | null }) {
+  const provider = wallet.exchange
+    ? EXCHANGES[wallet.exchange]?.budget
+    : wallet.chain
+      ? BUDGET[CHAINS[wallet.chain as ChainKey]?.provider]
+      : undefined;
+  return provider ? limitFor(db, provider) : null;
+}
+
 export const canSyncExchange = (key: string | null | undefined) => !!key && key in EXCHANGES;
 
 /** Run an exchange wallet's adapter (its encrypted key is decrypted only here). */
@@ -564,11 +574,13 @@ async function runSync(
 
 /** Sync every wallet with sync on, one at a time. Errors are kept per wallet. */
 export async function syncAll(db: MunyDb, deps: SyncDeps): Promise<CryptoSyncResult> {
+  // A wallet whose service is out of requests waits; it would only fail.
   const ids = db
-    .select({ id: w.id })
+    .select({ id: w.id, chain: w.chain, exchange: w.exchange })
     .from(w)
     .where(and(eq(w.syncEnabled, true), eq(w.archived, false), sql`${w.sourceEnc} is not null`))
     .all()
+    .filter((r) => !walletLimit(db, r))
     .map((r) => r.id);
   return syncMany(db, ids, deps);
 }

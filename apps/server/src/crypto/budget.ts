@@ -1,5 +1,5 @@
 import { type MunyDb, schema } from "@muny/db";
-import type { CryptoUsage } from "@muny/shared";
+import { type ApiLimit, type CryptoUsage, limitMessage } from "@muny/shared";
 import { eq } from "drizzle-orm";
 
 /**
@@ -111,19 +111,43 @@ function current(c: Counter | undefined, now: Date): Counter {
   };
 }
 
+/** The limit this count has used up. A spent month outlasts a spent day, so it comes first. */
+function limitOf(provider: BudgetProvider, c: Counter, now: Date): ApiLimit | null {
+  const lim = LIMITS[provider];
+  const base = { provider, label: lim.label };
+  if (c.monthCount >= lim.month)
+    return {
+      ...base,
+      period: "month",
+      allowed: lim.month,
+      resetsAt: new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime(),
+    };
+  if (c.dayCount >= lim.day)
+    return {
+      ...base,
+      period: "day",
+      allowed: lim.day,
+      resetsAt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime(),
+    };
+  return null;
+}
+
+/** Whether this service has hit a limit right now. */
+export function limitFor(db: MunyDb, provider: BudgetProvider, now = new Date()): ApiLimit | null {
+  return limitOf(provider, current(load(db)[provider], now), now);
+}
+
+/** Every service that has hit a limit right now. */
+export function apiLimits(db: MunyDb, now = new Date()): ApiLimit[] {
+  return usage(db, now).flatMap((u) => (u.limit ? [u.limit] : []));
+}
+
 /** Count one call, or throw BudgetError without counting if a cap is reached. */
 export function spend(db: MunyDb, provider: BudgetProvider, now = new Date()) {
   const all = load(db);
   const c = current(all[provider], now);
-  const lim = LIMITS[provider];
-  if (c.dayCount >= lim.day)
-    throw new BudgetError(
-      `Daily limit for ${lim.label} reached (${lim.day} requests); it resets tomorrow`,
-    );
-  if (c.monthCount >= lim.month)
-    throw new BudgetError(
-      `Monthly limit for ${lim.label} reached (${lim.month} requests); it resets next month`,
-    );
+  const hit = limitOf(provider, c, now);
+  if (hit) throw new BudgetError(limitMessage(hit, now.getTime()));
   all[provider] = { ...c, dayCount: c.dayCount + 1, monthCount: c.monthCount + 1 };
   db.insert(schema.appSettings)
     .values({ key: KEY, value: all })
@@ -154,6 +178,7 @@ export function usage(db: MunyDb, now = new Date()): CryptoUsage[] {
       dayLimit: LIMITS[p].day,
       month: c.monthCount,
       monthLimit: LIMITS[p].month,
+      limit: limitOf(p, c, now),
     };
   });
 }

@@ -9,6 +9,7 @@ import {
 import { Link } from "@tanstack/react-router";
 import { ChevronRight, FileUp, Link2, Pencil, X } from "lucide-react";
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ApiLimitNotice, useApiLimit } from "../components/ApiLimit.js";
 import { Donut, LineChart, type StackBand } from "../components/charts.js";
 import { Modal } from "../components/forms.js";
 import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
@@ -67,6 +68,7 @@ function ValueChart({
 }) {
   const [range, setRange] = useState<(typeof RANGES)[number][0]>("All");
   const backfill = useInvestBackfill();
+  const limit = useApiLimit("yahoo");
   const days = RANGES.find((r) => r[0] === range)?.[1] ?? 0;
   const cutoff = days ? new Date(Date.now() - days * 86400000).toISOString().slice(0, 10) : "";
   const shown = thin(history.map((p, i) => ({ ...p, i })).filter((p) => p.date >= cutoff));
@@ -137,7 +139,7 @@ function ValueChart({
           prices.{" "}
           <button
             type="button"
-            disabled={backfill.isPending}
+            disabled={backfill.isPending || !!limit}
             onClick={() => backfill.mutate()}
             title="After importing older trades, work the estimates out again"
             className="text-brand-600 hover:underline disabled:opacity-60 dark:text-brand-500"
@@ -154,13 +156,14 @@ function ValueChart({
           <Button
             variant="secondary"
             className="px-2.5 py-1 text-xs"
-            disabled={backfill.isPending}
+            disabled={backfill.isPending || !!limit}
             onClick={() => backfill.mutate()}
           >
             {backfill.isPending ? "Filling in…" : "Fill in history"}
           </Button>
         </div>
       )}
+      {limit && <ApiLimitNotice limit={limit} className="mt-2" />}
       {backfill.error && <Alert>{backfill.error.message}</Alert>}
       {res && res.missing.length > 0 && (
         <p role="status" className="mt-2 text-xs text-slate-500">

@@ -7,6 +7,7 @@ import {
 } from "@muny/shared";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { ApiLimitNotice } from "../../components/ApiLimit.js";
 import { CoinIcon, WalletIcon } from "../../components/coins.js";
 import { Modal } from "../../components/forms.js";
 import { Alert, Button, Card, cx } from "../../components/ui.js";
@@ -390,7 +391,7 @@ export function CryptoWalletPage() {
               <div className="flex flex-wrap gap-2">
                 {w.sourceHint && (
                   <Button
-                    disabled={w.syncing || w.queued || sync.isPending}
+                    disabled={w.syncing || w.queued || sync.isPending || !!w.limit}
                     onClick={() => sync.mutate(undefined)}
                   >
                     <span
@@ -467,6 +468,7 @@ export function CryptoWalletPage() {
                     )}
                   </p>
                 )}
+                {w.limit && <ApiLimitNotice limit={w.limit} className="mt-2" />}
                 {w.lastError && !w.syncing && (
                   <p
                     className={cx(

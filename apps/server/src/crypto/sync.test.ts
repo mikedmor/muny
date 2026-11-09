@@ -272,8 +272,8 @@ describe("crypto wallet sync", () => {
     ).json<CryptoWallet>();
     await client.put(`/api/crypto/wallets/${w.id}/source`, { chain: "eth", source: ME });
     const res = await client.post(`/api/crypto/wallets/${w.id}/sync`);
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toMatch(/Daily limit/);
+    expect(res.statusCode).toBe(429);
+    expect(res.body).toMatch(/daily limit of .* It resets in/);
     expect(bs.calls).toEqual([]);
     const s = (await client.get("/api/crypto/settings")).json<{
       usage: { provider: string; today: number; dayLimit: number }[];

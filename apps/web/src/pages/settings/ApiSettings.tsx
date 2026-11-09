@@ -1,7 +1,13 @@
-import { type AssetValuationSettings, CRYPTO_SYNC_CHAINS, type CryptoUsage } from "@muny/shared";
+import {
+  type AssetValuationSettings,
+  CRYPTO_SYNC_CHAINS,
+  type CryptoUsage,
+  describeWait,
+} from "@muny/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, ExternalLink } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { ApiLimitNotice } from "../../components/ApiLimit.js";
 import { Checkbox } from "../../components/forms.js";
 import { Alert, Button, Card, cx, Field } from "../../components/ui.js";
 import { api } from "../../lib/api.js";
@@ -250,6 +256,12 @@ function RequestLimits({ usage }: { usage: CryptoUsage[] }) {
           {used.map((u) => (
             <li key={u.provider}>
               <span className="block">{u.label}</span>
+              {u.limit && (
+                <span className="block text-xs font-medium text-amber-700 dark:text-amber-400">
+                  {u.limit.period === "day" ? "Daily" : "Monthly"} limit reached · resets in{" "}
+                  {describeWait(u.limit.resetsAt - Date.now())}
+                </span>
+              )}
               <span className="block text-xs tabular-nums text-slate-500">
                 {u.today.toLocaleString()} / {u.dayLimit.toLocaleString()} today ·{" "}
                 {u.month.toLocaleString()} / {u.monthLimit.toLocaleString()} this month
@@ -259,7 +271,10 @@ function RequestLimits({ usage }: { usage: CryptoUsage[] }) {
                 aria-hidden="true"
               >
                 <span
-                  className="block h-full rounded-full bg-brand-600"
+                  className={cx(
+                    "block h-full rounded-full",
+                    u.limit ? "bg-amber-500" : "bg-brand-600",
+                  )}
                   style={{ width: `${Math.min(100, share(u) * 100)}%` }}
                 />
               </span>
@@ -313,6 +328,9 @@ export function ApiSettings() {
   if (!d || !v || !stocks || !banks) return <p className="text-sm text-slate-500">Loading…</p>;
 
   const providerName = d.provider === "coingecko" ? "CoinGecko" : "DefiLlama";
+  const limited = (...providers: string[]) =>
+    d.usage.find((u) => providers.includes(u.provider) && u.limit)?.limit ?? null;
+  const priceLimit = limited(d.provider);
   const customServers = Object.values(d.servers).filter(Boolean).length;
   const stockExtras = [stocks.logos && "Logos", stocks.market && "Market"].filter(Boolean);
   const bankNames = [banks.plaid.configured && "Plaid", banks.teller.configured && "Teller"].filter(
@@ -335,9 +353,11 @@ export function ApiSettings() {
             <Service
               name="Crypto prices"
               purpose="What your coins are worth, today and in the past"
-              status={d.pricesEnabled ? `On · ${providerName}` : "Off"}
-              tone={d.pricesEnabled ? "good" : "idle"}
-              startOpen={!d.pricesEnabled}
+              status={
+                priceLimit ? "Limit reached" : d.pricesEnabled ? `On · ${providerName}` : "Off"
+              }
+              tone={priceLimit ? "suggest" : d.pricesEnabled ? "good" : "idle"}
+              startOpen={!d.pricesEnabled || !!priceLimit}
             >
               <Checkbox
                 label="Get crypto prices"
@@ -395,14 +415,15 @@ export function ApiSettings() {
                   <Button
                     variant="secondary"
                     className="px-3 py-1.5"
-                    disabled={refresh.isPending}
+                    disabled={refresh.isPending || !!priceLimit}
                     onClick={() => refresh.mutate(undefined)}
                   >
                     {refresh.isPending ? "Updating… (can take a minute)" : "Update now"}
                   </Button>
                 )}
               </div>
-              {d.lastError && <Alert>Last update failed: {d.lastError}</Alert>}
+              {priceLimit && <ApiLimitNotice limit={priceLimit} />}
+              {d.lastError && !priceLimit && <Alert>Last update failed: {d.lastError}</Alert>}
               {refresh.error && <Alert>{refresh.error.message}</Alert>}
               {refresh.data && (
                 <p className="text-sm text-emerald-700 dark:text-emerald-400">
@@ -493,8 +514,14 @@ export function ApiSettings() {
             <Service
               name="Blockscout"
               purpose="Faster, more reliable sync for Ethereum-style wallets"
-              status={d.hasBlockscoutKey ? "Key added" : "Recommended"}
-              tone={d.hasBlockscoutKey ? "good" : "suggest"}
+              status={
+                limited("blockscout")
+                  ? "Limit reached"
+                  : d.hasBlockscoutKey
+                    ? "Key added"
+                    : "Recommended"
+              }
+              tone={d.hasBlockscoutKey && !limited("blockscout") ? "good" : "suggest"}
               startOpen={!d.hasBlockscoutKey}
               collapseWhen={d.hasBlockscoutKey}
             >
@@ -547,8 +574,14 @@ export function ApiSettings() {
             <Service
               name="APillow"
               purpose="Home values from Zillow data"
-              status={v.apillow ? "Key added" : "Not set up"}
-              tone={v.apillow ? "good" : "idle"}
+              status={
+                limited("apillow", "apillowreq")
+                  ? "Limit reached"
+                  : v.apillow
+                    ? "Key added"
+                    : "Not set up"
+              }
+              tone={limited("apillow", "apillowreq") ? "suggest" : v.apillow ? "good" : "idle"}
               startOpen={!v.apillow}
               collapseWhen={v.apillow}
             >
@@ -567,8 +600,8 @@ export function ApiSettings() {
             <Service
               name="CarAPI.dev"
               purpose="Vehicle values"
-              status={v.carapi ? "Key added" : "Not set up"}
-              tone={v.carapi ? "good" : "idle"}
+              status={limited("carapi") ? "Limit reached" : v.carapi ? "Key added" : "Not set up"}
+              tone={limited("carapi") ? "suggest" : v.carapi ? "good" : "idle"}
               startOpen={!v.carapi}
               collapseWhen={v.carapi}
             >

@@ -10,6 +10,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Pencil, Plus } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import { ApiLimitNotice, useApiLimit } from "../components/ApiLimit.js";
 import { LineChart } from "../components/charts.js";
 import { Modal } from "../components/forms.js";
 import { Alert, Button, Card, Field, PageHeader } from "../components/ui.js";
@@ -255,10 +256,12 @@ function LookupValue({ asset }: { asset: Asset }) {
     queryFn: () => api.get<AssetValuationSettings>("/api/assets/valuation"),
   });
   const [state, setState] = useState<string | null>(null);
+  const limit = useApiLimit(...(asset.kind === "home" ? ["apillow", "apillowreq"] : ["carapi"]));
   const can =
     (asset.kind === "home" && settings.data?.apillow) ||
     (asset.kind === "vehicle" && settings.data?.carapi);
   if (!can) return null;
+  if (limit) return <ApiLimitNotice limit={limit} className="max-w-56" />;
   const run = async () => {
     setState(asset.kind === "home" ? "Looking up… (up to a minute)" : "Looking up…");
     try {

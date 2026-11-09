@@ -66,6 +66,11 @@ const RULES: Record<AlertType, { label: string; description: string }> = {
     label: "Free trial ending",
     description: "A free trial you are tracking is about to turn into a charge.",
   },
+  api_limit: {
+    label: "An API reaches its limit",
+    description:
+      "A service in Settings → API has used up its requests for the day or month. It says when they reset.",
+  },
   connection_error: {
     label: "Bank needs attention",
     description: "A bank connection needs you to log in again or failed to sync.",

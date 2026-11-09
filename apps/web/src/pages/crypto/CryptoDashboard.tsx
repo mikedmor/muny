@@ -1,11 +1,17 @@
 import { type CryptoHolding, formatMoney } from "@muny/shared";
 import { Link } from "@tanstack/react-router";
 import { Fragment, useMemo, useState } from "react";
+import { ApiLimitNotice, useApiLimit } from "../../components/ApiLimit.js";
 import { Donut, type DonutSlice, LineChart, type StackBand } from "../../components/charts.js";
 import { CoinIcon, WalletIcon } from "../../components/coins.js";
 import { Alert, Button, Card, cx } from "../../components/ui.js";
 import { api } from "../../lib/api.js";
-import { useCryptoMutation, useCryptoOverview, useCryptoTax } from "../../lib/queries.js";
+import {
+  useCryptoMutation,
+  useCryptoOverview,
+  useCryptoSettings,
+  useCryptoTax,
+} from "../../lib/queries.js";
 import { assignColors, OTHER_COLOR } from "../../lib/series.js";
 import { FlowsStrip, MaturityView, NftsView, TaxOptimizationView } from "./CryptoTaxViews.js";
 import {
@@ -333,6 +339,8 @@ function HoldingRow({ h }: { h: CryptoHolding }) {
  */
 function RefreshStatus() {
   const o = useCryptoOverview();
+  const settings = useCryptoSettings();
+  const limit = useApiLimit(settings.data?.provider ?? "defillama");
   const refresh = useCryptoMutation(() => api.post("/api/crypto/prices/refresh"));
   const d = o.data;
   if (!d || d.walletCount === 0) return null;
@@ -353,11 +361,16 @@ function RefreshStatus() {
         )}
       </span>
       {d.pricesEnabled && (
-        <Button variant="secondary" disabled={busy} onClick={() => refresh.mutate(undefined)}>
+        <Button
+          variant="secondary"
+          disabled={busy || !!limit}
+          onClick={() => refresh.mutate(undefined)}
+        >
           <span className={cx("inline-block", busy && "animate-spin")}>↻</span> Refresh prices
         </Button>
       )}
       {refresh.error && <span className="text-red-600">{refresh.error.message}</span>}
+      {limit && d.pricesEnabled && <ApiLimitNotice limit={limit} className="w-full text-right" />}
     </div>
   );
 }

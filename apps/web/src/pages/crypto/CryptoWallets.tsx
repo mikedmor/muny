@@ -12,6 +12,7 @@ import {
 } from "@muny/shared";
 import { Link } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import { ApiLimitNotice } from "../../components/ApiLimit.js";
 import { CoinIcon, WalletIcon } from "../../components/coins.js";
 import { Modal, SelectField } from "../../components/forms.js";
 import { Alert, Button, Card, cx, Field } from "../../components/ui.js";
@@ -584,6 +585,7 @@ function WalletRow({
               ` · ${fmtAmount(w.balances[0]?.amount, 4)} ${w.balances[0]?.asset}`}
             {w.balances.length > 1 && ` · ${w.balances.length} coins`}
           </span>
+          {w.limit && <ApiLimitNotice limit={w.limit} />}
           {w.status === "ok" && w.lastError && !w.syncing && (
             <span className="block text-xs text-slate-500">{w.lastError}</span>
           )}
@@ -641,7 +643,7 @@ function WalletRow({
             variant="ghost"
             aria-label={`Sync ${w.name} now`}
             title="Sync now"
-            disabled={w.syncing || w.queued || sync.isPending}
+            disabled={w.syncing || w.queued || sync.isPending || !!w.limit}
             onClick={() => sync.mutate(undefined)}
           >
             <span className={cx("inline-block", (w.syncing || sync.isPending) && "animate-spin")}>

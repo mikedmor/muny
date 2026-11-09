@@ -9,6 +9,7 @@ Muny checks for alerts every 5 minutes:
 - budgets reaching the percentages you choose: 80% and 100% to start; add or remove as many as you like (turn them off for one category with **Budget alerts** in that category's **Edit** dialog)
 - charges after you cancelled something
 - banks that need you to log in again
+- a service in Settings → API using up its requests for the day or month, with how long until they reset
 
 Every alert appears under **Alerts** in Muny (the bell).
 

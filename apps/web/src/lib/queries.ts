@@ -4,6 +4,7 @@ import type {
   AlertRule,
   AlertType,
   AlternativeSuggestion,
+  ApiLimit,
   BackupInfo,
   BudgetMonth,
   BulkUpdateInput,
@@ -771,6 +772,14 @@ export function useCryptoTxns(q: CryptoTxnQuery) {
     placeholderData: keepPreviousData,
   });
 }
+/** Services out of requests right now. Checked often enough for a wait to stay honest. */
+export const useApiLimits = () =>
+  useQuery({
+    queryKey: ["api-limits"],
+    queryFn: () => api.get<ApiLimit[]>("/api/limits"),
+    refetchInterval: 60_000,
+  });
+
 export const useCryptoSettings = () =>
   useQuery({
     queryKey: cryptoKeys.settings,

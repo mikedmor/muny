@@ -5,14 +5,15 @@ import {
   type CryptoTaxReportKind,
   type CryptoTxnType,
   cryptoExchange,
+  limitMessage,
 } from "@muny/shared";
 import { eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
 import { audit } from "../lib/audit.js";
-import { badRequest, notFound, parse } from "../lib/http.js";
-import { usage } from "./budget.js";
+import { badRequest, HttpError, notFound, parse } from "../lib/http.js";
+import { apiLimits, limitFor, usage } from "./budget.js";
 import { fetchNftImage, NftImageError } from "./nft-image.js";
 import {
   getCryptoSettings,
@@ -69,6 +70,7 @@ import {
   syncAll,
   syncMany,
   syncWallet,
+  walletLimit,
   walletsDue,
 } from "./sync.js";
 import { cryptoTax } from "./tax.js";
@@ -172,7 +174,13 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
 
   app.get("/api/crypto/wallets", async () => {
     daily();
-    return listWallets(db);
+    return listWallets(db).map((x) => ({ ...x, limit: walletLimit(db, x) }));
+  });
+
+  /** Services that have used up their requests, and when each comes back. */
+  app.get("/api/limits", async (req) => {
+    requireUser(req);
+    return apiLimits(db);
   });
 
   const syncErr = (fn: () => void) => {
@@ -256,6 +264,8 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
     const { id } = parse(IdParams, req.params);
     // Exchanges can take minutes (Binance US asks coin by coin): sync in the background.
     const wallet = listWallets(db).find((x) => x.id === id);
+    const limit = wallet ? walletLimit(db, wallet) : null;
+    if (limit) throw new HttpError(429, limitMessage(limit));
     if (wallet?.exchange && !wallet.chain) {
       log(user.id, "crypto.wallet_sync", id);
       quiet(syncWallet(db, id, bg).then((r) => (r.added ? refreshPrices(db, bg) : undefined)));
@@ -1027,7 +1037,10 @@ export function registerCryptoRoutes(app: FastifyInstance, db: MunyDb, priceDeps
 
   app.post("/api/crypto/prices/refresh", async (req) => {
     requireUser(req);
-    if (!getCryptoSettings(db).pricesEnabled) throw badRequest("Turn on prices first");
+    const settings = getCryptoSettings(db);
+    if (!settings.pricesEnabled) throw badRequest("Turn on prices first");
+    const limit = limitFor(db, settings.provider);
+    if (limit) throw new HttpError(429, limitMessage(limit));
     try {
       return await refreshPrices(db, priceDeps);
     } catch (err) {

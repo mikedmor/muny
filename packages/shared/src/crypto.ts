@@ -56,6 +56,8 @@ export interface CryptoWallet {
   exchange: string | null;
   /** Kept for history but out of the way. */
   archived: boolean;
+  /** Set while the service this wallet syncs through has hit a limit. */
+  limit?: ApiLimit | null;
 }
 
 /** One sync attempt (the wallet page's history). */
@@ -280,6 +282,39 @@ export interface CryptoUsage {
   dayLimit: number;
   month: number;
   monthLimit: number;
+  /** Set while a daily or monthly limit is used up. */
+  limit: ApiLimit | null;
+}
+
+/** A service that has used up its allowance, and when it comes back. */
+export interface ApiLimit {
+  provider: string;
+  label: string;
+  period: "day" | "month";
+  /** Requests allowed in that period. */
+  allowed: number;
+  /** When the count resets (unix ms). */
+  resetsAt: number;
+}
+
+/** A wait in plain words: "3 hours 12 minutes", "2 days", "under a minute". */
+export function describeWait(ms: number): string {
+  const unit = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  const minutes = Math.ceil(ms / 60_000);
+  if (minutes <= 1) return "under a minute";
+  if (minutes < 60) return unit(minutes, "minute");
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) {
+    const rest = minutes % 60;
+    return rest ? `${unit(hours, "hour")} ${unit(rest, "minute")}` : unit(hours, "hour");
+  }
+  return unit(Math.ceil(minutes / 1440), "day");
+}
+
+/** The whole explanation, for errors and notices. */
+export function limitMessage(l: ApiLimit, now = Date.now()): string {
+  const period = l.period === "day" ? "daily" : "monthly";
+  return `${l.label} has used its ${period} limit of ${l.allowed.toLocaleString("en-US")} requests. It resets in ${describeWait(l.resetsAt - now)}.`;
 }
 
 export interface CryptoSyncResult {

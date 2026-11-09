@@ -4,10 +4,12 @@ import {
   type AlertParams,
   type AlertType,
   DEFAULT_ACCOUNT_ALERTS,
+  describeWait,
   formatMoney,
 } from "@muny/shared";
 import { and, eq, gte, isNull, sql } from "drizzle-orm";
 import { budgetMonth } from "../budgets/service.js";
+import { apiLimits } from "../crypto/budget.js";
 import { listAccounts } from "../ledger/accounts.js";
 import { listSeries, merchantKey, upcoming } from "../recurring/service.js";
 import { listTrials } from "../trials/routes.js";
@@ -52,6 +54,7 @@ export const DEFAULT_PARAMS: Record<AlertType, AlertParams> = {
   trial_ending: { daysBefore: 3 },
   agent_proposal: {},
   ai_review: {},
+  api_limit: {},
 };
 
 const STATE_KEY = "alerts.state";
@@ -277,6 +280,19 @@ export function evaluateRules(
           }
           state.low[a.id] = low;
         }
+        break;
+      }
+      case "api_limit": {
+        // Once per service per period: the reset time is what makes it unique.
+        for (const l of apiLimits(db, now))
+          out.push({
+            type: rule.type,
+            dedupeKey: `api_limit:${l.provider}:${l.period}:${l.resetsAt}`,
+            severity: "warning",
+            title: `${l.label} reached its ${l.period === "day" ? "daily" : "monthly"} limit`,
+            body: `Muny won't use it again until it resets in ${describeWait(l.resetsAt - now.getTime())}.`,
+            link: "/settings#api",
+          });
         break;
       }
       case "connection_error": {
