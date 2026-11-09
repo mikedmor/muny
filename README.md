@@ -164,7 +164,7 @@ For Docker Compose, Synology, Unraid and every setting, see the **[install guide
   <img src="guides/images/budgets-phone.png" alt="Budgets on a phone" width="260" />
 </p>
 
-Every screenshot uses the built-in demo household. All names and numbers are made up.
+Every screenshot uses a made-up household: the built-in demo, plus sample stocks, crypto, assets and documents added for these pictures. All names and numbers are invented.
 
 ## Documentation
 
