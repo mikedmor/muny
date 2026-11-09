@@ -259,6 +259,20 @@ describe("reports", () => {
     ]);
     expect(all.months).toHaveLength(6);
 
+    // The chart keeps its months for one it already shows, and follows you back.
+    const shown = all.months[1]?.month as string;
+    const within = (await client.get(`/api/spending?month=${shown}`)).json<SpendingOverview>();
+    expect(within.months.map((m) => m.month)).toEqual(all.months.map((m) => m.month));
+    const older = (await client.get("/api/spending?month=2020-03")).json<SpendingOverview>();
+    expect(older.months.map((m) => m.month)).toEqual([
+      "2020-03",
+      "2020-04",
+      "2020-05",
+      "2020-06",
+      "2020-07",
+      "2020-08",
+    ]);
+
     const noBills = (
       await client.get(`/api/spending?month=${thisMonth}&includeBills=false`)
     ).json<SpendingOverview>();

@@ -283,9 +283,23 @@ export function ColumnChart({
         {data.map((d, i) => {
           const x0 =
             PAD.left + band * i + (band - (barW + (multi ? gap : 0)) * seriesNames.length) / 2;
-          const emphasized = multi || !selectedKey || d.key === selectedKey;
+          const selected = d.key === selectedKey;
+          const emphasized = multi || !selectedKey || selected;
           return (
             <g key={d.key}>
+              {/* With two colors in play, a band shows which one is selected. */}
+              {multi && selected && (
+                <rect
+                  x={PAD.left + band * i + 2}
+                  y={PAD.top}
+                  width={Math.max(0, band - 4)}
+                  height={plotH}
+                  rx={6}
+                  fill="var(--viz-series-1)"
+                  fillOpacity={0.12}
+                  pointerEvents="none"
+                />
+              )}
               {d.values.map((v, s) => {
                 const h = Math.max(0, y(0) - y(v));
                 const x = x0 + s * (barW + gap);
@@ -324,7 +338,8 @@ export function ColumnChart({
                   y={H - 6}
                   textAnchor="middle"
                   fontSize={11}
-                  fill="var(--viz-muted)"
+                  fontWeight={selected ? 600 : undefined}
+                  fill={selected ? "var(--viz-ink-2)" : "var(--viz-muted)"}
                 >
                   {d.label}
                 </text>

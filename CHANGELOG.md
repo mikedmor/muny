@@ -17,6 +17,7 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ### Fixed
 
+- The Spending page's chart highlights the month you're viewing, and follows you when you go back further than it shows.
 - The rule editor no longer gets cut off at the bottom on shorter windows.
 - Closing a window opened from inside a transaction, or choosing a rule under **Rules applied**, no longer closes the transaction as well.
 

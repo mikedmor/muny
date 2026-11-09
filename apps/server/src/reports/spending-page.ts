@@ -113,7 +113,10 @@ export function spendingOverview(
       groupName: r.grp,
     }));
 
-  const end = month > thisMonth ? month : thisMonth;
+  // Six months, ending this month. Go further back and they follow, with the
+  // month you're looking at first.
+  const end =
+    month > thisMonth ? month : month < addMonths(thisMonth, -5) ? addMonths(month, 5) : thisMonth;
   const chart = monthlyReport(db, addMonths(end, -5), end).months.map((m) => ({
     month: m.month,
     incomeCents: m.incomeCents,
