@@ -1,9 +1,12 @@
 import type { MunyDb } from "@muny/db";
+import { schema } from "@muny/db";
 import type { AgentScope } from "@muny/shared";
+import { eq } from "drizzle-orm";
 import { ZodError, z } from "zod";
 import { audit } from "../lib/audit.js";
 import { localToday } from "../lib/dates.js";
 import { HttpError } from "../lib/http.js";
+import { describeChange } from "../undo/track.js";
 import type { AgentContext } from "./tokens.js";
 
 /**
@@ -92,6 +95,20 @@ export function runTool(
       );
     const parsed = tool.input.parse(input) as { dry_run?: boolean };
     dryRun = tool.write === true && parsed.dry_run !== false;
+    if (tool.write) {
+      // In the history (and undoable) as the assistant's, by what it did.
+      const token = db
+        .select({ name: schema.apiTokens.name })
+        .from(schema.apiTokens)
+        .where(eq(schema.apiTokens.id, agent.tokenId))
+        .get();
+      const what = name.replace(/_/g, " ");
+      describeChange(db, `${what[0]?.toUpperCase()}${what.slice(1)}`, {
+        type: "agent",
+        id: agent.tokenId,
+        name: token?.name ?? "An assistant",
+      });
+    }
     const result = tool.run({ db, agent, today: localToday() }, parsed as never);
     audit(db, {
       actorType: "agent",

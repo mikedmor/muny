@@ -36,6 +36,8 @@ export interface AuthStatusResponse {
 export interface ApiErrorBody {
   error: string;
   issues?: { path: string; message: string }[];
+  /** More about the error, when the route gives it (an undo's preview, say). */
+  details?: unknown;
 }
 
 export interface HouseholdUser {

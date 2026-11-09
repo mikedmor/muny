@@ -33,6 +33,7 @@ import { useNotifications } from "../lib/queries.js";
 import { ThemeProvider } from "../lib/theme.js";
 import { DemoBanner } from "./DemoNotice.js";
 import { ThemeTryBar } from "./ThemeSettings.js";
+import { UndoBar } from "./Undo.js";
 import { UpdateNotice } from "./UpdateNotice.js";
 import { cx } from "./ui.js";
 
@@ -327,6 +328,7 @@ function Shell({ user }: { user: CurrentUser }) {
         <UpdateNotice />
         <DemoBanner />
         <Outlet />
+        <UndoBar />
       </main>
     </div>
   );

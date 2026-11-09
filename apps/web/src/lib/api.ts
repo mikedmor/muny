@@ -1,4 +1,5 @@
-import type { ApiErrorBody } from "@muny/shared";
+import { type ApiErrorBody, CHANGE_HEADER, CHANGE_TITLE_HEADER } from "@muny/shared";
+import { announceChange } from "./changes.js";
 
 export class ApiError extends Error {
   constructor(
@@ -31,6 +32,17 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   const data = text ? JSON.parse(text) : undefined;
   if (!res.ok) {
     throw new ApiError(res.status, (data as ApiErrorBody) ?? { error: res.statusText });
+  }
+  // The server names a change worth offering to undo.
+  const change = res.headers.get(CHANGE_HEADER);
+  if (change) {
+    let title = "Saved";
+    try {
+      title = decodeURIComponent(res.headers.get(CHANGE_TITLE_HEADER) ?? "") || title;
+    } catch {
+      // Keep "Saved".
+    }
+    announceChange({ id: change, title });
   }
   return data as T;
 }

@@ -14,6 +14,7 @@ import { rescanRecurring } from "./recurring/service.js";
 import { markCategoryMoves } from "./savings/buckets.js";
 import { linkStatementDocuments } from "./statements/status.js";
 import { startSyncScheduler } from "./sync/engine.js";
+import { startChangePruner } from "./undo/routes.js";
 import { VERSION } from "./version.js";
 
 async function main() {
@@ -58,6 +59,7 @@ async function main() {
   startSyncScheduler(db, app.syncDeps, app.log);
   startAlertScheduler(db, app.alertDeps, app.log);
   startAiScheduler(db, { secretKey: config.secretKey }, app.log);
+  startChangePruner(db);
   if (config.plaid) app.log.info({ env: config.plaid.env }, "Plaid sync enabled");
   if (config.teller) app.log.info({ env: config.teller.env }, "Teller sync enabled");
 }

@@ -19,6 +19,7 @@ import { AgentSettings } from "./settings/AgentSettings.js";
 import { AiSettings } from "./settings/AiSettings.js";
 import { ApiSettings } from "./settings/ApiSettings.js";
 import { DataSettings } from "./settings/DataSettings.js";
+import { HistorySettings } from "./settings/HistorySettings.js";
 import { HouseholdSettings } from "./settings/HouseholdSettings.js";
 import { PayeesSettings } from "./settings/PayeesSettings.js";
 import { RulesSettings } from "./settings/RulesSettings.js";
@@ -34,6 +35,7 @@ const TABS = [
   ["agents", "Agents"],
   ["ai", "AI"],
   ["api", "API"],
+  ["history", "History"],
   ["household", "Household & account"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
@@ -86,6 +88,7 @@ export function SettingsPage() {
       {tab === "display" && <DisplaySettings />}
       {tab === "agents" && <AgentSettings />}
       {tab === "ai" && <AiSettings />}
+      {tab === "history" && <HistorySettings />}
       {tab === "api" && <ApiSettings />}
       {tab === "household" && <HouseholdSettings />}
     </>

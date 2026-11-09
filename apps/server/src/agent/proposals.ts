@@ -31,6 +31,7 @@ import {
 } from "../rules/service.js";
 import { createDiy } from "../savings/routes.js";
 import { createSaving, listSavings, verifySavings } from "../savings/service.js";
+import { describeChange } from "../undo/track.js";
 import { defineTool, dryRunField, type Tool, ToolError } from "./registry.js";
 
 /**
@@ -765,6 +766,11 @@ export function registerProposalRoutes(app: FastifyInstance, db: MunyDb, today: 
     expireOld(db);
     const rows = db.select().from(p).where(inArray(p.id, chosen)).all();
     if (rows.length !== new Set(chosen).size) throw badRequest("Some of those no longer exist");
+    const verb = decision === "approve" ? "Approved" : "Rejected";
+    describeChange(
+      db,
+      rows.length === 1 ? `${verb} “${rows[0]?.summary}”` : `${verb} ${rows.length} inbox items`,
+    );
     return rows.map((row) => {
       // Already decided (or expired): stays as it is.
       const done =

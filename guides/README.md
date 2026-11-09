@@ -39,6 +39,7 @@ Everything you need to install, set up and use Muny. New here? Start with **[Ins
 | [Your Overview](overview.md)              | Choosing and arranging cards, and building your own with calculations |
 | [Spending, reports and taxes](reports.md) | Monthly spending, longer reports, net worth and the tax year          |
 | [Themes](themes.md)                       | Light, dark and your own color themes                                 |
+| [Undo and history](undo.md)               | Undo or redo any change, and see who changed what                     |
 
 ## AI
 

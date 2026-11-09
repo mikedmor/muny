@@ -43,6 +43,7 @@ import { registerStatementTemplateRoutes } from "./statements/routes.js";
 import { makeProviders, type Providers } from "./sync/engine.js";
 import { registerSyncRoutes } from "./sync/routes.js";
 import { registerTrialRoutes } from "./trials/routes.js";
+import { registerChangeTracking } from "./undo/routes.js";
 import { VERSION } from "./version.js";
 
 export interface AppDeps {
@@ -146,6 +147,8 @@ export async function buildApp({
   });
 
   registerAuth(app, db);
+  // Right after auth: every change from here on is recorded so it can be undone.
+  registerChangeTracking(app, db);
   registerAuthRoutes(app, db, config.demo);
   registerDemoRoutes(app, db);
   registerHouseholdRoutes(app, db);

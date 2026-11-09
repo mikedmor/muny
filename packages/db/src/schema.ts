@@ -1199,3 +1199,49 @@ export const assetDetails = sqliteTable("asset_details", {
   details: text({ mode: "json" }).$type<Record<string, unknown>>(),
   updatedAt: updatedAt(),
 });
+
+// ---------------------------------------------------------------------------
+// Undo: what each change did, so it can be put back
+// ---------------------------------------------------------------------------
+
+/** One change someone made (a request), which can be undone as a whole. */
+export const changesets = sqliteTable(
+  "changesets",
+  {
+    id: text().primaryKey(),
+    at: createdAt(),
+    actorType: text({ enum: ["user", "agent", "system"] }).notNull(),
+    /** user id or api token id */
+    actorId: text(),
+    actorName: text(),
+    /** A description set by the code that made the change; otherwise one is made from what changed. */
+    label: text(),
+    /** "PATCH /api/transactions/:id", for the record. */
+    route: text(),
+    /** The change that undid this one. */
+    undoneBy: text(),
+    /** The change this one undid. */
+    undoOf: text(),
+  },
+  (t) => [index("changesets_at_idx").on(t.at)],
+);
+
+/**
+ * Every row a change touched, before and after, written by temporary triggers
+ * while a change is being made. Rows as JSON (blobs as hex). Never sent to the
+ * browser: the history shows only counts and names.
+ */
+export const changeLog = sqliteTable(
+  "change_log",
+  {
+    seq: integer().primaryKey({ autoIncrement: true }),
+    changesetId: text().notNull(),
+    tbl: text().notNull(),
+    op: text({ enum: ["I", "U", "D"] }).notNull(),
+    /** The row's primary key, as a JSON object. */
+    pk: text().notNull(),
+    oldRow: text(),
+    newRow: text(),
+  },
+  (t) => [index("change_log_changeset_idx").on(t.changesetId)],
+);
