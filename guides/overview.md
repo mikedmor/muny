@@ -12,6 +12,8 @@ The solid line is what you've spent so far, next to last month's whole month as 
 - **Earned** is what's come in so far.
 - **Expected** continues your earnings from today, on the dates your recurring income is due.
 
+Hover over a day to see what's behind it: the transactions from that day, or what's expected on it. The biggest few are listed, and transfers aren't included.
+
 To split the spending line into categories, turn on **Split totals into colored parts** in **Settings → Appearance**. It's off by default.
 
 ## Customizing

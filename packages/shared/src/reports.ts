@@ -51,6 +51,17 @@ export interface NetWorthReport {
   byType: { type: string; cents: number }[];
 }
 
+/** One line in the Spent this month chart's tooltip. */
+export interface OverviewDayItem {
+  /** Day of the month, 1-based. */
+  day: number;
+  name: string;
+  /** Signed: money out is negative. */
+  amountCents: number;
+  /** A recurring charge or income that's due, rather than a transaction. */
+  expected: boolean;
+}
+
 export interface Overview {
   today: string;
   netWorth: { nowCents: number; monthAgoCents: number | null };
@@ -82,6 +93,8 @@ export interface Overview {
     billsExpectedDaily: number[];
     /** Recurring bills still due this month that count as spending. */
     billsExpectedCents: number;
+    /** What's behind the chart, day by day: what happened, and what's expected. */
+    dayItems: OverviewDayItem[];
     daysInMonth: number;
   };
   incomeMonthToDateCents: number;

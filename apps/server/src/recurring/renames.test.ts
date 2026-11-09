@@ -78,6 +78,16 @@ describe("anticipated spending on the Spent this month chart", () => {
     expect(s.billsExpectedDaily[12]).toBe(s.monthToDateCents); // Nov 19.
     expect(s.billsExpectedDaily[13]).toBe(s.monthToDateCents + 2_500); // Nov 20.
     expect(s.billsExpectedDaily.at(-1)).toBe(s.monthToDateCents + 2_500);
+
+    // The chart's tooltip: what happened on a day, and what's expected on one.
+    expect(s.dayItems.filter((i) => i.day === 3)).toMatchObject([
+      { amountCents: -1_234, expected: false },
+    ]);
+    expect(s.dayItems.filter((i) => i.day === 20)).toMatchObject([
+      { amountCents: -2_500, expected: true },
+    ]);
+    // A transfer isn't on the chart, so it isn't in the tooltip.
+    expect(s.dayItems.filter((i) => i.day === 25)).toEqual([]);
   });
 });
 

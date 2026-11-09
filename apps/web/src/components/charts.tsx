@@ -1,3 +1,4 @@
+import type { OverviewDayItem as DayItem } from "@muny/shared";
 import { formatMoney } from "@muny/shared";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { useUiPrefs } from "../lib/queries.js";
@@ -40,21 +41,27 @@ function Tooltip({
   y,
   width,
   children,
+  contentWidth,
 }: {
   x: number;
   y: number;
   width: number;
   children: ReactNode;
+  /** About how wide the content is, for one wide enough to run off a small chart. */
+  contentWidth?: number;
 }) {
   // Keep inside the chart: flip to the left near the right edge.
-  const left = x > width * 0.6;
+  const fitsRight = contentWidth !== undefined && x + 12 + contentWidth <= width;
+  const fitsLeft = contentWidth !== undefined && x - 12 - contentWidth >= 0;
+  const left = contentWidth === undefined ? x > width * 0.6 : !fitsRight && fitsLeft;
+  const pinned = contentWidth !== undefined && !fitsRight && !fitsLeft;
   return (
     <div
       role="tooltip"
       className="pointer-events-none absolute z-10 whitespace-nowrap rounded-lg border border-slate-200 bg-surface px-2.5 py-1.5 text-xs shadow-md dark:border-slate-700 dark:bg-slate-900"
       style={{
         top: Math.max(0, y - 8),
-        ...(left ? { right: width - x + 12 } : { left: x + 12 }),
+        ...(pinned ? { left: 0 } : left ? { right: width - x + 12 } : { left: x + 12 }),
       }}
     >
       {children}
@@ -751,6 +758,29 @@ export function LineChart({
 // Month pace: running total this month vs. last month, by day of month
 // ---------------------------------------------------------------------------
 
+/** One group of a day's transactions in the tooltip: the biggest few, then a count. */
+function DayItems({ title, items }: { title: string; items: DayItem[] }) {
+  if (!items.length) return null;
+  const MAX = 5;
+  const sorted = [...items].sort((a, b) => Math.abs(b.amountCents) - Math.abs(a.amountCents));
+  const more = sorted.length - MAX;
+  return (
+    <div className="mt-1.5 border-t border-slate-200 pt-1 dark:border-slate-700">
+      <p className="text-slate-500">{title}</p>
+      {sorted.slice(0, MAX).map((i, k) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: two charges can match exactly
+        <p key={k} className="flex justify-between gap-4 tabular-nums">
+          <span className="max-w-36 truncate">{i.name}</span>
+          <span className={i.amountCents > 0 ? "text-emerald-700 dark:text-emerald-400" : ""}>
+            {formatMoney(i.amountCents)}
+          </span>
+        </p>
+      ))}
+      {more > 0 && <p className="text-slate-500">and {more} more</p>}
+    </div>
+  );
+}
+
 /**
  * Two cumulative series on one axis: this month (emphasized, area) through
  * today, last month (de-emphasized, dashed) for the whole month. Legend and
@@ -768,7 +798,10 @@ export function PaceChart({
   stack: stackIn,
   income,
   anticipated,
+  dayItems,
 }: {
+  /** What happened, or is expected, on each day of the month. */
+  dayItems?: DayItem[];
   /** Where this month is headed from today: index 0 = today, through month end. */
   anticipated?: { label: string; values: number[] };
   /**
@@ -852,6 +885,9 @@ export function PaceChart({
     hover !== null && hasAnticipated && anticipated && hover >= lastI
       ? anticipated.values[hover - lastI]
       : undefined;
+  const hoverItems = hover === null ? [] : (dayItems ?? []).filter((i) => i.day === hover + 1);
+  const happened = hoverItems.filter((i) => !i.expected);
+  const dueThatDay = hoverItems.filter((i) => i.expected);
   // The two end labels sit at the right edge: when they'd collide, the lower
   // total's label goes under its line.
   const labelsClash = hasIncome && hasAnticipated && Math.abs(y(incomeEnd) - y(headedTo)) < 18;
@@ -1144,7 +1180,12 @@ export function PaceChart({
           )}
         </svg>
         {hover !== null && (
-          <Tooltip x={x(hover)} y={y(Math.max(hv ?? 0, hp ?? 0, hi$ ?? 0, ha ?? 0))} width={width}>
+          <Tooltip
+            x={x(hover)}
+            y={y(Math.max(hv ?? 0, hp ?? 0, hi$ ?? 0, ha ?? 0))}
+            width={width}
+            contentWidth={hoverItems.length ? 252 : undefined}
+          >
             <p className="font-medium">{dayLabel(hover + 1)}</p>
             {hv !== undefined && (
               <p className="tabular-nums">
@@ -1170,6 +1211,8 @@ export function PaceChart({
                 {formatMoney(hi$)}
               </p>
             )}
+            <DayItems title="Transactions" items={happened} />
+            <DayItems title="Expected" items={dueThatDay} />
           </Tooltip>
         )}
       </div>

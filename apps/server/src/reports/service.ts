@@ -7,6 +7,7 @@ import {
   type NetWorthPoint,
   type NetWorthReport,
   type Overview,
+  type OverviewDayItem,
   type SpendingGroupBy,
   type SpendingItem,
   type SpendingReport,
@@ -19,6 +20,7 @@ import { localToday } from "../lib/dates.js";
 import { listSeries, merchantKey, upcoming } from "../recurring/service.js";
 import {
   addMonths,
+  type CategoryMeta,
   categoryMeta,
   dailyCategoryTotals,
   monthEnd,
@@ -301,6 +303,60 @@ export function cumulativeDailySpending(db: Db, from: string, to: string): numbe
   return out;
 }
 
+/**
+ * The transactions behind the spending and earnings lines, by day. The same
+ * rules as those lines: transfers, hidden items, loan accounts and accounts
+ * left out of reports don't appear, and only a split's counted parts add up.
+ */
+function dailyActivity(
+  db: Db,
+  from: string,
+  to: string,
+  cats: Map<string, CategoryMeta>,
+): OverviewDayItem[] {
+  const rows = db.all<{
+    id: string;
+    date: string;
+    cat: string | null;
+    pair: string | null;
+    cents: number;
+    payee: string | null;
+    raw: string;
+  }>(sql`
+    select t.id, t.posted_date as date, t.category_id as cat, t.transfer_pair_id as pair,
+           t.amount_cents as cents, p.display_name as payee, t.raw_description as raw
+      from transactions t
+      join accounts a on a.id = t.account_id
+      left join payees p on p.id = t.payee_id
+     where t.hidden = 0 and a.exclude_from_reports = 0 and a.type <> 'loan'
+       and t.posted_date >= ${from} and t.posted_date <= ${to}
+       and not exists (select 1 from transaction_splits x where x.transaction_id = t.id)
+    union all
+    select t.id, t.posted_date, sp.category_id, null, sp.amount_cents, p.display_name, t.raw_description
+      from transaction_splits sp
+      join transactions t on t.id = sp.transaction_id
+      join accounts a on a.id = t.account_id
+      left join payees p on p.id = t.payee_id
+     where t.hidden = 0 and a.exclude_from_reports = 0 and a.type <> 'loan'
+       and t.posted_date >= ${from} and t.posted_date <= ${to}
+  `);
+  const byTxn = new Map<string, OverviewDayItem>();
+  for (const r of rows) {
+    const kind = r.cat ? cats.get(r.cat)?.kind : undefined;
+    if (r.cat ? kind === "transfer" || !kind : r.pair) continue;
+    const seen = byTxn.get(r.id);
+    if (seen) seen.amountCents += Number(r.cents);
+    else
+      byTxn.set(r.id, {
+        day: Number(r.date.slice(8)),
+        name: r.payee ?? cleanPayeeName(r.raw) ?? r.raw,
+        amountCents: Number(r.cents),
+        expected: false,
+      });
+  }
+  return [...byTxn.values()];
+}
+
 /** Running total earned (income categories), one entry per day. */
 export function cumulativeDailyIncome(db: Db, from: string, to: string): number[] {
   const cats = categoryMeta(db);
@@ -418,7 +474,8 @@ export function overview(db: Db, today = localToday()): Overview {
   const incomeDaily = cumulativeDailyIncome(db, `${month}-01`, today);
   // Expected income still to come, on its due dates (a late one counts today).
   const expectedOn = new Map<string, number>();
-  for (const u of upcoming(db, today, monthEnd(month), today))
+  const ahead = upcoming(db, today, monthEnd(month), today);
+  for (const u of ahead)
     if (u.amountCents > 0) expectedOn.set(u.date, (expectedOn.get(u.date) ?? 0) + u.amountCents);
   const incomeExpectedDaily: number[] = [];
   let projected = incomeDaily.at(-1) ?? 0;
@@ -434,10 +491,19 @@ export function overview(db: Db, today = localToday()): Overview {
   const spendCats = categoryMeta(db);
   const seriesCategory = new Map(listSeries(db, today).map((s) => [s.id, s.categoryId]));
   const billsOn = new Map<string, number>();
-  for (const u of upcoming(db, today, monthEnd(month), today)) {
+  const dayItems = dailyActivity(db, `${month}-01`, today, spendCats);
+  for (const u of ahead) {
     const cat = seriesCategory.get(u.seriesId);
-    if (u.amountCents >= 0 || (cat && spendCats.get(cat)?.kind !== "expense")) continue;
-    billsOn.set(u.date, (billsOn.get(u.date) ?? 0) - u.amountCents);
+    if (u.amountCents < 0) {
+      if (cat && spendCats.get(cat)?.kind !== "expense") continue;
+      billsOn.set(u.date, (billsOn.get(u.date) ?? 0) - u.amountCents);
+    }
+    dayItems.push({
+      day: Number(u.date.slice(8)),
+      name: u.name,
+      amountCents: u.amountCents,
+      expected: true,
+    });
   }
   const billsExpectedDaily: number[] = [];
   let headed = thisMonthDaily.at(-1) ?? 0;
@@ -469,6 +535,7 @@ export function overview(db: Db, today = localToday()): Overview {
       incomeExpectedCents,
       billsExpectedDaily,
       billsExpectedCents,
+      dayItems,
       daysInMonth: Number(monthEnd(month).slice(8)),
     },
     incomeMonthToDateCents: monthly?.incomeCents ?? 0,

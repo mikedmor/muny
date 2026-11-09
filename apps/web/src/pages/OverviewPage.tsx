@@ -142,6 +142,7 @@ function SpendingCard({ d }: { d: Overview }) {
           dayLabel={(day) => `Day ${day}`}
           ariaLabel={`Running spending total: ${thisName} so far compared with ${lastName}, against ${formatMoney(d.incomeMonthToDateCents)} earned this month${s.incomeExpectedCents > 0 ? ` and ${formatMoney(d.incomeMonthToDateCents + s.incomeExpectedCents)} expected by the end of it` : ""}${s.billsExpectedCents > 0 ? `. With recurring bills still due, spending is anticipated to reach ${formatMoney(s.monthToDateCents + s.billsExpectedCents)}` : ""}`}
           stack={stack}
+          dayItems={s.dayItems}
           anticipated={{ label: "Anticipated", values: s.billsExpectedDaily }}
           income={{
             label: "Earned",
@@ -162,10 +163,6 @@ function SpendingCard({ d }: { d: Overview }) {
             </dd>
           )}
         </div>
-        <div>
-          <dt className="text-slate-500">Spent in {lastName}</dt>
-          <dd className="font-medium tabular-nums">{formatMoney(s.lastMonthTotalCents)}</dd>
-        </div>
         {s.billsExpectedCents > 0 && (
           <div>
             <dt className="text-slate-500">
@@ -179,6 +176,10 @@ function SpendingCard({ d }: { d: Overview }) {
             </dd>
           </div>
         )}
+        <div>
+          <dt className="text-slate-500">Spent in {lastName}</dt>
+          <dd className="font-medium tabular-nums">{formatMoney(s.lastMonthTotalCents)}</dd>
+        </div>
       </dl>
     </Card>
   );

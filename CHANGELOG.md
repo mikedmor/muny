@@ -7,7 +7,7 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 ### Added
 
 - **Remove old agent tokens.** A revoked or expired token can now be taken off the Agents page for good. Its past activity stays in the audit log.
-- **Anticipated spending.** The Spent this month chart continues your spending to the end of the month, rising on the due date of each recurring bill still to come.
+- **Anticipated spending.** The Spent this month chart continues your spending to the end of the month, rising on the due date of each recurring bill still to come. Hover over a day to see its transactions, or what's expected on it.
 
 ### Changed
 
