@@ -606,7 +606,8 @@ export function CryptoDashboard() {
               </span>
               <span className="flex items-center gap-2">
                 <Link
-                  to="/crypto/settings"
+                  to="/settings"
+                  hash="api"
                   className="font-medium text-brand-700 underline dark:text-brand-500"
                 >
                   Price settings

@@ -13,6 +13,7 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ### Changed
 
+- **Settings → API** is the one place for every outside service: crypto prices, Blockscout, wallet servers, home and vehicle values and stock extras, each showing whether it's set up and folding away once its key is saved, with request limits for all of them alongside. Crypto's Settings tab keeps cost basis and NFT images, and Assets no longer has a Settings tab.
 - **Split totals into colored parts** is now off by default. If you turned it on yourself, it stays on.
 
 ### Fixed

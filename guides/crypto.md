@@ -12,7 +12,7 @@
 
 ## Prices
 
-Prices are **off by default**. Turn them on in Crypto → Settings. Muny then fetches prices once a day, when someone opens Crypto (there's no background timer), plus whenever you press **Refresh prices**. It fills in daily history back to your first transaction.
+Prices are **off by default**. Turn them on in **Settings → API**. Muny then fetches prices once a day, when someone opens Crypto (there's no background timer), plus whenever you press **Refresh prices**. It fills in daily history back to your first transaction.
 
 It sends only coin ids (like `bitcoin`), never balances, addresses or wallet names. The default provider is **DefiLlama** (free, no key, years of history). **CoinGecko** is an alternative (about a year of history on its free plan; an optional free Demo key, stored encrypted, raises its limits).
 
@@ -22,18 +22,18 @@ Wallet sync is opt-in per wallet. On Crypto → Wallets, add a wallet with its p
 
 Pick the coin, or just paste the address and Muny recognises the format:
 
-| Coin                                                                 | Service                                                       |
-| -------------------------------------------------------------------- | ------------------------------------------------------------- |
-| Bitcoin, Litecoin                                                    | mempool.space, litecoinspace.org (no key)                     |
-| Dogecoin                                                             | BlockCypher (no key)                                          |
-| Ethereum, Base, Optimism, Arbitrum One, Polygon PoS, Gnosis + tokens | Blockscout (no key; an optional free key raises the limits)   |
-| Cardano (ADA)                                                        | Koios (no key); a stake address covers the whole wallet       |
-| Algorand (ALGO) + tokens                                             | AlgoNode (no key)                                             |
-| Stellar (XLM) + tokens                                               | Horizon (no key)                                              |
-| Cosmos Hub (ATOM)                                                    | A public REST node                                            |
-| TRON (TRX) + tokens                                                  | TronGrid (no key)                                             |
-| Siacoin (SC)                                                         | SiaScan (no key); paste several addresses separated by commas |
-| Zcash (transparent)                                                  | A Blockbook server you set in Crypto → Settings → Servers     |
+| Coin                                                                 | Service                                                            |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Bitcoin, Litecoin                                                    | mempool.space, litecoinspace.org (no key)                          |
+| Dogecoin                                                             | BlockCypher (no key)                                               |
+| Ethereum, Base, Optimism, Arbitrum One, Polygon PoS, Gnosis + tokens | Blockscout (no key; an optional free key raises the limits)        |
+| Cardano (ADA)                                                        | Koios (no key); a stake address covers the whole wallet            |
+| Algorand (ALGO) + tokens                                             | AlgoNode (no key)                                                  |
+| Stellar (XLM) + tokens                                               | Horizon (no key)                                                   |
+| Cosmos Hub (ATOM)                                                    | A public REST node                                                 |
+| TRON (TRX) + tokens                                                  | TronGrid (no key)                                                  |
+| Siacoin (SC)                                                         | SiaScan (no key); paste several addresses separated by commas      |
+| Zcash (transparent)                                                  | A Blockbook server you set in Settings → API → Wallet sync servers |
 
 For Bitcoin, Litecoin and Dogecoin, paste the wallet's **xpub/ypub/zpub** instead of one address: Muny works out the addresses itself and looks up only those, never the key. **Never paste a seed phrase or private key** into Muny or anywhere else.
 
@@ -58,7 +58,7 @@ Muny's numbers are a starting point for you or your accountant, not tax advice.
 
 ## Request limits
 
-Every call to price and sync services is counted, and Muny stays well under each service's free limits however often anyone presses refresh. Usage is shown in Crypto → Settings → Request limits.
+Every call to price and sync services is counted, and Muny stays well under each service's free limits however often anyone presses refresh. Usage is shown under **Request limits** in Settings → API.
 
 Your crypto counts toward net worth, valued at each date's price. Coins you've hidden don't count.
 

@@ -898,8 +898,8 @@ function Unpriced() {
           <p className="text-sm text-slate-600 dark:text-slate-300">
             Most of these are airdropped spam tokens; hide them and they disappear from holdings and
             warnings. For a real coin, map it to its CoinGecko id in{" "}
-            <Link to="/crypto/settings" className="text-brand-600 underline">
-              Settings
+            <Link to="/settings" hash="api" className="text-brand-600 underline">
+              Settings → API
             </Link>
             .
           </p>

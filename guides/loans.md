@@ -76,7 +76,7 @@ For an asset with no loan linked (a car you own outright, say), set **Owed on it
 
 ## Automatic values (optional)
 
-On **Assets → Settings**, add your own keys:
+In **Settings → API**, add your own keys:
 
 - **Homes: APillow** (Zillow data, free plan 50 lookups a month, [apillow.co](https://apillow.co)). Give the home its address as Zillow shows it. **Look up value** fills in Zillow's estimate, plus beds, baths, square feet, lot, year built, last sale, property tax and the rent estimate. Zillow has no estimate for homes listed for sale; Muny says so and keeps your value.
 - **Vehicles: CarAPI.dev** (free plan 100 requests a month, [carapi.dev](https://carapi.dev)). Give the vehicle its year, make, model and mileage (the make and model fields suggest names from NHTSA's public vehicle database, which only sees the make and year you type); **Look up value** fills in its US market value.

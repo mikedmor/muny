@@ -224,7 +224,7 @@ const VIA: Record<ChainKey, string> = {
   btc: "mempool.space",
   ltc: "litecoinspace.org",
   doge: "BlockCypher",
-  zec: "the Blockbook server set in Settings",
+  zec: "the Blockbook server set in Settings → API",
   sc: "SiaScan",
   atom: "a public Cosmos node",
   trx: "TronGrid",
