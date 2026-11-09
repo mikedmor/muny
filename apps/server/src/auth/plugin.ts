@@ -31,6 +31,8 @@ const VIEWER_WRITES = new Set([
   "POST /api/dashboard/preview",
   // Their own choice of theme.
   "PUT /api/theme/selected",
+  // A question: read-only.
+  "POST /api/ai/ask",
 ]);
 
 /** The path part of a URL, %-decoded the way the router reads it. */

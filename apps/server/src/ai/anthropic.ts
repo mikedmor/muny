@@ -1,7 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
+import type { AiAskTurn } from "@muny/shared";
 import type { z } from "zod";
-import { type AiCall, AiCallError } from "./call.js";
+import { type AiCall, AiCallError, type ChatTool, type ToolChat } from "./call.js";
 
 /**
  * Claude through the official SDK. Only this file talks to Anthropic; other
@@ -96,4 +97,59 @@ export async function anthropicText(c: AiCall): Promise<string> {
   } catch (err) {
     friendly(err);
   }
+}
+
+/** A conversation with tools. The whole reply goes back each turn, so thinking blocks stay in place. */
+export function anthropicToolChat(c: AiCall, tools: ChatTool[], history: AiAskTurn[]): ToolChat {
+  const messages: Anthropic.Beta.BetaMessageParam[] = [
+    ...history.map((t) => ({ role: t.role, content: t.text })),
+    { role: "user", content: c.prompt },
+  ];
+  const api = client(c);
+  const definitions = tools.map((t) => {
+    const { $schema: _, ...schema } = t.parameters;
+    return {
+      name: t.name,
+      description: t.description,
+      input_schema: schema as Anthropic.Beta.BetaTool.InputSchema,
+    };
+  });
+  return {
+    async send(answers) {
+      if (answers)
+        messages.push({
+          role: "user",
+          content: answers.map((a) => ({
+            type: "tool_result" as const,
+            tool_use_id: a.id,
+            content: a.content,
+            is_error: a.isError,
+          })),
+        });
+      try {
+        for (;;) {
+          const msg = await api.beta.messages.create({
+            ...common(c),
+            messages,
+            tools: definitions,
+            ...(takesEffort(c.model) ? { output_config: { effort: c.effort } } : {}),
+          });
+          check(msg.stop_reason);
+          messages.push({ role: "assistant", content: msg.content });
+          if (msg.stop_reason === "pause_turn") continue;
+          return {
+            text: msg.content
+              .map((b) => (b.type === "text" ? b.text : ""))
+              .join("")
+              .trim(),
+            calls: msg.content.flatMap((b) =>
+              b.type === "tool_use" ? [{ id: b.id, name: b.name, input: b.input }] : [],
+            ),
+          };
+        }
+      } catch (err) {
+        friendly(err);
+      }
+    },
+  };
 }

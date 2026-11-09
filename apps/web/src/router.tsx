@@ -4,6 +4,7 @@ import { Alert, Button } from "./components/ui.js";
 import { useAuthStatus } from "./lib/auth.js";
 import { validateTransactionSearch } from "./lib/search.js";
 import { AccountsPage } from "./pages/AccountsPage.js";
+import { AskPage } from "./pages/AskPage.js";
 import { AssetsPage } from "./pages/AssetsPage.js";
 import { InvitePage, LoginPage, SetupPage } from "./pages/AuthPages.js";
 import { BudgetsPage } from "./pages/BudgetsPage.js";
@@ -108,6 +109,7 @@ const routeTree = rootRoute.addChildren([
   page("/loans", LoansPage),
   page("/cards", CardsPage),
   page("/assets", AssetsPage),
+  page("/ask", AskPage),
   page("/reports", ReportsPage),
   page("/taxes", TaxesPage),
   page("/documents", DocumentsPage),

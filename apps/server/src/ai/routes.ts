@@ -1,5 +1,11 @@
 import { type MunyDb, schema } from "@muny/db";
-import { AI_MODEL_JOBS, AI_PROVIDERS, type AiReview, type AiSettings } from "@muny/shared";
+import {
+  AI_MODEL_JOBS,
+  AI_PROVIDERS,
+  type AiAskResult,
+  type AiReview,
+  type AiSettings,
+} from "@muny/shared";
 import { desc } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -8,6 +14,7 @@ import { audit } from "../lib/audit.js";
 import { localToday } from "../lib/dates.js";
 import { HttpError, parse } from "../lib/http.js";
 import { addMonths } from "../reports/spending.js";
+import { askMuny } from "./ask.js";
 import { AiCallError, askText } from "./call.js";
 import {
   type AiDeps,
@@ -135,6 +142,24 @@ export function registerAiRoutes(app: FastifyInstance, db: MunyDb, deps: AiDeps)
     const text = await guard(() => writeCheckin(db, deps));
     log(user.id, "ai.checkin");
     return { text };
+  });
+
+  /** A question in plain words. Read-only; viewers may ask too. The question isn't logged. */
+  app.post("/api/ai/ask", async (req): Promise<AiAskResult> => {
+    const user = requireUser(req);
+    const body = parse(
+      z.object({
+        question: z.string().trim().min(1).max(1000),
+        history: z
+          .array(z.object({ role: z.enum(["user", "assistant"]), text: z.string().max(8000) }))
+          .max(12)
+          .default([]),
+      }),
+      req.body,
+    );
+    const out = await guard(() => askMuny(db, deps, user.id, body.question, body.history));
+    log(user.id, "ai.ask", { looked: out.looked });
+    return out;
   });
 
   /** Every monthly review written, newest first (they stay after AI is turned off). */

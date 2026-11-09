@@ -20,6 +20,7 @@ import {
   LogOut,
   type LucideIcon,
   Menu,
+  MessageCircleQuestion,
   PiggyBank,
   Receipt,
   Repeat,
@@ -31,6 +32,7 @@ import { useState } from "react";
 import { useLogout, useMeta } from "../lib/auth.js";
 import { useNotifications } from "../lib/queries.js";
 import { ThemeProvider } from "../lib/theme.js";
+import { useAiSettings } from "../pages/settings/AiSettings.js";
 import { DemoBanner } from "./DemoNotice.js";
 import { ThemeTryBar } from "./ThemeSettings.js";
 import { UndoBar } from "./Undo.js";
@@ -68,6 +70,7 @@ const NAV: { label?: string; items: { to: string; label: string; icon: LucideIco
   {
     label: "Insights",
     items: [
+      { to: "/ask", label: "Ask Muny", icon: MessageCircleQuestion },
       { to: "/reports", label: "Reports", icon: ChartColumn },
       { to: "/taxes", label: "Taxes", icon: Receipt },
       { to: "/documents", label: "Documents", icon: FolderOpen },
@@ -87,6 +90,8 @@ function UnreadBadge({ count }: { count: number }) {
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const unread = useNotifications().data?.unread ?? 0;
+  const ai = useAiSettings().data;
+  const canAsk = !!ai?.enabled && ai.features.ask;
   return (
     <nav className="flex flex-col gap-4" aria-label="Main">
       {NAV.map((group, g) => (
@@ -96,23 +101,25 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
               {group.label}
             </p>
           )}
-          {group.items.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              onClick={onNavigate}
-              activeOptions={{ exact: item.to === "/" }}
-              className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-              activeProps={{
-                className:
-                  "!bg-brand-50 !text-brand-700 dark:!bg-brand-700/20 dark:!text-brand-500",
-              }}
-            >
-              <item.icon aria-hidden="true" className="size-4 shrink-0" strokeWidth={2} />
-              {item.label}
-              {item.to === "/alerts" && <UnreadBadge count={unread} />}
-            </Link>
-          ))}
+          {group.items
+            .filter((item) => item.to !== "/ask" || canAsk)
+            .map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                onClick={onNavigate}
+                activeOptions={{ exact: item.to === "/" }}
+                className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                activeProps={{
+                  className:
+                    "!bg-brand-50 !text-brand-700 dark:!bg-brand-700/20 dark:!text-brand-500",
+                }}
+              >
+                <item.icon aria-hidden="true" className="size-4 shrink-0" strokeWidth={2} />
+                {item.label}
+                {item.to === "/alerts" && <UnreadBadge count={unread} />}
+              </Link>
+            ))}
         </div>
       ))}
     </nav>

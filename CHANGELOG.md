@@ -6,6 +6,7 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ### Added
 
+- **Ask Muny**: ask about your money in plain words, answered from read-only lookups of your own data. Off by default, under **Settings → AI**.
 - Built-in AI can tidy merchant names (one inbox item to approve) and write a mid-month check-in on how budgets are pacing.
 - Built-in AI can suggest categories by itself after a sync or import, offers a rule once you've approved a merchant into a category three times, and suggests a budget from the monthly review. You can choose a model per job, and past reviews are kept in **Reports → Reviews**.
 - **Undo for anything.** After a change, an **Undo** bar appears at the bottom of the page (or press Ctrl+Z), and **Settings → History** lists every change from the last 60 days, by you, your household or an assistant, to undo or redo. Muny asks first when something was changed since, or when undoing would remove more than the change added.

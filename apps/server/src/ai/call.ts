@@ -1,6 +1,7 @@
+import type { AiAskTurn } from "@muny/shared";
 import type { z } from "zod";
-import { anthropicJson, anthropicText } from "./anthropic.js";
-import { compatibleJson, compatibleText } from "./compatible.js";
+import { anthropicJson, anthropicText, anthropicToolChat } from "./anthropic.js";
+import { compatibleJson, compatibleText, compatibleToolChat } from "./compatible.js";
 import type { AiConnection } from "./settings.js";
 
 /** One request to the chosen provider. */
@@ -28,11 +29,49 @@ export class AiCallError extends Error {
   readonly retryAfter?: number;
   /** The provider's reason code, when it gave one (busy, no_machines…). */
   readonly code?: string | null;
-  constructor(message: string, opts: { retryAfter?: number; code?: string | null } = {}) {
+  /** The provider's HTTP status, when that's what went wrong. */
+  readonly status?: number;
+  constructor(
+    message: string,
+    opts: { retryAfter?: number; code?: string | null; status?: number } = {},
+  ) {
     super(message);
     this.retryAfter = opts.retryAfter;
     this.code = opts.code;
+    this.status = opts.status;
   }
+}
+
+/** A tool offered to the model. */
+export interface ChatTool {
+  name: string;
+  description: string;
+  /** JSON Schema for its input. */
+  parameters: Record<string, unknown>;
+}
+
+export interface ToolCall {
+  id: string;
+  name: string;
+  input: unknown;
+}
+
+export interface ToolAnswer {
+  id: string;
+  name: string;
+  content: string;
+  isError: boolean;
+}
+
+/** One conversation with tools. send(null) starts it; send(answers) replies to its calls. */
+export interface ToolChat {
+  send(answers: ToolAnswer[] | null): Promise<{ text: string; calls: ToolCall[] }>;
+}
+
+export function toolChat(c: AiCall, tools: ChatTool[], history: AiAskTurn[]): ToolChat {
+  return c.provider === "anthropic"
+    ? anthropicToolChat(c, tools, history)
+    : compatibleToolChat(c, tools, history);
 }
 
 export function askJson<T>(c: AiCall, schema: z.ZodType<T>): Promise<T> {

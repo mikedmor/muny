@@ -67,6 +67,12 @@ const FEATURES: {
       "When you press the button, sends merchant names that still look like bank text, with long numbers hidden. The new names go to Alerts → Inbox.",
   },
   {
+    key: "ask",
+    label: "Ask Muny",
+    sends:
+      "Sends your question and whatever Muny looks up to answer it, which can include individual transactions, accounts and balances (long numbers hidden). It can only read. Needs a model that supports tools.",
+  },
+  {
     key: "statementTemplates",
     label: "Fill in Teach Muny",
     sends:

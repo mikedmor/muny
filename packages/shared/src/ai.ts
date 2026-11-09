@@ -107,6 +107,18 @@ export interface AiTemplateDraft {
   fields: Record<string, { label: string }>;
 }
 
+/** One earlier turn of an Ask Muny conversation. */
+export interface AiAskTurn {
+  role: "user" | "assistant";
+  text: string;
+}
+
+export interface AiAskResult {
+  answer: string;
+  /** What it looked at, for the page to show: "budgets", "transactions". */
+  looked: string[];
+}
+
 /** A monthly review the built-in AI wrote (Reports → Reviews). */
 export interface AiReview {
   /** YYYY-MM, the month reviewed. */

@@ -1,5 +1,6 @@
+import type { AiAskTurn } from "@muny/shared";
 import { z } from "zod";
-import { type AiCall, AiCallError } from "./call.js";
+import { type AiCall, AiCallError, type ChatTool, type ToolCall, type ToolChat } from "./call.js";
 
 /**
  * OpenAI-compatible servers (/chat/completions) and Ollama (/api/chat), over
@@ -199,7 +200,9 @@ async function post(c: AiCall, path: string, body: unknown): Promise<unknown> {
             : ` Try again in about ${waitWords(wait)}.`;
       throw new AiCallError(
         `${p.message}${when}`,
-        wait === null ? { code: p.code } : { retryAfter: wait, code: p.code },
+        wait === null
+          ? { code: p.code, status: p.status }
+          : { retryAfter: wait, code: p.code, status: p.status },
       );
     }
     const pause = Math.min(wait, policy.longestWait);
@@ -242,6 +245,68 @@ async function complete(c: AiCall, json: boolean): Promise<string> {
   );
   if (!r.success) throw new AiCallError("The AI server's answer wasn't in the expected shape.");
   return (r.data.choices[0]?.message.content ?? "").trim();
+}
+
+const ToolReply = z.looseObject({
+  content: z.string().nullish(),
+  tool_calls: z
+    .array(
+      z.looseObject({
+        id: z.string().optional(),
+        function: z.object({ name: z.string(), arguments: z.unknown() }),
+      }),
+    )
+    .nullish(),
+});
+
+/** Ollama sends tool arguments as an object, OpenAI-compatible servers as a JSON string. */
+function toolInput(args: unknown): unknown {
+  if (typeof args !== "string") return args ?? {};
+  try {
+    return JSON.parse(args || "{}");
+  } catch {
+    return {};
+  }
+}
+
+/** A conversation with tools, for either kind of server. */
+export function compatibleToolChat(c: AiCall, tools: ChatTool[], history: AiAskTurn[]): ToolChat {
+  const ollama = c.provider === "ollama";
+  const messages: Record<string, unknown>[] = [
+    { role: "system", content: c.system },
+    ...history.map((t) => ({ role: t.role, content: t.text })),
+    { role: "user", content: c.prompt },
+  ];
+  const definitions = tools.map((t) => ({
+    type: "function",
+    function: { name: t.name, description: t.description, parameters: t.parameters },
+  }));
+  return {
+    async send(answers) {
+      for (const a of answers ?? [])
+        messages.push(
+          ollama
+            ? { role: "tool", tool_name: a.name, content: a.content }
+            : { role: "tool", tool_call_id: a.id, content: a.content },
+        );
+      const raw = (await post(
+        c,
+        ollama ? "/api/chat" : "/chat/completions",
+        ollama
+          ? { model: c.model, messages, tools: definitions, stream: false }
+          : { model: c.model, messages, tools: definitions, max_tokens: c.maxTokens },
+      )) as { message?: unknown; choices?: { message?: unknown }[] };
+      const r = ToolReply.safeParse(ollama ? raw.message : raw.choices?.[0]?.message);
+      if (!r.success) throw new AiCallError("The AI server's answer wasn't in the expected shape.");
+      messages.push({ role: "assistant", ...r.data });
+      const calls: ToolCall[] = (r.data.tool_calls ?? []).map((t, i) => ({
+        id: t.id ?? `call-${messages.length}-${i}`,
+        name: t.function.name,
+        input: toolInput(t.function.arguments),
+      }));
+      return { text: (r.data.content ?? "").trim(), calls };
+    },
+  };
 }
 
 export const compatibleText = (c: AiCall) => complete(c, false);
