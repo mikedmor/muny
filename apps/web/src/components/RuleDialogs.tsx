@@ -251,7 +251,7 @@ export function CreateRuleDialog({
         />
       )}
       {open && current && !simple && (
-        <div className="p-6">
+        <div className="overflow-y-auto p-6">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold">Edit rule</h2>
             <button

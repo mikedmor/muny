@@ -172,7 +172,10 @@ export function Modal({
     // biome-ignore lint/a11y/useKeyWithClickEvents: backdrop click is a mouse convenience; Esc closes natively
     <dialog
       ref={ref}
-      onClose={onClose}
+      onClose={(e) => {
+        // A dialog opened from inside this one closing isn't this one closing.
+        if (e.target === ref.current) onClose();
+      }}
       onClick={(e) => {
         if (e.target === ref.current) onClose();
       }}
@@ -180,9 +183,10 @@ export function Modal({
       className={cx(
         "m-auto w-[calc(100%-2rem)] border border-slate-200 bg-surface p-0 text-slate-900 shadow-xl backdrop:bg-slate-900/50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100",
         bare
-          ? "max-w-3xl overflow-hidden rounded-2xl"
+          ? // The content keeps inside the frame: its 2px of border included.
+            "max-h-[calc(100dvh-2rem)] max-w-3xl overflow-hidden rounded-2xl *:max-h-[calc(100dvh-2rem-2px)]"
           : wide
-            ? "max-h-[calc(100vh-2rem)] max-w-3xl overflow-y-auto rounded-xl"
+            ? "max-h-[calc(100dvh-2rem)] max-w-3xl overflow-y-auto rounded-xl"
             : "max-w-lg rounded-xl",
       )}
     >
