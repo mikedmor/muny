@@ -16,6 +16,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
 import { budgetMonth, setBudget } from "../budgets/service.js";
+import { renamePayee } from "../ledger/payees.js";
 import { bulkUpdateTransactions, loadTransactions } from "../ledger/transactions.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, HttpError, parse } from "../lib/http.js";
@@ -26,6 +27,7 @@ import {
   ConditionSchema,
   createRule,
   evaluateRules,
+  listRules,
   previewOf,
   ruleSetsCategory,
   validateReferences,
@@ -90,6 +92,17 @@ function resolveCategory(db: MunyDb, ref: string) {
   return only;
 }
 
+/** A merchant by its current name, with a message an assistant can act on. */
+function merchantByName(db: MunyDb, name: string) {
+  const row = db
+    .select({ id: schema.payees.id })
+    .from(schema.payees)
+    .where(sql`lower(${schema.payees.displayName}) = lower(${name})`)
+    .get();
+  if (!row) throw new ToolError("invalid", `There's no merchant called "${name}".`);
+  return row;
+}
+
 function loadAll(db: MunyDb, ids: string[]) {
   const unique = [...new Set(ids)];
   const rows = loadTransactions(db, unique);
@@ -138,6 +151,55 @@ const KINDS: ProposalKind[] = [
       const out = bulkUpdateTransactions(db, transaction_ids, { categoryId: cat.id });
       offerRules(db, transaction_ids, cat, today);
       return out;
+    },
+  }),
+  kind({
+    tool: "rename_merchants",
+    scope: "write:annotations",
+    description:
+      "Propose clearer names for merchants, by their current name. If the new name is one another merchant already has, they're merged.",
+    strict: true,
+    input: z.object({
+      renames: z
+        .array(
+          z.object({
+            from: z.string().trim().min(1).max(100),
+            to: z.string().trim().min(1).max(100),
+          }),
+        )
+        .min(1)
+        .max(100),
+    }),
+    preview: (db, { renames }) => {
+      const found = renames.filter((r) => r.from !== r.to);
+      for (const r of found) merchantByName(db, r.from);
+      // Rules that name a merchant go by its name, so a new name can stop them matching.
+      const rules = listRules(db);
+      const named = found.filter(
+        (r) =>
+          r.from.toLowerCase() !== r.to.toLowerCase() &&
+          rules.some((x) =>
+            JSON.stringify(x.conditions).toLowerCase().includes(r.from.toLowerCase()),
+          ),
+      );
+      return {
+        summary: `Rename ${plural(found.length, "merchant")}`,
+        changes: found.map((r) => ({ label: "Merchant", from: r.from, to: r.to })),
+        warnings: named.length
+          ? [
+              `A rule mentions ${named.map((r) => r.from).join(", ")} by name and may stop matching after this.`,
+            ]
+          : [],
+      };
+    },
+    apply: (db, { renames }) => {
+      let renamed = 0;
+      for (const r of renames) {
+        if (r.from === r.to) continue;
+        renamePayee(db, merchantByName(db, r.from).id, r.to);
+        renamed++;
+      }
+      return { renamed };
     },
   }),
   kind({

@@ -54,6 +54,7 @@ export const DEFAULT_PARAMS: Record<AlertType, AlertParams> = {
   trial_ending: { daysBefore: 3 },
   agent_proposal: {},
   ai_review: {},
+  ai_checkin: {},
   api_limit: {},
 };
 
@@ -182,6 +183,23 @@ export function evaluateRules(
     return rows;
   };
 
+  // Earlier charges at the same merchant, smallest first (six months back).
+  let chargesByKey: Map<string, Txn[]> | null = null;
+  const chargesBefore = (x: Txn): number[] => {
+    if (!chargesByKey) {
+      chargesByKey = new Map();
+      for (const h of loadTxns(
+        db,
+        and(gte(t.postedDate, addDays(today, -190)), sql`${t.amountCents} < 0`),
+      ))
+        chargesByKey.set(h.key, [...(chargesByKey.get(h.key) ?? []), h]);
+    }
+    return (chargesByKey.get(x.key) ?? [])
+      .filter((h) => h.id !== x.id && h.postedDate <= x.postedDate)
+      .map((h) => -h.amountCents)
+      .sort((a, b) => a - b);
+  };
+
   for (const rule of rules) {
     const p = { ...DEFAULT_PARAMS[rule.type], ...rule.params };
     switch (rule.type) {
@@ -189,12 +207,18 @@ export function evaluateRules(
         for (const x of fresh(rule.since)) {
           const min = alertsOf(x.accountId).largeChargeCents;
           if (min === null || x.amountCents > -min || !afterChange(x)) continue;
+          const before = chargesBefore(x);
+          const usual = before.length ? (before[Math.floor(before.length / 2)] as number) : null;
+          const context =
+            usual === null
+              ? "The first charge here in the last six months. "
+              : `Usually about ${money(usual)} here. `;
           out.push({
             type: rule.type,
             dedupeKey: `large:${x.id}`,
             severity: "info",
             title: `Large charge: ${money(x.amountCents)} at ${nameOf(x)}`,
-            body: `${x.accountName} · ${dayLabel(x.postedDate)}`,
+            body: `${context}${x.accountName} · ${dayLabel(x.postedDate)}`,
             link: "/transactions",
           });
         }
@@ -206,17 +230,8 @@ export function evaluateRules(
           (x) => x.amountCents < -2000 && alertsOf(x.accountId).unusualCharge && afterChange(x),
         );
         if (!news.length) break;
-        const history = loadTxns(
-          db,
-          and(gte(t.postedDate, addDays(today, -190)), sql`${t.amountCents} < 0`),
-        );
-        const byKey = new Map<string, Txn[]>();
-        for (const h of history) byKey.set(h.key, [...(byKey.get(h.key) ?? []), h]);
         for (const x of news) {
-          const prior = (byKey.get(x.key) ?? [])
-            .filter((h) => h.id !== x.id && h.postedDate <= x.postedDate)
-            .map((h) => -h.amountCents)
-            .sort((a, b) => a - b);
+          const prior = chargesBefore(x);
           if (prior.length < 3) continue;
           const median = prior[Math.floor(prior.length / 2)] as number;
           if (-x.amountCents < median * mult) continue;
@@ -348,7 +363,7 @@ export function evaluateRules(
             dedupeKey: `price:${s.id}:${pc.date}`,
             severity: "warning",
             title: `${s.name} went up to ${money(pc.toCents)}`,
-            body: `Was ${money(pc.fromCents)} (${money(pc.toCents - pc.fromCents)} more each time).`,
+            body: `Was ${money(pc.fromCents)}: about ${Math.round(((pc.toCents - pc.fromCents) / pc.fromCents) * 100)}% more (${money(pc.toCents - pc.fromCents)} each time).`,
             link: "/recurring",
           });
         }

@@ -471,6 +471,171 @@ export function startAutoCategorize(
   };
 }
 
+const looksRaw = (name: string) =>
+  /[*#_]|\d{3,}|\b(POS|ACH|DEBIT|PURCHASE)\b|^(SQ|TST|PP|SP)\b/.test(name) ||
+  (name === name.toUpperCase() && /[A-Z]{3}/.test(name));
+
+const MAX_MERCHANTS = 60;
+
+/**
+ * Suggest tidier names for merchants that still look like bank text. Sent:
+ * those names, with long digit runs masked. One inbox item with all of them.
+ */
+export async function suggestMerchantNames(db: MunyDb, deps: AiDeps): Promise<AiCategorizeResult> {
+  const conn = aiConnection(db, deps.secretKey, "merchantNames");
+  const rows = db
+    .all<{ name: string }>(sql`
+      select p.display_name as name from payees p
+       where exists (select 1 from transactions t where t.payee_id = p.id)
+         and not exists (
+           select 1 from agent_proposals ap, json_each(ap.input, '$.renames') j
+            where ap.tool = 'rename_merchants' and ap.status in ('pending', 'rejected')
+              and json_extract(j.value, '$.from') = p.display_name)
+       order by (select count(*) from transactions t where t.payee_id = p.id) desc`)
+    .filter((r) => looksRaw(r.name))
+    .slice(0, MAX_MERCHANTS);
+  if (!rows.length) return { considered: 0, suggested: 0, filed: 0 };
+  const Answer = z.object({
+    names: z.array(z.object({ n: z.number().int(), name: z.string().nullable() })),
+  });
+  const answer = await askJson(
+    {
+      ...conn,
+      fetch: deps.fetch,
+      sleep: deps.sleep,
+      effort: "low",
+      maxTokens: 3000,
+      system:
+        "You turn raw bank merchant text into the short name a person would call the business, like 'Corner Cafe' for 'SQ *CORNER CAFE 1234 ANYTOWN'. Drop store numbers, cities, card processors and reference codes. Answer null when you can't tell what the business is: never guess a brand the text doesn't point to. A person reviews every name.",
+      prompt: `Merchant text:\n${rows.map((r, i) => `${i + 1}. ${maskDigits(r.name).slice(0, 80)}`).join("\n")}\n\nAnswer as JSON: {"names": [{"n": <number>, "name": "<short name>" or null}]}, one entry per line.`,
+    },
+    Answer,
+  );
+  const renames = new Map<string, string>();
+  for (const a of answer.names) {
+    const from = rows[a.n - 1]?.name;
+    const to = a.name?.trim();
+    if (!from || !to || to === from || to.length > 60 || /[*#]|^\d+$/.test(to)) continue;
+    renames.set(from, to);
+  }
+  if (!renames.size) return { considered: rows.length, suggested: 0, filed: 0 };
+  const r = fileFromMuny(
+    db,
+    localToday(),
+    "rename_merchants",
+    { renames: [...renames].map(([from, to]) => ({ from, to })) },
+    "Suggested by Muny AI from the bank's text. Check them before approving.",
+  );
+  return { considered: rows.length, suggested: renames.size, filed: r.filed ? 1 : 0 };
+}
+
+/**
+ * How the month's budgets are pacing, for the check-in: what's budgeted and
+ * spent, and which are ahead of the calendar. Worked out here. Sent: only
+ * these figures, by category. Null when there are no budgets to talk about.
+ */
+export function checkinFacts(db: MunyDb, today = localToday()): string | null {
+  const month = today.slice(0, 7);
+  const day = Number(today.slice(8));
+  const days = Number(monthEnd(month).slice(8));
+  const fraction = day / days;
+  const b = budgetMonth(db, month);
+  const lines = b.groups
+    .flatMap((g) => g.lines)
+    .filter((l) => l.categoryId && l.kind !== "income" && l.budgetCents && l.budgetCents > 0);
+  if (!lines.length) return null;
+  const ahead = lines
+    .map((l) => ({ l, over: l.spentCents - (l.budgetCents as number) * fraction }))
+    .filter(
+      (x) => x.l.spentCents > (x.l.budgetCents as number) * fraction * 1.15 && x.over >= 1_000,
+    )
+    .sort((x, y) => y.over - x.over)
+    .slice(0, 5);
+  const budget = lines.reduce((s, l) => s + (l.budgetCents as number), 0);
+  const spent = lines.reduce((s, l) => s + l.spentCents, 0);
+  return [
+    `Day ${day} of ${days} in ${monthName(month)}`,
+    `Across ${lines.length} budgeted categories: ${formatMoney(spent)} spent of ${formatMoney(budget)}`,
+    ahead.length
+      ? `Ahead of the calendar: ${ahead
+          .map(
+            ({ l }) =>
+              `${l.name} (${formatMoney(l.spentCents)} of ${formatMoney(l.budgetCents as number)})`,
+          )
+          .join("; ")}`
+      : "Ahead of the calendar: none",
+  ].join("\n");
+}
+
+/** Write this month's check-in and leave it as a notification. Null when there's nothing to say. */
+export async function writeCheckin(
+  db: MunyDb,
+  deps: AiDeps,
+  today = localToday(),
+  wait: Pick<AiCall, "mode" | "onWait"> = {},
+): Promise<string | null> {
+  const conn = aiConnection(db, deps.secretKey, "midMonthCheckin");
+  const facts = checkinFacts(db, today);
+  if (!facts) return null;
+  const text = await askText({
+    ...conn,
+    ...wait,
+    fetch: deps.fetch,
+    sleep: deps.sleep,
+    effort: "low",
+    maxTokens: 800,
+    system:
+      "You write a short mid-month note on how a household's budgets are pacing, from figures their own finance app worked out. Use only the numbers given and don't invent any. Be warm and direct, not preachy. Plain text, under 70 words: 2 or 3 short lines, each on its own line starting with '- '. No headings, bold or other markdown.",
+    prompt: facts,
+  });
+  if (!text) throw new Error("The check-in came back empty.");
+  const month = today.slice(0, 7);
+  const body = tidyReview(text).slice(0, 1000);
+  const dedupeKey = `ai_checkin:${month}`;
+  db.delete(schema.notifications).where(eq(schema.notifications.dedupeKey, dedupeKey)).run();
+  db.insert(schema.notifications)
+    .values({
+      id: newId(),
+      ruleType: "ai_checkin",
+      dedupeKey,
+      severity: "info",
+      title: `How ${monthName(month).split(" ")[0]} is going`,
+      body,
+      link: "/budgets",
+    })
+    .run();
+  return body;
+}
+
+/** Around mid-month, this month's check-in (once), if it's turned on and the alert is on. */
+export async function midMonthCheckinIfDue(
+  db: MunyDb,
+  deps: AiDeps,
+  today = localToday(),
+  onWait?: AiCall["onWait"],
+) {
+  const day = Number(today.slice(8));
+  if (day < 15 || day > 21) return false;
+  const rule = db
+    .select({ enabled: schema.alertRules.enabled })
+    .from(schema.alertRules)
+    .where(eq(schema.alertRules.type, "ai_checkin"))
+    .get();
+  if (rule && !rule.enabled) return false;
+  const done = db
+    .select({ id: schema.notifications.id })
+    .from(schema.notifications)
+    .where(eq(schema.notifications.dedupeKey, `ai_checkin:${today.slice(0, 7)}`))
+    .get();
+  if (done) return false;
+  try {
+    aiConnection(db, deps.secretKey, "midMonthCheckin");
+  } catch {
+    return false; // off, or not set up
+  }
+  return (await writeCheckin(db, deps, today, { mode: "background", onWait })) !== null;
+}
+
 export function startAiScheduler(
   db: MunyDb,
   deps: AiDeps,
@@ -481,15 +646,14 @@ export function startAiScheduler(
     // A background review can wait out a busy server for a while; don't start a second one.
     if (running) return;
     running = true;
-    void monthlyReviewIfDue(db, deps, localToday(), (reason, seconds) =>
-      log.info?.({ reason, seconds }, "Monthly AI review waiting on the AI server"),
-    )
-      .catch((err) =>
-        log.warn(
-          { err: err instanceof Error ? err.message : "unknown" },
-          "Monthly AI review failed",
-        ),
-      )
+    const failed = (what: string) => (err: unknown) =>
+      log.warn({ err: err instanceof Error ? err.message : "unknown" }, what);
+    const waiting = (reason: string, seconds: number) =>
+      log.info?.({ reason, seconds }, "A scheduled AI job is waiting on the AI server");
+    void monthlyReviewIfDue(db, deps, localToday(), waiting)
+      .catch(failed("Monthly AI review failed"))
+      .then(() => midMonthCheckinIfDue(db, deps, localToday(), waiting))
+      .catch(failed("Mid-month AI check-in failed"))
       .finally(() => {
         running = false;
       });

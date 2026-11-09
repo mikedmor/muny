@@ -134,6 +134,28 @@ export function repairStubPayees(db: MunyDb): number {
   });
 }
 
+/** Rename a merchant; if another already has that name, merge into it. */
+export function renamePayee(
+  db: MunyDb,
+  id: string,
+  displayName: string,
+): { id: string; merged: boolean } {
+  const other = db
+    .select({ id: p.id })
+    .from(p)
+    .where(and(sql`lower(${p.displayName}) = lower(${displayName})`, ne(p.id, id)))
+    .get();
+  if (other) {
+    db.transaction((tx) => {
+      tx.update(t).set({ payeeId: other.id }).where(eq(t.payeeId, id)).run();
+      tx.delete(p).where(eq(p.id, id)).run();
+    });
+    return { id: other.id, merged: true };
+  }
+  db.update(p).set({ displayName }).where(eq(p.id, id)).run();
+  return { id, merged: false };
+}
+
 export function registerPayeeRoutes(app: FastifyInstance, db: MunyDb) {
   const log = (userId: string, action: string, entityId?: string, details?: unknown) =>
     audit(db, {
@@ -167,22 +189,10 @@ export function registerPayeeRoutes(app: FastifyInstance, db: MunyDb) {
     const { displayName } = parse(RenameBody, req.body);
     const current = db.select().from(p).where(eq(p.id, id)).get();
     if (!current) throw notFound("Payee not found");
-    const other = db
-      .select({ id: p.id })
-      .from(p)
-      .where(and(sql`lower(${p.displayName}) = lower(${displayName})`, ne(p.id, id)))
-      .get();
-    if (other) {
-      db.transaction((tx) => {
-        tx.update(t).set({ payeeId: other.id }).where(eq(t.payeeId, id)).run();
-        tx.delete(p).where(eq(p.id, id)).run();
-      });
-      log(user.id, "payee.merge", id, { into: other.id });
-      return { id: other.id, merged: true };
-    }
-    db.update(p).set({ displayName }).where(eq(p.id, id)).run();
-    log(user.id, "payee.rename", id);
-    return { id, merged: false };
+    const out = renamePayee(db, id, displayName);
+    if (out.merged) log(user.id, "payee.merge", id, { into: out.id });
+    else log(user.id, "payee.rename", id);
+    return out;
   });
 
   app.delete("/api/payees/:id", async (req) => {

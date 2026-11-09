@@ -62,6 +62,11 @@ const RULES: Record<AlertType, { label: string; description: string }> = {
     description:
       "Muny AI's short review of last month, when it's turned on in Settings → AI. It includes amounts: add a channel only if you want them sent there.",
   },
+  ai_checkin: {
+    label: "Mid-month check-in (AI)",
+    description:
+      "How your budgets are pacing, around the 15th, when it's turned on in Settings → AI. It includes amounts: add a channel only if you want them sent there.",
+  },
   trial_ending: {
     label: "Free trial ending",
     description: "A free trial you are tracking is about to turn into a charge.",

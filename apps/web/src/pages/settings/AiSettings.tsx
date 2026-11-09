@@ -55,6 +55,18 @@ const FEATURES: {
       "Early each month, sends last month's totals, biggest categories, budgets gone over and Ways to save (no transactions or accounts). The review arrives as a notification.",
   },
   {
+    key: "midMonthCheckin",
+    label: "Mid-month check-in",
+    sends:
+      "Around the 15th, sends this month's budgeted and spent totals and the categories running ahead of the calendar (no transactions or accounts). Arrives as a notification.",
+  },
+  {
+    key: "merchantNames",
+    label: "Tidy merchant names",
+    sends:
+      "When you press the button, sends merchant names that still look like bank text, with long numbers hidden. The new names go to Alerts → Inbox.",
+  },
+  {
     key: "statementTemplates",
     label: "Fill in Teach Muny",
     sends:
@@ -87,6 +99,14 @@ export function AiSettings() {
   });
   const review = useMutation({
     mutationFn: () => api.post<{ month: string; text: string }>("/api/ai/review", {}),
+    onSuccess: () => qc.invalidateQueries(),
+  });
+  const merchants = useMutation({
+    mutationFn: () => api.post<AiCategorizeResult>("/api/ai/merchant-names", {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["proposals"] }),
+  });
+  const checkin = useMutation({
+    mutationFn: () => api.post<{ text: string | null }>("/api/ai/checkin", {}),
     onSuccess: () => qc.invalidateQueries(),
   });
   if (!s.data) return s.isError ? <Alert>Couldn't load AI settings.</Alert> : null;
@@ -267,6 +287,20 @@ export function AiSettings() {
             >
               {review.isPending ? "Writing…" : "Write last month's review"}
             </Button>
+            <Button
+              variant="secondary"
+              disabled={!s.data.features.midMonthCheckin || checkin.isPending}
+              onClick={() => checkin.mutate()}
+            >
+              {checkin.isPending ? "Writing…" : "Check in on this month"}
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={!s.data.features.merchantNames || merchants.isPending}
+              onClick={() => merchants.mutate()}
+            >
+              {merchants.isPending ? "Thinking…" : "Tidy merchant names"}
+            </Button>
           </div>
           {categorize.data && (
             <p className="text-sm text-slate-600 dark:text-slate-300">
@@ -285,8 +319,27 @@ export function AiSettings() {
               {review.data.text}
             </p>
           )}
-          {(categorize.error ?? review.error) && (
-            <Alert>{(categorize.error ?? review.error)?.message}</Alert>
+          {merchants.data && (
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              {merchants.data.considered === 0
+                ? "No merchant names look like bank text."
+                : `Looked at ${merchants.data.considered}, suggested a name for ${merchants.data.suggested}. `}
+              {merchants.data.filed > 0 && (
+                <a href="/alerts#inbox" className="text-brand-600 underline dark:text-brand-500">
+                  Review them in the inbox
+                </a>
+              )}
+            </p>
+          )}
+          {checkin.data && (
+            <p className="whitespace-pre-line text-sm text-slate-600 dark:text-slate-300">
+              {checkin.data.text ?? "There are no budgets this month to check in on."}
+            </p>
+          )}
+          {(categorize.error ?? review.error ?? merchants.error ?? checkin.error) && (
+            <Alert>
+              {(categorize.error ?? review.error ?? merchants.error ?? checkin.error)?.message}
+            </Alert>
           )}
         </Card>
       )}

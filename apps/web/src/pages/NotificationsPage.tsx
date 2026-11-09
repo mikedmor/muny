@@ -20,6 +20,7 @@ const ICON: Record<string, string> = {
   trial_ending: "⏳",
   agent_proposal: "📥",
   ai_review: "🧠",
+  ai_checkin: "🧭",
   api_limit: "🚦",
 };
 

@@ -84,6 +84,19 @@ describe("alerts", () => {
     expect(set[card.id]?.largeChargeCents).toBe(30_000);
   });
 
+  it("says how a large charge compares", async () => {
+    const { add, card, run, list, alertsOn } = await setup();
+    await alertsOn(card.id, { largeChargeCents: 50_000 });
+    await add(card.id, today, -75_000, "BIG TV STORE");
+    await run();
+    expect((await list()).items[0]?.body).toMatch(
+      /^The first charge here in the last six months\. /,
+    );
+    await add(card.id, today, -60_000, "BIG TV STORE");
+    await run();
+    expect((await list()).items[0]?.body).toMatch(/^Usually about \$750\.00 here\. /);
+  });
+
   it("has every rule on by default with sensible thresholds", async () => {
     const { client } = await setup();
     const rules = (await client.get("/api/alerts/rules")).json<AlertRule[]>();

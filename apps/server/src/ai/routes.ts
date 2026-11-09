@@ -9,7 +9,14 @@ import { localToday } from "../lib/dates.js";
 import { HttpError, parse } from "../lib/http.js";
 import { addMonths } from "../reports/spending.js";
 import { AiCallError, askText } from "./call.js";
-import { type AiDeps, draftTemplate, suggestCategories, writeReview } from "./features.js";
+import {
+  type AiDeps,
+  draftTemplate,
+  suggestCategories,
+  suggestMerchantNames,
+  writeCheckin,
+  writeReview,
+} from "./features.js";
 import { AiSetupError, aiConnection, aiSettings, updateAiSettings } from "./settings.js";
 
 /** Setup problems and provider failures as short messages; anything else stays a 500. */
@@ -114,6 +121,20 @@ export function registerAiRoutes(app: FastifyInstance, db: MunyDb, deps: AiDeps)
     const text = await guard(() => writeReview(db, deps, month));
     log(user.id, "ai.review", { month });
     return { month, text };
+  });
+
+  app.post("/api/ai/merchant-names", async (req) => {
+    const user = requireUser(req);
+    const out = await guard(() => suggestMerchantNames(db, deps));
+    log(user.id, "ai.merchantNames", out);
+    return out;
+  });
+
+  app.post("/api/ai/checkin", async (req) => {
+    const user = requireUser(req);
+    const text = await guard(() => writeCheckin(db, deps));
+    log(user.id, "ai.checkin");
+    return { text };
   });
 
   /** Every monthly review written, newest first (they stay after AI is turned off). */

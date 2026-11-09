@@ -2,6 +2,7 @@ import type {
   Account,
   AiReview,
   AiSettings,
+  AppNotification,
   CategoryGroup,
   ChangeList,
   ProposalList,
@@ -12,7 +13,13 @@ import { localToday } from "../lib/dates.js";
 import { transactionsAdded } from "../lib/events.js";
 import { addMonths } from "../reports/spending.js";
 import { makeSignedInApp } from "../test-utils.js";
-import { autoCategorize, startAutoCategorize, tidyReview } from "./features.js";
+import {
+  autoCategorize,
+  checkinFacts,
+  midMonthCheckinIfDue,
+  startAutoCategorize,
+  tidyReview,
+} from "./features.js";
 
 // Synthetic data only. The AI server is a fake that answers from what it's sent.
 
@@ -237,5 +244,81 @@ describe("the review's budget", () => {
     await client.post("/api/ai/review", {});
     expect(sent.at(-1)?.prompt).not.toContain("Budget Muny suggests");
     expect((await inbox()).pending.filter((p) => p.tool === "set_budget")).toHaveLength(0);
+  });
+});
+
+describe("tidying merchant names", () => {
+  const nameAll = (s: Sent) => {
+    const lines = s.prompt.match(/^\d+\. .*$/gm) ?? [];
+    return JSON.stringify({
+      names: lines.map((l, i) => ({
+        n: i + 1,
+        name: l.includes("MYSTERY") ? null : l.includes("CORNER") ? "Corner Cafe" : "Sample Shop",
+      })),
+    });
+  };
+
+  it("asks about bank-looking names only, files one item, and renames on approval", async () => {
+    const { client, add, sent, inbox } = await setup(nameAll);
+    const named = async (d: string, payeeName: string) =>
+      client.patch(`/api/transactions/${await add(d)}`, { payeeName });
+    await named("a", "SQ *CORNER CAFE 1234567");
+    await named("b", "MYSTERY 123 CO");
+    await named("c", "Greenleaf Market");
+    const r = (await client.post("/api/ai/merchant-names", {})).json();
+    expect(r).toEqual({ considered: 2, suggested: 1, filed: 1 });
+    expect(sent[0]?.prompt).toContain("#######");
+    expect(sent[0]?.prompt).not.toContain("Greenleaf");
+    const [item] = (await inbox()).pending;
+    expect(item?.summary).toBe("Rename 1 merchant");
+
+    await client.post("/api/proposals/decide", { ids: [item?.id], decision: "approve" });
+    const names = (await client.get("/api/payees/manage"))
+      .json<{ displayName: string }[]>()
+      .map((p) => p.displayName);
+    expect(names).toContain("Corner Cafe");
+    expect(names).not.toContain("SQ *CORNER CAFE 1234567");
+  });
+
+  it("doesn't ask again about names you turned down", async () => {
+    const { client, add, sent, inbox } = await setup(nameAll);
+    await client.patch(`/api/transactions/${await add("a")}`, { payeeName: "CORNER CAFE 12345" });
+    await client.post("/api/ai/merchant-names", {});
+    const [item] = (await inbox()).pending;
+    await client.post("/api/proposals/decide", { ids: [item?.id], decision: "reject" });
+    const again = (await client.post("/api/ai/merchant-names", {})).json();
+    expect(again).toEqual({ considered: 0, suggested: 0, filed: 0 });
+    expect(sent).toHaveLength(1);
+  });
+});
+
+describe("the mid-month check-in", () => {
+  const month = localToday().slice(0, 7);
+
+  it("works out the pace itself, and has nothing to say without budgets", async () => {
+    const { client, db, add, cat } = await setup();
+    expect(checkinFacts(db, `${month}-15`)).toBeNull();
+    await client.put("/api/budgets", { categoryId: cat("Coffee"), amountCents: 10_000 });
+    await client.put("/api/budgets", { categoryId: cat("Groceries"), amountCents: 50_000 });
+    const id = await add("CORNER CAFE", -9_000, `${month}-02`);
+    await client.patch(`/api/transactions/${id}`, { categoryId: cat("Coffee") });
+    const facts = checkinFacts(db, `${month}-15`);
+    expect(facts).toContain("Across 2 budgeted categories: $90.00 spent of $600.00");
+    expect(facts).toContain("Ahead of the calendar: Coffee ($90.00 of $100.00)");
+  });
+
+  it("writes once around the 15th, only when turned on", async () => {
+    const { client, db, deps, cat, sent } = await setup();
+    await client.put("/api/budgets", { categoryId: cat("Coffee"), amountCents: 10_000 });
+    const mid = `${month}-16`;
+    expect(await midMonthCheckinIfDue(db, deps, mid)).toBe(false);
+    await client.put("/api/ai", { features: { midMonthCheckin: true } });
+    expect(await midMonthCheckinIfDue(db, deps, `${month}-10`)).toBe(false);
+    expect(await midMonthCheckinIfDue(db, deps, mid)).toBe(true);
+    expect(await midMonthCheckinIfDue(db, deps, mid)).toBe(false);
+    expect(sent).toHaveLength(1);
+    const notes = (await client.get("/api/notifications")).json<{ items: AppNotification[] }>()
+      .items;
+    expect(notes.filter((n) => n.ruleType === "ai_checkin")).toHaveLength(1);
   });
 });
