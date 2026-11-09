@@ -93,6 +93,8 @@ export function AiSettings() {
     mutationFn: (body: AiSettingsInput) => api.put<Settings>("/api/ai", body),
     onSuccess: (data) => {
       qc.setQueryData(aiKey, data);
+      // The Muny AI card comes and goes with AI.
+      void qc.invalidateQueries({ queryKey: ["dashboard"] });
       setKey("");
     },
   });

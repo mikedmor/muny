@@ -534,8 +534,8 @@ export const TOOLS: Tool[] = [
       "Everything about Muny's data and cards: every dataset and field, every formula function, every kind of block, the formula guide, the JSON Schema of a card and worked examples. Holds no financial data. Read this before query_data or building a card.",
     scope: null,
     input: z.object({}),
-    run: () => ({
-      ...dashboardSchema(),
+    run: (ctx) => ({
+      ...dashboardSchema(ctx.db),
       datasetPermissions: DATASET_SCOPES,
     }),
   }),

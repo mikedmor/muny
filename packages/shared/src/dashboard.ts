@@ -26,6 +26,8 @@ export interface BuiltinCard {
   placement: CardPlacement;
   /** Roughly how tall it is, in 16px rows, until its real height is known. */
   weight: number;
+  /** Exists only while the built-in AI is on. Interactive, so there's no copy to customize. */
+  needsAi?: boolean;
 }
 
 export const BUILTIN_CARDS: BuiltinCard[] = [
@@ -127,7 +129,19 @@ export const BUILTIN_CARDS: BuiltinCard[] = [
     placement: "side",
     weight: 20,
   },
+  {
+    id: "muny-ai",
+    title: "Muny AI",
+    description: "Ask about your money, and read your latest monthly review.",
+    placement: "side",
+    weight: 18,
+    needsAi: true,
+  },
 ];
+
+/** The built-in cards that exist right now. */
+export const availableBuiltinCards = (aiOn: boolean) =>
+  BUILTIN_CARDS.filter((c) => aiOn || !c.needsAi);
 
 /** A new user's Overview, highest priority first. */
 export const DEFAULT_DASHBOARD: string[] = [

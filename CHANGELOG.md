@@ -6,6 +6,7 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ### Added
 
+- A **Muny AI** Overview card with quick questions and your latest review, available while AI is on.
 - **Ask Muny**: ask about your money in plain words, answered from read-only lookups of your own data. Off by default, under **Settings → AI**.
 - Built-in AI can tidy merchant names (one inbox item to approve) and write a mid-month check-in on how budgets are pacing.
 - Built-in AI can suggest categories by itself after a sync or import, offers a rule once you've approved a merchant into a category three times, and suggests a budget from the monthly review. You can choose a model per job, and past reviews are kept in **Reports → Reviews**.

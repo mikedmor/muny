@@ -1,6 +1,7 @@
 import { type MunyDb, newId, schema } from "@muny/db";
 import {
   AGGREGATES,
+  availableBuiltinCards,
   BLOCK_KIND_INFO,
   BLOCK_KINDS,
   BUILTIN_CARDS,
@@ -41,6 +42,7 @@ import {
 } from "@muny/shared";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { aiEnabled } from "../ai/settings.js";
 import { localToday } from "../lib/dates.js";
 import { badRequest, conflict, notFound } from "../lib/http.js";
 import { dataProvider } from "./datasets.js";
@@ -283,14 +285,14 @@ A named value (metric) with a dataset is worked out over that dataset's rows; wi
 Text can include live values: "You spent {{$spent}} of {{$budget}}".
 Dividing by zero gives an empty value rather than an error.`;
 
-export function dashboardSchema(): DashboardSchema {
+export function dashboardSchema(db: Db): DashboardSchema {
   const example = (id: string, title: string, description: string): CustomCardInput => ({
     title,
     description,
     doc: builtinCardDoc(id) as CardDoc,
   });
   return {
-    builtinCards: BUILTIN_CARDS,
+    builtinCards: availableBuiltinCards(aiEnabled(db)),
     datasets: DATASETS,
     functions: FUNCTIONS,
     blockKinds: Object.values(BLOCK_KIND_INFO),
@@ -340,7 +342,7 @@ export const listCustomCards = (db: Db): CustomCard[] =>
 
 function knownCards(db: Db) {
   return new Set([
-    ...BUILTIN_CARDS.map((c) => c.id),
+    ...availableBuiltinCards(aiEnabled(db)).map((c) => c.id),
     ...listCustomCards(db).map((c) => `${CUSTOM_PREFIX}${c.id}`),
   ]);
 }
@@ -382,7 +384,12 @@ export function saveLayout(
   columns?: ManualColumns,
 ): Dashboard {
   assertLayout(db, cards, columns);
-  write(db, layoutKey(userId), cards);
+  // A card hidden for now (AI is off) keeps its place for when it's back.
+  const known = knownCards(db);
+  const hidden = (layoutFromSaved(read<unknown>(db, layoutKey(userId))) ?? []).filter(
+    (c) => !known.has(c) && BUILTIN_CARDS.some((b) => b.id === c),
+  );
+  write(db, layoutKey(userId), [...cards, ...hidden]);
   if (columns) write(db, columnsKey(userId), columns);
   return getDashboard(db, userId);
 }

@@ -184,7 +184,12 @@ describe("running cards on real data", () => {
 
   it("runs every built-in card as a document", async () => {
     const { client } = await setup();
-    expect([...TEMPLATE_IDS].sort()).toEqual(BUILTIN_CARDS.map((c) => c.id).sort());
+    // All but the interactive ones, which aren't documents.
+    expect([...TEMPLATE_IDS].sort()).toEqual(
+      BUILTIN_CARDS.filter((c) => !c.needsAi)
+        .map((c) => c.id)
+        .sort(),
+    );
     for (const id of TEMPLATE_IDS) {
       const doc = builtinCardDoc(id) as CardDoc;
       expect(checkCardDoc(doc), id).toEqual([]);
@@ -210,6 +215,38 @@ describe("running cards on real data", () => {
       expect(out.blocks.b?.error, d.id).toBeUndefined();
       expect(out.blocks.b?.value?.value, d.id).toBeTypeOf("number");
     }
+  });
+});
+
+describe("the Muny AI card", () => {
+  const AI = { enabled: true, provider: "ollama", model: "m", baseUrl: "http://ai.example.test" };
+  const ids = (d: Dashboard) => d.cards;
+
+  it("exists only while AI is on, and keeps its place while it's off", async () => {
+    const { client } = await setup();
+    const listed = async () =>
+      (await client.get("/api/dashboard/schema"))
+        .json<DashboardSchema>()
+        .builtinCards.map((c) => c.id);
+    expect(await listed()).not.toContain("muny-ai");
+    expect(
+      (await client.put("/api/dashboard/layout", { cards: ["spending", "muny-ai"] })).statusCode,
+    ).toBe(400);
+
+    await client.put("/api/ai", AI);
+    expect(await listed()).toContain("muny-ai");
+    const on = await client.put("/api/dashboard/layout", { cards: ["spending", "muny-ai"] });
+    expect(ids(on.json<Dashboard>())).toEqual(["spending", "muny-ai"]);
+
+    await client.put("/api/ai", { enabled: false });
+    const off = (await client.get("/api/dashboard")).json<Dashboard>();
+    expect(ids(off)).toEqual(["spending"]);
+    // Rearranging while it's hidden doesn't lose it.
+    await client.put("/api/dashboard/layout", { cards: ["budget", "spending"] });
+
+    await client.put("/api/ai", { enabled: true });
+    const back = (await client.get("/api/dashboard")).json<Dashboard>();
+    expect(ids(back)).toEqual(["budget", "spending", "muny-ai"]);
   });
 });
 

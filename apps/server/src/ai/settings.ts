@@ -75,6 +75,9 @@ export function aiSettings(db: MunyDb, secret: Buffer | undefined): AiSettings {
   return { ...s, hasKey: !!keyEnc, canStoreKey: !!secret };
 }
 
+/** The built-in AI is switched on, whatever each feature is set to. */
+export const aiEnabled = (db: MunyDb) => read(db).enabled;
+
 export class AiSetupError extends Error {}
 
 export function updateAiSettings(

@@ -29,6 +29,10 @@ Each feature can be turned off on its own.
 
 Nothing else is ever sent, and Muny never sends anything in the background except the features you turned on.
 
+## On your Overview
+
+While AI is on, you can add the **Muny AI** card from **Overview → Customize**. It has a box for quick questions, if **Ask Muny** is on, and your latest monthly review. If you turn AI off, the card disappears and comes back in the same place when you turn it on again.
+
 ## Letting it help on its own
 
 - **Do it after every sync or import** (off by default). A couple of minutes after a bank sync or import brings in new transactions, Muny suggests categories by itself. Anything already in the inbox or that you turned down is left out.

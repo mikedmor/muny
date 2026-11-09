@@ -23,6 +23,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   arrangeColumns,
+  availableBuiltinCards,
   BUILTIN_CARDS,
   CUSTOM_PREFIX,
   type CustomCard,
@@ -59,6 +60,7 @@ import { Alert, Button, buttonClass, Card, cx, PageHeader } from "../components/
 import { useAuthStatus } from "../lib/auth.js";
 import { useDashboard, useResetLayout, useSaveLayout } from "../lib/queries.js";
 import { useCardRenderer } from "./OverviewPage.js";
+import { useAiSettings } from "./settings/AiSettings.js";
 
 /**
  * Customize your Overview: your cards in priority order, a live picture of the
@@ -427,6 +429,7 @@ function ListDrop({ children }: { children: ReactNode }) {
 
 export function CustomizePage() {
   const dashboard = useDashboard();
+  const aiOn = !!useAiSettings().data?.enabled;
   const viewOnly = useAuthStatus().data?.user?.role === "viewer";
   const save = useSaveLayout();
   const reset = useResetLayout();
@@ -488,7 +491,7 @@ export function CustomizePage() {
 
   const available = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return [...custom.map(customRef), ...BUILTIN_CARDS.map((c) => c.id)]
+    return [...custom.map(customRef), ...availableBuiltinCards(aiOn).map((c) => c.id)]
       .filter((c) => !list.includes(c))
       .filter((c) =>
         show === "all"
@@ -502,7 +505,7 @@ export function CustomizePage() {
         const info = describeCard(c, custom);
         return `${info.title} ${info.description}`.toLowerCase().includes(q);
       });
-  }, [custom, list, search, show]);
+  }, [aiOn, custom, list, search, show]);
 
   const device = SCREENS[screen] ?? SCREENS[1];
   const sizeKey = `${device.count}` as keyof ManualColumns;
@@ -597,6 +600,8 @@ export function CustomizePage() {
           <Pencil aria-hidden="true" className="size-3.5" />
         </Link>
       );
+    // Interactive cards aren't documents, so there's no copy to customize.
+    if (BUILTIN_CARDS.find((c) => c.id === ref)?.needsAi) return null;
     const info = describeCard(ref, custom);
     return (
       <Link

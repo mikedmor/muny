@@ -6,7 +6,7 @@ import { Alert, Button, Card } from "../../components/ui.js";
 import { api } from "../../lib/api.js";
 import { useAiSettings } from "../settings/AiSettings.js";
 
-const monthName = (m: string) =>
+export const monthName = (m: string) =>
   new Date(`${m}-15T00:00:00`).toLocaleDateString(undefined, { month: "long", year: "numeric" });
 
 /** Reports → Reviews: every monthly review the built-in AI wrote, to look back over. */

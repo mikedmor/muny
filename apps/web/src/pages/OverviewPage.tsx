@@ -10,6 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
 import { CustomCardView } from "../cardkit/CustomCardView.js";
+import { AiOverviewCard } from "../components/AiOverviewCard.js";
 import {
   ColumnChart,
   LineChart,
@@ -743,6 +744,7 @@ const CARD_RENDERERS: Record<string, (d: Overview) => ReactNode> = {
   crypto: () => <CryptoOverviewCard />,
   budget: (d) => <BudgetCard d={d} />,
   "coming-up": (d) => <UpcomingCard d={d} />,
+  "muny-ai": () => <AiOverviewCard />,
 };
 
 const useOverview = () =>

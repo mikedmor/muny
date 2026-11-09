@@ -43,7 +43,7 @@ export function registerDashboardRoutes(app: FastifyInstance, db: MunyDb) {
   /** Everything a person or an assistant needs to write a card. Holds no financial data. */
   app.get("/api/dashboard/schema", async (req) => {
     requireUser(req);
-    return dashboardSchema();
+    return dashboardSchema(db);
   });
 
   app.put("/api/dashboard/layout", async (req) => {
