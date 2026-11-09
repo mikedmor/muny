@@ -2,6 +2,8 @@
 
 **Crypto** (in the menu) tracks wallets and exchanges: holdings, value over time, cost basis, gains, income, NFTs and tax reports. Muny never moves or trades crypto.
 
+![Crypto: total value over time, what went in, and allocation by coin](images/crypto.png)
+
 ## Getting your history in
 
 - **Koinly:** in Koinly, open **Transactions** and export them all (every year, on any plan), then drop the CSV on Muny's **Import** page or use Crypto → Wallets → **Import file**. Koinly's yearly **Transaction History** report from Tax reports works too, one file per year. Muny matches each Koinly wallet to one of yours by name, and re-importing never duplicates.

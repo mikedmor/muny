@@ -2,6 +2,8 @@
 
 Muny follows your device's light or dark setting until you choose otherwise. Each person in a household picks their own theme, and it follows them to every device they sign in on.
 
+![Appearance: built-in themes and your own](images/appearance.png)
+
 ## Choosing a theme
 
 Go to **Settings → Appearance**.

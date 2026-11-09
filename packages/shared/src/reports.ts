@@ -74,6 +74,14 @@ export interface Overview {
     incomeExpectedDaily: number[];
     /** Expected recurring income still to come this month. */
     incomeExpectedCents: number;
+    /**
+     * Where spending is headed: today's total plus recurring bills still due, on
+     * their due dates, one entry per day from today through the month's end.
+     * Known bills only, so everyday spending will add to it.
+     */
+    billsExpectedDaily: number[];
+    /** Recurring bills still due this month that count as spending. */
+    billsExpectedCents: number;
     daysInMonth: number;
   };
   incomeMonthToDateCents: number;

@@ -2,6 +2,8 @@
 
 **Savings** (in the menu, under Wealth) opens on your **Savings accounts**, with tabs for **Ways to save**, **Money saved** and self-hosting beside it.
 
+![Savings accounts: balance, interest earned and monthly deposits](images/savings.png)
+
 ## Savings accounts
 
 Every account of type **Savings** gets a card showing:

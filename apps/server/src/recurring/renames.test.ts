@@ -50,6 +50,37 @@ describe("the Coming up card's data", () => {
   });
 });
 
+describe("anticipated spending on the Spent this month chart", () => {
+  it("adds recurring bills still due, on their dates, and only what counts as spending", async () => {
+    const { db, client, account, add, scan, series } = await setup();
+    const main = await account("Main");
+    for (const m of ["2026-07", "2026-08", "2026-09", "2026-10"]) {
+      await add(main.id, `${m}-20`, -2_500, "SAMPLE GYM");
+      await add(main.id, `${m}-25`, -40_000, "SAMPLE MOVE TO SAVINGS");
+    }
+    await add(main.id, "2026-11-03", -1_234, "SAMPLE CORNER STORE");
+    scan();
+    const moved = series().find((s) => s.expectedAmountCents === -40_000);
+    const groups = (await client.get("/api/categories")).json<
+      { categories: { id: string; name: string }[] }[]
+    >();
+    const transfer = groups
+      .flatMap((g) => g.categories)
+      .find((c) => c.name === "Internal Transfer");
+    expect(transfer && moved).toBeTruthy();
+    await client.patch(`/api/recurring/${moved?.id}`, { categoryId: transfer?.id });
+
+    const s = overview(db, TODAY).spending;
+    // The gym on the 20th counts; the transfer on the 25th doesn't.
+    expect(s.billsExpectedCents).toBe(2_500);
+    expect(s.billsExpectedDaily).toHaveLength(24); // Nov 7 through Nov 30.
+    expect(s.billsExpectedDaily[0]).toBe(s.monthToDateCents);
+    expect(s.billsExpectedDaily[12]).toBe(s.monthToDateCents); // Nov 19.
+    expect(s.billsExpectedDaily[13]).toBe(s.monthToDateCents + 2_500); // Nov 20.
+    expect(s.billsExpectedDaily.at(-1)).toBe(s.monthToDateCents + 2_500);
+  });
+});
+
 describe("merchants the bank rewords", () => {
   it("keeps a bill that varies with its series when the name changes", async () => {
     const { account, add, scan, series, seriesOf } = await setup();

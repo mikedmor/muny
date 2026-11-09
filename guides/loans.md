@@ -2,6 +2,8 @@
 
 **Loans** (under Money) shows every loan account: what you owe, the rate, your payment and the minimum, the next due date, when it'll be paid off and how much interest is left. **Assets** (under Wealth) holds your home, car and other things of value, so loans can show your equity.
 
+![Loans: what you owe, the payoff date and each payment split into principal and interest](images/loans.png)
+
 ## Getting your loans in
 
 - **Through your bank connection.** Synced loans keep the balance the lender reports. Connections made from now on also bring the rate, minimum payment, due date and original amount when the lender shares them. For an older connection, click **Get details from your lender** on the loan: Plaid asks you to approve sharing loan details on the same login (no new login is used). Or enter them yourself with **Edit details**.
@@ -65,6 +67,8 @@ You see when you'd be debt-free, the interest left and what you'd save compared 
 Enter the home's **original value** (the lower of the purchase price and the original appraisal) and the monthly mortgage insurance. Muny shows your equity on that value, when you reach 20% (you can ask your lender to cancel it) and 22% (it ends on its own), at your current payments.
 
 ## Assets and equity
+
+![Assets: a home and a car, with value, equity and history](images/assets.png)
 
 On **Assets**, add your home with what it's worth now and what you paid. Update the value now and then (a home value site's estimate is fine); each update is kept, so you see its value over time, and it counts toward net worth. Net worth history spreads a change evenly between two values you've entered, and marks those dates as estimated, so years of change don't land on the day you update it. In the mortgage's **Edit details**, pick it as **The home** to see your equity and loan-to-value on both pages.
 

@@ -423,7 +423,7 @@ function GroupCard({
 function DisplaySettings() {
   const prefs = useUiPrefs();
   const set = useSetUiPrefs();
-  const split = prefs.data?.splitCharts ?? true;
+  const split = prefs.data?.splitCharts ?? false;
   return (
     <div className="space-y-8">
       <ThemeSettings />

@@ -140,8 +140,9 @@ function SpendingCard({ d }: { d: Overview }) {
           currentLabel={thisName}
           previousLabel={lastName}
           dayLabel={(day) => `Day ${day}`}
-          ariaLabel={`Running spending total: ${thisName} so far compared with ${lastName}, against ${formatMoney(d.incomeMonthToDateCents)} earned this month${s.incomeExpectedCents > 0 ? ` and ${formatMoney(d.incomeMonthToDateCents + s.incomeExpectedCents)} expected by the end of it` : ""}`}
+          ariaLabel={`Running spending total: ${thisName} so far compared with ${lastName}, against ${formatMoney(d.incomeMonthToDateCents)} earned this month${s.incomeExpectedCents > 0 ? ` and ${formatMoney(d.incomeMonthToDateCents + s.incomeExpectedCents)} expected by the end of it` : ""}${s.billsExpectedCents > 0 ? `. With recurring bills still due, spending is anticipated to reach ${formatMoney(s.monthToDateCents + s.billsExpectedCents)}` : ""}`}
           stack={stack}
+          anticipated={{ label: "Anticipated", values: s.billsExpectedDaily }}
           income={{
             label: "Earned",
             expectedLabel: "Expected",
@@ -150,7 +151,7 @@ function SpendingCard({ d }: { d: Overview }) {
           }}
         />
       </div>
-      <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-3 text-sm dark:border-slate-800">
+      <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-3 text-sm sm:grid-cols-3 dark:border-slate-800">
         <div>
           <dt className="text-slate-500">Earned this month</dt>
           <dd className="font-medium tabular-nums">{formatMoney(d.incomeMonthToDateCents)}</dd>
@@ -165,6 +166,19 @@ function SpendingCard({ d }: { d: Overview }) {
           <dt className="text-slate-500">Spent in {lastName}</dt>
           <dd className="font-medium tabular-nums">{formatMoney(s.lastMonthTotalCents)}</dd>
         </div>
+        {s.billsExpectedCents > 0 && (
+          <div>
+            <dt className="text-slate-500">
+              Anticipated by {shortDate(addDaysIso(`${d.today.slice(0, 8)}01`, s.daysInMonth - 1))}
+            </dt>
+            <dd className="font-medium tabular-nums">
+              {formatMoney(s.monthToDateCents + s.billsExpectedCents)}
+            </dd>
+            <dd className="text-xs text-slate-500 tabular-nums">
+              +{formatMoney(s.billsExpectedCents)} in recurring bills still due
+            </dd>
+          </div>
+        )}
       </dl>
     </Card>
   );

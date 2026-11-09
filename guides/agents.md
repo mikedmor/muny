@@ -2,6 +2,8 @@
 
 Muny can talk to AI assistants like Claude through MCP (the Model Context Protocol). An assistant can answer questions about your money, build Overview cards and themes for you, and suggest changes that wait for your approval. Nothing connects until you create a token for it.
 
+![AI assistants: each token only reaches the permissions you tick](images/agents.png)
+
 Here the assistant runs elsewhere and connects to Muny. Muny can also use an AI model itself for a few jobs, which is separate and off by default: see [Built-in AI](ai.md).
 
 ## What an assistant can and can't do
@@ -45,6 +47,8 @@ Only the household's owner can do this.
 To cut off a token, click **Revoke**. It stops working straight away. A revoked or expired token stays listed so you can still see its activity; click **Remove** to take it off the list for good. Its past activity stays in Muny's audit log, and anything it suggested stays in your inbox under its name.
 
 ## Approving what an assistant suggests
+
+![The inbox: suggested changes wait for you to approve or reject them](images/inbox.png)
 
 When an assistant suggests a change to your financial data, nothing happens until you approve it. Suggestions wait under **Alerts → Inbox**, and you get an alert when new ones arrive. You can send that alert to your phone or email under **Alerts → Settings**. It only says something is waiting, not what.
 

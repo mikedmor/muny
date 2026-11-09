@@ -2,6 +2,8 @@
 
 Muny works fully without AI. If you want, it can use a model you choose for three jobs. This is separate from [AI assistants](agents.md), where an assistant like Claude connects to Muny; here, Muny itself makes the call.
 
+![Built-in AI settings: choose a provider and what it can help with](images/ai.png)
+
 It's **off by default**. Until you turn it on in **Settings → AI**, Muny never contacts an AI provider.
 
 ## Choosing a provider

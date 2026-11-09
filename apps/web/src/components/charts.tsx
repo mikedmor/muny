@@ -548,7 +548,7 @@ export function LineChart({
 }) {
   // Settings → Display can turn the split off.
   const prefs = useUiPrefs();
-  const stack = prefs.data?.splitCharts === false ? undefined : stackIn;
+  const stack = prefs.data?.splitCharts ? stackIn : undefined;
   const { ref, width } = useWidth();
   const [hover, setHover] = useState<number | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
@@ -767,7 +767,10 @@ export function PaceChart({
   height = 180,
   stack: stackIn,
   income,
+  anticipated,
 }: {
+  /** Where this month is headed from today: index 0 = today, through month end. */
+  anticipated?: { label: string; values: number[] };
   /**
    * Earnings to compare against: the running total so far (index 0 = day 1,
    * through today), then where it should end up (index 0 = today, to month end).
@@ -790,18 +793,20 @@ export function PaceChart({
 }) {
   // Settings → Display can turn the split off.
   const prefs = useUiPrefs();
-  const stack = prefs.data?.splitCharts === false ? undefined : stackIn;
+  const stack = prefs.data?.splitCharts ? stackIn : undefined;
   const { ref, width } = useWidth();
   const [hover, setHover] = useState<number | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
   const gradId = useId();
   const n = Math.max(days, previous.length, current.length, 2);
+  const lineColor = stack?.length ? "var(--viz-ink-2)" : "var(--viz-series-1)";
   const hi = Math.max(
     1,
     ...current,
     ...previous,
     ...(income?.actual ?? []),
     ...(income?.expected ?? []),
+    ...(anticipated?.values ?? []),
   );
   const ticks = niceTicks(hi, 0);
   const top = ticks[ticks.length - 1] ?? hi;
@@ -833,6 +838,26 @@ export function PaceChart({
   const expectedPath = income
     ? income.expected.map((v, k) => `${k ? "L" : "M"}${x(incomeStart + k)},${y(v)}`).join(" ")
     : "";
+  // Spending ahead: starts where the solid line stops, even if a late bill counts today.
+  const spentNow = current[lastI] ?? 0;
+  const headedTo = anticipated?.values.at(-1) ?? spentNow;
+  const hasAnticipated = !!anticipated && headedTo > spentNow;
+  const anticipatedPath =
+    hasAnticipated && anticipated
+      ? `M${x(lastI)},${y(spentNow)} ${anticipated.values
+          .map((v, k) => `L${x(lastI + k)},${y(v)}`)
+          .join(" ")}`
+      : "";
+  const ha =
+    hover !== null && hasAnticipated && anticipated && hover >= lastI
+      ? anticipated.values[hover - lastI]
+      : undefined;
+  // The two end labels sit at the right edge: when they'd collide, the lower
+  // total's label goes under its line.
+  const labelsClash = hasIncome && hasAnticipated && Math.abs(y(incomeEnd) - y(headedTo)) < 18;
+  const incomeLabelY = labelsClash && incomeEnd <= headedTo ? y(incomeEnd) + 15 : y(incomeEnd) - 6;
+  const anticipatedLabelY =
+    labelsClash && headedTo < incomeEnd ? y(headedTo) + 15 : y(headedTo) - 6;
 
   return (
     <div>
@@ -851,6 +876,22 @@ export function PaceChart({
           </svg>
           {currentLabel}
         </span>
+        {hasAnticipated && anticipated && (
+          <span className="inline-flex items-center gap-1.5">
+            <svg width="18" height="6" aria-hidden="true">
+              <line
+                x1="1"
+                x2="17"
+                y1="3"
+                y2="3"
+                stroke={lineColor}
+                strokeWidth="2"
+                strokeDasharray="5 3"
+              />
+            </svg>
+            {anticipated.label}
+          </span>
+        )}
         <span className="inline-flex items-center gap-1.5">
           <svg width="18" height="6" aria-hidden="true">
             <line
@@ -978,14 +1019,42 @@ export function PaceChart({
               )}
               <text
                 x={width - PAD.right}
-                y={y(incomeEnd) - 6}
+                y={incomeLabelY}
                 textAnchor="end"
                 fontSize={11}
                 fontWeight={500}
                 fill="var(--viz-ink-2)"
+                stroke="var(--viz-surface)"
+                strokeWidth={3}
+                paintOrder="stroke"
               >
                 {incomeEnd > incomeNow ? income.expectedLabel : income.label}{" "}
                 {compactMoney(incomeEnd)}
+              </text>
+            </g>
+          )}
+          {hasAnticipated && anticipated && (
+            <g>
+              <path
+                d={anticipatedPath}
+                fill="none"
+                stroke={lineColor}
+                strokeWidth={2}
+                strokeDasharray="5 3"
+                strokeLinejoin="round"
+              />
+              <text
+                x={width - PAD.right}
+                y={anticipatedLabelY}
+                textAnchor="end"
+                fontSize={11}
+                fontWeight={500}
+                fill="var(--viz-ink-2)"
+                stroke="var(--viz-surface)"
+                strokeWidth={3}
+                paintOrder="stroke"
+              >
+                {anticipated.label} {compactMoney(headedTo)}
               </text>
             </g>
           )}
@@ -1051,6 +1120,16 @@ export function PaceChart({
                   strokeWidth={2}
                 />
               )}
+              {ha !== undefined && hover > lastI && (
+                <circle
+                  cx={x(hover)}
+                  cy={y(ha)}
+                  r={4}
+                  fill={lineColor}
+                  stroke="var(--viz-surface)"
+                  strokeWidth={2}
+                />
+              )}
               {hv !== undefined && (
                 <circle
                   cx={x(hover)}
@@ -1065,7 +1144,7 @@ export function PaceChart({
           )}
         </svg>
         {hover !== null && (
-          <Tooltip x={x(hover)} y={y(Math.max(hv ?? 0, hp ?? 0, hi$ ?? 0))} width={width}>
+          <Tooltip x={x(hover)} y={y(Math.max(hv ?? 0, hp ?? 0, hi$ ?? 0, ha ?? 0))} width={width}>
             <p className="font-medium">{dayLabel(hover + 1)}</p>
             {hv !== undefined && (
               <p className="tabular-nums">
@@ -1075,6 +1154,11 @@ export function PaceChart({
             {stack?.length && hover < current.length ? (
               <StackTooltipRows stack={stack} i={hover} />
             ) : null}
+            {ha !== undefined && hover > lastI && anticipated && (
+              <p className="tabular-nums">
+                {anticipated.label}: {formatMoney(ha)}
+              </p>
+            )}
             {hp !== undefined && (
               <p className="tabular-nums text-slate-500">
                 {previousLabel}: {formatMoney(hp)}

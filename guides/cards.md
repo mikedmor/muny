@@ -2,6 +2,8 @@
 
 **Credit cards** (under Money) shows each card: what you owe against its limit, the last statement (balance, minimum payment, due date), the purchase rate, payments, spending since the statement, interest charged this year, and how long paying it off takes at the minimum versus more.
 
+![Credit cards: balance, limit, payoff and recent payments](images/credit-cards.png)
+
 ## Getting the details in
 
 - **Bank connection (Plaid):** synced cards bring their credit limit, and when the login shares loan and card details, the statement balance, minimum payment, due date and APR too. For an older connection, use **Get details from your lender** on a loan from the same login, or reconnect.

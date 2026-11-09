@@ -2,6 +2,8 @@
 
 **Stocks** (in the menu, under Wealth) tracks your brokerage accounts: what each one holds, its value, your gain over what you paid, cash, and dividends and interest. Brokerage accounts count toward net worth.
 
+![Stocks: portfolio value, gains, allocation and holdings](images/stocks.png)
+
 Muny doesn't fetch stock quotes. Values and prices are the ones your broker reports, updated whenever you import or sync. Muny never places trades.
 
 ## Connecting a brokerage through Plaid

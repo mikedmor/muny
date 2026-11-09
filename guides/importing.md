@@ -2,6 +2,8 @@
 
 Everything in Muny can come from files you export yourself, whether or not you use [bank sync](bank-sync.md). **Import** (in the menu under your name, at the bottom of the sidebar) is the one place for all of them.
 
+![Import: drop in any file, or choose what you are bringing in](images/import.png)
+
 **Drop any file on the Import page**, or several at once, and Muny works out what each one is and opens the right importer. You always see a preview first, and nothing is saved until you confirm.
 
 > [!NOTE]

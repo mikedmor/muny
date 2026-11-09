@@ -108,13 +108,61 @@ For Docker Compose, Synology, Unraid and every setting, see the **[install guide
 
 ## Screenshots
 
-| Budgets                                                                                                                                           | Recurring bills and subscriptions                                                                       |
-| ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| ![Budgets: Earnings, Home & utilities, Bills & subscriptions and each category against its budget](guides/images/budgets.png)                     | ![Recurring: subscriptions and bills with what's due and what's been paid](guides/images/recurring.png) |
-| **Ways to save**                                                                                                                                  | **Dark mode**                                                                                           |
-| ![Ways to save: duplicate subscriptions, price rises, self-hosted replacements and more, ranked by yearly saving](guides/images/ways-to-save.png) | ![The Overview in dark mode](guides/images/overview-dark.png)                                           |
+### Day to day
 
-<p align="center"><img src="guides/images/overview-phone.png" alt="The Overview on a phone" width="300" /></p>
+| Transactions                                                                                                                  | Recurring bills and subscriptions                                                                       |
+| ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| ![Transactions from every account in one list, with search and filters](guides/images/transactions.png)                       | ![Recurring: subscriptions and bills with what's due and what's been paid](guides/images/recurring.png) |
+| **Budgets**                                                                                                                   | **Spending**                                                                                            |
+| ![Budgets: Earnings, Home & utilities, Bills & subscriptions and each category against its budget](guides/images/budgets.png) | ![Spending: this month by category and merchant, against recent months](guides/images/spending.png)     |
+
+### What you owe
+
+| Credit cards                                                                                | Loans                                                                                                               |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| ![Credit cards: balance, limit, payoff and recent payments](guides/images/credit-cards.png) | ![Loans: what you owe, the payoff date and each payment split into principal and interest](guides/images/loans.png) |
+
+### What you own
+
+| Savings                                                                                       | Ways to save                                                                                                                                      |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ![Savings accounts: balance, interest earned and monthly deposits](guides/images/savings.png) | ![Ways to save: duplicate subscriptions, price rises, self-hosted replacements and more, ranked by yearly saving](guides/images/ways-to-save.png) |
+| **Stocks**                                                                                    | **Crypto**                                                                                                                                        |
+| ![Stocks: portfolio value, gains, allocation and holdings](guides/images/stocks.png)          | ![Crypto: total value over time, what went in, and allocation by coin](guides/images/crypto.png)                                                  |
+| **Assets**                                                                                    | **Net worth**                                                                                                                                     |
+| ![Assets: a home and a car, with value, equity and history](guides/images/assets.png)         | ![Reports: net worth over time and by account type](guides/images/reports.png)                                                                    |
+
+### Paperwork
+
+| Taxes                                                                                                     | Documents                                                                                      |
+| --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| ![Taxes: deductible spending, mortgage interest and crypto reports for the year](guides/images/taxes.png) | ![Documents: statements, tax forms and your own files in folders](guides/images/documents.png) |
+| **Import anything**                                                                                       | **Accounts**                                                                                   |
+| ![Import: drop in any file, or choose what you are bringing in](guides/images/import.png)                 | ![Accounts: every account grouped by type, with net worth](guides/images/accounts.png)         |
+
+### Automation and AI
+
+| Rules                                                                                                          | Approval inbox                                                                                  |
+| -------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| ![Rules: what each rule looks for, what it does and how many transactions it matches](guides/images/rules.png) | ![The inbox: suggested changes wait for you to approve or reject them](guides/images/inbox.png) |
+| **AI assistants over MCP**                                                                                     | **Built-in AI (optional)**                                                                      |
+| ![AI assistants: each token only reaches the permissions you tick](guides/images/agents.png)                   | ![Built-in AI settings: choose a provider and what it can help with](guides/images/ai.png)      |
+
+### Make it yours
+
+| Customize your Overview                                                                                       | Themes                                                                    |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| ![Customizing the Overview: choose cards, set their priority and build your own](guides/images/customize.png) | ![Appearance: built-in themes and your own](guides/images/appearance.png) |
+| **Dark mode**                                                                                                 | **Budgets in dark mode**                                                  |
+| ![The Overview in dark mode](guides/images/overview-dark.png)                                                 | ![Budgets in dark mode](guides/images/budgets-dark.png)                   |
+
+### On your phone
+
+<p align="center">
+  <img src="guides/images/overview-phone.png" alt="The Overview on a phone" width="260" />
+  <img src="guides/images/recurring-phone.png" alt="Recurring charges on a phone" width="260" />
+  <img src="guides/images/budgets-phone.png" alt="Budgets on a phone" width="260" />
+</p>
 
 Every screenshot uses the built-in demo household. All names and numbers are made up.
 

@@ -428,6 +428,25 @@ export function overview(db: Db, today = localToday()): Overview {
   }
   const incomeExpectedCents = [...expectedOn.values()].reduce((a, b) => a + b, 0);
 
+  // Bills still due, on their due dates (a late one counts today). Only what
+  // would count as spending when it's paid: expense categories or none.
+  const thisMonthDaily = cumulativeDailySpending(db, `${month}-01`, today);
+  const spendCats = categoryMeta(db);
+  const seriesCategory = new Map(listSeries(db, today).map((s) => [s.id, s.categoryId]));
+  const billsOn = new Map<string, number>();
+  for (const u of upcoming(db, today, monthEnd(month), today)) {
+    const cat = seriesCategory.get(u.seriesId);
+    if (u.amountCents >= 0 || (cat && spendCats.get(cat)?.kind !== "expense")) continue;
+    billsOn.set(u.date, (billsOn.get(u.date) ?? 0) - u.amountCents);
+  }
+  const billsExpectedDaily: number[] = [];
+  let headed = thisMonthDaily.at(-1) ?? 0;
+  for (let d = today; d <= monthEnd(month); d = addDays(d, 1)) {
+    headed += billsOn.get(d) ?? 0;
+    billsExpectedDaily.push(headed);
+  }
+  const billsExpectedCents = [...billsOn.values()].reduce((a, b) => a + b, 0);
+
   const newRecurring = listSeries(db, today).filter(
     (s) => s.status === "detected" && s.active,
   ).length;
@@ -442,12 +461,14 @@ export function overview(db: Db, today = localToday()): Overview {
       monthToDateCents: mtd.totalCents,
       lastMonthSameDayCents: lastSpan.totalCents,
       lastMonthTotalCents: lastFull.totalCents,
-      thisMonthDaily: cumulativeDailySpending(db, `${month}-01`, today),
+      thisMonthDaily,
       thisMonthByCategory: cumulativeDailyByCategory(db, `${month}-01`, today),
       lastMonthDaily: cumulativeDailySpending(db, `${lastMonth}-01`, lastMonthEnd),
       incomeDaily,
       incomeExpectedDaily,
       incomeExpectedCents,
+      billsExpectedDaily,
+      billsExpectedCents,
       daysInMonth: Number(monthEnd(month).slice(8)),
     },
     incomeMonthToDateCents: monthly?.incomeCents ?? 0,

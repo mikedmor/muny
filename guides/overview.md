@@ -4,7 +4,19 @@ The Overview shows your cards in as many columns as your screen has room for: on
 
 ![The Overview with spending, accounts, cards and loans](images/overview.png)
 
+## Spent this month
+
+The solid line is what you've spent so far, next to last month's whole month as a dotted line. Three things look ahead:
+
+- **Anticipated** continues your spending from today, rising on the due date of each recurring bill still to come this month. It only knows about your recurring bills, so everyday spending like groceries will take the real total higher. Bills that are transfers don't count, because they aren't spending.
+- **Earned** is what's come in so far.
+- **Expected** continues your earnings from today, on the dates your recurring income is due.
+
+To split the spending line into categories, turn on **Split totals into colored parts** in **Settings → Appearance**. It's off by default.
+
 ## Customizing
+
+![Customizing the Overview: choose cards, set their priority and build your own](images/customize.png)
 
 Click **Customize** at the top of the page. Changes save as you make them, and **Undo** steps back through them.
 

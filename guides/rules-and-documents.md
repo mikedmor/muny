@@ -2,6 +2,8 @@
 
 ## Rules
 
+![Rules: what each rule looks for, what it does and how many transactions it matches](images/rules.png)
+
 A rule finds transactions and does something to them: sets the category, renames the merchant, adds a tag, ignores them everywhere (left out of totals and reports), or counts them as one of your [recurring](recurring.md#keeping-charges-with-their-series-when-the-bank-renames-them) bills, subscriptions or paychecks. New transactions always run your rules.
 
 - **From a transaction:** open it. If no rule applies yet, click **Add rule** (+). If rules apply, **Rules** (→) lists them, with how many transactions each matches; click one to change it, or **Add rule** for another.
@@ -17,6 +19,8 @@ While you make or edit a rule, Muny warns when you already have the same rule, o
 - **Rules that clash:** two rules file the same transactions differently. It says how many they share and which one wins (the higher one), with buttons to edit either.
 
 ## Documents
+
+![Documents: statements, tax forms and your own files in folders](images/documents.png)
 
 **Insights → Documents** keeps your files in folders by where they come from:
 

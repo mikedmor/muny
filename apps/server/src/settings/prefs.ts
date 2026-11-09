@@ -9,7 +9,7 @@ import { parse } from "../lib/http.js";
 /** Display preferences for the household (Settings → Display). */
 
 const KEY = "ui.prefs";
-const DEFAULTS: UiPrefs = { splitCharts: true };
+const DEFAULTS: UiPrefs = { splitCharts: false };
 
 export function getUiPrefs(db: MunyDb): UiPrefs {
   const v = db

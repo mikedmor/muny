@@ -2,6 +2,8 @@
 
 **Transactions** (under Money) lists everything from every account, newest first. It's where you search, fix categories, split purchases and add notes.
 
+![Transactions: every account in one list, with search and filters](images/transactions.png)
+
 ## Finding things
 
 - **Search** matches the merchant, notes or an amount (type `42.10` to find that charge).
