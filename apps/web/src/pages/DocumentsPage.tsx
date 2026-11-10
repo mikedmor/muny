@@ -9,6 +9,7 @@ import {
   Folder,
   FolderInput,
   FolderOpen,
+  FolderPlus,
   Image,
   ScrollText,
   Search,
@@ -82,8 +83,16 @@ interface FolderNode {
 }
 
 /** Every folder and its parents, in order, with how many documents are inside. */
-function folderTree(docs: DocumentInfo[]): FolderNode[] {
+function folderTree(docs: DocumentInfo[], made: string[]): FolderNode[] {
   const counts = new Map<string, number>();
+  // Folders you made show up while they're empty.
+  for (const f of made) {
+    const p = parts(f);
+    for (let i = 1; i <= p.length; i++) {
+      const k = join(p.slice(0, i));
+      counts.set(k, counts.get(k) ?? 0);
+    }
+  }
   for (const d of docs) {
     const p = parts(d.folder);
     for (let i = 1; i <= p.length; i++) {
@@ -147,13 +156,52 @@ export function DocumentsPage() {
     enabled: addingContract,
   });
 
+  const folders = useQuery({
+    queryKey: [...docsKey, "folders"],
+    queryFn: () => api.get<{ folders: string[] }>("/api/documents/folders"),
+  });
+  const made = folders.data?.folders ?? [];
+  const [newFolder, setNewFolder] = useState<string | null>(null);
+
   const all = docs.data ?? [];
-  const tree = folderTree(all);
-  const uploadFolder =
-    folder && !/^(Loans|Credit cards|Taxes|Contracts)\b/.test(folder) ? folder : "Uploads";
+  const tree = folderTree(all, made);
+  const uploadFolder = folder ?? "Uploads";
+  // In a loan's contracts, uploads are contracts for that loan (so they can be reviewed).
+  const inContracts = /^Contracts( \/|$)/.test(uploadFolder);
+  const contractLoan = inContracts
+    ? (all.find((d) => d.kind === "contract" && d.folder === uploadFolder)?.accountId ?? null)
+    : null;
   const userFolders = [
-    ...new Set(all.filter((d) => d.stored && d.kind === "other").map((d) => d.folder)),
-  ];
+    ...new Set([
+      ...made,
+      ...all.filter((d) => d.stored && d.kind === "other").map((d) => d.folder),
+    ]),
+  ].sort((a, b) => a.localeCompare(b));
+  const empty = folder !== null && (tree.find((n) => n.path === folder)?.count ?? 0) === 0;
+
+  const makeFolder = async () => {
+    if (newFolder === null) return;
+    setError(null);
+    try {
+      const r = await api.post<{ path: string }>("/api/documents/folders", { path: newFolder });
+      setNewFolder(null);
+      await qc.invalidateQueries({ queryKey: [...docsKey, "folders"] });
+      go(r.path);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't make that folder");
+    }
+  };
+  const removeFolder = async (path: string) => {
+    setError(null);
+    try {
+      await api.delete(`/api/documents/folders?path=${encodeURIComponent(path)}`);
+      await qc.invalidateQueries({ queryKey: [...docsKey, "folders"] });
+      const up = parts(path).slice(0, -1);
+      setFolder(up.length ? join(up) : null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't delete that folder");
+    }
+  };
 
   const upload = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -175,6 +223,7 @@ export function DocumentsPage() {
           mime: file.type,
           dataBase64: await toBase64(file),
           folder: uploadFolder,
+          ...(inContracts ? { kind: "contract", accountId: contractLoan } : {}),
         });
       } catch (err) {
         setError(err instanceof Error ? err.message : `Couldn't upload ${file.name}`);
@@ -284,7 +333,7 @@ export function DocumentsPage() {
       <p className="-mt-3 mb-4 text-sm text-slate-500">
         Statements you import file themselves by lender and card; tax forms and the tax reports Muny
         makes are under Taxes by year. Your own uploads (titles, receipts) go into the folder you
-        pick on the left, or move them after.
+        pick on the left (or a new one), or move them after.
       </p>
       {addingContract && (
         <Card className="mb-4 space-y-3">
@@ -387,6 +436,48 @@ export function DocumentsPage() {
                 <span className="text-xs text-slate-500">{n.count}</span>
               </button>
             ))}
+          {newFolder === null ? (
+            <button
+              type="button"
+              onClick={() => setNewFolder(folder ? `${folder} / ` : "")}
+              className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            >
+              <FolderPlus aria-hidden="true" className="size-4" />
+              New folder
+            </button>
+          ) : (
+            <form
+              className="space-y-2 rounded-lg border border-slate-200 p-2 dark:border-slate-800"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void makeFolder();
+              }}
+            >
+              <input
+                aria-label="New folder"
+                // biome-ignore lint/a11y/noAutofocus: opened by pressing New folder
+                autoFocus
+                value={newFolder}
+                maxLength={120}
+                onChange={(e) => setNewFolder(e.target.value)}
+                placeholder="e.g. Home / Insurance"
+                className="w-full rounded-lg border border-slate-300 bg-surface px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+              />
+              <p className="text-xs text-slate-500">Use / for a folder inside another.</p>
+              <span className="flex gap-1">
+                <Button type="submit" className="px-2.5 py-1 text-xs" disabled={!newFolder.trim()}>
+                  Make folder
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="px-2 py-1 text-xs"
+                  onClick={() => setNewFolder(null)}
+                >
+                  Cancel
+                </Button>
+              </span>
+            </form>
+          )}
         </nav>
 
         <div className="min-w-0 space-y-4">
@@ -423,7 +514,21 @@ export function DocumentsPage() {
             <Card className="text-center text-sm text-slate-500">
               {all.length === 0
                 ? "No documents yet. Import a statement on Loans or Credit cards, or upload a file."
-                : "Nothing here."}
+                : empty
+                  ? `Nothing in ${folder} yet. Upload to put files here.`
+                  : "Nothing here."}
+              {empty && folder && made.some((f) => f === folder || f.startsWith(`${folder} /`)) && (
+                <div className="mt-3">
+                  <Button
+                    variant="ghost"
+                    className="text-xs"
+                    onClick={() => void removeFolder(folder)}
+                  >
+                    <Trash2 aria-hidden="true" className="mr-1 inline size-3.5" />
+                    Delete this folder
+                  </Button>
+                </div>
+              )}
             </Card>
           )}
           {ordered.map((path) => (

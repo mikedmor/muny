@@ -142,6 +142,55 @@ function taxDocuments(db: MunyDb): DocumentInfo[] {
   return out;
 }
 
+const FOLDERS_KEY = "documents.folders";
+const MAX_FOLDERS = 500;
+
+/** "Home/ Insurance " -> "Home / Insurance": the form folders are kept in. */
+export const cleanFolder = (s: string) =>
+  s
+    .split("/")
+    .map((p) => p.replace(/\p{Cc}/gu, "").trim())
+    .filter(Boolean)
+    .join(" / ");
+
+/** Folders you made, kept even while they're empty. */
+export function documentFolders(db: MunyDb): string[] {
+  const row = db
+    .select({ value: schema.appSettings.value })
+    .from(schema.appSettings)
+    .where(eq(schema.appSettings.key, FOLDERS_KEY))
+    .get();
+  return Array.isArray(row?.value)
+    ? (row.value as unknown[]).filter((v) => typeof v === "string")
+    : [];
+}
+
+function saveFolders(db: MunyDb, folders: string[]) {
+  const value = [...new Set(folders)].sort((a, b) => a.localeCompare(b));
+  db.insert(schema.appSettings)
+    .values({ key: FOLDERS_KEY, value })
+    .onConflictDoUpdate({ target: schema.appSettings.key, set: { value } })
+    .run();
+  return value;
+}
+
+const inside = (folder: string, path: string) => folder === path || folder.startsWith(`${path} /`);
+
+export function addFolder(db: MunyDb, path: string): string[] {
+  const now = documentFolders(db);
+  if (now.length >= MAX_FOLDERS) throw new Error("That's as many folders as Muny keeps.");
+  return now.includes(path) ? now : saveFolders(db, [...now, path]);
+}
+
+/** Forget a folder and the ones inside it. False if documents are still in it. */
+export function removeFolder(db: MunyDb, path: string): string[] | null {
+  if (listDocuments(db).some((d) => inside(d.folder, path))) return null;
+  return saveFolders(
+    db,
+    documentFolders(db).filter((f) => !inside(f, path)),
+  );
+}
+
 export function listDocuments(db: MunyDb): DocumentInfo[] {
   const reviews = new Map(
     db

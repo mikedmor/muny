@@ -47,4 +47,42 @@ describe("documents", () => {
     expect((await client.delete(`/api/documents/${doc.id}`)).statusCode).toBe(200);
     expect((await client.get("/api/documents")).json<DocumentInfo[]>()).toEqual([]);
   });
+
+  it("keeps folders you make, and uploads into whichever folder you're in", async () => {
+    const { client } = await makeSignedInApp({ env: { MUNY_SECRET_KEY: SECRET } });
+    const made = await client.post("/api/documents/folders", { path: " Home/Insurance " });
+    expect(made.json()).toEqual({ path: "Home / Insurance", folders: ["Home / Insurance"] });
+    expect((await client.post("/api/documents/folders", { path: " / " })).statusCode).toBe(400);
+    expect((await client.get("/api/documents/folders")).json()).toEqual({
+      folders: ["Home / Insurance"],
+    });
+
+    // Any folder, the ones statements file themselves in too.
+    const up = await client.post("/api/documents", {
+      name: "letter.pdf",
+      mime: "application/pdf",
+      dataBase64: fakePdf.toString("base64"),
+      folder: "Loans / Seaview",
+    });
+    expect(up.json<DocumentInfo>()).toMatchObject({ kind: "other", folder: "Loans / Seaview" });
+
+    // A contract in a Contracts folder of your own stays there.
+    const c = await client.post("/api/documents", {
+      name: "c.pdf",
+      mime: "application/pdf",
+      dataBase64: Buffer.from("%PDF-1.4\n% another synthetic file\n%%EOF").toString("base64"),
+      folder: "Contracts / Boat",
+      kind: "contract",
+      accountId: null,
+    });
+    expect(c.json<DocumentInfo>()).toMatchObject({ kind: "contract", folder: "Contracts / Boat" });
+
+    // Only an empty folder can go.
+    await client.post("/api/documents/folders", { path: "Loans / Seaview / Letters" });
+    expect(
+      (await client.delete("/api/documents/folders?path=Loans%20%2F%20Seaview")).statusCode,
+    ).toBe(409);
+    const gone = await client.delete("/api/documents/folders?path=Home%20%2F%20Insurance");
+    expect(gone.json()).toEqual({ folders: ["Loans / Seaview / Letters"] });
+  });
 });

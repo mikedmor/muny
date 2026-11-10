@@ -4,12 +4,16 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
 import { audit } from "../lib/audit.js";
-import { badRequest, notFound, parse } from "../lib/http.js";
+import { badRequest, HttpError, notFound, parse } from "../lib/http.js";
 import {
+  addFolder,
+  cleanFolder,
   DOCUMENT_TYPES,
   deleteDocument,
+  documentFolders,
   listDocuments,
   readDocument,
+  removeFolder,
   saveDocument,
   updateDocument,
 } from "./service.js";
@@ -18,8 +22,14 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 const IdParams = z.object({ id: z.string().min(1).max(64) });
 
 /** The loan a contract belongs to, and its folder (a slash would make it a subfolder). */
-function contractFiling(db: MunyDb, accountId: string | null | undefined) {
-  if (!accountId) return { accountId: null, lender: null, folder: "Contracts" };
+function contractFiling(db: MunyDb, accountId: string | null | undefined, folder?: string | null) {
+  // Not tied to a loan: under Contracts, in the folder you're in if it's one of its own.
+  if (!accountId)
+    return {
+      accountId: null,
+      lender: null,
+      folder: folder && /^Contracts( \/|$)/.test(folder) ? folder : "Contracts",
+    };
   const loan = db
     .select({ name: schema.accounts.name, lender: schema.loanDetails.lender })
     .from(schema.loanDetails)
@@ -77,10 +87,45 @@ export function registerDocumentRoutes(
     const doc = saveDocument(db, secret, {
       ...details,
       bytes,
-      ...(body.kind === "contract" ? contractFiling(db, accountId) : {}),
+      ...(body.kind === "contract" ? contractFiling(db, accountId, body.folder) : {}),
     });
     log(user.id, "document.upload", doc.id);
     return doc;
+  });
+
+  const FolderPath = z.object({
+    path: z
+      .string()
+      .max(200)
+      .transform(cleanFolder)
+      .pipe(z.string().min(1, "Give the folder a name").max(120, "That folder name is too long")),
+  });
+
+  app.get("/api/documents/folders", async (req) => {
+    requireUser(req);
+    return { folders: documentFolders(db) };
+  });
+
+  app.post("/api/documents/folders", async (req) => {
+    const user = requireUser(req);
+    const { path } = parse(FolderPath, req.body);
+    let folders: string[];
+    try {
+      folders = addFolder(db, path);
+    } catch (err) {
+      throw badRequest(err instanceof Error ? err.message : "Couldn't add that folder");
+    }
+    log(user.id, "document.folder.add");
+    return { path, folders };
+  });
+
+  app.delete("/api/documents/folders", async (req) => {
+    const user = requireUser(req);
+    const { path } = parse(FolderPath, req.query);
+    const folders = removeFolder(db, path);
+    if (!folders) throw new HttpError(409, "Move or delete what's in this folder first.");
+    log(user.id, "document.folder.remove");
+    return { folders };
   });
 
   /** The file itself: shown in the browser, or downloaded with ?download=1. */

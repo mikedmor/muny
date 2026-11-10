@@ -59,6 +59,7 @@ export const noun = (table: string, n: number) => {
 /** Settings rows, by what they hold. */
 const SETTINGS: Record<string, string> = {
   "ai.settings": "AI settings",
+  "documents.folders": "document folders",
   "alerts.perAccount": "account alerts",
   "alerts.vapid": "push notification keys",
   "assets.apillowHomes": "home values",
