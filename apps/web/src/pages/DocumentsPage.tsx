@@ -17,7 +17,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { useState } from "react";
+import { type DragEvent, useState } from "react";
 import { SelectField } from "../components/forms.js";
 import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
 import { api } from "../lib/api.js";
@@ -167,10 +167,14 @@ export function DocumentsPage() {
   const tree = folderTree(all, made);
   const uploadFolder = folder ?? "Uploads";
   // In a loan's contracts, uploads are contracts for that loan (so they can be reviewed).
-  const inContracts = /^Contracts( \/|$)/.test(uploadFolder);
-  const contractLoan = inContracts
-    ? (all.find((d) => d.kind === "contract" && d.folder === uploadFolder)?.accountId ?? null)
-    : null;
+  const filing = (target: string) =>
+    /^Contracts( \/|$)/.test(target)
+      ? {
+          kind: "contract",
+          accountId:
+            all.find((d) => d.kind === "contract" && d.folder === target)?.accountId ?? null,
+        }
+      : {};
   const userFolders = [
     ...new Set([
       ...made,
@@ -183,7 +187,9 @@ export function DocumentsPage() {
     if (newFolder === null) return;
     setError(null);
     try {
-      const r = await api.post<{ path: string }>("/api/documents/folders", { path: newFolder });
+      const r = await api.post<{ path: string }>("/api/documents/folders", {
+        path: folder ? `${folder} / ${newFolder}` : newFolder,
+      });
       setNewFolder(null);
       await qc.invalidateQueries({ queryKey: [...docsKey, "folders"] });
       go(r.path);
@@ -203,8 +209,8 @@ export function DocumentsPage() {
     }
   };
 
-  const upload = async (files: FileList | null) => {
-    if (!files?.length) return;
+  const upload = async (files: FileList | null, target = uploadFolder) => {
+    if (!files?.length || busy) return;
     setError(null);
     let i = 0;
     for (const file of [...files]) {
@@ -222,8 +228,8 @@ export function DocumentsPage() {
           name: file.name,
           mime: file.type,
           dataBase64: await toBase64(file),
-          folder: uploadFolder,
-          ...(inContracts ? { kind: "contract", accountId: contractLoan } : {}),
+          folder: target,
+          ...filing(target),
         });
       } catch (err) {
         setError(err instanceof Error ? err.message : `Couldn't upload ${file.name}`);
@@ -232,6 +238,31 @@ export function DocumentsPage() {
     setBusy(null);
     await qc.invalidateQueries({ queryKey: docsKey });
   };
+
+  // Files dragged onto a folder, or onto the files area, upload to that folder.
+  const [dropOn, setDropOn] = useState<string | null>(null);
+  const hasFiles = (e: DragEvent) => e.dataTransfer.types.includes("Files");
+  const dropTo = (target: string) => ({
+    onDragOver: (e: DragEvent<HTMLElement>) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = busy ? "none" : "copy";
+      if (dropOn !== target) setDropOn(target);
+    },
+    onDragLeave: (e: DragEvent<HTMLElement>) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node | null))
+        setDropOn((d) => (d === target ? null : d));
+    },
+    onDrop: (e: DragEvent<HTMLElement>) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setDropOn(null);
+      void upload(e.dataTransfer.files, target);
+    },
+  });
+  const dropRing = (target: string) => dropOn === target && "ring-2 ring-brand-500";
 
   const uploadContracts = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -314,7 +345,7 @@ export function DocumentsPage() {
               Add a contract
             </Button>
             <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-on-brand hover:bg-brand-700">
-              <Upload aria-hidden="true" className="size-4" /> Upload to {uploadFolder}
+              <Upload aria-hidden="true" className="size-4" /> Upload
               <input
                 type="file"
                 multiple
@@ -332,8 +363,8 @@ export function DocumentsPage() {
       />
       <p className="-mt-3 mb-4 text-sm text-slate-500">
         Statements you import file themselves by lender and card; tax forms and the tax reports Muny
-        makes are under Taxes by year. Your own uploads (titles, receipts) go into the folder you
-        pick on the left (or a new one), or move them after.
+        makes are under Taxes by year. Your own files (titles, receipts) go into the folder you're
+        in: upload them, or drag them onto the files or onto a folder.
       </p>
       {addingContract && (
         <Card className="mb-4 space-y-3">
@@ -385,8 +416,10 @@ export function DocumentsPage() {
           <button
             type="button"
             onClick={() => go(null)}
+            {...dropTo("Uploads")}
             className={cx(
               "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left",
+              dropRing("Uploads"),
               folder === null
                 ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-700/20 dark:text-brand-500"
                 : "hover:bg-slate-100 dark:hover:bg-slate-800",
@@ -409,9 +442,11 @@ export function DocumentsPage() {
                 type="button"
                 aria-expanded={hasKids(n.path) ? open.has(n.path) : undefined}
                 onClick={() => go(n.path)}
+                {...dropTo(n.path)}
                 style={{ paddingLeft: `${0.5 + n.depth}rem` }}
                 className={cx(
                   "flex w-full items-center gap-2 rounded-lg py-1.5 pr-2 text-left",
+                  dropRing(n.path),
                   folder === n.path
                     ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-700/20 dark:text-brand-500"
                     : "hover:bg-slate-100 dark:hover:bg-slate-800",
@@ -436,63 +471,75 @@ export function DocumentsPage() {
                 <span className="text-xs text-slate-500">{n.count}</span>
               </button>
             ))}
-          {newFolder === null ? (
-            <button
-              type="button"
-              onClick={() => setNewFolder(folder ? `${folder} / ` : "")}
-              className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+        </nav>
+
+        <section
+          aria-label={`Files in ${uploadFolder}`}
+          {...dropTo(uploadFolder)}
+          className={cx(
+            "relative min-h-[50vh] min-w-0 space-y-4 rounded-xl",
+            dropOn === uploadFolder &&
+              "outline-2 outline-offset-4 outline-brand-500 outline-dashed",
+          )}
+        >
+          {dropOn === uploadFolder && (
+            <p className="pointer-events-none rounded-lg bg-brand-50 px-3 py-2 text-sm font-medium text-brand-700 dark:bg-brand-700/20 dark:text-brand-500">
+              Drop to upload to {uploadFolder}
+            </p>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex min-w-48 flex-1 items-center gap-2 rounded-lg border border-slate-300 bg-surface px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950">
+              <Search aria-hidden="true" className="size-4 text-slate-400" />
+              <span className="sr-only">Search documents</span>
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder={
+                  folder ? `Search in ${folder}` : "Search by name, lender, year or folder"
+                }
+                className="min-w-0 flex-1 bg-transparent outline-none"
+              />
+            </label>
+            <Button
+              variant="secondary"
+              onClick={() => setNewFolder((v) => (v === null ? "" : null))}
             >
-              <FolderPlus aria-hidden="true" className="size-4" />
+              <FolderPlus aria-hidden="true" className="mr-1.5 inline size-4" />
               New folder
-            </button>
-          ) : (
+            </Button>
+          </div>
+          {newFolder !== null && (
             <form
-              className="space-y-2 rounded-lg border border-slate-200 p-2 dark:border-slate-800"
+              className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-surface px-4 py-3 dark:border-slate-800 dark:bg-slate-900"
               onSubmit={(e) => {
                 e.preventDefault();
                 void makeFolder();
               }}
             >
+              <FolderPlus aria-hidden="true" className="size-5 shrink-0 text-brand-600" />
               <input
-                aria-label="New folder"
+                aria-label={folder ? `New folder in ${folder}` : "New folder"}
                 // biome-ignore lint/a11y/noAutofocus: opened by pressing New folder
                 autoFocus
                 value={newFolder}
-                maxLength={120}
+                maxLength={100}
                 onChange={(e) => setNewFolder(e.target.value)}
-                placeholder="e.g. Home / Insurance"
-                className="w-full rounded-lg border border-slate-300 bg-surface px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+                onKeyDown={(e) => e.key === "Escape" && setNewFolder(null)}
+                placeholder={folder ? `New folder in ${folder}` : "Folder name, e.g. Home"}
+                className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-surface px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
               />
-              <p className="text-xs text-slate-500">Use / for a folder inside another.</p>
-              <span className="flex gap-1">
-                <Button type="submit" className="px-2.5 py-1 text-xs" disabled={!newFolder.trim()}>
-                  Make folder
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="px-2 py-1 text-xs"
-                  onClick={() => setNewFolder(null)}
-                >
-                  Cancel
-                </Button>
-              </span>
+              <Button type="submit" className="px-2.5 py-1 text-xs" disabled={!newFolder.trim()}>
+                Make folder
+              </Button>
+              <Button
+                variant="ghost"
+                className="px-2 py-1 text-xs"
+                onClick={() => setNewFolder(null)}
+              >
+                Cancel
+              </Button>
             </form>
           )}
-        </nav>
-
-        <div className="min-w-0 space-y-4">
-          <label className="flex items-center gap-2 rounded-lg border border-slate-300 bg-surface px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950">
-            <Search aria-hidden="true" className="size-4 text-slate-400" />
-            <span className="sr-only">Search documents</span>
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder={
-                folder ? `Search in ${folder}` : "Search by name, lender, year or folder"
-              }
-              className="min-w-0 flex-1 bg-transparent outline-none"
-            />
-          </label>
           {docs.isError && <Alert>{docs.error.message}</Alert>}
           {!needle && sub.length > 0 && (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -501,7 +548,11 @@ export function DocumentsPage() {
                   key={n.path}
                   type="button"
                   onClick={() => go(n.path)}
-                  className="flex items-center gap-3 rounded-xl border border-slate-200 bg-surface px-4 py-3 text-left hover:border-brand-500 dark:border-slate-800 dark:bg-slate-900"
+                  {...dropTo(n.path)}
+                  className={cx(
+                    "flex items-center gap-3 rounded-xl border border-slate-200 bg-surface px-4 py-3 text-left hover:border-brand-500 dark:border-slate-800 dark:bg-slate-900",
+                    dropRing(n.path),
+                  )}
                 >
                   <Folder aria-hidden="true" className="size-5 shrink-0 text-brand-600" />
                   <span className="min-w-0 flex-1 truncate font-medium">{n.name}</span>
@@ -515,7 +566,7 @@ export function DocumentsPage() {
               {all.length === 0
                 ? "No documents yet. Import a statement on Loans or Credit cards, or upload a file."
                 : empty
-                  ? `Nothing in ${folder} yet. Upload to put files here.`
+                  ? `Nothing in ${folder} yet. Upload or drop files here.`
                   : "Nothing here."}
               {empty && folder && made.some((f) => f === folder || f.startsWith(`${folder} /`)) && (
                 <div className="mt-3">
@@ -672,7 +723,7 @@ export function DocumentsPage() {
               </Card>
             </section>
           ))}
-        </div>
+        </section>
       </div>
     </>
   );

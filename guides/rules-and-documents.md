@@ -28,9 +28,9 @@ While you make or edit a rule, Muny warns when you already have the same rule, o
 - **Statements / account:** statements for other accounts (checking, savings…), kept with their date.
 - **Taxes / year:** 1099-DA forms you added on the Taxes page, and the reports Muny makes for that year (the tax summary CSV and the crypto tax reports), made fresh when you open them.
 - **Contracts / loan:** contracts you add with **Add a contract**, one folder per loan.
-- **Your own folders:** **New folder**, under the folders on the left, makes one (`Home / Insurance` makes Insurance inside Home). It stays even while it's empty, and an empty one you made can be deleted from inside it.
+- **Your own folders:** **New folder**, beside the search box, makes one inside the folder you're in (`Home / Insurance` makes two levels at once). It stays even while it's empty, and an empty one you made can be deleted from inside it.
 
-**Upload** puts files (PDF, PNG or JPEG, up to 10 MB) in the folder you're in, or **Uploads** from All documents. That works in any folder, including a lender's or a year's. Uploading inside a loan's **Contracts** folder adds them as contracts for that loan. Move a file with the folder button; typing a new name there makes that folder too.
+**Upload** puts files (PDF, PNG or JPEG, up to 10 MB) in the folder you're in, or **Uploads** from All documents. You can also drag files onto the file list to put them in that folder, or onto any folder on the left or in the view. That works in any folder, including a lender's or a year's. Uploading inside a loan's **Contracts** folder adds them as contracts for that loan. Move a file with the folder button; typing a new name there makes that folder too.
 
 A contract can be read by your AI model: press **Review** beside it. See [Contract review](ai.md#contract-review).
 
