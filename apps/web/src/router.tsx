@@ -11,6 +11,7 @@ import { BudgetsPage } from "./pages/BudgetsPage.js";
 import { CardEditorPage } from "./pages/CardEditorPage.js";
 import { CardsPage } from "./pages/CardsPage.js";
 import { CategoryPage } from "./pages/CategoryPage.js";
+import { ContractReviewPage } from "./pages/ContractReviewPage.js";
 import { CustomizePage } from "./pages/CustomizePage.js";
 import { CryptoDashboard } from "./pages/crypto/CryptoDashboard.js";
 import { CryptoReconcile } from "./pages/crypto/CryptoReconcile.js";
@@ -113,6 +114,7 @@ const routeTree = rootRoute.addChildren([
   page("/reports", ReportsPage),
   page("/taxes", TaxesPage),
   page("/documents", DocumentsPage),
+  page("/documents/$documentId/review", ContractReviewPage),
   page("/stocks", StocksPage),
   page("/crypto", CryptoDashboard),
   page("/crypto/wallets", CryptoWallets),

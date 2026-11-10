@@ -1,6 +1,6 @@
 # Built-in AI (optional)
 
-Muny works fully without AI. If you want, it can use a model you choose for three jobs. This is separate from [AI assistants](agents.md), where an assistant like Claude connects to Muny; here, Muny itself makes the call.
+Muny works fully without AI. If you want, it can use a model you choose for the jobs below. This is separate from [AI assistants](agents.md), where an assistant like Claude connects to Muny; here, Muny itself makes the call.
 
 ![Built-in AI settings: choose a provider and what it can help with](images/ai.png)
 
@@ -25,9 +25,22 @@ Each feature can be turned off on its own.
 - **Tidy merchant names.** Press **Tidy merchant names** and Muny sends the names that still look like bank text, with long numbers hidden. The new names arrive as one inbox item to approve. Names you turn down aren't asked about again.
 - **Mid-month check-in** (off by default). Around the 15th, Muny sends this month's budgeted and spent totals and the categories running ahead of the calendar, and leaves a short note as a notification. It goes to the channels you choose for **Mid-month check-in (AI)** under Alerts settings. No transactions or accounts.
 - **Ask Muny** (off by default). Ask a question in plain words, like "what did we spend on dining since summer?". The model chooses which of Muny's read-only lookups to run and answers from what they return. It sends your question and those results, which can include individual transactions, accounts and balances, with long numbers hidden. With Ollama or a server of your own, that stays at home; with a hosted provider, it goes to that company. It can't change anything, conversations aren't saved, and it needs a model that supports tools. Answers come from a model, so check anything important against the page itself.
+- **Contract review** (off by default). When you press **Review** on a contract in Documents, Muny sends all of its text and the loan's rate, balance, payment and yearly fee. See [Contract review](#contract-review).
 - **Fill in Teach Muny.** When a statement doesn't read fully and you open **Teach Muny**, **Fill in with AI** sends that statement's text (long numbers hidden) and fills in the labels it finds. Muny keeps only labels that really find a value on that statement, and you still check and save the template.
 
 Nothing else is ever sent, and Muny never sends anything in the background except the features you turned on.
+
+## Contract review
+
+Add a contract with **Documents → Add a contract**, choosing the loan it's for, turn on **Contract review** in **Settings → AI**, then press **Review** beside it. You can say what you most want to know, like whether you can give it back.
+
+Muny reads the contract in parts, then brings them together: an overview, what's worth doing first, ways out, ways to save, what to watch out for, anything that looks off, questions to ask, and the key terms. It runs in the background, one contract at a time, and leaves a notification when it's done. A long contract on a home server can take a while, and it waits if the server is busy.
+
+**What it sends.** All of the contract's text, with long numbers like account and social security numbers hidden, plus that loan's figures from Muny. Names and addresses printed in the contract go too. With Ollama or a server of your own, that stays with you; with a hosted provider, it goes to that company. The review quotes your contract, so it's stored encrypted like the contract is, and assistants and cards can't read it.
+
+**What to trust.** Muny looks up every quoted clause in the contract's own text and links the page it's on. If the words aren't there, the finding says so, because a model can invent a clause that sounds right. Key terms that can't be found are left out. Page numbers and those checks come from Muny; the explanations and advice come from the model. It isn't legal advice, and it can miss things, so check with a consumer attorney or your state attorney general's consumer office before acting on it.
+
+Muny reads the text inside a PDF. A scan or photo of a contract has none, so Muny tells you instead of guessing. A contract with some scanned pages gets reviewed, and the review lists the pages it couldn't read.
 
 ## On your Overview
 

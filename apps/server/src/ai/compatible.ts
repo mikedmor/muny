@@ -230,6 +230,7 @@ async function complete(c: AiCall, json: boolean): Promise<string> {
         messages,
         stream: false,
         ...(json ? { format: "json" } : {}),
+        ...(c.contextTokens ? { options: { num_ctx: c.contextTokens } } : {}),
       }),
     );
     if (!r.success) throw new AiCallError("Ollama's answer wasn't in the expected shape.");
@@ -319,9 +320,10 @@ export async function compatibleJson<T>(c: AiCall, schema: z.ZodType<T>): Promis
   try {
     raw = JSON.parse(body);
   } catch {
-    throw new AiCallError("The model's answer wasn't JSON.");
+    throw new AiCallError("The model's answer wasn't JSON.", { badAnswer: true });
   }
   const r = schema.safeParse(raw);
-  if (!r.success) throw new AiCallError("The model's answer wasn't in the expected shape.");
+  if (!r.success)
+    throw new AiCallError("The model's answer wasn't in the expected shape.", { badAnswer: true });
   return r.data;
 }

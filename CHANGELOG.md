@@ -6,6 +6,7 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ### Added
 
+- **Contract review.** Add a loan's contract under **Documents** and have your AI model read it for ways out, ways to save, terms to watch and anything that looks off. Every clause it quotes is checked against the contract's own text and linked to its page. Off by default, under **Settings → AI**.
 - Budgets show what would be left over if every budget gets fully used, beside the projection from bills alone.
 - A **Muny AI** Overview card with quick questions and your latest review, available while AI is on.
 - **Ask Muny**: ask about your money in plain words, answered from read-only lookups of your own data. Off by default, under **Settings → AI**.

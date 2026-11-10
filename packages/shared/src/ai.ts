@@ -41,6 +41,8 @@ export interface AiFeatures {
   midMonthCheckin: boolean;
   /** Ask questions about your money in plain words. */
   ask: boolean;
+  /** Read a loan contract you added to Documents and say what's in it for you. */
+  contractReview: boolean;
 }
 
 export const AI_FEATURE_KEYS = [
@@ -51,6 +53,7 @@ export const AI_FEATURE_KEYS = [
   "merchantNames",
   "statementTemplates",
   "ask",
+  "contractReview",
 ] as const satisfies readonly (keyof AiFeatures)[];
 
 /** The jobs that can use their own model (the rest of the settings are shared). */
@@ -61,6 +64,7 @@ export const AI_MODEL_JOBS = [
   "merchantNames",
   "statementTemplates",
   "ask",
+  "contractReview",
 ] as const satisfies readonly (keyof AiFeatures)[];
 export type AiModelJob = (typeof AI_MODEL_JOBS)[number];
 
@@ -127,4 +131,67 @@ export interface AiReview {
   body: string;
   /** unix ms */
   createdAt: number;
+}
+
+export const CONTRACT_FINDING_KINDS = ["exit", "savings", "risk", "mismatch"] as const;
+export type ContractFindingKind = (typeof CONTRACT_FINDING_KINDS)[number];
+
+/** Something the model pointed out in a contract. */
+export interface ContractFinding {
+  kind: ContractFindingKind;
+  title: string;
+  /** The contract's words, as the model quoted them; null when the point isn't about one clause. */
+  quote: string | null;
+  /** Where Muny found the quote (1-based); null when it didn't. */
+  page: number | null;
+  /** Muny found the quoted words in the contract's text. */
+  verified: boolean;
+  explanation: string;
+  nextStep: string | null;
+}
+
+export interface ContractTerm {
+  label: string;
+  value: string;
+  page: number | null;
+}
+
+export interface ContractReviewResult {
+  summary: string;
+  nextSteps: string[];
+  /** Worth asking the lender or a lawyer. */
+  questions: string[];
+  findings: ContractFinding[];
+  terms: ContractTerm[];
+  /** What you asked it to look for. */
+  focus: string | null;
+  model: string;
+  pages: number;
+  /** Pages with no text to read (scans, blank pages). */
+  unreadablePages: number[];
+  /** Pages in parts the model never gave a usable answer for. */
+  skippedPages: number[];
+}
+
+export interface ContractReviewState {
+  documentId: string;
+  name: string;
+  /** Open the contract itself; add #page=N for a page. */
+  href: string;
+  loanName: string | null;
+  status: "none" | "running" | "done" | "failed";
+  /** Steps finished and how many there are; 0 total while it waits its turn. */
+  stepsDone: number;
+  stepsTotal: number;
+  /** Why it's waiting right now, when the AI server said. */
+  waiting: string | null;
+  /** Why the last try failed. An earlier review, if any, stays in `result`. */
+  error: string | null;
+  /** unix ms */
+  finishedAt: number | null;
+  result: ContractReviewResult | null;
+  /** Where the text would go, when a review can be run. */
+  sendsTo: { where: string; model: string } | null;
+  /** Why a review can't be run right now (AI or this feature is off). */
+  blockedBy: string | null;
 }

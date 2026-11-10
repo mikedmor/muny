@@ -1,5 +1,6 @@
-import type { DocumentInfo } from "@muny/shared";
+import type { DocumentInfo, LoansReport } from "@muny/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import {
   Download,
   ExternalLink,
@@ -9,11 +10,14 @@ import {
   FolderInput,
   FolderOpen,
   Image,
+  ScrollText,
   Search,
+  Sparkles,
   Trash2,
   Upload,
 } from "lucide-react";
 import { useState } from "react";
+import { SelectField } from "../components/forms.js";
 import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
 import { api } from "../lib/api.js";
 
@@ -29,6 +33,7 @@ const TYPES = ["application/pdf", "image/png", "image/jpeg"];
 const KIND_LABEL: Record<DocumentInfo["kind"], string> = {
   loan_statement: "Loan statement",
   card_statement: "Card statement",
+  contract: "Contract",
   tax_form: "Tax form",
   report: "Report",
   other: "Document",
@@ -42,6 +47,11 @@ const day = (iso: string | null) =>
         year: "numeric",
       })
     : null;
+const REVIEW_LABEL: Record<NonNullable<DocumentInfo["review"]>, string> = {
+  running: "Reviewing…",
+  done: "See review",
+  failed: "Review",
+};
 const size = (b: number) =>
   b <= 0
     ? null
@@ -105,6 +115,7 @@ export function DocumentsPage() {
   const docs = useQuery({
     queryKey: docsKey,
     queryFn: () => api.get<DocumentInfo[]>("/api/documents"),
+    refetchInterval: (q) => (q.state.data?.some((d) => d.review === "running") ? 5000 : false),
   });
   const [folder, setFolder] = useState<string | null>(null);
   // Folders start closed; opening one shows what's inside.
@@ -128,9 +139,18 @@ export function DocumentsPage() {
   const [confirm, setConfirm] = useState<string | null>(null);
   const [moving, setMoving] = useState<{ id: string; folder: string } | null>(null);
 
+  const [addingContract, setAddingContract] = useState(false);
+  const [loanId, setLoanId] = useState("");
+  const loans = useQuery({
+    queryKey: ["documents", "loans"],
+    queryFn: () => api.get<LoansReport>("/api/loans"),
+    enabled: addingContract,
+  });
+
   const all = docs.data ?? [];
   const tree = folderTree(all);
-  const uploadFolder = folder && !/^(Loans|Credit cards|Taxes)\b/.test(folder) ? folder : "Uploads";
+  const uploadFolder =
+    folder && !/^(Loans|Credit cards|Taxes|Contracts)\b/.test(folder) ? folder : "Uploads";
   const userFolders = [
     ...new Set(all.filter((d) => d.stored && d.kind === "other").map((d) => d.folder)),
   ];
@@ -162,6 +182,43 @@ export function DocumentsPage() {
     }
     setBusy(null);
     await qc.invalidateQueries({ queryKey: docsKey });
+  };
+
+  const uploadContracts = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setError(null);
+    let filed: string | null = null;
+    let i = 0;
+    for (const file of [...files]) {
+      setBusy(`Uploading ${++i} of ${files.length}…`);
+      if (file.type !== "application/pdf") {
+        setError(`${file.name}: contracts have to be PDFs, so their text can be read.`);
+        continue;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        setError(`${file.name} is over 10 MB.`);
+        continue;
+      }
+      try {
+        const doc = await api.post<DocumentInfo>("/api/documents", {
+          name: file.name,
+          mime: file.type,
+          dataBase64: await toBase64(file),
+          kind: "contract",
+          accountId: loanId || null,
+        });
+        filed = doc.folder;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : `Couldn't upload ${file.name}`);
+      }
+    }
+    setBusy(null);
+    await qc.invalidateQueries({ queryKey: docsKey });
+    if (filed) {
+      setAddingContract(false);
+      setLoanId("");
+      go(filed);
+    }
   };
 
   const remove = async (id: string) => {
@@ -202,20 +259,26 @@ export function DocumentsPage() {
       <PageHeader
         title="Documents"
         actions={
-          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-on-brand hover:bg-brand-700">
-            <Upload aria-hidden="true" className="size-4" /> Upload to {uploadFolder}
-            <input
-              type="file"
-              multiple
-              accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
-              className="sr-only"
-              disabled={!!busy}
-              onChange={(e) => {
-                void upload(e.target.files);
-                e.target.value = "";
-              }}
-            />
-          </label>
+          <span className="flex flex-wrap items-center gap-2">
+            <Button variant="secondary" onClick={() => setAddingContract((v) => !v)}>
+              <ScrollText aria-hidden="true" className="mr-1.5 inline size-4" />
+              Add a contract
+            </Button>
+            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-on-brand hover:bg-brand-700">
+              <Upload aria-hidden="true" className="size-4" /> Upload to {uploadFolder}
+              <input
+                type="file"
+                multiple
+                accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                className="sr-only"
+                disabled={!!busy}
+                onChange={(e) => {
+                  void upload(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          </span>
         }
       />
       <p className="-mt-3 mb-4 text-sm text-slate-500">
@@ -223,6 +286,48 @@ export function DocumentsPage() {
         makes are under Taxes by year. Your own uploads (titles, receipts) go into the folder you
         pick on the left, or move them after.
       </p>
+      {addingContract && (
+        <Card className="mb-4 space-y-3">
+          <h2 className="font-semibold">Add a contract</h2>
+          <SelectField
+            label="Which loan is it for?"
+            className="max-w-md"
+            value={loanId}
+            onChange={(e) => setLoanId(e.target.value)}
+          >
+            <option value="">Not tied to a loan</option>
+            {(loans.data?.loans ?? []).map((l) => (
+              <option key={l.accountId} value={l.accountId}>
+                {l.name}
+                {l.mask ? ` ····${l.mask}` : ""}
+              </option>
+            ))}
+          </SelectField>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-on-brand hover:bg-brand-700">
+              <Upload aria-hidden="true" className="size-4" /> Choose PDF
+              <input
+                type="file"
+                multiple
+                accept=".pdf,application/pdf"
+                className="sr-only"
+                disabled={!!busy}
+                onChange={(e) => {
+                  void uploadContracts(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            <Button variant="ghost" onClick={() => setAddingContract(false)}>
+              Cancel
+            </Button>
+          </div>
+          <p className="text-xs text-slate-500">
+            Kept encrypted under Contracts, by loan. Once it's here, Review can have your AI model
+            read it.
+          </p>
+        </Card>
+      )}
       {error && <Alert>{error}</Alert>}
       {busy && <p className="mb-3 text-sm text-slate-500">{busy}</p>}
 
@@ -385,6 +490,16 @@ export function DocumentsPage() {
                           )}
                         </div>
                         <span className="flex items-center gap-1">
+                          {d.kind === "contract" && d.mime === "application/pdf" && (
+                            <Link
+                              to="/documents/$documentId/review"
+                              params={{ documentId: d.id }}
+                              className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-sm text-brand-600 hover:bg-slate-100 dark:text-brand-500 dark:hover:bg-slate-800"
+                            >
+                              <Sparkles aria-hidden="true" className="size-4" />
+                              {d.review ? REVIEW_LABEL[d.review] : "Review"}
+                            </Link>
+                          )}
                           <a
                             href={d.href}
                             target="_blank"

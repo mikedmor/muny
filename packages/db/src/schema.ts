@@ -993,7 +993,7 @@ export const documents = sqliteTable(
   "documents",
   {
     id: text().primaryKey(),
-    kind: text({ enum: ["loan_statement", "card_statement", "other"] })
+    kind: text({ enum: ["loan_statement", "card_statement", "contract", "other"] })
       .notNull()
       .default("other"),
     name: text().notNull(),
@@ -1247,6 +1247,27 @@ export const changeLog = sqliteTable(
 );
 
 /** The built-in AI's monthly reviews, one per month (Reports → Reviews). */
+/**
+ * The AI's reading of a contract in Documents, one per document. The result
+ * quotes the contract, so it's encrypted like the document is.
+ */
+export const documentReviews = sqliteTable("document_reviews", {
+  documentId: text()
+    .primaryKey()
+    .references(() => documents.id, { onDelete: "cascade" }),
+  status: text({ enum: ["running", "done", "failed"] }).notNull(),
+  stepsDone: integer().notNull().default(0),
+  stepsTotal: integer().notNull().default(0),
+  /** What the AI server said it's waiting on. */
+  waiting: text(),
+  error: text(),
+  encrypted: integer({ mode: "boolean" }).notNull().default(false),
+  /** ContractReviewResult as JSON, encrypted when MUNY_SECRET_KEY is set. */
+  result: text(),
+  startedAt: createdAt(),
+  finishedAt: integer({ mode: "timestamp_ms" }),
+});
+
 export const aiReviews = sqliteTable("ai_reviews", {
   /** YYYY-MM, the month reviewed. */
   month: text().primaryKey(),

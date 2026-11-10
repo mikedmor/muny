@@ -43,6 +43,7 @@ const DEFAULTS: Stored = {
     merchantNames: true,
     midMonthCheckin: false,
     ask: false,
+    contractReview: false,
   },
   models: {},
   keyEnc: null,

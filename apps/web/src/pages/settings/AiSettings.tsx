@@ -73,6 +73,12 @@ const FEATURES: {
       "Sends your question and whatever Muny looks up to answer it, which can include individual transactions, accounts and balances (long numbers hidden). It can only read. Needs a model that supports tools.",
   },
   {
+    key: "contractReview",
+    label: "Contract review",
+    sends:
+      "When you press Review on a contract in Documents, sends all of its text (long numbers hidden, but names and addresses printed in it go too) and that loan's rate, balance, payment and yearly fee.",
+  },
+  {
     key: "statementTemplates",
     label: "Fill in Teach Muny",
     sends:

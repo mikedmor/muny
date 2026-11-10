@@ -1,4 +1,5 @@
 import { openDb } from "@muny/db";
+import { closeInterruptedReviews } from "./ai/contract.js";
 import { startAiScheduler, startAutoCategorize } from "./ai/features.js";
 import { ensureAlertRules, startAlertScheduler } from "./alerts/service.js";
 import { buildApp } from "./app.js";
@@ -58,6 +59,7 @@ async function main() {
   startBackupScheduler(db, config, app.log);
   startSyncScheduler(db, app.syncDeps, app.log);
   startAlertScheduler(db, app.alertDeps, app.log);
+  closeInterruptedReviews(db);
   startAiScheduler(db, { secretKey: config.secretKey }, app.log);
   startAutoCategorize(db, { secretKey: config.secretKey }, app.log);
   startChangePruner(db);

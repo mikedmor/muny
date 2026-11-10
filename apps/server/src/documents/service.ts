@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { type MunyDb, newId, schema } from "@muny/db";
 import { CRYPTO_TAX_REPORTS, type DocumentInfo } from "@muny/shared";
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq, getTableColumns, sql } from "drizzle-orm";
 import { decryptBytes, encryptBytes } from "../lib/crypto.js";
 
 /**
@@ -16,14 +16,20 @@ export const DOCUMENT_TYPES: Record<string, string> = {
   "image/jpeg": "jpg",
 };
 
+type DocumentRow = Omit<typeof schema.documents.$inferSelect, "data">;
+
+/** Everything about a document but the file, so listing doesn't load every PDF. */
+const { data: _file, ...withoutFile } = getTableColumns(schema.documents);
+
 /** Statements file themselves by where they came from; uploads go where you put them. */
-function folderOf(r: typeof schema.documents.$inferSelect) {
+function folderOf(r: DocumentRow) {
   if (r.kind === "loan_statement") return `Loans / ${r.lender ?? "Statements"}`;
   if (r.kind === "card_statement") return `Credit cards / ${r.lender ?? "Statements"}`;
+  if (r.kind === "contract") return r.folder?.trim() || "Contracts";
   return r.folder?.trim() || "Uploads";
 }
 
-const info = (r: typeof schema.documents.$inferSelect): DocumentInfo => ({
+const info = (r: DocumentRow): DocumentInfo => ({
   id: r.id,
   kind: r.kind,
   folder: folderOf(r),
@@ -137,8 +143,20 @@ function taxDocuments(db: MunyDb): DocumentInfo[] {
 }
 
 export function listDocuments(db: MunyDb): DocumentInfo[] {
+  const reviews = new Map(
+    db
+      .select({ id: schema.documentReviews.documentId, status: schema.documentReviews.status })
+      .from(schema.documentReviews)
+      .all()
+      .map((r) => [r.id, r.status]),
+  );
   return [
-    ...db.select().from(schema.documents).orderBy(desc(schema.documents.createdAt)).all().map(info),
+    ...db
+      .select(withoutFile)
+      .from(schema.documents)
+      .orderBy(desc(schema.documents.createdAt))
+      .all()
+      .map((r) => ({ ...info(r), review: reviews.get(r.id) })),
     ...taxDocuments(db),
   ].sort(
     (a, b) =>
@@ -154,7 +172,7 @@ export function saveDocument(
     name: string;
     mime: string;
     bytes: Buffer;
-    kind?: "loan_statement" | "card_statement" | "other";
+    kind?: "loan_statement" | "card_statement" | "contract" | "other";
     lender?: string | null;
     documentDate?: string | null;
     notes?: string | null;
@@ -204,6 +222,12 @@ export function saveDocument(
   };
   db.insert(schema.documents).values(row).run();
   return info({ ...row, createdAt: new Date() });
+}
+
+/** A document's details, without opening the file. */
+export function documentInfo(db: MunyDb, id: string): DocumentInfo | null {
+  const r = db.select(withoutFile).from(schema.documents).where(eq(schema.documents.id, id)).get();
+  return r ? info(r) : null;
 }
 
 export function readDocument(

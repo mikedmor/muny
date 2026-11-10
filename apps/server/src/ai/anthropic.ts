@@ -24,7 +24,7 @@ function client(c: AiCall) {
     apiKey: c.apiKey ?? undefined,
     fetch: c.fetch,
     maxRetries: 1,
-    timeout: 120_000,
+    timeout: c.mode === "background" ? 300_000 : 120_000,
   });
 }
 
@@ -42,7 +42,8 @@ function common(c: AiCall) {
 
 function check(stop: string | null) {
   if (stop === "refusal") throw new AiCallError("The model declined this request.");
-  if (stop === "max_tokens") throw new AiCallError("The model's answer was cut off.");
+  if (stop === "max_tokens")
+    throw new AiCallError("The model's answer was cut off.", { badAnswer: true });
 }
 
 /** Typed SDK errors to short messages (the provider's text never includes the key). */
@@ -76,7 +77,9 @@ export async function anthropicJson<T>(c: AiCall, schema: z.ZodType<T>): Promise
     });
     check(msg.stop_reason);
     if (!msg.parsed_output)
-      throw new AiCallError("The model's answer wasn't in the expected shape.");
+      throw new AiCallError("The model's answer wasn't in the expected shape.", {
+        badAnswer: true,
+      });
     return msg.parsed_output as T;
   } catch (err) {
     friendly(err);

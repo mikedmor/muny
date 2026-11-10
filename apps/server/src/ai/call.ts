@@ -11,6 +11,8 @@ export interface AiCall extends AiConnection {
   maxTokens: number;
   /** How hard the model should think (where the model supports it). */
   effort: "low" | "medium" | "high";
+  /** Ollama: how much context to load the model with, for requests bigger than its default. */
+  contextTokens?: number;
   fetch?: typeof fetch;
   /**
    * Whether someone is waiting on the answer. Interactive (the default) only retries
@@ -31,14 +33,17 @@ export class AiCallError extends Error {
   readonly code?: string | null;
   /** The provider's HTTP status, when that's what went wrong. */
   readonly status?: number;
+  /** The model answered, but not in a usable way: asking again may help. */
+  readonly badAnswer?: boolean;
   constructor(
     message: string,
-    opts: { retryAfter?: number; code?: string | null; status?: number } = {},
+    opts: { retryAfter?: number; code?: string | null; status?: number; badAnswer?: boolean } = {},
   ) {
     super(message);
     this.retryAfter = opts.retryAfter;
     this.code = opts.code;
     this.status = opts.status;
+    this.badAnswer = opts.badAnswer;
   }
 }
 

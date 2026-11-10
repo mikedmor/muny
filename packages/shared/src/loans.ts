@@ -355,7 +355,7 @@ export interface LoanStatementPreview {
 /** A document kept in Muny (Insights → Documents), or one it makes (tax reports). */
 export interface DocumentInfo {
   id: string;
-  kind: "loan_statement" | "card_statement" | "tax_form" | "report" | "other";
+  kind: "loan_statement" | "card_statement" | "contract" | "tax_form" | "report" | "other";
   /** Where it's filed, e.g. "Loans / Seaview" or "Taxes / 2026". */
   folder: string;
   /** Open it (in the browser) and download it. */
@@ -370,9 +370,11 @@ export interface DocumentInfo {
   /** Loan statements: the statement date. */
   documentDate: string | null;
   notes: string | null;
-  /** The account a statement belongs to. */
+  /** The account a statement or contract belongs to. */
   accountId: string | null;
   createdAt: number;
+  /** Contracts: how the AI review stands, if one was started. */
+  review?: "running" | "done" | "failed";
 }
 
 /** One loan's statement (mortgage, auto, personal…): what Muny read from it. */

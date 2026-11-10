@@ -1,4 +1,5 @@
-import type { MunyDb } from "@muny/db";
+import { type MunyDb, schema } from "@muny/db";
+import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/plugin.js";
@@ -15,6 +16,23 @@ import {
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 const IdParams = z.object({ id: z.string().min(1).max(64) });
+
+/** The loan a contract belongs to, and its folder (a slash would make it a subfolder). */
+function contractFiling(db: MunyDb, accountId: string | null | undefined) {
+  if (!accountId) return { accountId: null, lender: null, folder: "Contracts" };
+  const loan = db
+    .select({ name: schema.accounts.name, lender: schema.loanDetails.lender })
+    .from(schema.loanDetails)
+    .innerJoin(schema.accounts, eq(schema.accounts.id, schema.loanDetails.accountId))
+    .where(eq(schema.loanDetails.accountId, accountId))
+    .get();
+  if (!loan) throw badRequest("That loan wasn't found.");
+  return {
+    accountId,
+    lender: loan.lender,
+    folder: `Contracts / ${loan.name.replaceAll("/", "-")}`,
+  };
+}
 
 /** Does the file start like its type says? */
 function looksLike(mime: string, b: Buffer) {
@@ -47,12 +65,20 @@ export function registerDocumentRoutes(
         notes: z.string().trim().max(500).nullable().optional(),
         documentDate: isoDate.nullable().optional(),
         folder: z.string().trim().max(120).nullable().optional(),
+        /** A contract, filed under the loan it's for. */
+        kind: z.literal("contract").optional(),
+        accountId: z.string().min(1).max(64).nullable().optional(),
       }),
       req.body,
     );
     const bytes = Buffer.from(body.dataBase64, "base64");
     if (!looksLike(body.mime, bytes)) throw badRequest("That file isn't a PDF, PNG or JPEG.");
-    const doc = saveDocument(db, secret, { ...body, bytes });
+    const { accountId, ...details } = body;
+    const doc = saveDocument(db, secret, {
+      ...details,
+      bytes,
+      ...(body.kind === "contract" ? contractFiling(db, accountId) : {}),
+    });
     log(user.id, "document.upload", doc.id);
     return doc;
   });

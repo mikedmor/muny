@@ -5,6 +5,7 @@ import {
   type AiAskResult,
   type AiReview,
   type AiSettings,
+  type ContractReviewState,
 } from "@muny/shared";
 import { desc } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
@@ -16,6 +17,7 @@ import { HttpError, parse } from "../lib/http.js";
 import { addMonths } from "../reports/spending.js";
 import { askMuny } from "./ask.js";
 import { AiCallError, askText } from "./call.js";
+import { contractReviewState, startContractReview } from "./contract.js";
 import {
   type AiDeps,
   draftTemplate,
@@ -72,6 +74,7 @@ export function registerAiRoutes(app: FastifyInstance, db: MunyDb, deps: AiDeps)
             merchantNames: z.boolean().optional(),
             midMonthCheckin: z.boolean().optional(),
             ask: z.boolean().optional(),
+            contractReview: z.boolean().optional(),
           })
           .optional(),
         models: z.partialRecord(z.enum(AI_MODEL_JOBS), z.string().trim().max(100)).optional(),
@@ -160,6 +163,23 @@ export function registerAiRoutes(app: FastifyInstance, db: MunyDb, deps: AiDeps)
     const out = await guard(() => askMuny(db, deps, user.id, body.question, body.history));
     log(user.id, "ai.ask", { looked: out.looked });
     return out;
+  });
+
+  const DocumentParams = z.object({ id: z.string().min(1).max(64) });
+
+  app.get("/api/documents/:id/review", async (req): Promise<ContractReviewState> => {
+    requireUser(req);
+    return contractReviewState(db, deps, parse(DocumentParams, req.params).id);
+  });
+
+  /** Starts reading a contract; it carries on after this returns. What you asked isn't logged. */
+  app.post("/api/documents/:id/review", async (req): Promise<ContractReviewState> => {
+    const user = requireUser(req);
+    const { id } = parse(DocumentParams, req.params);
+    const body = parse(z.object({ focus: z.string().trim().max(500).optional() }), req.body ?? {});
+    await guard(() => startContractReview(db, deps, id, body.focus || null));
+    log(user.id, "ai.contractReview", { documentId: id });
+    return contractReviewState(db, deps, id);
   });
 
   /** Every monthly review written, newest first (they stay after AI is turned off). */

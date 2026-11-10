@@ -22,6 +22,7 @@ const NOUNS: Record<string, [string, string]> = {
   crypto_txns: ["crypto transaction", "crypto transactions"],
   crypto_wallets: ["wallet", "wallets"],
   diy_projects: ["DIY project", "DIY projects"],
+  document_reviews: ["contract review", "contract reviews"],
   documents: ["document", "documents"],
   holding_costs: ["cost basis", "cost bases"],
   import_batches: ["import", "imports"],
