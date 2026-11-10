@@ -4,22 +4,24 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-09
+
+Muny's built-in AI does much more, from answering questions about your money to reading your loan contracts, and almost anything you change can now be undone.
+
 ### Added
 
-- **Your own document folders.** **New folder** in Documents makes one inside the folder you're in, empty or not. **Upload** goes to whichever folder you're in, and you can drag files onto the file list or onto a folder.
-- **Contract review.** Add a loan's contract under **Documents** and have your AI model read it for ways out, ways to save, terms to watch and anything that looks off. Every clause it quotes is checked against the contract's own text and linked to its page. Off by default, under **Settings → AI**.
-- Budgets show what would be left over if every budget gets fully used, beside the projection from bills alone.
-- A **Muny AI** Overview card with quick questions and your latest review, available while AI is on.
-- **Ask Muny**: ask about your money in plain words, answered from read-only lookups of your own data. Off by default, under **Settings → AI**.
-- Built-in AI can tidy merchant names (one inbox item to approve) and write a mid-month check-in on how budgets are pacing.
-- Built-in AI can suggest categories by itself after a sync or import, offers a rule once you've approved a merchant into a category three times, and suggests a budget from the monthly review. You can choose a model per job, and past reviews are kept in **Reports → Reviews**.
 - **Undo for anything.** After a change, an **Undo** bar appears at the bottom of the page (or press Ctrl+Z), and **Settings → History** lists every change from the last 60 days, by you, your household or an assistant, to undo or redo. Muny asks first when something was changed since, or when undoing would remove more than the change added.
-- **Remove old agent tokens.** A revoked or expired token can now be taken off the Agents page for good. Its past activity stays in the audit log.
+- **Ask Muny**: ask about your money in plain words, answered from read-only lookups of your own data. Off by default, under **Settings → AI**.
+- **Contract review.** Add a loan's contract under **Documents** and have your AI model read it for ways out, ways to save, terms to watch and anything that looks off. Every clause it quotes is checked against the contract's own text and linked to its page. Off by default, under **Settings → AI**.
+- A **Muny AI** Overview card with quick questions and your latest review, available while AI is on.
+- Built-in AI can suggest categories by itself after a sync or import, offers a rule once you've approved a merchant into a category three times, and suggests a budget from the monthly review. You can choose a model per job, and past reviews are kept in **Reports → Reviews**.
+- Built-in AI can tidy merchant names (one inbox item to approve) and write a mid-month check-in on how budgets are pacing.
+- **Your own document folders.** **New folder** in Documents makes one inside the folder you're in, empty or not. **Upload** goes to whichever folder you're in, and you can drag files onto the file list or onto a folder.
 - **Anticipated spending.** The Spent this month chart continues your spending to the end of the month, rising on the due date of each recurring bill still to come. Hover over a day to see its transactions, or what's expected on it.
-
-- **See where a transaction came from.** Its window now shows the source: your bank sync provider, a statement upload, a file import or added by hand.
-
+- Budgets show what would be left over if every budget gets fully used, beside the projection from bills alone.
 - **Know when an API runs out.** A new alert tells you when a service reaches its daily or monthly limit. Anything that relies on it, like syncing a wallet or updating prices, is turned off with a note saying how long until it resets.
+- **See where a transaction came from.** Its window now shows the source: your bank sync provider, a statement upload, a file import or added by hand.
+- **Remove old agent tokens.** A revoked or expired token can now be taken off the Agents page for good. Its past activity stays in the audit log.
 
 ### Changed
 
@@ -109,6 +111,7 @@ Install it with `docker pull ghcr.io/mikedmor/muny:1` and follow the [install gu
 
 If Muny saves you a subscription or two, you can [support its development](https://www.paypal.com/paypalme/mikedmor).
 
-[Unreleased]: https://github.com/mikedmor/muny/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/mikedmor/muny/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/mikedmor/muny/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/mikedmor/muny/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/mikedmor/muny/releases/tag/v1.0.0
