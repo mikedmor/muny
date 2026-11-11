@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Muny · Personal finance on your own hardware</title>
+    <meta
+      name="description"
+      content="Muny is a self-hosted personal finance and subscription manager: budgets, bills, subscriptions, loans, cards, savings, stocks and crypto in one container, with an MCP server so AI assistants can help, on your terms."
+    />
+    <meta property="og:title" content="Muny · Personal finance on your own hardware" />
+    <meta property="og:description" content="Budgets, bills, subscriptions, loans, cards, savings, stocks and crypto in one container on your own hardware. Built for AI assistants to use." />
+    <meta property="og:type" content="website" />
+    <meta name="color-scheme" content="light dark" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1254 1254'%3E%3Crect width='1254' height='1254' rx='240' fill='%23020d22'/%3E%3Cpath d='M275 286h137l215 239 218-239h135v341H851V475L627 720 402 473v435H275z' fill='%23fff'/%3E%3Cg fill='%2310efb0'%3E%3Cpath d='M515 908V805a16 16 0 0 1 16-16h99a16 16 0 0 1 16 16v103z'/%3E%3Cpath d='M683 908V752a16 16 0 0 1 16-16h99a16 16 0 0 1 16 16v156z'/%3E%3Cpath d='M851 908V681a16 16 0 0 1 16-16h97a16 16 0 0 1 16 16v227z'/%3E%3C/g%3E%3C/svg%3E"
+    />
+    <style>
+      :root {
+        --bg: #f6f8fb;
+        --card: #ffffff;
+        --ink: #0b1526;
+        --muted: #55627a;
+        --faint: #8a96aa;
+        --line: #e2e8f0;
+        --brand: #0d9488;
+        --brand-hi: #14b8a6;
+        --brand-ink: #0f766e;
+        --mint: #10efb0;
+        --navy: #020d22;
+        --glow: rgb(20 184 166 / 0.16);
+        --shadow: 0 1px 2px rgb(2 13 34 / 0.05), 0 24px 60px -24px rgb(2 13 34 / 0.3);
+        --mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #050c1a;
+          --card: #0c1628;
+          --ink: #eaf1fb;
+          --muted: #9aa8bf;
+          --faint: #66758e;
+          --line: #1a2740;
+          --brand-ink: #2dd4bf;
+          --glow: rgb(16 239 176 / 0.12);
+          --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 24px 60px -24px rgb(0 0 0 / 0.9);
+        }
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; scroll-padding-top: 4.5rem; }
+      body {
+        margin: 0;
+        background: radial-gradient(70rem 40rem at 50% -12%, var(--glow), transparent 65%), var(--bg);
+        color: var(--ink);
+        font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+      }
+      a { color: var(--brand-ink); font-weight: 600; }
+      img { display: block; max-width: 100%; height: auto; }
+      code { font-family: var(--mono); font-size: 0.88em; }
+      .wrap { max-width: 72rem; margin: 0 auto; padding: 0 1.25rem; }
+      :focus-visible { outline: 3px solid var(--brand-hi); outline-offset: 3px; border-radius: 6px; }
+
+      .top { position: sticky; top: 0; z-index: 10; backdrop-filter: blur(12px); background: color-mix(in oklab, var(--bg) 80%, transparent); border-bottom: 1px solid color-mix(in oklab, var(--line) 70%, transparent); }
+      .top .wrap { display: flex; align-items: center; gap: 1rem; height: 3.6rem; }
+      .logo { display: inline-flex; align-items: center; gap: 0.55rem; color: var(--ink); text-decoration: none; font-size: 1.2rem; font-weight: 800; }
+      .logo svg { width: 1.8rem; height: 1.8rem; border-radius: 7px; }
+      .top nav { margin-left: auto; display: flex; gap: 0.15rem; }
+      .top nav a { padding: 0.35rem 0.7rem; border-radius: 999px; color: var(--muted); font-size: 0.9rem; text-decoration: none; white-space: nowrap; }
+      .top nav a:hover { color: var(--ink); background: color-mix(in oklab, var(--ink) 7%, transparent); }
+      @media (max-width: 640px) { .top nav a.opt { display: none; } }
+
+      /* Hero */
+      .hero { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.25fr); gap: 3rem; align-items: center; padding: 4rem 1.25rem 1rem; }
+      @media (max-width: 920px) { .hero { grid-template-columns: minmax(0, 1fr); text-align: center; } .hero .cta { justify-content: center; } }
+      .eyebrow { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0.85rem; border-radius: 999px; background: var(--card); border: 1px solid var(--line); color: var(--muted); font-size: 0.85rem; font-weight: 600; }
+      .eyebrow i { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--mint); box-shadow: 0 0 0 3px rgb(16 239 176 / 0.2); }
+      h1 { margin: 1.1rem 0 0; font-size: clamp(2.4rem, 5.6vw, 4rem); line-height: 1.02; letter-spacing: -0.04em; font-weight: 850; }
+      h1 em { font-style: normal; background: linear-gradient(90deg, var(--brand), var(--mint)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+      .lede { margin: 1.1rem 0 0; color: var(--muted); font-size: 1.12rem; }
+      .cta { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1.6rem; }
+      .btn { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.7rem 1.2rem; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-weight: 700; text-decoration: none; transition: transform 0.15s, border-color 0.15s; }
+      .btn:hover { border-color: var(--brand-hi); transform: translateY(-1px); }
+      .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+      .btn svg { width: 1.05rem; height: 1.05rem; }
+
+      .stage { position: relative; }
+      .stage::before { content: ""; position: absolute; inset: 6% 4% -4%; background: radial-gradient(closest-side, rgb(20 184 166 / 0.5), transparent); filter: blur(50px); opacity: 0.55; z-index: -1; }
+      .window { border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: var(--card); box-shadow: var(--shadow); }
+      .chrome { display: flex; align-items: center; gap: 0.4rem; height: 2rem; padding: 0 0.8rem; background: color-mix(in oklab, var(--card) 92%, var(--ink)); border-bottom: 1px solid var(--line); }
+      .chrome i { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: color-mix(in oklab, var(--ink) 18%, transparent); }
+      .chrome span { margin-left: 0.6rem; padding: 0.05rem 0.75rem; border-radius: 6px; background: var(--bg); color: var(--faint); font: 500 0.72rem/1.6 var(--mono); }
+      .window img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; object-position: top; transition: opacity 0.2s; cursor: zoom-in; }
+      .window img.swap { opacity: 0; }
+      .phone { position: absolute; right: -1.5rem; bottom: -2.5rem; width: 24%; min-width: 7rem; padding: 6px; border-radius: 26px; background: var(--navy); border: 1px solid #22314d; box-shadow: 0 30px 60px -20px rgb(2 13 34 / 0.6); }
+      .phone img { border-radius: 20px; aspect-ratio: 390 / 844; object-fit: cover; object-position: top; cursor: zoom-in; }
+      @media (max-width: 920px) { .phone { right: 0.5rem; bottom: -2rem; } }
+      .mode { display: inline-flex; gap: 0.25rem; margin-top: 3.2rem; padding: 0.25rem; border-radius: 999px; background: var(--card); border: 1px solid var(--line); }
+      .mode button { padding: 0.35rem 0.9rem; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font: 600 0.85rem/1.4 system-ui, sans-serif; cursor: pointer; }
+      .mode button[aria-pressed="true"] { background: var(--navy); color: #fff; }
+      @media (prefers-color-scheme: dark) { .mode button[aria-pressed="true"] { background: var(--brand); } }
+
+      /* Sections */
+      section.wrap { padding-top: 6rem; }
+      .head { max-width: 46rem; margin-bottom: 2.25rem; }
+      .head.center { margin-inline: auto; text-align: center; }
+      .kicker { margin: 0 0 0.6rem; font: 700 0.75rem/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--brand-ink); }
+      h2 { margin: 0; font-size: clamp(1.8rem, 3.6vw, 2.6rem); line-height: 1.08; letter-spacing: -0.03em; }
+      .head p { margin: 0.8rem 0 0; color: var(--muted); font-size: 1.05rem; }
+
+      /* Why */
+      .why { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
+      @media (max-width: 960px) { .why { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+      @media (max-width: 560px) { .why { grid-template-columns: minmax(0, 1fr); } }
+      .card { padding: 1.4rem 1.4rem 1.25rem; border-radius: 18px; background: var(--card); border: 1px solid var(--line); }
+      .card .ico { display: grid; place-items: center; width: 2.5rem; height: 2.5rem; border-radius: 12px; background: color-mix(in oklab, var(--brand) 14%, transparent); color: var(--brand-ink); margin-bottom: 0.9rem; }
+      .card .ico svg { width: 1.3rem; height: 1.3rem; }
+      .card h3 { margin: 0 0 0.45rem; font-size: 1.1rem; letter-spacing: -0.01em; }
+      .card p { margin: 0; color: var(--muted); font-size: 0.94rem; }
+      .card ul { margin: 0; padding-left: 1.1rem; color: var(--muted); font-size: 0.93rem; display: grid; gap: 0.35rem; }
+      .card li b { color: var(--ink); font-weight: 650; }
+      .card li::marker { color: var(--brand-hi); }
+
+      /* Tour */
+      .tabs { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1.25rem; }
+      .tabs button { padding: 0.45rem 0.95rem; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--muted); font: 600 0.9rem/1.3 system-ui, sans-serif; cursor: pointer; }
+      .tabs button:hover { color: var(--ink); }
+      .tabs button[aria-selected="true"] { background: var(--brand); border-color: var(--brand); color: #fff; }
+      .tour { display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr); gap: 2rem; align-items: center; }
+      @media (max-width: 860px) { .tour { grid-template-columns: minmax(0, 1fr); } }
+      .tour h3 { margin: 0; font-size: 1.4rem; letter-spacing: -0.02em; }
+      .tour p { margin: 0.6rem 0 0; color: var(--muted); }
+      .tour .more { display: inline-block; margin-top: 1rem; }
+
+      /* Features */
+      .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+      @media (max-width: 760px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+
+      /* AI band */
+      .band { margin-top: 6rem; padding: 5rem 0; background: var(--navy); color: #eaf1fb; position: relative; overflow: hidden; }
+      .band::before { content: ""; position: absolute; inset: -30% -10% auto auto; width: 50rem; height: 50rem; background: radial-gradient(closest-side, rgb(16 239 176 / 0.14), transparent); }
+      .band .kicker { color: var(--mint); }
+      .band .head p { color: #9aa8bf; }
+      .ai { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2.5rem; align-items: start; }
+      @media (max-width: 920px) { .ai { grid-template-columns: minmax(0, 1fr); } }
+      .asks { display: grid; gap: 0.6rem; margin: 0; padding: 0; list-style: none; }
+      .asks li { padding: 0.75rem 1rem; border-radius: 14px 14px 14px 4px; background: #0c1a30; border: 1px solid #1a2b48; color: #dbe6f5; }
+      .asks li::before { content: "“"; color: var(--mint); font-weight: 800; margin-right: 0.2rem; }
+      .asks li::after { content: "”"; color: var(--mint); font-weight: 800; margin-left: 0.1rem; }
+      .rules { margin: 1.6rem 0 0; padding: 0; list-style: none; display: grid; gap: 0.7rem; }
+      .rules li { display: flex; gap: 0.7rem; color: #b6c3d8; }
+      .rules li::before { content: "✓"; flex: none; display: grid; place-items: center; width: 1.4rem; height: 1.4rem; border-radius: 50%; background: rgb(16 239 176 / 0.15); color: var(--mint); font-size: 0.75rem; font-weight: 800; margin-top: 0.1rem; }
+      .rules li b { color: #fff; }
+      .term { margin-top: 1.6rem; border-radius: 14px; background: #020814; border: 1px solid #1a2b48; overflow: hidden; }
+      .term header { padding: 0.5rem 0.9rem; border-bottom: 1px solid #1a2b48; color: #66758e; font: 500 0.75rem/1.4 var(--mono); }
+      .term pre { margin: 0; padding: 1rem 1.1rem; overflow-x: auto; color: #dbe6f5; font: 0.8rem/1.7 var(--mono); }
+      .term pre .p { color: var(--mint); }
+      .shots-2 { display: grid; gap: 1rem; }
+      .band .window { border-color: #1a2b48; background: #0c1628; }
+      .band .chrome { background: #0f1c33; border-color: #1a2b48; }
+      .band .chrome span { background: #050c1a; color: #66758e; }
+      .band figcaption { margin-top: 0.6rem; color: #9aa8bf; font-size: 0.9rem; }
+      .band figure { margin: 0; }
+
+      /* Phones */
+      .phones { display: flex; justify-content: center; gap: 1.5rem; flex-wrap: wrap; }
+      .phones figure { margin: 0; width: min(15rem, 28vw); min-width: 10rem; text-align: center; }
+      .phones .frame { padding: 6px; border-radius: 26px; background: var(--navy); border: 1px solid #22314d; box-shadow: var(--shadow); }
+      .phones img { border-radius: 20px; aspect-ratio: 390 / 844; object-fit: cover; object-position: top; cursor: zoom-in; }
+      .phones figure:nth-child(2) { transform: translateY(-1.5rem); }
+      .phones figcaption { margin-top: 0.8rem; color: var(--muted); font-size: 0.9rem; }
+
+      /* Install */
+      .start { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 2.5rem; align-items: start; }
+      @media (max-width: 860px) { .start { grid-template-columns: minmax(0, 1fr); } }
+      .code { position: relative; border-radius: 16px; background: #050c1a; border: 1px solid #1a2740; box-shadow: var(--shadow); overflow: hidden; }
+      .code pre { margin: 0; padding: 2.6rem 1.3rem 1.2rem; overflow-x: auto; color: #eaf1fb; font: 0.82rem/1.7 var(--mono); }
+      .code pre .c { color: #66758e; }
+      .code button { position: absolute; top: 0.6rem; right: 0.6rem; padding: 0.3rem 0.7rem; border-radius: 8px; border: 1px solid #22314d; background: #0c1628; color: #cbd5e1; font: 600 0.78rem/1.4 system-ui, sans-serif; cursor: pointer; }
+      .code button:hover { border-color: var(--brand-hi); color: #fff; }
+      .steps { margin: 1.2rem 0 0; padding: 0; list-style: none; display: grid; gap: 0.8rem; counter-reset: s; }
+      .steps li { position: relative; padding-left: 2.6rem; color: var(--muted); }
+      .steps li::before { counter-increment: s; content: counter(s); position: absolute; left: 0; top: -0.1rem; display: grid; place-items: center; width: 1.8rem; height: 1.8rem; border-radius: 50%; background: color-mix(in oklab, var(--brand) 15%, transparent); color: var(--brand-ink); font-weight: 800; font-size: 0.85rem; }
+      .steps li b { color: var(--ink); }
+      .tip { margin-top: 1.25rem; padding: 0.9rem 1.1rem; border-radius: 14px; background: color-mix(in oklab, var(--brand) 9%, var(--card)); border: 1px solid color-mix(in oklab, var(--brand) 25%, var(--line)); color: var(--muted); font-size: 0.93rem; }
+      p.tip b { color: var(--ink); }
+
+      footer { margin-top: 6rem; padding: 2.5rem 0 3rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.9rem; }
+      footer.foot .wrap { display: flex; flex-wrap: wrap; gap: 0.75rem 1.5rem; justify-content: space-between; }
+      footer.foot nav { display: flex; flex-wrap: wrap; gap: 1rem; }
+
+      dialog { width: min(96vw, 100rem); max-height: 94vh; padding: 0; border: 0; background: transparent; overflow: visible; }
+      dialog::backdrop { background: rgb(2 8 20 / 0.88); backdrop-filter: blur(6px); }
+      #zoom img { margin: 0 auto; max-height: 86vh; width: auto; border-radius: 12px; box-shadow: 0 30px 80px rgb(0 0 0 / 0.7); }
+      #zoom p { margin: 0.8rem 0 0; text-align: center; color: #cbd5e1; }
+      #zoom button { position: fixed; top: 1rem; right: 1rem; width: 2.6rem; height: 2.6rem; border-radius: 50%; border: 1px solid #22314d; background: #0c1628; color: #fff; font-size: 1.3rem; cursor: pointer; }
+
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+        .btn, .window img { transition: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <div class="wrap">
+        <a class="logo" href="./">
+          <svg viewBox="0 0 1254 1254" aria-hidden="true">
+            <rect width="1254" height="1254" fill="#020d22" />
+            <path d="M275 286h137l215 239 218-239h135v341H851V475L627 720 402 473v435H275z" fill="#fff" />
+            <g fill="#10efb0">
+              <path d="M515 908V805a16 16 0 0 1 16-16h99a16 16 0 0 1 16 16v103z" />
+              <path d="M683 908V752a16 16 0 0 1 16-16h99a16 16 0 0 1 16 16v156z" />
+              <path d="M851 908V681a16 16 0 0 1 16-16h97a16 16 0 0 1 16 16v227z" />
+            </g>
+          </svg>
+          Muny
+        </a>
+        <nav aria-label="On this page">
+          <a class="opt" href="#tour">Tour</a>
+          <a class="opt" href="#features">Features</a>
+          <a href="#ai">AI</a>
+          <a href="#start">Install</a>
+          <a href="https://github.com/mikedmor/muny">GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <div class="wrap hero">
+        <div>
+          <span class="eyebrow"><i aria-hidden="true"></i> Self-hosted · open source · built for AI</span>
+          <h1>Your money, on <em>your own hardware</em></h1>
+          <p class="lede">
+            Budgets, bills, subscriptions, loans, cards, savings, stocks and crypto in one container on your own
+            hardware. No subscription, no account with anyone, and your financial data never leaves your machine
+            unless you decide it should.
+          </p>
+          <div class="cta">
+            <a class="btn primary" href="#start">Install it</a>
+            <a class="btn" href="https://github.com/mikedmor/muny">
+              <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+              Code on GitHub
+            </a>
+          </div>
+        </div>
+        <div>
+          <div class="stage">
+            <div class="window">
+              <div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span>money.home</span></div>
+              <img id="hero-shot" src="shots/overview.png" width="1440" height="900" alt="Muny's Overview: spending this month against last month, what's coming in, accounts, credit cards and loans." />
+            </div>
+            <div class="phone">
+              <img src="shots/overview-phone.png" width="390" height="844" alt="The Overview on a phone." />
+            </div>
+          </div>
+          <div class="mode">
+            <button type="button" aria-pressed="true" data-src="shots/overview.png">Light</button>
+            <button type="button" aria-pressed="false" data-src="shots/overview-dark.png">Dark</button>
+          </div>
+        </div>
+      </div>
+
+      <section class="wrap" aria-labelledby="why-title">
+        <div class="head center">
+          <p class="kicker">Why Muny</p>
+          <h2 id="why-title">The everyday tools of a money app, without the monthly bill</h2>
+          <p>Commercial money apps work well, but they charge a subscription and keep everything you own on someone else's servers.</p>
+        </div>
+        <div class="why">
+          <div class="card">
+            <span class="ico"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="10.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg></span>
+            <h3>Yours, end to end</h3>
+            <p>Runs on your NAS, home server or PC with a single SQLite file. No telemetry, nothing phoning home, and you can export everything.</p>
+          </div>
+          <div class="card">
+            <span class="ico"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg></span>
+            <h3>Complete</h3>
+            <p>Budgets, recurring bills, reports, net worth, loans, cards, savings, stocks and crypto, with alerts to your phone.</p>
+          </div>
+          <div class="card">
+            <span class="ico"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v2M12 19v2M5 12H3M21 12h-2"/><rect x="7" y="7" width="10" height="10" rx="2.5"/><circle cx="10.5" cy="11" r=".6" fill="currentColor"/><circle cx="13.5" cy="11" r=".6" fill="currentColor"/><path d="M10.5 14h3"/></svg></span>
+            <h3>Built for AI, on your terms</h3>
+            <p>An MCP server and REST API let assistants such as Claude read exactly what you allow, and suggest changes that wait for you.</p>
+          </div>
+          <div class="card">
+            <span class="ico"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></span>
+            <h3>Helps you spend less</h3>
+            <p>Finds doubled-up subscriptions, price rises, card interest and idle cash, and tracks what you save.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="tour" class="wrap" aria-labelledby="tour-title">
+        <div class="head">
+          <p class="kicker">A tour</p>
+          <h2 id="tour-title">Every page, with a made-up household</h2>
+          <p>These are real screenshots of Muny's built-in demo. All names and numbers are invented.</p>
+        </div>
+        <div class="tabs" role="tablist" aria-label="Muny's pages" id="tabs"></div>
+        <div class="tour">
+          <div class="window">
+            <div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span id="tour-url">money.home/transactions</span></div>
+            <img id="tour-shot" src="shots/transactions.png" width="1440" height="900" alt="" loading="lazy" />
+          </div>
+          <div aria-live="polite">
+            <h3 id="tour-title-2">Transactions</h3>
+            <p id="tour-text"></p>
+            <a class="more" id="tour-more" href="https://github.com/mikedmor/muny/blob/main/guides/transactions.md">Read the guide →</a>
+          </div>
+        </div>
+      </section>
+
+      <section id="features" class="wrap" aria-labelledby="features-title">
+        <div class="head center">
+          <p class="kicker">Features</p>
+          <h2 id="features-title">Everything in one place</h2>
+        </div>
+        <div class="grid">
+          <div class="card">
+            <h3>Everyday money</h3>
+            <ul>
+              <li><b>Accounts</b> from bank sync (Plaid or Teller, with your own keys), PayPal, or files</li>
+              <li><b>Import anything:</b> Rocket Money exports, bank CSV/OFX/QFX/QBO, PDF statements, brokerage and Koinly exports</li>
+              <li><b>Transactions</b> with search, filters, splits, notes, tags, merchant cleanup and bulk edits</li>
+              <li><b>Rules</b> that file, rename, tag or hide transactions as they arrive</li>
+              <li><b>Recurring bills and subscriptions</b> found automatically, with price rises</li>
+              <li><b>Budgets</b> by category with rollover, alerts and a month-end forecast</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Debts and wealth</h3>
+            <ul>
+              <li><b>Loans</b> with payoff dates, payoff plans and statement reading</li>
+              <li><b>Credit cards</b> with limits, statements, due dates and interest</li>
+              <li><b>Savings</b> accounts with interest, earned rate and projections</li>
+              <li><b>Stocks</b> from Plaid or broker exports, with cost basis and history</li>
+              <li><b>Crypto</b> wallets and exchanges, with cost basis, gains and tax reports</li>
+              <li><b>Assets</b> such as a home or car, for equity and net worth</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Insights</h3>
+            <ul>
+              <li><b>A customizable Overview</b>, arranged per screen size, with a card editor that calculates over all your data</li>
+              <li><b>Spending and reports:</b> by category and merchant, month over month, net worth over time</li>
+              <li><b>Ways to save:</b> doubled-up subscriptions, price rises, self-hosted replacements, card interest and idle cash</li>
+              <li><b>Taxes:</b> yearly totals and an export for your accountant</li>
+              <li><b>Documents:</b> statements and receipts, stored encrypted</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>AI and automation</h3>
+            <ul>
+              <li><b>MCP server and REST API</b> with per-token permissions and an activity log</li>
+              <li><b>Approval inbox:</b> assistants suggest changes; you approve or reject</li>
+              <li><b>Optional built-in AI</b> (off by default) with Claude, an OpenAI-compatible server or Ollama</li>
+              <li><b>Alerts</b> in the app, by phone push, ntfy, Apprise, email or webhook</li>
+              <li><b>Themes:</b> light, dark and your own, with a live preview</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <div class="band" id="ai">
+        <div class="wrap">
+          <div class="head">
+            <p class="kicker">AI assistants</p>
+            <h2>Ask about your money. Approve what changes.</h2>
+            <p>
+              Connect an assistant like Claude over MCP. It reads only what its token allows, builds Overview cards and
+              themes for you, and suggests changes that wait in your inbox. Muny never moves money.
+            </p>
+          </div>
+          <div class="ai">
+            <div>
+              <ul class="asks">
+                <li>Where did my money go this month compared with last?</li>
+                <li>Which subscriptions could I cut, and what would that save in a year?</li>
+                <li>Make me an Overview card showing dining spending by month against my budget.</li>
+                <li>Find my uncategorized transactions and suggest categories.</li>
+              </ul>
+              <ul class="rules">
+                <li><span><b>Nothing connects</b> until you create a token, and each token only reaches the permissions you tick.</span></li>
+                <li><span><b>Suggestions wait for you.</b> Each shows exactly what would change; approve or reject it.</span></li>
+                <li><span><b>Everything is logged</b>, and a token can be revoked in one click.</span></li>
+              </ul>
+              <div class="term">
+                <header>Connect Claude Code (Muny shows you this command)</header>
+<pre><span class="p">$</span> claude mcp add --transport http muny https://your-muny-address/mcp \
+    --header "Authorization: Bearer muny_..."</pre>
+              </div>
+            </div>
+            <div class="shots-2">
+              <figure>
+                <div class="window"><div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span>money.home/settings</span></div><img src="shots/agents.png" width="1440" height="900" alt="AI assistants: each token only reaches the permissions you tick." loading="lazy" /></div>
+                <figcaption>Each assistant gets its own token, with only the access you give it.</figcaption>
+              </figure>
+              <figure>
+                <div class="window"><div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span>money.home/alerts</span></div><img src="shots/inbox.png" width="1440" height="900" alt="The inbox: suggested changes wait for you to approve or reject them." loading="lazy" /></div>
+                <figcaption>The approval inbox: suggestions, with the assistant's reason in its own words.</figcaption>
+              </figure>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <section class="wrap" aria-labelledby="phone-title">
+        <div class="head center">
+          <p class="kicker">On your phone</p>
+          <h2 id="phone-title">Made for the screen you have</h2>
+          <p>Install it to your home screen. The Overview is arranged separately for phones and desktops.</p>
+        </div>
+        <div class="phones">
+          <figure><div class="frame"><img src="shots/recurring-phone.png" width="390" height="844" alt="Recurring charges on a phone." loading="lazy" /></div><figcaption>What's due</figcaption></figure>
+          <figure><div class="frame"><img src="shots/overview-phone.png" width="390" height="844" alt="The Overview on a phone." loading="lazy" /></div><figcaption>The Overview</figcaption></figure>
+          <figure><div class="frame"><img src="shots/budgets-phone.png" width="390" height="844" alt="Budgets on a phone." loading="lazy" /></div><figcaption>Budgets</figcaption></figure>
+        </div>
+      </section>
+
+      <section id="start" class="wrap" aria-labelledby="start-title">
+        <div class="start">
+          <div>
+            <p class="kicker">Install</p>
+            <h2 id="start-title">One container, one command</h2>
+            <ol class="steps">
+              <li>You need <b>Docker</b> on any amd64 or arm64 machine.</li>
+              <li>Run the commands, then open <b>http://localhost:8420</b> and create your account.</li>
+              <li>Keep a copy of <b>.env</b> somewhere safe, such as a password manager. Its key encrypts bank connections and stored keys.</li>
+            </ol>
+            <p class="tip">
+              <b>Want to look around first?</b> Add <code>-e MUNY_DEMO=true</code> and Muny starts with a made-up household.
+              <b>Settings → Data → Start clean</b> removes it when you're ready.
+            </p>
+            <div class="cta">
+              <a class="btn" href="https://github.com/mikedmor/muny/blob/main/guides/install.md">Install guide (Compose, Synology, Unraid)</a>
+            </div>
+          </div>
+          <div class="code">
+            <button type="button" id="copy">Copy</button>
+<pre id="cmds"><span class="c"># a folder for Muny's data</span>
+mkdir -p muny/data &amp;&amp; cd muny
+
+<span class="c"># the key that encrypts its secrets</span>
+umask 077; printf "MUNY_SECRET_KEY=%s\n" "$(openssl rand -base64 32)" &gt; .env
+
+docker run -d --name muny --restart unless-stopped --user "$(id -u):$(id -g)" \
+  -p 8420:8420 --env-file .env -v "$PWD/data:/data" ghcr.io/mikedmor/muny:1</pre>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div class="wrap">
+        <span>Muny is free and open source (AGPL-3.0). This site has no tracking and no cookies.</span>
+        <nav aria-label="More">
+          <a href="https://github.com/mikedmor/muny">GitHub</a>
+          <a href="https://github.com/mikedmor/muny/blob/main/guides/README.md">Guides</a>
+          <a href="https://github.com/mikedmor/muny/blob/main/CHANGELOG.md">Changelog</a>
+          <a href="https://github.com/mikedmor/muny/blob/main/SECURITY.md">Security</a>
+        </nav>
+      </div>
+    </footer>
+
+    <dialog id="zoom" aria-label="Screenshot">
+      <img alt="" />
+      <p></p>
+      <button type="button" aria-label="Close">×</button>
+    </dialog>
+
+    <script>
+      (() => {
+        const GUIDES = "https://github.com/mikedmor/muny/blob/main/guides/";
+        const TOUR = [
+          ["Transactions", "transactions", "transactions", "Every account in one list, with search, filters, splits, notes, tags, merchant cleanup and bulk edits.", "transactions.md"],
+          ["Recurring", "recurring", "recurring", "Subscriptions and bills, found automatically: what's due, what's been paid, and when a price goes up.", "recurring.md"],
+          ["Budgets", "budgets", "budgets", "Each category against its budget, with rollover, alerts and a forecast for the end of the month.", "budgets.md"],
+          ["Spending", "spending", "spending", "This month by category and merchant, against the months before it.", "reports.md"],
+          ["Ways to save", "ways-to-save", "savings", "Duplicate subscriptions, price rises, self-hosted replacements, card interest and idle cash, ranked by what they'd save in a year.", "savings.md"],
+          ["Loans", "loans", "loans", "What you owe, the payoff date, and every payment split into principal and interest.", "loans.md"],
+          ["Net worth", "reports", "reports", "Net worth over time, and by account type.", "reports.md"],
+          ["Customize", "customize", "overview/customize", "Choose the Overview's cards, set their order per screen size, or build your own with a card editor.", "overview.md"],
+          ["Themes", "appearance", "settings", "Light, dark and your own themes, with a live preview.", "themes.md"],
+        ];
+        const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const swap = (img, src, alt) => {
+          img.classList.add("swap");
+          setTimeout(() => {
+            img.src = src;
+            img.alt = alt;
+            if (img.complete) img.classList.remove("swap");
+            else img.onload = () => img.classList.remove("swap");
+          }, still ? 0 : 160);
+        };
+
+        // The tour: tabs that swap the big screenshot.
+        const tabs = document.getElementById("tabs");
+        const shot = document.getElementById("tour-shot");
+        const pick = (i) => {
+          const [name, file, url, text, guide] = TOUR[i];
+          for (const [n, b] of [...tabs.children].entries()) {
+            b.setAttribute("aria-selected", String(n === i));
+            b.tabIndex = n === i ? 0 : -1;
+          }
+          swap(shot, `shots/${file}.png`, `${name}: ${text}`);
+          document.getElementById("tour-url").textContent = `money.home/${url}`;
+          document.getElementById("tour-title-2").textContent = name;
+          document.getElementById("tour-text").textContent = text;
+          document.getElementById("tour-more").href = GUIDES + guide;
+        };
+        TOUR.forEach(([name], i) => {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.role = "tab";
+          b.textContent = name;
+          b.addEventListener("click", () => pick(i));
+          tabs.append(b);
+        });
+        tabs.addEventListener("keydown", (e) => {
+          if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+          const now = [...tabs.children].findIndex((b) => b.getAttribute("aria-selected") === "true");
+          const next = (now + (e.key === "ArrowRight" ? 1 : -1) + TOUR.length) % TOUR.length;
+          pick(next);
+          tabs.children[next].focus();
+        });
+        pick(0);
+
+        // Light or dark Overview in the hero.
+        const hero = document.getElementById("hero-shot");
+        const modes = document.querySelectorAll(".mode button");
+        if (matchMedia("(prefers-color-scheme: dark)").matches) {
+          hero.src = "shots/overview-dark.png";
+          modes[0].setAttribute("aria-pressed", "false");
+          modes[1].setAttribute("aria-pressed", "true");
+        }
+        for (const m of modes)
+          m.addEventListener("click", () => {
+            for (const o of modes) o.setAttribute("aria-pressed", String(o === m));
+            swap(hero, m.dataset.src, hero.alt);
+          });
+
+        // Any screenshot opens full size.
+        const zoom = document.getElementById("zoom");
+        document.addEventListener("click", (e) => {
+          const img = e.target.closest(".window img, .phone img, .phones img");
+          if (!img) return;
+          zoom.querySelector("img").src = img.src;
+          zoom.querySelector("img").alt = img.alt;
+          zoom.querySelector("p").textContent = img.alt;
+          zoom.showModal();
+        });
+        zoom.addEventListener("click", (e) => {
+          if (e.target === zoom || e.target.tagName === "BUTTON") zoom.close();
+        });
+
+        const copy = document.getElementById("copy");
+        copy.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(document.getElementById("cmds").textContent);
+            copy.textContent = "Copied";
+          } catch {
+            copy.textContent = "Select and copy";
+          }
+          setTimeout(() => (copy.textContent = "Copy"), 1800);
+        });
+      })();
+    </script>
+  </body>
+</html>

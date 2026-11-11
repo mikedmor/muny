@@ -60,3 +60,6 @@ docs/
 
 # AI agent instructions (private, like docs/)
 CLAUDE.md
+
+# The public site copies its screenshots from guides/images when it deploys.
+public-site/shots/
