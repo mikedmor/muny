@@ -134,6 +134,45 @@ export function readProblem(
   return out(`The AI server returned an error (${status}).`, null);
 }
 
+/** TLS errors that mean Muny doesn't trust who signed the server's certificate. */
+const UNTRUSTED = new Set([
+  "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+  "UNABLE_TO_GET_ISSUER_CERT",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+  "SELF_SIGNED_CERT_IN_CHAIN",
+  "DEPTH_ZERO_SELF_SIGNED_CERT",
+]);
+
+/**
+ * Why a request never got an answer, from the error's code (never its text,
+ * which can carry the address and headers). The host comes from Settings → AI.
+ */
+export function unreachable(err: unknown, base: string, timeout: number): string {
+  const name = err instanceof Error ? err.name : "";
+  if (name === "TimeoutError" || name === "AbortError")
+    return `The AI server didn't answer within ${waitWords(timeout)}.`;
+  const cause = (err as { cause?: { code?: unknown } } | null)?.cause;
+  const code = typeof cause?.code === "string" ? cause.code : "";
+  let host = "the AI server";
+  try {
+    host = new URL(base).host;
+  } catch {
+    // Checked as http(s) already; keep the generic name.
+  }
+  if (UNTRUSTED.has(code))
+    return `Muny doesn't trust the certificate on ${host}. It's signed by a certificate authority Muny doesn't know, like a home or self-signed one. Give Muny that authority's certificate (NODE_EXTRA_CA_CERTS; see the AI guide), or use the server's plain http:// address.`;
+  if (code === "CERT_HAS_EXPIRED") return `The certificate on ${host} has expired.`;
+  if (code === "ERR_TLS_CERT_ALTNAME_INVALID")
+    return `The certificate on ${host} is for a different name. Check the address in Settings → AI.`;
+  if (code === "ENOTFOUND" || code === "EAI_AGAIN")
+    return `Muny couldn't look up ${host}. Check the address, and that the Muny server's DNS knows that name.`;
+  if (code === "ECONNREFUSED")
+    return `${host} refused the connection. Check that the AI server is running and the port is right.`;
+  if (code === "EHOSTUNREACH" || code === "ENETUNREACH" || code === "ETIMEDOUT")
+    return `Muny can't reach ${host} from its network.`;
+  return `Couldn't reach the AI server at ${host}.`;
+}
+
 const sleepFor = (secs: number) => new Promise<void>((r) => setTimeout(r, secs * 1000));
 
 async function post(c: AiCall, path: string, body: unknown): Promise<unknown> {
@@ -158,8 +197,8 @@ async function post(c: AiCall, path: string, body: unknown): Promise<unknown> {
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(policy.timeout * 1000),
       });
-    } catch {
-      throw new AiCallError("Couldn't reach the AI server.");
+    } catch (err) {
+      throw new AiCallError(unreachable(err, base, policy.timeout));
     }
     if (res.ok) {
       try {

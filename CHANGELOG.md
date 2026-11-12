@@ -19,6 +19,7 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 ### Fixed
 
 - A pending charge a rule counts as recurring now stands for that series's next charge, even when the merchant renamed it or charged a little less, so **Coming up** no longer lists it again.
+- When Muny can't reach your AI server, it now says why: a certificate it doesn't trust (with how to add a home CA), a name it can't look up, a refused connection, or no answer in time. It used to say only "Couldn't reach the AI server."
 
 ## [1.2.0] - 2026-11-09
 

@@ -16,6 +16,18 @@ It's **off by default**. Until you turn it on in **Settings → AI**, Muny never
 
 The key is stored encrypted with `MUNY_SECRET_KEY` (set it first; see [Install](install.md)), is never shown again, and never appears in logs or the audit log. **Check it works** sends a one-line test.
 
+### A server with a home certificate
+
+If your AI server's `https://` address uses a certificate from your own certificate authority (a home CA, or a reverse proxy's self-signed one), your browser may trust it while Muny doesn't, and **Check it works** says Muny doesn't trust the certificate. Muny's container trusts only the public authorities until you give it yours:
+
+1. Export your root CA's **public** certificate as a PEM file (it starts with `-----BEGIN CERTIFICATE-----`; never the private key).
+2. Put it in Muny's data folder, for example `data/certs/home-root-ca.pem`, so the container sees it at `/data/certs/home-root-ca.pem`.
+3. Add `NODE_EXTRA_CA_CERTS=/data/certs/home-root-ca.pem` to `.env` and recreate the container (`docker compose up -d --force-recreate`).
+
+Muny then trusts that authority as well as the public ones, for every outbound call. Or skip TLS and use the server's plain `http://` address on your network.
+
+Other messages from **Check it works**: "couldn't look up" means the Muny server's DNS doesn't know the name (a container can use different DNS from your PC); "refused the connection" means nothing is listening on that port.
+
 ## What it does, and exactly what it sends
 
 Each feature can be turned off on its own.
