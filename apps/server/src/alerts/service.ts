@@ -192,8 +192,27 @@ export async function runAlerts(db: MunyDb, deps: AlertDeps, now = new Date()) {
       now,
     );
     const created = record(db, candidates);
+    await sendPending(db, deps, now);
+    return { created: created.length };
+  } finally {
+    running = false;
+  }
+}
 
-    // Send anything not yet handed off (from this run or a failed earlier one) from the last day.
+let sending: Promise<void> | null = null;
+
+/**
+ * Send every notification not yet handed off (from this run or a failed
+ * earlier one) from the last day, to its type's channels. One at a time.
+ */
+export function sendPending(db: MunyDb, deps: AlertDeps, now = new Date()): Promise<void> {
+  const run = async () => {
+    // Only the channels of alert types that are on, as before.
+    const rules = db
+      .select()
+      .from(schema.alertRules)
+      .where(eq(schema.alertRules.enabled, true))
+      .all();
     const channelsByType = new Map(rules.map((r) => [r.type, r.channelIds]));
     const pending = db
       .select()
@@ -226,10 +245,11 @@ export async function runAlerts(db: MunyDb, deps: AlertDeps, now = new Date()) {
           .where(eq(schema.notifications.id, n.id))
           .run();
     }
-    return { created: created.length };
-  } finally {
-    running = false;
-  }
+  };
+  sending = (sending ?? Promise.resolve()).then(run, run).finally(() => {
+    sending = null;
+  });
+  return sending;
 }
 
 export function listNotifications(db: MunyDb, limit = 50) {

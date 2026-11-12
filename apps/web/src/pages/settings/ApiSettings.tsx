@@ -20,6 +20,7 @@ import {
   useSetInvestSettings,
   useSyncConfig,
 } from "../../lib/queries.js";
+import { LiveCrypto, LiveStocks } from "./LiveSettings.js";
 
 /**
  * Every outside service Muny can use, in one place: what it's for, whether it's
@@ -572,6 +573,7 @@ export function ApiSettings() {
                 <Alert>{save.error.message}</Alert>
               </li>
             )}
+            <LiveCrypto Service={Service} />
           </Group>
 
           <Group title="Assets">
@@ -653,6 +655,7 @@ export function ApiSettings() {
                 onChange={(details) => setInvest.mutate({ details })}
               />
             </Service>
+            <LiveStocks Service={Service} />
           </Group>
 
           <Group title="Banks">

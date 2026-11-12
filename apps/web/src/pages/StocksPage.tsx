@@ -4,6 +4,7 @@ import {
   type InvestImportPreview,
   type InvestImportResult,
   type InvestPosition,
+  liveKey,
   SECURITY_TYPE_LABELS,
 } from "@muny/shared";
 import { Link } from "@tanstack/react-router";
@@ -12,9 +13,11 @@ import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ApiLimitNotice, useApiLimit } from "../components/ApiLimit.js";
 import { Donut, LineChart, type StackBand } from "../components/charts.js";
 import { Modal } from "../components/forms.js";
+import { PriceAlertButton } from "../components/PriceAlerts.js";
 import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
 import { MerchantAvatar } from "../components/visuals.js";
 import { api } from "../lib/api.js";
+import { fmtLive, useLiveQuotes } from "../lib/live.js";
 import {
   useInvestBackfill,
   useInvestImport,
@@ -643,6 +646,7 @@ function WatchList() {
     }
   }, [stale, refreshNow]);
   const items = list.data?.items ?? [];
+  const live = useLiveQuotes(items.map((w) => liveKey("stock", w.symbol)));
   const usd = (n: number) =>
     `${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: n < 1 ? 4 : 2 })}`;
   return (
@@ -690,7 +694,7 @@ function WatchList() {
                 <th className="hidden px-2 py-2 text-right font-medium sm:table-cell">1 month</th>
                 <th className="hidden px-2 py-2 text-right font-medium md:table-cell">1 year</th>
                 <th className="hidden px-2 py-2 text-right font-medium lg:table-cell">3 months</th>
-                <th className="w-10" />
+                <th className="w-16" />
               </tr>
             </thead>
             <tbody>
@@ -721,15 +725,30 @@ function WatchList() {
                     </span>
                   </td>
                   <td className="px-2 text-right font-medium tabular-nums">
-                    {w.price ? usd(Number(w.price)) : "—"}
-                    {w.priceDate && (
-                      <span className="block text-[11px] font-normal text-slate-500">
-                        {shortDate(w.priceDate)}
-                      </span>
-                    )}
+                    {(() => {
+                      const q = live.get(liveKey("stock", w.symbol));
+                      return q ? (
+                        <>
+                          {fmtLive(q.price)}
+                          <span className="flex items-center justify-end gap-1 text-[11px] font-normal text-emerald-600 dark:text-emerald-400">
+                            <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
+                            live
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          {w.price ? usd(Number(w.price)) : "—"}
+                          {w.priceDate && (
+                            <span className="block text-[11px] font-normal text-slate-500">
+                              {shortDate(w.priceDate)}
+                            </span>
+                          )}
+                        </>
+                      );
+                    })()}
                   </td>
                   <td className="px-2 text-right">
-                    <Pct v={w.change1dPct} />
+                    <Pct v={live.get(liveKey("stock", w.symbol))?.changePct ?? w.change1dPct} />
                   </td>
                   <td className="hidden px-2 text-right sm:table-cell">
                     <Pct v={w.change1mPct} />
@@ -742,7 +761,15 @@ function WatchList() {
                       <Sparkline values={w.spark} />
                     </span>
                   </td>
-                  <td className="pr-3 text-right">
+                  <td className="pr-3 text-right whitespace-nowrap">
+                    <PriceAlertButton
+                      kind="stock"
+                      symbol={w.symbol}
+                      price={
+                        live.get(liveKey("stock", w.symbol))?.price ??
+                        (w.price ? Number(w.price) : null)
+                      }
+                    />
                     <button
                       type="button"
                       aria-label={`Stop watching ${w.symbol}`}

@@ -1,11 +1,13 @@
-import { type CryptoHolding, formatMoney } from "@muny/shared";
+import { type CryptoHolding, formatMoney, type LiveQuote, liveKey } from "@muny/shared";
 import { Link } from "@tanstack/react-router";
 import { Fragment, useMemo, useState } from "react";
 import { ApiLimitNotice, useApiLimit } from "../../components/ApiLimit.js";
 import { Donut, type DonutSlice, LineChart, type StackBand } from "../../components/charts.js";
 import { CoinIcon, WalletIcon } from "../../components/coins.js";
+import { PriceAlertButton } from "../../components/PriceAlerts.js";
 import { Alert, Button, Card, cx } from "../../components/ui.js";
 import { api } from "../../lib/api.js";
+import { fmtLive, useLiveQuotes } from "../../lib/live.js";
 import {
   useCryptoMutation,
   useCryptoOverview,
@@ -106,7 +108,7 @@ const compactUsd = (n: number) =>
 /** Below this a wallet's balance shows as 0 (8 decimals), so it counts as empty. */
 const isDust = (amount: string) => Math.abs(Number(amount)) < 1e-8;
 
-function HoldingRow({ h }: { h: CryptoHolding }) {
+function HoldingRow({ h, live }: { h: CryptoHolding; live?: LiveQuote }) {
   const [open, setOpen] = useState(false);
   const [showEmpty, setShowEmpty] = useState(false);
   const held = h.wallets.filter((w) => !isDust(w.amount));
@@ -177,7 +179,14 @@ function HoldingRow({ h }: { h: CryptoHolding }) {
           <span className="block font-medium">
             {h.valueCents !== null ? formatMoney(h.valueCents) : "—"}
           </span>
-          {h.price && <span className="text-xs text-slate-500">{fmtPrice(h.price)} / unit</span>}
+          {live ? (
+            <span className="flex items-center justify-end gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+              <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
+              {fmtLive(live.price)} / unit
+            </span>
+          ) : (
+            h.price && <span className="text-xs text-slate-500">{fmtPrice(h.price)} / unit</span>
+          )}
         </td>
         <td className="hidden px-2 text-right text-sm tabular-nums sm:table-cell">
           <Pct v={roi} />
@@ -187,7 +196,12 @@ function HoldingRow({ h }: { h: CryptoHolding }) {
             <span className="hidden lg:inline-block">
               <Sparkline values={h.spark} />
             </span>
-            <Pct v={h.change24hPct} />
+            <Pct v={live?.changePct ?? h.change24hPct} />
+            <PriceAlertButton
+              kind="crypto"
+              symbol={h.asset}
+              price={live?.price ?? (h.price ? Number(h.price) : null)}
+            />
           </span>
         </td>
       </tr>
@@ -497,6 +511,7 @@ export function CryptoDashboard() {
     to: isoDay(Date.now()),
   });
   const d = o.data;
+  const liveCoins = useLiveQuotes((d?.holdings ?? []).map((h) => liveKey("crypto", h.asset)));
 
   // The range as dates (for the chart and the flows below it).
   const [rangeFrom, rangeTo] = useMemo((): [string, string] => {
@@ -863,7 +878,7 @@ export function CryptoDashboard() {
                 <tbody>
                   {sortHoldings(d.holdings, sort).map((h) => (
                     <Fragment key={h.asset}>
-                      <HoldingRow h={h} />
+                      <HoldingRow h={h} live={liveCoins.get(liveKey("crypto", h.asset))} />
                     </Fragment>
                   ))}
                 </tbody>

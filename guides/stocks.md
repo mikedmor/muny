@@ -60,6 +60,22 @@ Click a ticker in **Holdings** or the **Watch list** to open its page. It shows 
 
 With **Stock details and news** turned on, the page also gets the latest price and the day's change, the day's and 52-week ranges, volume, returns from a month to five years, and recent news stories, which open on the publisher's site. **Refresh** gets them again. Without it, the page uses only the prices Muny already keeps.
 
+## Live prices and price alerts
+
+With **Live stock prices** on (**Settings → API**, off by default), the watch list and each stock's page show the latest price, marked **live**, while you look. Muny only asks for prices of stocks on an open page or with an alert, during US market hours (9:30 to 4:00 New York time on weekdays), plus once after the close. Only tickers are sent.
+
+- **Without a key** prices come from Yahoo Finance every few minutes. Yahoo has no official limit, so Muny keeps itself to a share of its 300 requests a day: with one stock that's every 5 minutes, and less often with more.
+- **With a free Finnhub key** (make one at finnhub.io and paste it in **Settings → API → Live stock prices**) prices are live, as each trade happens, for up to 50 stocks. Finnhub's free plan is for personal use. The key is stored encrypted and only sent to Finnhub.
+
+**Price alerts.** Press the bell on a watch list row or on a stock's page to be told when it:
+
+- rises to or above a price, or falls to or below one
+- is up or down today by at least a percent
+- has moved up or down by at least a percent since you set the alert
+- reaches a new 52-week high or low (from the prices Muny keeps for it)
+
+An alert tells you once and turns off, unless you choose **Keep it on**, which tells you at most once a day. It's checked as each new price arrives, so it's as quick as the prices are: within seconds with Finnhub, within a few minutes with Yahoo. Alerts arrive under **Alerts**, and on your phone or anywhere else you choose for **Price alerts** in **Alerts → Settings**. A ringing bell means a stock has alerts on.
+
 ## What you paid (cost basis)
 
 Gains need to know what you paid. Muny uses, in order:

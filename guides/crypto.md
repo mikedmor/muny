@@ -16,6 +16,12 @@ Prices are **off by default**. Turn them on in **Settings → API**. Muny then f
 
 It sends only coin ids (like `bitcoin`), never balances, addresses or wallet names. The default provider is **DefiLlama** (free, no key, years of history). **CoinGecko** is an alternative (about a year of history on its free plan; an optional free Demo key, stored encrypted, raises its limits).
 
+### Live prices and price alerts
+
+With **Live crypto prices** on (**Settings → API**, off by default), each coin's price on Crypto updates as it trades, from Coinbase's public price feed. No account or key is needed, and only the coins' symbols are sent. Coins Coinbase doesn't list in US dollars keep their usual daily prices. Values and totals still use the daily price, so they don't jump around while you look.
+
+The bell on each coin sets a **price alert**: a price it rises to or falls to, or a move today or since you set it. See [Stocks](stocks.md#live-prices-and-price-alerts) for how alerts work; for coins, "today" means the last 24 hours, and alerts are checked around the clock.
+
 ## Wallet sync
 
 Wallet sync is opt-in per wallet. On Crypto → Wallets, add a wallet with its public address, or press the link button on an existing wallet (for example one imported from Koinly). Muny stores the address encrypted and syncs it once a day when Crypto is opened, or when you press **Sync**. Synced transactions that match imported ones are skipped, and the wallet warns you if the balance on the blockchain differs from its transactions.

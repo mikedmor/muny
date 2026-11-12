@@ -76,8 +76,8 @@ For Docker Compose, Synology, Unraid and every setting, see the **[install guide
 - **Loans** with payoff dates, payoff plans and statement reading, including multi-loan student loan servicers
 - **Credit cards** with limits, statements, due dates and interest
 - **Savings** accounts with interest, earned rate and projections
-- **Stocks** from Plaid or broker exports, with cost basis and history, a watch list, and a page for each stock with optional live details and news
-- **Crypto** wallets and exchanges, with cost basis, gains and tax reports
+- **Stocks** from Plaid or broker exports, with cost basis and history, a watch list, a page for each stock with optional live details and news, and optional live prices and price alerts
+- **Crypto** wallets and exchanges, with cost basis, gains and tax reports, and optional live prices and price alerts
 - **Assets** such as a home or car, for equity and net worth
 
 </td>

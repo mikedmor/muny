@@ -32,6 +32,8 @@ import { registerPayeeRoutes } from "./ledger/payees.js";
 import { registerTransactionRoutes } from "./ledger/transactions.js";
 import { localToday } from "./lib/dates.js";
 import { registerErrorHandler } from "./lib/http.js";
+import { LiveHub, type WsFactory } from "./live/hub.js";
+import { registerLiveRoutes } from "./live/routes.js";
 import { registerLoanRoutes } from "./loans/routes.js";
 import type { MailDeps } from "./mail/check.js";
 import { registerMailRoutes } from "./mail/routes.js";
@@ -63,6 +65,8 @@ export interface AppDeps {
   aiSleep?: (seconds: number) => Promise<void>;
   /** Where emails come from instead of an IMAP server (tests). */
   mailSource?: MailDeps["source"];
+  /** WebSocket for live prices instead of the real one (tests). */
+  liveWebSocket?: WsFactory;
 }
 
 /**
@@ -108,6 +112,7 @@ export async function buildApp({
   aiFetch,
   aiSleep,
   mailSource,
+  liveWebSocket,
 }: AppDeps): Promise<FastifyInstance> {
   const syncDeps = { config, providers: providers ?? makeProviders(config) };
   const csp = contentSecurityPolicy(config);
@@ -199,6 +204,14 @@ export async function buildApp({
     fetch: alertFetch,
   };
   registerAlertRoutes(app, db, alertDeps);
+  const liveHub = new LiveHub(db, {
+    secretKey: config.secretKey,
+    fetch: priceFetch,
+    WebSocket: liveWebSocket,
+  });
+  registerLiveRoutes(app, db, liveHub, { secretKey: config.secretKey, alerts: alertDeps });
+  liveHub.start();
+  app.addHook("onClose", async () => liveHub.stop());
   registerCryptoRoutes(app, db, {
     secretKey: config.secretKey,
     fetch: priceFetch,

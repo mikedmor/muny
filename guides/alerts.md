@@ -10,6 +10,7 @@ Muny checks for alerts every 5 minutes:
 - charges after you cancelled something
 - banks that need you to log in again
 - a service in Settings → API using up its requests for the day or month, with how long until they reset
+- price alerts you set on a stock or coin (from its bell), checked as live prices arrive rather than every 5 minutes: see [Stocks](stocks.md#live-prices-and-price-alerts)
 
 Every alert appears under **Alerts** in Muny (the bell).
 

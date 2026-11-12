@@ -71,6 +71,11 @@ const RULES: Record<AlertType, { label: string; description: string }> = {
     label: "Free trial ending",
     description: "A free trial you are tracking is about to turn into a charge.",
   },
+  price_alert: {
+    label: "Price alerts",
+    description:
+      "A stock or coin you set an alert on (from its page, the watch list or Crypto) crosses your price or move. It includes the price.",
+  },
   api_limit: {
     label: "An API reaches its limit",
     description:

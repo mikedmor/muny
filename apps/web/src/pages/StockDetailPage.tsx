@@ -1,6 +1,7 @@
 import {
   formatMoney,
   INVEST_TXN_LABELS,
+  liveKey,
   SECURITY_TYPE_LABELS,
   type StockLive,
   type StockPage,
@@ -11,7 +12,9 @@ import { ArrowLeft, ExternalLink, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ApiLimitNotice, useApiLimit } from "../components/ApiLimit.js";
 import { LineChart } from "../components/charts.js";
+import { PriceAlertButton } from "../components/PriceAlerts.js";
 import { Alert, Button, Card, cx } from "../components/ui.js";
+import { useLiveQuotes } from "../lib/live.js";
 import {
   fetchStockFresh,
   stockKey,
@@ -386,7 +389,9 @@ export function StockDetailPage() {
   const live = page?.live ?? null;
   const cur = live?.currency ?? "USD";
   const lastClose = page?.history.at(-1);
-  const shownPrice = live?.price ?? lastClose?.close ?? null;
+  const tick = useLiveQuotes([liveKey("stock", symbol)]).get(liveKey("stock", symbol));
+  const shownPrice = tick?.price ?? live?.price ?? lastClose?.close ?? null;
+  const dayPct = tick?.changePct ?? live?.change1dPct ?? null;
 
   return (
     <>
@@ -413,6 +418,12 @@ export function StockDetailPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <PriceAlertButton
+            kind="stock"
+            symbol={symbol}
+            price={shownPrice}
+            className="rounded-lg border border-slate-300 p-2 dark:border-slate-700"
+          />
           {page && !page.watching && !page.position && (
             <Button
               variant="secondary"
@@ -447,7 +458,22 @@ export function StockDetailPage() {
           <div>
             <p className="text-3xl font-semibold tabular-nums">{price(shownPrice, cur)}</p>
             <p className="mt-1 flex flex-wrap items-center gap-x-2 text-sm text-slate-500">
-              {live ? (
+              {tick ? (
+                <>
+                  <Pct v={dayPct} />
+                  <span className="inline-flex items-center gap-1.5">
+                    today
+                    <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                      <span
+                        aria-hidden="true"
+                        className="size-1.5 animate-pulse rounded-full bg-current"
+                      />
+                      {tick.source === "yahoo" ? "every few minutes" : "live"}
+                    </span>
+                    · {ago(tick.at)}
+                  </span>
+                </>
+              ) : live ? (
                 <>
                   <Pct v={live.change1dPct} />
                   <span>today · updated {ago(live.updatedAt)}</span>

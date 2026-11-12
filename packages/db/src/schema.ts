@@ -1268,6 +1268,24 @@ export const documentReviews = sqliteTable("document_reviews", {
   finishedAt: integer({ mode: "timestamp_ms" }),
 });
 
+/** Price alerts on a stock or coin (Stocks, Crypto), checked as live prices arrive. */
+export const priceAlerts = sqliteTable("price_alerts", {
+  id: text().primaryKey(),
+  kind: text({ enum: ["stock", "crypto"] }).notNull(),
+  symbol: text().notNull(),
+  condition: text().notNull(),
+  /** A price or a percent, as a decimal string; null for 52-week alerts. */
+  value: text(),
+  basePrice: text(),
+  note: text(),
+  repeat: integer({ mode: "boolean" }).notNull().default(false),
+  enabled: integer({ mode: "boolean" }).notNull().default(true),
+  lastFiredAt: integer({ mode: "timestamp_ms" }),
+  lastFiredPrice: text(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
 /** Email-import templates: how to read one sender's card activity or statement emails. */
 export const mailTemplates = sqliteTable("mail_templates", {
   id: text().primaryKey(),

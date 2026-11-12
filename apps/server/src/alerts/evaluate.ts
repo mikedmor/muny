@@ -56,6 +56,7 @@ export const DEFAULT_PARAMS: Record<AlertType, AlertParams> = {
   ai_review: {},
   ai_checkin: {},
   api_limit: {},
+  price_alert: {},
 };
 
 const STATE_KEY = "alerts.state";
