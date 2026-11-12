@@ -82,7 +82,7 @@ const FEATURES: {
     key: "statementTemplates",
     label: "Fill in Teach Muny",
     sends:
-      "When you press the button, sends that statement's text with long numbers hidden. You still check and save the template.",
+      "When you press the button, sends that statement's text, or that email's in Settings → Email, with long numbers hidden. You still check and save the template.",
   },
 ];
 

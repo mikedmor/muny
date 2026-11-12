@@ -33,6 +33,8 @@ import { registerTransactionRoutes } from "./ledger/transactions.js";
 import { localToday } from "./lib/dates.js";
 import { registerErrorHandler } from "./lib/http.js";
 import { registerLoanRoutes } from "./loans/routes.js";
+import type { MailDeps } from "./mail/check.js";
+import { registerMailRoutes } from "./mail/routes.js";
 import { registerRecurringRoutes } from "./recurring/routes.js";
 import { registerReportRoutes } from "./reports/routes.js";
 import { registerRuleRoutes } from "./rules/routes.js";
@@ -59,6 +61,8 @@ export interface AppDeps {
   aiFetch?: typeof fetch;
   /** Override waiting between AI retries (tests). */
   aiSleep?: (seconds: number) => Promise<void>;
+  /** Where emails come from instead of an IMAP server (tests). */
+  mailSource?: MailDeps["source"];
 }
 
 /**
@@ -103,6 +107,7 @@ export async function buildApp({
   priceFetch,
   aiFetch,
   aiSleep,
+  mailSource,
 }: AppDeps): Promise<FastifyInstance> {
   const syncDeps = { config, providers: providers ?? makeProviders(config) };
   const csp = contentSecurityPolicy(config);
@@ -183,6 +188,11 @@ export async function buildApp({
   registerTrialRoutes(app, db);
   registerSavingsRoutes(app, db);
   registerAiRoutes(app, db, { secretKey: config.secretKey, fetch: aiFetch, sleep: aiSleep });
+  registerMailRoutes(app, db, {
+    secretKey: config.secretKey,
+    source: mailSource,
+    ai: { secretKey: config.secretKey, fetch: aiFetch, sleep: aiSleep },
+  });
   const alertDeps: AlertDeps = {
     secretKey: config.secretKey,
     publicUrl: config.publicUrl,

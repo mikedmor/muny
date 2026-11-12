@@ -11,6 +11,7 @@ import { repairRawAchPayees, repairStubPayees } from "./ledger/payees.js";
 import { seedDefaultCategories } from "./ledger/seed.js";
 import { pairLoanPayments, pairPayPalFunding } from "./ledger/transfers.js";
 import { refreshManualLoans } from "./loans/service.js";
+import { startMailScheduler } from "./mail/check.js";
 import { rescanRecurring } from "./recurring/service.js";
 import { markCategoryMoves } from "./savings/buckets.js";
 import { linkStatementDocuments } from "./statements/status.js";
@@ -60,6 +61,7 @@ async function main() {
   startSyncScheduler(db, app.syncDeps, app.log);
   startAlertScheduler(db, app.alertDeps, app.log);
   closeInterruptedReviews(db);
+  startMailScheduler(db, { secretKey: config.secretKey }, app.log);
   startAiScheduler(db, { secretKey: config.secretKey }, app.log);
   startAutoCategorize(db, { secretKey: config.secretKey }, app.log);
   startChangePruner(db);

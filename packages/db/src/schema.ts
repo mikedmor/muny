@@ -1268,6 +1268,67 @@ export const documentReviews = sqliteTable("document_reviews", {
   finishedAt: integer({ mode: "timestamp_ms" }),
 });
 
+/** Email-import templates: how to read one sender's card activity or statement emails. */
+export const mailTemplates = sqliteTable("mail_templates", {
+  id: text().primaryKey(),
+  name: text().notNull(),
+  kind: text({ enum: ["activity", "summary"] }).notNull(),
+  /** An address, or "@domain". */
+  fromMatch: text().notNull(),
+  subjectMatch: text(),
+  direction: text({ enum: ["out", "in"] })
+    .notNull()
+    .default("out"),
+  accountId: text().references(() => accounts.id, { onDelete: "set null" }),
+  /** Record<field, { before, after }> */
+  fields: text({ mode: "json" })
+    .$type<Record<string, { before: string; after: string }>>()
+    .notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+/**
+ * Emails read from the mailbox (Settings → Email), one row each, so none is
+ * read twice. The text is kept encrypted for 60 days (to teach Muny or look
+ * again), then dropped; the row stays.
+ */
+export const mailMessages = sqliteTable(
+  "mail_messages",
+  {
+    id: text().primaryKey(),
+    /** SHA-256 of the Message-ID (or of the whole email when it has none). */
+    messageKey: text().notNull(),
+    receivedAt: integer({ mode: "timestamp_ms" }).notNull(),
+    fromAddress: text().notNull(),
+    subject: text().notNull(),
+    status: text({
+      enum: [
+        "transaction",
+        "statement",
+        "document",
+        "unrecognized",
+        "not_allowed",
+        "unsigned",
+        "skipped",
+        "failed",
+      ],
+    }).notNull(),
+    note: text(),
+    signed: text({ enum: ["pass", "fail", "none"] })
+      .notNull()
+      .default("none"),
+    /** encryptJson({ text, attachments }) */
+    bodyEnc: text(),
+    accountId: text().references(() => accounts.id, { onDelete: "set null" }),
+    transactionId: text().references(() => transactions.id, { onDelete: "set null" }),
+    documentId: text().references(() => documents.id, { onDelete: "set null" }),
+    templateId: text().references(() => mailTemplates.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("mail_messages_key_uq").on(t.messageKey)],
+);
+
 export const aiReviews = sqliteTable("ai_reviews", {
   /** YYYY-MM, the month reviewed. */
   month: text().primaryKey(),

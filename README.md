@@ -61,6 +61,7 @@ For Docker Compose, Synology, Unraid and every setting, see the **[install guide
 
 - **Accounts** from bank sync (Plaid or Teller, with your own keys), PayPal, or files
 - **Import anything:** Rocket Money exports, bank CSV/OFX/QFX/QBO, PDF statements, brokerage and Koinly exports, all from one page
+- **Email import** for accounts that can't sync: card alerts become transactions, and statement emails and PDFs update the card
 - **Transactions** with search, filters, splits, notes, tags, merchant cleanup and bulk edits
 - **Rules** that file, rename, tag or hide transactions as they arrive
 - **Recurring bills and subscriptions** found automatically, with what's due, what's paid and price rises

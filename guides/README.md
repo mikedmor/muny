@@ -11,6 +11,7 @@ Everything you need to install, set up and use Muny. New here? Start with **[Ins
 | [Secure access](access.md)            | HTTPS and access from anywhere with Tailscale, reverse proxies, the phone app, household members |
 | [Bank sync](bank-sync.md)             | Plaid, Teller and PayPal with your own keys, and how merchants and pending charges are handled   |
 | [Importing files](importing.md)       | Rocket Money, bank CSV/OFX/QFX/QBO, statements, brokerage and Koinly exports                     |
+| [Email import](email.md)              | Card alerts and statements from your bank's emails, for accounts that can't sync                 |
 
 ## Everyday money
 

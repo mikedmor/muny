@@ -37,6 +37,7 @@ const FILE_SOURCES: Record<string, string> = {
 function sourceLabel(importHash: string, batchSource: string | undefined): string {
   if (importHash.startsWith(MANUAL_PREFIX)) return "Added by hand";
   if (importHash.startsWith("stmt:")) return "Statement upload";
+  if (importHash.startsWith("email:")) return "Email";
   const provider = SYNC_SOURCES[importHash.split(":")[0] ?? ""];
   if (provider) return provider;
   return (batchSource && FILE_SOURCES[batchSource]) || "Imported file";

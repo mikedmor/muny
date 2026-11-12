@@ -40,6 +40,8 @@ When Muny doesn't recognise a CSV's layout, it asks which columns hold the date,
 
 ## Statements
 
+Banks that email you card alerts and statements can feed Muny directly: see [Email import](email.md).
+
 PDF statements go to the statement importer, which handles several at once and matches each to an account by the last 4 digits printed on it. For each statement you can read it into the account, just keep it under Documents with its date, or create the account from it. Each account then shows its last statement and any missing months.
 
 See [Credit cards](cards.md#getting-the-details-in), [Loans](loans.md#statements-for-any-loan) and [Statements](rules-and-documents.md#statements) for the details. A student loan statement that covers several loans is read from the lender's card on **Loans**.

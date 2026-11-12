@@ -6,6 +6,7 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ### Added
 
+- **Email import.** For cards that can't sync, Muny can read your bank's emails from a mailbox folder (Gmail, Fastmail, iCloud, Yahoo or any IMAP server), read-only: card alerts become transactions, statement emails update the card's balance, minimum and due date, and statement PDFs are read into the card and kept in Documents. Teach Muny each bank's emails once, or let your AI model fill it in. Only senders you list are read, and by default only email their domain signed. Off until you set it up in **Settings → Email**.
 - **A page for each stock.** Click a ticker in Holdings or the Watch list to see its chart over a month to five years, your position and trades in it, and, with the new **Stock details and news** extra, its live price, ranges, returns and recent news, with a **Refresh** button.
 
 ### Changed

@@ -24,6 +24,7 @@ const NOUNS: Record<string, [string, string]> = {
   diy_projects: ["DIY project", "DIY projects"],
   document_reviews: ["contract review", "contract reviews"],
   documents: ["document", "documents"],
+  mail_templates: ["email template", "email templates"],
   holding_costs: ["cost basis", "cost bases"],
   import_batches: ["import", "imports"],
   infra_costs: ["running cost", "running costs"],
@@ -60,6 +61,7 @@ export const noun = (table: string, n: number) => {
 const SETTINGS: Record<string, string> = {
   "ai.settings": "AI settings",
   "documents.folders": "document folders",
+  "mail.settings": "email settings",
   "alerts.perAccount": "account alerts",
   "alerts.vapid": "push notification keys",
   "assets.apillowHomes": "home values",

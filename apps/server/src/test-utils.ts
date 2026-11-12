@@ -11,6 +11,7 @@ export interface AppOptions {
   priceFetch?: typeof fetch;
   aiFetch?: typeof fetch;
   aiSleep?: (seconds: number) => Promise<void>;
+  mailSource?: import("./mail/check.js").MailDeps["source"];
 }
 
 export async function makeApp(env: Record<string, string> = {}, opts: AppOptions = {}) {
@@ -23,6 +24,7 @@ export async function makeApp(env: Record<string, string> = {}, opts: AppOptions
     priceFetch: opts.priceFetch,
     aiFetch: opts.aiFetch,
     aiSleep: opts.aiSleep,
+    mailSource: opts.mailSource,
   });
   return { app, db, config };
 }

@@ -47,6 +47,7 @@ const UNTRACKED = new Set([
   "security_prices",
   "security_logos",
   "crypto_sync_runs",
+  "mail_messages", // a record of what was read, so nothing is read twice
   "__drizzle_migrations",
 ]);
 
@@ -57,6 +58,7 @@ const UNTRACKED_SETTINGS = [
   "alerts.state",
   "invest.watchlist.refreshed",
   "plaid.loginsCreated",
+  "mail.state",
 ];
 
 /** A change to only these isn't a change anyone would undo. */
