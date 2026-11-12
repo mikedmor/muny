@@ -1035,20 +1035,28 @@ export function listSeries(db: Db, today = localToday(), id?: string): Recurring
   const pendingFor = (r: (typeof rows)[number]["s"]) => {
     if (r.status === "ignored") return null;
     const words = keyWords(r.matchKey);
-    const hit = pendingRows
-      .filter((x) => {
-        if (x.postedDate < r.lastDate || (x.amountCents < 0 ? "out" : "in") !== r.direction)
-          return false;
-        const cents = Math.abs(x.amountCents);
-        const key = merchantKey(x.payee, x.rawDescription);
-        if (key === r.matchKey) return near(cents, r.anchorCents, 0.3);
-        return (
-          x.accountId === r.accountId &&
-          (near(cents, r.anchorCents, 0.1) || near(cents, Math.abs(r.lastAmountCents), 0.1)) &&
-          [...keyWords(key)].some((w) => words.has(w))
-        );
-      })
+    const after = (x: Row) => x.postedDate >= r.lastDate;
+    // Put in this series already (a rule's "Count as recurring"): it's this one, whatever it's called or costs.
+    const held = pendingRows
+      .filter((x) => x.recurringSeriesId === r.id && after(x))
       .sort((a, b) => a.postedDate.localeCompare(b.postedDate))[0];
+    const hit =
+      held ??
+      pendingRows
+        .filter((x) => {
+          // One that's another series' doesn't count for this one.
+          if (x.recurringSeriesId && x.recurringSeriesId !== r.id) return false;
+          if (!after(x) || (x.amountCents < 0 ? "out" : "in") !== r.direction) return false;
+          const cents = Math.abs(x.amountCents);
+          const key = merchantKey(x.payee, x.rawDescription);
+          if (key === r.matchKey) return near(cents, r.anchorCents, 0.3);
+          return (
+            x.accountId === r.accountId &&
+            (near(cents, r.anchorCents, 0.1) || near(cents, Math.abs(r.lastAmountCents), 0.1)) &&
+            [...keyWords(key)].some((w) => words.has(w))
+          );
+        })
+        .sort((a, b) => a.postedDate.localeCompare(b.postedDate))[0];
     return hit
       ? { transactionId: hit.id, date: hit.postedDate, amountCents: hit.amountCents }
       : null;

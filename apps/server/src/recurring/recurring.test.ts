@@ -8,6 +8,7 @@ import type {
   TransactionPage,
   UpcomingCharge,
 } from "@muny/shared";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { localToday } from "../lib/dates.js";
 import { makeSignedInApp, type TestClient } from "../test-utils.js";
@@ -263,6 +264,41 @@ describe("recurring: names that change, and pending charges", () => {
     const mine = up.filter((u) => u.seriesId === sf.id);
     expect(mine[0]).toMatchObject({ pending: true, date: today });
     // The pending charge stands for the next expected one.
+    expect(
+      mine.filter((u) => !u.pending).every((u) => u.date > addInterval(sf.lastDate, "monthly")),
+    ).toBe(true);
+  });
+
+  it("counts a pending charge a rule put in the series, whatever it's called", async () => {
+    const { client, db } = await setup();
+    const sf = (await list(client)).find((s) => s.name === "Streamflix") as RecurringSeries;
+    const acc = db.select().from(schema.accounts).get();
+    if (!acc) throw new Error("account missing");
+    // Renamed by the merchant and a little cheaper: nothing to match it by but the rule.
+    const pend = (seriesId: string | null) =>
+      db
+        .insert(schema.transactions)
+        .values({
+          id: newId(),
+          accountId: acc.id,
+          postedDate: today,
+          amountCents: -1399,
+          currency: "USD",
+          rawDescription: "FLIXPLUSPAY",
+          pending: true,
+          importHash: newId(),
+          recurringSeriesId: seriesId,
+        })
+        .run();
+    pend(null);
+    expect((await list(client)).find((s) => s.id === sf.id)?.pending).toBeNull();
+    db.delete(schema.transactions).where(eq(schema.transactions.pending, true)).run();
+    pend(sf.id);
+    const now = (await list(client)).find((s) => s.id === sf.id) as RecurringSeries;
+    expect(now.pending).toMatchObject({ date: today, amountCents: -1399 });
+    const up = (await client.get(`/api/recurring/upcoming?from=${today}`)).json<UpcomingCharge[]>();
+    const mine = up.filter((u) => u.seriesId === sf.id);
+    expect(mine[0]).toMatchObject({ pending: true, amountCents: -1399 });
     expect(
       mine.filter((u) => !u.pending).every((u) => u.date > addInterval(sf.lastDate, "monthly")),
     ).toBe(true);

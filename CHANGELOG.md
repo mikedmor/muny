@@ -8,6 +8,10 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 - **Support development** in the menu now opens Muny's own PayPal donation page.
 
+### Fixed
+
+- A pending charge a rule counts as recurring now stands for that series's next charge, even when the merchant renamed it or charged a little less, so **Coming up** no longer lists it again.
+
 ## [1.2.0] - 2026-11-09
 
 Muny's built-in AI does much more, from answering questions about your money to reading your loan contracts, and almost anything you change can now be undone.
