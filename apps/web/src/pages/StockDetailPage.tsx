@@ -4,15 +4,15 @@ import {
   liveKey,
   SECURITY_TYPE_LABELS,
   type StockLive,
+  type StockNews,
   type StockPage,
 } from "@muny/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { ArrowLeft, ExternalLink, RefreshCw } from "lucide-react";
-import { useMemo, useState } from "react";
 import { ApiLimitNotice, useApiLimit } from "../components/ApiLimit.js";
-import { LineChart } from "../components/charts.js";
 import { PriceAlertButton } from "../components/PriceAlerts.js";
+import { TradingChart } from "../components/TradingChart.js";
 import { Alert, Button, Card, cx } from "../components/ui.js";
 import { useLiveQuotes } from "../lib/live.js";
 import {
@@ -30,15 +30,6 @@ import { StockLogo } from "./StocksMarket.js";
  * One stock: your position and trades from Muny's own data, and, when turned
  * on, live details and recent news from Yahoo Finance (only the ticker is sent).
  */
-
-const RANGES = [
-  ["1M", 31],
-  ["6M", 183],
-  ["YTD", -1],
-  ["1Y", 366],
-  ["5Y", 0],
-] as const;
-type Range = (typeof RANGES)[number][0];
 
 const price = (n: number | null | undefined, currency = "USD") =>
   n === null || n === undefined
@@ -98,88 +89,6 @@ function RangeBar({
         )}
       </span>
     </span>
-  );
-}
-
-function Chart({ page }: { page: StockPage }) {
-  const [range, setRange] = useState<Range>("1Y");
-  const all = page.live?.series.length ? page.live.series : page.history;
-  const { points, partial } = useMemo(() => {
-    const last = all.at(-1)?.date;
-    if (!last) return { points: [], partial: false };
-    const days = RANGES.find(([r]) => r === range)?.[1] ?? 0;
-    const from =
-      days === -1
-        ? `${last.slice(0, 4)}-01-01`
-        : days === 0
-          ? ""
-          : new Date(Date.parse(`${last}T00:00:00Z`) - days * 86_400_000)
-              .toISOString()
-              .slice(0, 10);
-    const kept = all.filter((p) => p.date >= from);
-    // Weekly past a year keeps the chart light.
-    const thin =
-      kept.length > 400
-        ? kept.filter(
-            (p, i) => i === kept.length - 1 || new Date(`${p.date}T00:00:00Z`).getUTCDay() === 5,
-          )
-        : kept;
-    return {
-      points: thin.map((p) => ({
-        date: p.date,
-        label: day(p.date, range === "5Y" || range === "1Y"),
-        value: Math.round(p.close * 100),
-      })),
-      // Prices don't reach back that far: say where they start instead.
-      partial: !from || (all[0]?.date ?? "") > from,
-    };
-  }, [all, range]);
-  const first = points[0]?.value;
-  const lastV = points.at(-1)?.value;
-  const change = first && lastV !== undefined ? ((lastV - first) / first) * 100 : null;
-  return (
-    <Card>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm text-slate-500">
-          {points.length > 1 ? (
-            <>
-              <Pct v={change} />{" "}
-              {partial && points[0]
-                ? `since ${day(points[0].date)}`
-                : range === "YTD"
-                  ? "this year"
-                  : `over ${range}`}
-            </>
-          ) : null}
-        </span>
-        <div role="tablist" aria-label="Range" className="flex gap-1">
-          {RANGES.map(([r]) => (
-            <button
-              key={r}
-              type="button"
-              role="tab"
-              aria-selected={range === r}
-              onClick={() => setRange(r)}
-              className={cx(
-                "rounded-md px-2 py-1 text-xs font-medium",
-                range === r
-                  ? "bg-brand-50 text-brand-700 dark:bg-brand-700/20 dark:text-brand-500"
-                  : "text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800",
-              )}
-            >
-              {r}
-            </button>
-          ))}
-        </div>
-      </div>
-      {points.length > 1 ? (
-        <LineChart ariaLabel={`${page.symbol} closing price`} height={220} points={points} fit />
-      ) : (
-        <p className="py-10 text-center text-sm text-slate-500">
-          No price history for {page.symbol} yet.
-        </p>
-      )}
-    </Card>
   );
 }
 
@@ -314,19 +223,20 @@ function Activity({ page }: { page: StockPage }) {
   );
 }
 
-function News({ live }: { live: StockLive }) {
+/** Recent stories (stock or coin), each opening on the publisher's site. */
+export function NewsCard({ news, failed }: { news: StockNews[]; failed: boolean }) {
   return (
     <Card className="p-0">
       <h2 className="border-b border-slate-200 px-4 py-3 font-semibold dark:border-slate-800">
         Recent news
       </h2>
-      {live.news.length === 0 ? (
+      {news.length === 0 ? (
         <p className="px-4 py-6 text-sm text-slate-500">
-          {live.newsFailed ? "The news couldn't be loaded. Try Refresh." : "No recent stories."}
+          {failed ? "The news couldn't be loaded. Try again later." : "No recent stories."}
         </p>
       ) : (
         <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-          {live.news.map((n) => (
+          {news.map((n) => (
             <li key={n.url}>
               <a
                 href={n.url}
@@ -492,7 +402,13 @@ export function StockDetailPage() {
           </div>
 
           {!page.liveOn && <TurnOn />}
-          <Chart page={page} />
+          <TradingChart
+            liveKey={liveKey("stock", symbol)}
+            fallback={page.live?.series.length ? page.live.series : page.history}
+            candlesOn={page.liveOn}
+            offNote="Daily closes Muny keeps. Turn on live details above for candles, volume and the 1-day view."
+            aria={`${symbol} price`}
+          />
 
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <div className="min-w-0 space-y-5">
@@ -507,7 +423,7 @@ export function StockDetailPage() {
             </div>
             {live && (
               <div className="min-w-0">
-                <News live={live} />
+                <NewsCard news={live.news} failed={live.newsFailed} />
               </div>
             )}
           </div>

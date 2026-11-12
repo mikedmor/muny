@@ -145,7 +145,14 @@ function HoldingRow({ h, live }: { h: CryptoHolding; live?: LiveQuote }) {
           <span className="flex items-center gap-3">
             <CoinIcon asset={h.asset} />
             <span>
-              <span className="block font-semibold">{h.asset}</span>
+              <Link
+                to="/crypto/coins/$asset"
+                params={{ asset: h.asset }}
+                onClick={(e) => e.stopPropagation()}
+                className="block font-semibold hover:text-brand-700 hover:underline dark:hover:text-brand-500"
+              >
+                {h.asset}
+              </Link>
               <span className="text-xs text-slate-500">{h.name}</span>
             </span>
           </span>

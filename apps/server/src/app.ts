@@ -209,7 +209,11 @@ export async function buildApp({
     fetch: priceFetch,
     WebSocket: liveWebSocket,
   });
-  registerLiveRoutes(app, db, liveHub, { secretKey: config.secretKey, alerts: alertDeps });
+  registerLiveRoutes(app, db, liveHub, {
+    secretKey: config.secretKey,
+    alerts: alertDeps,
+    fetch: priceFetch,
+  });
   liveHub.start();
   app.addHook("onClose", async () => liveHub.stop());
   registerCryptoRoutes(app, db, {

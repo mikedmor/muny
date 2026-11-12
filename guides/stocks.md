@@ -56,7 +56,9 @@ Watch list prices come from Yahoo Finance: a year of daily closes when you add a
 
 ## A stock's page
 
-Click a ticker in **Holdings** or the **Watch list** to open its page. It shows the price and a chart over a month to five years, plus, if you hold it, your shares, value, cost and gain in each account, and your buys, sales and dividends in it. **Add to watch list** follows a ticker you don't own yet.
+Click a ticker in **Holdings** or the **Watch list** to open its page. It shows the price and a trading chart, plus, if you hold it, your shares, value, cost and gain in each account, and your buys, sales and dividends in it. **Add to watch list** follows a ticker you don't own yet.
+
+The **trading chart** shows candles (each bar's open, high, low and close) with the volume traded underneath, over one day to five years. The 1D view is five-minute bars, including before and after the bell; 1W is half-hour bars, then daily bars up to a year and weekly bars for five years. **Average and bands** adds the 20-bar average and Bollinger bands (two standard deviations either side of it). Dashed lines mark yesterday's close (on 1D) and the latest price. Point at a bar to see its numbers. The bars come from Yahoo Finance with **Stock details and news** on; without it, the chart is a line of the daily closes Muny keeps.
 
 With **Stock details and news** turned on, the page also gets the latest price and the day's change, the day's and 52-week ranges, volume, returns from a month to five years, and recent news stories, which open on the publisher's site. **Refresh** gets them again. Without it, the page uses only the prices Muny already keeps.
 

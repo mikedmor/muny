@@ -60,7 +60,15 @@ interface Chart {
         regularMarketVolume?: number;
       };
       timestamp?: number[];
-      indicators?: { quote?: { close?: (number | null)[] }[] };
+      indicators?: {
+        quote?: {
+          open?: (number | null)[];
+          high?: (number | null)[];
+          low?: (number | null)[];
+          close?: (number | null)[];
+          volume?: (number | null)[];
+        }[];
+      };
     }[];
   };
 }
@@ -74,16 +82,36 @@ export async function chart(f: typeof fetch, symbol: string, query: string) {
   const r = ((await res.json()) as Chart).chart?.result?.[0];
   if (!r) throw new Error("No data");
   const offset = r.meta?.gmtoffset ?? 0;
-  const points: { t: number; date: string; close: number }[] = [];
-  const closes = r.indicators?.quote?.[0]?.close ?? [];
+  const points: {
+    t: number;
+    date: string;
+    close: number;
+    /** Open, high, low and volume (the close when Yahoo leaves one out). */
+    open: number;
+    high: number;
+    low: number;
+    volume: number;
+  }[] = [];
+  const q = r.indicators?.quote?.[0] ?? {};
+  const closes = q.close ?? [];
+  const ok = (v: number | null | undefined): v is number =>
+    v !== null && v !== undefined && Number.isFinite(v) && v > 0;
   (r.timestamp ?? []).forEach((t, i) => {
     const c = closes[i];
-    if (c !== null && c !== undefined && Number.isFinite(c) && c > 0)
-      points.push({
-        t: t * 1000,
-        date: new Date((t + offset) * 1000).toISOString().slice(0, 10),
-        close: c,
-      });
+    if (!ok(c)) return;
+    const o = q.open?.[i];
+    const h = q.high?.[i];
+    const l = q.low?.[i];
+    const v = q.volume?.[i];
+    points.push({
+      t: t * 1000,
+      date: new Date((t + offset) * 1000).toISOString().slice(0, 10),
+      close: c,
+      open: ok(o) ? o : c,
+      high: ok(h) ? Math.max(h, c) : c,
+      low: ok(l) ? Math.min(l, c) : c,
+      volume: typeof v === "number" && Number.isFinite(v) ? v : 0,
+    });
   });
   return { meta: r.meta ?? {}, points };
 }

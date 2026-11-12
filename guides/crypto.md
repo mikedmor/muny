@@ -20,6 +20,8 @@ It sends only coin ids (like `bitcoin`), never balances, addresses or wallet nam
 
 With **Live crypto prices** on (**Settings → API**, off by default), each coin's price on Crypto updates as it trades, from Coinbase's public price feed. No account or key is needed, and only the coins' symbols are sent. Coins Coinbase doesn't list in US dollars keep their usual daily prices. Values and totals still use the daily price, so they don't jump around while you look.
 
+Click a coin to open its page: its price, a trading chart like a stock's (candles from Coinbase, with **Live crypto prices** on; otherwise a line of the daily prices Muny keeps), what you hold of it in each wallet with its cost and gain, your transactions with it, and recent news with **Stock details and news** on.
+
 The bell on each coin sets a **price alert**: a price it rises to or falls to, or a move today or since you set it. See [Stocks](stocks.md#live-prices-and-price-alerts) for how alerts work; for coins, "today" means the last 24 hours, and alerts are checked around the clock.
 
 ## Wallet sync

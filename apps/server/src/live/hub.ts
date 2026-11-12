@@ -372,7 +372,8 @@ export class LiveHub {
 
   // --- Crypto: Coinbase -----------------------------------------------------
 
-  private async coinbaseBases(): Promise<Set<string>> {
+  /** Coins Coinbase lists in USD (kept a day). */
+  async coinbaseBases(): Promise<Set<string>> {
     const now = this.now();
     if (this.products && now - this.products.at < PRODUCTS_EVERY) return this.products.bases;
     const res = await (this.deps.fetch ?? fetch)("https://api.exchange.coinbase.com/products", {

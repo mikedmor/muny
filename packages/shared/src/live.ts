@@ -1,3 +1,5 @@
+import type { StockNews } from "./invest.js";
+
 /**
  * Live prices and price alerts. Prices here are market quotes for display
  * and alerts only; they never change what an account is worth.
@@ -105,4 +107,57 @@ export interface PriceAlertInput {
   note?: string | null;
   repeat?: boolean;
   enabled?: boolean;
+}
+
+/** The trading chart's ranges. */
+export const CANDLE_RANGES = ["1d", "1w", "1m", "3m", "6m", "ytd", "1y", "5y"] as const;
+export type CandleRange = (typeof CANDLE_RANGES)[number];
+
+export const CANDLE_RANGE_LABELS: Record<CandleRange, string> = {
+  "1d": "1D",
+  "1w": "1W",
+  "1m": "1M",
+  "3m": "3M",
+  "6m": "6M",
+  ytd: "YTD",
+  "1y": "1Y",
+  "5y": "5Y",
+};
+
+/** One bar of the trading chart (prices for display only). */
+export interface Candle {
+  /** unix ms when the bar starts */
+  t: number;
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  /** Shares or coins traded (0 when not known). */
+  v: number;
+}
+
+export interface CandleSet {
+  key: LiveKey;
+  range: CandleRange;
+  /** How long each bar is, in minutes (1440 for a day). */
+  barMinutes: number;
+  candles: Candle[];
+  /** The close before the first bar (stocks, 1D), for the dashed line. */
+  previousClose: number | null;
+  source: "yahoo" | "coinbase";
+}
+
+/** A coin's page: its stored prices and, when turned on, recent news. */
+export interface CoinPage {
+  asset: string;
+  /** Daily closes Muny keeps, oldest first. */
+  history: { date: string; close: number }[];
+  /** Coinbase lists it in USD (bars and live prices can come from there). */
+  onCoinbase: boolean | null;
+  /** The live crypto setting is on (bars and live prices). */
+  liveOn: boolean;
+  /** News is turned on (Stock extras → Stock details and news). */
+  newsOn: boolean;
+  news: StockNews[];
+  newsFailed: boolean;
 }
