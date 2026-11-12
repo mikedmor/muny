@@ -37,6 +37,8 @@ Every series shows where it stands this month:
 | **Late**                     | The expected date has passed without a charge  |
 | **Next**                     | Nothing due until a later month                |
 
+A pending charge stands for the next one, so it isn't also listed as still to come. One that a **Count as recurring** rule puts in the series counts even when the merchant renamed it or charged a different amount.
+
 The line above the list totals what's been paid this month, what's pending, and what's still due. **Upcoming** lists everything expected over the next 30 days, which the Overview's calendar and **Coming up** card show too, income included.
 
 ## Changing a series

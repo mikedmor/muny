@@ -11,6 +11,7 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 ### Changed
 
 - **Support development** in the menu now opens Muny's own PayPal donation page.
+- **Settings → API → Logos and market overview** is now **Stock extras**, with the new **Stock details and news** switch beside the other two.
 
 ### Fixed
 

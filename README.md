@@ -64,7 +64,8 @@ For Docker Compose, Synology, Unraid and every setting, see the **[install guide
 - **Transactions** with search, filters, splits, notes, tags, merchant cleanup and bulk edits
 - **Rules** that file, rename, tag or hide transactions as they arrive
 - **Recurring bills and subscriptions** found automatically, with what's due, what's paid and price rises
-- **Budgets** by category with rollover, alerts and a month-end forecast
+- **Budgets** by category with rollover, alerts and a month-end forecast, including what's left if every budget gets used
+- **Undo for anything:** every change from the last 60 days, by you, your household or an assistant, can be undone or redone
 
 </td>
 <td width="50%" valign="top">
@@ -74,7 +75,7 @@ For Docker Compose, Synology, Unraid and every setting, see the **[install guide
 - **Loans** with payoff dates, payoff plans and statement reading, including multi-loan student loan servicers
 - **Credit cards** with limits, statements, due dates and interest
 - **Savings** accounts with interest, earned rate and projections
-- **Stocks** from Plaid or broker exports, with cost basis and history
+- **Stocks** from Plaid or broker exports, with cost basis and history, a watch list, and a page for each stock with optional live details and news
 - **Crypto** wallets and exchanges, with cost basis, gains and tax reports
 - **Assets** such as a home or car, for equity and net worth
 
@@ -89,7 +90,7 @@ For Docker Compose, Synology, Unraid and every setting, see the **[install guide
 - **Spending and reports:** by category and merchant, month over month, income versus spending, net worth over time
 - **Ways to save:** doubled-up subscriptions, price rises, self-hosted replacements, card interest, loan order and idle cash
 - **Taxes:** yearly totals and an export for your accountant
-- **Documents:** statements and receipts, stored encrypted
+- **Documents:** statements, contracts and receipts in folders of your own, stored encrypted
 
 </td>
 <td valign="top">
@@ -98,7 +99,7 @@ For Docker Compose, Synology, Unraid and every setting, see the **[install guide
 
 - **MCP server and REST API** with per-token permissions and an activity log
 - **Approval inbox:** assistants suggest changes; you approve or reject
-- **Optional built-in AI** (off by default): category suggestions, a monthly review and statement help, with Claude, an OpenAI-compatible server or Ollama
+- **Optional built-in AI** (off by default), with Claude, an OpenAI-compatible server or Ollama: ask about your money in plain words, have a loan contract reviewed, plus category suggestions, tidier merchant names, a monthly review and a mid-month check-in
 - **Alerts** in the app, by phone push, ntfy, Apprise, email or webhook
 - **Themes:** light, dark and your own, with a live preview
 

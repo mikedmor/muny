@@ -19,18 +19,18 @@ Everything you need to install, set up and use Muny. New here? Start with **[Ins
 | [Transactions and categories](transactions.md)    | Searching, filtering, splits, notes, tags, bulk edits and categories           |
 | [Recurring bills and subscriptions](recurring.md) | What Muny finds, what's due and paid, price rises, cancelling, free trials     |
 | [Budgets](budgets.md)                             | Budget basics, category budgets, rollover, the forecast and leaving things out |
-| [Rules and documents](rules-and-documents.md)     | Rules that file transactions, statements and your document folders             |
+| [Rules and documents](rules-and-documents.md)     | Rules that file transactions, statements, contracts and your document folders  |
 | [Alerts](alerts.md)                               | What Muny watches for, phone notifications, ntfy, Apprise, email and webhooks  |
 
 ## Debts and wealth
 
-| Guide                        | What it covers                                                       |
-| ---------------------------- | -------------------------------------------------------------------- |
-| [Loans and assets](loans.md) | Loans, payoff plans, student loan statements, your home and car      |
-| [Credit cards](cards.md)     | Limits, statements, due dates, interest and paying cards off         |
-| [Savings](savings.md)        | Ways to save, savings accounts, money saved and self-hosting         |
-| [Stocks](stocks.md)          | Brokerage accounts, holdings, cost basis, history and the watch list |
-| [Crypto](crypto.md)          | Wallets, exchanges, prices, cost basis and tax reports               |
+| Guide                        | What it covers                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------ |
+| [Loans and assets](loans.md) | Loans, payoff plans, student loan statements, your home and car                |
+| [Credit cards](cards.md)     | Limits, statements, due dates, interest and paying cards off                   |
+| [Savings](savings.md)        | Ways to save, savings accounts, money saved and self-hosting                   |
+| [Stocks](stocks.md)          | Brokerage accounts, holdings, cost basis, the watch list and each stock's page |
+| [Crypto](crypto.md)          | Wallets, exchanges, prices, cost basis and tax reports                         |
 
 ## Insights and customizing
 
@@ -43,10 +43,10 @@ Everything you need to install, set up and use Muny. New here? Start with **[Ins
 
 ## AI
 
-| Guide                      | What it covers                                                                               |
-| -------------------------- | -------------------------------------------------------------------------------------------- |
-| [AI assistants](agents.md) | Connect Claude or another assistant over MCP, with tokens, permissions and an approval inbox |
-| [Built-in AI](ai.md)       | Optional category suggestions, a monthly review and statement help, and exactly what's sent  |
+| Guide                      | What it covers                                                                                           |
+| -------------------------- | -------------------------------------------------------------------------------------------------------- |
+| [AI assistants](agents.md) | Connect Claude or another assistant over MCP, with tokens, permissions and an approval inbox             |
+| [Built-in AI](ai.md)       | Optional Ask Muny, contract review, category suggestions, reviews and check-ins, and exactly what's sent |
 
 ## Running Muny
 
