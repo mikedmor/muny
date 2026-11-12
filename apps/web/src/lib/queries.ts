@@ -62,6 +62,7 @@ import type {
   SecurityPricePoint,
   SetBudgetInput,
   SplitInput,
+  StockPage,
   SyncConfigStatus,
   SyncSummary,
   Tag,
@@ -870,6 +871,17 @@ export const useSecurityPrices = (securityId: string | null) =>
     queryFn: () => api.get<SecurityPricePoint[]>(`/api/invest/securities/${securityId}/prices`),
     enabled: !!securityId,
   });
+
+const stockUrl = (symbol: string) => `/api/invest/stock/${encodeURIComponent(symbol)}`;
+export const stockKey = (symbol: string) => [...investKeys.all, "stock", symbol];
+
+/** One stock's page. The server keeps live details for 15 minutes. */
+export const useStock = (symbol: string) =>
+  useQuery({ queryKey: stockKey(symbol), queryFn: () => api.get<StockPage>(stockUrl(symbol)) });
+
+/** The page again with fresh live details (the Refresh button). */
+export const fetchStockFresh = (symbol: string) =>
+  api.get<StockPage>(`${stockUrl(symbol)}?refresh=1`);
 
 export const useWatchlist = () =>
   useQuery({

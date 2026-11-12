@@ -16,6 +16,7 @@ import {
   previewInvestImport,
   setHoldingCost,
 } from "./service.js";
+import { STOCK_SYMBOL, stockPage } from "./stock.js";
 import {
   addToWatchlist,
   listWatchlist,
@@ -171,7 +172,11 @@ export function registerInvestRoutes(app: FastifyInstance, db: MunyDb, deps: His
   app.put("/api/invest/settings", async (req) => {
     const user = requireUser(req);
     const body = parse(
-      z.object({ logos: z.boolean().optional(), market: z.boolean().optional() }),
+      z.object({
+        logos: z.boolean().optional(),
+        market: z.boolean().optional(),
+        details: z.boolean().optional(),
+      }),
       req.body,
     );
     const next = setInvestSettings(db, body);
@@ -213,6 +218,22 @@ export function registerInvestRoutes(app: FastifyInstance, db: MunyDb, deps: His
     } catch (e) {
       throw badRequest(e instanceof Error ? e.message : "Couldn't load it");
     }
+  });
+
+  /** One stock's page; ?refresh=1 fetches the live details again. */
+  app.get("/api/invest/stock/:symbol", async (req) => {
+    requireUser(req);
+    const { symbol } = parse(
+      z.object({
+        symbol: z
+          .string()
+          .transform((s) => s.trim().toUpperCase())
+          .pipe(z.string().regex(STOCK_SYMBOL, "That isn't a ticker")),
+      }),
+      req.params,
+    );
+    const { refresh } = parse(z.object({ refresh: z.string().optional() }), req.query);
+    return stockPage(db, deps, symbol, { refresh: !!refresh });
   });
 
   app.get("/api/invest/securities/:id/prices", async (req) => {

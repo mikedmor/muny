@@ -332,7 +332,11 @@ export function ApiSettings() {
     d.usage.find((u) => providers.includes(u.provider) && u.limit)?.limit ?? null;
   const priceLimit = limited(d.provider);
   const customServers = Object.values(d.servers).filter(Boolean).length;
-  const stockExtras = [stocks.logos && "Logos", stocks.market && "Market"].filter(Boolean);
+  const stockExtras = [
+    stocks.logos && "Logos",
+    stocks.market && "Market",
+    stocks.details && "Details",
+  ].filter(Boolean);
   const bankNames = [banks.plaid.configured && "Plaid", banks.teller.configured && "Teller"].filter(
     Boolean,
   );
@@ -621,16 +625,17 @@ export function ApiSettings() {
 
           <Group title="Stocks">
             <Service
-              name="Logos and market overview"
-              purpose="Company logos, major indexes and sectors"
+              name="Stock extras"
+              purpose="Company logos, the market overview, and live details and news on a stock's page"
               status={stockExtras.length ? `On · ${stockExtras.join(", ")}` : "Off"}
               tone={stockExtras.length ? "good" : "idle"}
               startOpen={false}
             >
               <p className="text-sm text-slate-500">
                 No key needed. Logos come from Financial Modeling Prep or Parqet, once per ticker,
-                and market prices from Yahoo Finance, at most hourly while you look. Only ticker
-                symbols are sent, never your holdings.
+                and market prices from Yahoo Finance, at most hourly while you look. A stock's page
+                gets its live details and news from Yahoo Finance when you open it, kept for 15
+                minutes. Only ticker symbols are sent, never your holdings.
               </p>
               <Checkbox
                 label="Company logos"
@@ -641,6 +646,11 @@ export function ApiSettings() {
                 label="Market overview"
                 checked={stocks.market}
                 onChange={(market) => setInvest.mutate({ market })}
+              />
+              <Checkbox
+                label="Stock details and news"
+                checked={stocks.details}
+                onChange={(details) => setInvest.mutate({ details })}
               />
             </Service>
           </Group>

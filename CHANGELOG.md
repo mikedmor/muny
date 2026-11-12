@@ -4,6 +4,10 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+### Added
+
+- **A page for each stock.** Click a ticker in Holdings or the Watch list to see its chart over a month to five years, your position and trades in it, and, with the new **Stock details and news** extra, its live price, ranges, returns and recent news, with a **Refresh** button.
+
 ### Changed
 
 - **Support development** in the menu now opens Muny's own PayPal donation page.

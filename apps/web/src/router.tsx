@@ -30,6 +30,7 @@ import { ReportsPage } from "./pages/ReportsPage.js";
 import { SavingsPage } from "./pages/SavingsPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 import { SpendingPage } from "./pages/SpendingPage.js";
+import { StockDetailPage } from "./pages/StockDetailPage.js";
 import { StocksPage } from "./pages/StocksPage.js";
 import { TaxesPage } from "./pages/TaxesPage.js";
 import { ThemeEditorPage } from "./pages/ThemeEditorPage.js";
@@ -116,6 +117,7 @@ const routeTree = rootRoute.addChildren([
   page("/documents", DocumentsPage),
   page("/documents/$documentId/review", ContractReviewPage),
   page("/stocks", StocksPage),
+  page("/stocks/$symbol", StockDetailPage),
   page("/crypto", CryptoDashboard),
   page("/crypto/wallets", CryptoWallets),
   page("/crypto/wallets/$walletId", CryptoWalletPage),

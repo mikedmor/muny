@@ -30,7 +30,11 @@ export function getInvestSettings(db: MunyDb): InvestSettings {
     .from(schema.appSettings)
     .where(eq(schema.appSettings.key, SETTINGS_KEY))
     .get()?.value as Partial<InvestSettings> | undefined;
-  return { logos: v?.logos ?? false, market: v?.market ?? false };
+  return {
+    logos: v?.logos ?? false,
+    market: v?.market ?? false,
+    details: v?.details ?? false,
+  };
 }
 
 export function setInvestSettings(db: MunyDb, patch: Partial<InvestSettings>): InvestSettings {

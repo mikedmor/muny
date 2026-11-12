@@ -198,6 +198,8 @@ export interface InvestSettings {
   logos: boolean;
   /** Show the market overview (index and sector prices from Yahoo Finance). */
   market: boolean;
+  /** On a stock's page: live details and recent news from Yahoo Finance. */
+  details: boolean;
 }
 
 /** A fund or index in the market overview. Prices and percentages are for display only. */
@@ -228,4 +230,60 @@ export interface MarketIntraday {
   previousClose: number | null;
   /** Unix ms and price, every 5 minutes today. */
   points: { t: number; close: number }[];
+}
+
+/** A news story about a stock (opens on the publisher's site). */
+export interface StockNews {
+  title: string;
+  publisher: string | null;
+  url: string;
+  /** unix ms */
+  publishedAt: number;
+}
+
+/** Live details for one ticker, from Yahoo Finance (for display only). */
+export interface StockLive {
+  /** unix ms */
+  updatedAt: number;
+  name: string | null;
+  exchange: string | null;
+  currency: string | null;
+  price: number | null;
+  previousClose: number | null;
+  dayHigh: number | null;
+  dayLow: number | null;
+  volume: number | null;
+  high52w: number | null;
+  low52w: number | null;
+  change1dPct: number | null;
+  change1mPct: number | null;
+  change6mPct: number | null;
+  changeYtdPct: number | null;
+  change1yPct: number | null;
+  change5yPct: number | null;
+  /** Daily closes, up to five years, oldest first. */
+  series: { date: string; close: number }[];
+  news: StockNews[];
+  /** The news couldn't be loaded this time (the details could). */
+  newsFailed: boolean;
+}
+
+/** One stock's page: what Muny knows from your own data, and live details if they're on. */
+export interface StockPage {
+  symbol: string;
+  name: string;
+  type: SecurityKind | null;
+  securityId: string | null;
+  watching: boolean;
+  /** What you hold of it, across accounts. */
+  position: InvestPosition | null;
+  /** Your trades, dividends and the like in it, newest first. */
+  activity: InvestTxn[];
+  /** Daily closes Muny keeps for it (holdings and the watch list), oldest first. */
+  history: { date: string; close: number }[];
+  /** Live details and news are turned on. */
+  liveOn: boolean;
+  live: StockLive | null;
+  /** Why the live details couldn't be loaded. */
+  liveError: string | null;
 }

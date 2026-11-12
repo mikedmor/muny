@@ -47,6 +47,17 @@ interface Chart {
         chartPreviousClose?: number;
         previousClose?: number;
         regularMarketTime?: number;
+        longName?: string;
+        shortName?: string;
+        exchangeName?: string;
+        fullExchangeName?: string;
+        currency?: string;
+        instrumentType?: string;
+        fiftyTwoWeekHigh?: number;
+        fiftyTwoWeekLow?: number;
+        regularMarketDayHigh?: number;
+        regularMarketDayLow?: number;
+        regularMarketVolume?: number;
       };
       timestamp?: number[];
       indicators?: { quote?: { close?: (number | null)[] }[] };
@@ -54,7 +65,7 @@ interface Chart {
   };
 }
 
-async function chart(f: typeof fetch, symbol: string, query: string) {
+export async function chart(f: typeof fetch, symbol: string, query: string) {
   const res = await f(`${YAHOO}/${encodeURIComponent(symbol)}?${query}`, {
     headers: { accept: "application/json", "user-agent": "Muny (self-hosted)" },
     signal: AbortSignal.timeout(20_000),
@@ -78,14 +89,14 @@ async function chart(f: typeof fetch, symbol: string, query: string) {
 }
 
 /** Percent change from the last close on or before `date` to `last`. */
-function changeSince(points: { date: string; close: number }[], date: string, last: number) {
+export function changeSince(points: { date: string; close: number }[], date: string, last: number) {
   let base: number | undefined;
   for (const p of points) if (p.date <= date) base = p.close;
   base ??= points[0]?.close;
   return base ? ((last - base) / base) * 100 : null;
 }
 
-function daysAgo(today: string, days: number) {
+export function daysAgo(today: string, days: number) {
   const d = new Date(`${today}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() - days);
   return d.toISOString().slice(0, 10);

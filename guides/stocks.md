@@ -4,7 +4,7 @@
 
 ![Stocks: portfolio value, gains, allocation and holdings](images/stocks.png)
 
-Muny doesn't fetch stock quotes. Values and prices are the ones your broker reports, updated whenever you import or sync. Muny never places trades.
+Your values are the ones your broker reports, updated whenever you import or sync. Muny looks up prices only for the watch list, for filling in past values, and for the optional extras below, and never places trades.
 
 ## Connecting a brokerage through Plaid
 
@@ -54,6 +54,12 @@ The **Watch list** on the Stocks page follows tickers you're interested in, whet
 
 Watch list prices come from Yahoo Finance: a year of daily closes when you add a ticker, then an update at most once a day when you open Stocks. Only the ticker symbol is sent.
 
+## A stock's page
+
+Click a ticker in **Holdings** or the **Watch list** to open its page. It shows the price and a chart over a month to five years, plus, if you hold it, your shares, value, cost and gain in each account, and your buys, sales and dividends in it. **Add to watch list** follows a ticker you don't own yet.
+
+With **Stock details and news** turned on, the page also gets the latest price and the day's change, the day's and 52-week ranges, volume, returns from a month to five years, and recent news stories, which open on the publisher's site. **Refresh** gets them again. Without it, the page uses only the prices Muny already keeps.
+
 ## What you paid (cost basis)
 
 Gains need to know what you paid. Muny uses, in order:
@@ -64,14 +70,15 @@ Gains need to know what you paid. Muny uses, in order:
 
 Costs that Muny worked out or that you entered are marked with an asterisk.
 
-## Logos and market overview (optional)
+## Logos, market overview and stock details (optional)
 
-Two extras are off until you turn them on, from the banner on the Stocks page or the **Extras** switches at the bottom:
+Three extras are off until you turn them on, from the banner on the Stocks page or the **Extras** switches at the bottom:
 
 - **Company logos:** Muny's server fetches each ticker's logo once, from Financial Modeling Prep or Parqet, and keeps it. Your browser only ever loads it from Muny.
 - **Market overview:** the S&P 500, Nasdaq 100, Dow and Russell 2000 (through the SPY, QQQ, DIA and IWM funds) and the VIX, with a chart for each from one day to one year, plus the Vanguard sector funds' returns over 1 day to 5 years. Prices come from Yahoo Finance, refreshed at most once an hour while you're looking.
+- **Stock details and news:** on a stock's page, its live details and recent news from Yahoo Finance, fetched when you open the page and kept for 15 minutes, or when you press **Refresh**.
 
-Both send only ticker symbols, never your holdings.
+All three send only ticker symbols, never your holdings. They can also be switched in **Settings → API → Stock extras**.
 
 ## Reading the page
 

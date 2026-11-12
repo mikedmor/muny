@@ -442,6 +442,7 @@ export function StocksExtrasSwitches() {
         [
           ["logos", "Company logos"],
           ["market", "Market overview"],
+          ["details", "Stock details and news"],
         ] as const
       ).map(([k, label]) => (
         <label key={k} className="inline-flex items-center gap-1.5">
@@ -455,8 +456,8 @@ export function StocksExtrasSwitches() {
         </label>
       ))}
       <span>
-        Logos come from Financial Modeling Prep or Parqet, prices from Yahoo Finance; only tickers
-        are sent.
+        Logos come from Financial Modeling Prep or Parqet, prices and news from Yahoo Finance; only
+        tickers are sent.
       </span>
     </div>
   );

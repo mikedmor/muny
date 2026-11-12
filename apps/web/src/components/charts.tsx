@@ -557,6 +557,7 @@ export function LineChart({
   compareLabel,
   stack: stackIn,
   projectedFrom,
+  fit = false,
 }: {
   points: LinePoint[];
   ariaLabel: string;
@@ -567,6 +568,8 @@ export function LineChart({
   projectedFrom?: number;
   /** Split the area under the line into colored parts (they should add up to the line). */
   stack?: StackBand[];
+  /** Fit the axis to the values (a price), instead of starting at zero (an amount). */
+  fit?: boolean;
 }) {
   // Settings → Display can turn the split off.
   const prefs = useUiPrefs();
@@ -579,7 +582,7 @@ export function LineChart({
     p.compare !== undefined ? [p.value, p.compare] : [p.value],
   );
   const hasCompare = !!compareLabel && points.some((p) => p.compare !== undefined);
-  const lo = Math.min(0, ...values);
+  const lo = fit && values.length ? Math.min(...values) : Math.min(0, ...values);
   const hi = Math.max(1, ...values);
   const ticks = niceTicks(hi, lo);
   const top = ticks[ticks.length - 1] ?? hi;

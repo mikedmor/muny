@@ -470,7 +470,18 @@ function HoldingRow({
               />
             </span>
             <span className="min-w-0">
-              <span className="block font-semibold">{name}</span>
+              {cash ? (
+                <span className="block font-semibold">{name}</span>
+              ) : (
+                <Link
+                  to="/stocks/$symbol"
+                  params={{ symbol: p.symbol }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="block font-semibold hover:text-brand-700 hover:underline dark:hover:text-brand-500"
+                >
+                  {name}
+                </Link>
+              )}
               <span className="block max-w-64 truncate text-xs text-slate-500">{p.name}</span>
             </span>
           </span>
@@ -690,7 +701,13 @@ function WatchList() {
                       <StockLogo symbol={w.symbol} size="sm" />
                       <span className="min-w-0">
                         <span className="block font-semibold">
-                          {w.symbol}
+                          <Link
+                            to="/stocks/$symbol"
+                            params={{ symbol: w.symbol }}
+                            className="hover:text-brand-700 hover:underline dark:hover:text-brand-500"
+                          >
+                            {w.symbol}
+                          </Link>
                           {w.ownedValueCents !== null && (
                             <span className="ml-2 rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-medium text-brand-700 dark:bg-brand-700/20 dark:text-brand-500">
                               You own {formatMoney(w.ownedValueCents)}
