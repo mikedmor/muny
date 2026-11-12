@@ -4,6 +4,10 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+### Changed
+
+- **Support development** in the menu now opens Muny's own PayPal donation page.
+
 ## [1.2.0] - 2026-11-09
 
 Muny's built-in AI does much more, from answering questions about your money to reading your loan contracts, and almost anything you change can now be undone.

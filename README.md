@@ -13,7 +13,7 @@ Your financial data never leaves your machine unless you decide it should.
 [![Release](https://img.shields.io/github/v/release/mikedmor/muny?label=release)](https://github.com/mikedmor/muny/releases)
 [![Docker image](https://img.shields.io/badge/ghcr.io-mikedmor%2Fmuny-2496ED?logo=docker&logoColor=white)](https://github.com/mikedmor/muny/pkgs/container/muny)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
-[![Support development](https://img.shields.io/badge/support-PayPal-00457C?logo=paypal&logoColor=white)](https://www.paypal.com/paypalme/mikedmor)
+[![Support development](https://img.shields.io/badge/support-PayPal-00457C?logo=paypal&logoColor=white)](https://www.paypal.com/donate/?hosted_button_id=79GR7CV7MKETG)
 
 [Quick start](#quick-start) · [Features](#features) · [Screenshots](#screenshots) · [Documentation](guides/README.md) · [Changelog](CHANGELOG.md) · [Support](#support-the-project)
 
@@ -202,7 +202,7 @@ Bug reports, ideas and pull requests are welcome. Easy places to start are addin
 Muny is free and open source, built and maintained in spare time. If it saves you a subscription or two, consider passing some of that on:
 
 <p align="center">
-  <a href="https://www.paypal.com/paypalme/mikedmor"><img src="https://img.shields.io/badge/Donate-PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate with PayPal" /></a>
+  <a href="https://www.paypal.com/donate/?hosted_button_id=79GR7CV7MKETG"><img src="https://img.shields.io/badge/Donate-PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate with PayPal" /></a>
 </p>
 
 You'll also find **Support development** at the bottom of the menu inside Muny. Stars, bug reports and sharing Muny with friends help too.

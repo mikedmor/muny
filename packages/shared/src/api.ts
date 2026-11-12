@@ -69,4 +69,4 @@ export type InviteStatus =
   | { valid: false };
 
 /** Where people can support Muny's development (shown in the app and the README). */
-export const SUPPORT_URL = "https://www.paypal.com/paypalme/mikedmor";
+export const SUPPORT_URL = "https://www.paypal.com/donate/?hosted_button_id=79GR7CV7MKETG";

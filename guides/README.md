@@ -59,4 +59,4 @@ Everything you need to install, set up and use Muny. New here? Start with **[Ins
 
 ---
 
-Something missing or wrong? [Open an issue](https://github.com/mikedmor/muny/issues). Muny is free and open source; if it's useful to you, you can [support its development](https://www.paypal.com/paypalme/mikedmor).
+Something missing or wrong? [Open an issue](https://github.com/mikedmor/muny/issues). Muny is free and open source; if it's useful to you, you can [support its development](https://www.paypal.com/donate/?hosted_button_id=79GR7CV7MKETG).
