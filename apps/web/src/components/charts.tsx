@@ -885,6 +885,12 @@ export function PaceChart({
     !income ? undefined : i <= incomeStart ? income.actual[i] : income.expected[i - incomeStart];
   const incomeEnd = income?.expected.at(-1) ?? income?.actual.at(-1) ?? 0;
   const incomeNow = income?.actual.at(-1) ?? 0;
+  // Pay due today that hasn't (all) arrived: today belongs to the dashed line, so the solid one stops at yesterday.
+  const incomeDueToday =
+    !!income && incomeStart > 0 && (income.expected[0] ?? incomeNow) > incomeNow;
+  const earnedPath = income
+    ? path(incomeDueToday ? income.actual.slice(0, -1) : income.actual)
+    : "";
   const hi$ = hover !== null && hasIncome ? incomeAt(hover) : undefined;
   /**
    * A dashed line ahead of a solid one that ends at index `at` with `now`.
@@ -1065,7 +1071,7 @@ export function PaceChart({
           {hasIncome && income && (
             <g>
               <path
-                d={path(income.actual)}
+                d={earnedPath}
                 fill="none"
                 stroke="var(--viz-positive)"
                 strokeWidth={2}
