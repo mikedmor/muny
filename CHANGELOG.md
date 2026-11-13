@@ -4,6 +4,10 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+### Fixed
+
+- On **Spent this month**, the dashed **Expected** line now starts where **Earned** stops and steps up for pay that's due today but hasn't arrived, instead of starting on its own higher up.
+
 ## [1.3.0] - 2026-11-12
 
 Stocks and crypto get a page each, with trading charts, live prices and price alerts, and cards that can't sync can now update from your bank's emails.
