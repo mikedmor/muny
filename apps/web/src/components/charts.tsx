@@ -879,48 +879,38 @@ export function PaceChart({
   const hv = hover !== null ? current[hover] : undefined;
   const hp = hover !== null ? previous[hover] : undefined;
   // Earnings: what's arrived through today, then what's expected after it.
+  /**
+   * Money due today (or late) that hasn't arrived is drawn as expected
+   * tomorrow: the solid lines end at today's real totals, and the dashed ones
+   * rise into tomorrow. Once it lands it's part of today's solid line. On the
+   * month's last day there's no tomorrow, so it stays on today.
+   */
+  const tomorrow = lastI + 1 < n;
+  const ahead = (now: number, values: number[]) =>
+    tomorrow && values.length > 1 ? [now, ...values.slice(1)] : values;
+  const aheadPath = (at: number, now: number, values: number[]) =>
+    `M${x(at)},${y(now)} ${values.map((v, k) => `L${x(at + k)},${y(v)}`).join(" ")}`;
   const incomeStart = (income?.actual.length ?? 0) - 1;
   const hasIncome = !!income && Math.max(0, ...income.actual, ...income.expected) > 0;
-  const incomeAt = (i: number) =>
-    !income ? undefined : i <= incomeStart ? income.actual[i] : income.expected[i - incomeStart];
-  const incomeEnd = income?.expected.at(-1) ?? income?.actual.at(-1) ?? 0;
   const incomeNow = income?.actual.at(-1) ?? 0;
-  // Pay due today that hasn't (all) arrived: today belongs to the dashed line, so the solid one stops at yesterday.
-  const incomeDueToday =
-    !!income && incomeStart > 0 && (income.expected[0] ?? incomeNow) > incomeNow;
-  const earnedPath = income
-    ? path(incomeDueToday ? income.actual.slice(0, -1) : income.actual)
-    : "";
+  const incomeAhead = income ? ahead(incomeNow, income.expected) : [];
+  const incomeAt = (i: number) =>
+    !income ? undefined : i <= incomeStart ? income.actual[i] : incomeAhead[i - incomeStart];
+  const incomeEnd = income?.expected.at(-1) ?? income?.actual.at(-1) ?? 0;
   const hi$ = hover !== null && hasIncome ? incomeAt(hover) : undefined;
-  /**
-   * A dashed line ahead of a solid one that ends at index `at` with `now`.
-   * Money due today (or late) that hasn't arrived rises from yesterday, the
-   * way every other day's does, and the solid line covers it once it lands.
-   */
-  const aheadPath = (at: number, now: number, before: number | undefined, values: number[]) => {
-    const dueToday = (values[0] ?? now) > now;
-    const start =
-      dueToday && at > 0 && before !== undefined
-        ? `M${x(at - 1)},${y(before)}`
-        : `M${x(at)},${y(now)}`;
-    return `${start} ${values.map((v, k) => `L${x(at + k)},${y(v)}`).join(" ")}`;
-  };
-  const expectedPath = income
-    ? aheadPath(incomeStart, incomeNow, income.actual[incomeStart - 1], income.expected)
-    : "";
-  // Spending ahead: starts where the solid line stops, even if a late bill counts today.
+  const expectedPath = income ? aheadPath(incomeStart, incomeNow, incomeAhead) : "";
+  // Spending ahead: starts where the solid line stops.
   const spentNow = current[lastI] ?? 0;
+  const spendAhead = anticipated ? ahead(spentNow, anticipated.values) : [];
   const headedTo = anticipated?.values.at(-1) ?? spentNow;
   const hasAnticipated = !!anticipated && headedTo > spentNow;
-  const anticipatedPath =
-    hasAnticipated && anticipated
-      ? aheadPath(lastI, spentNow, current[lastI - 1], anticipated.values)
-      : "";
+  const anticipatedPath = hasAnticipated ? aheadPath(lastI, spentNow, spendAhead) : "";
   const ha =
-    hover !== null && hasAnticipated && anticipated && hover >= lastI
-      ? anticipated.values[hover - lastI]
-      : undefined;
-  const hoverItems = hover === null ? [] : (dayItems ?? []).filter((i) => i.day === hover + 1);
+    hover !== null && hasAnticipated && hover >= lastI ? spendAhead[hover - lastI] : undefined;
+  // Expected items still waiting on today show on tomorrow, where the lines put them.
+  const itemDay = (i: DayItem) =>
+    i.expected && tomorrow && i.day <= lastI + 1 ? lastI + 2 : i.day;
+  const hoverItems = hover === null ? [] : (dayItems ?? []).filter((i) => itemDay(i) === hover + 1);
   const happened = hoverItems.filter((i) => !i.expected);
   const dueThatDay = hoverItems.filter((i) => i.expected);
   // The two end labels sit at the right edge: when they'd collide, the lower
@@ -1071,7 +1061,7 @@ export function PaceChart({
           {hasIncome && income && (
             <g>
               <path
-                d={earnedPath}
+                d={path(income.actual)}
                 fill="none"
                 stroke="var(--viz-positive)"
                 strokeWidth={2}
