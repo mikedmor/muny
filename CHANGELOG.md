@@ -4,6 +4,10 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-12
+
+Stocks and crypto get a page each, with trading charts, live prices and price alerts, and cards that can't sync can now update from your bank's emails.
+
 ### Added
 
 - **Trading charts and a page for each coin.** A stock's page has a candlestick chart with volume, a 20-bar average and Bollinger bands, from one day (five-minute bars) to five years. Click a coin on **Crypto** for its own page: the same chart (from Coinbase), your position in each wallet, your activity and recent news.
@@ -128,7 +132,8 @@ Install it with `docker pull ghcr.io/mikedmor/muny:1` and follow the [install gu
 
 If Muny saves you a subscription or two, you can [support its development](https://www.paypal.com/paypalme/mikedmor).
 
-[Unreleased]: https://github.com/mikedmor/muny/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/mikedmor/muny/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/mikedmor/muny/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/mikedmor/muny/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/mikedmor/muny/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/mikedmor/muny/releases/tag/v1.0.0
