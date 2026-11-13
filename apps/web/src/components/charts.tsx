@@ -886,11 +886,21 @@ export function PaceChart({
   const incomeEnd = income?.expected.at(-1) ?? income?.actual.at(-1) ?? 0;
   const incomeNow = income?.actual.at(-1) ?? 0;
   const hi$ = hover !== null && hasIncome ? incomeAt(hover) : undefined;
-  // Starts where the solid line stops, then steps up for pay due today (or late) that hasn't arrived.
+  /**
+   * A dashed line ahead of a solid one that ends at index `at` with `now`.
+   * Money due today (or late) that hasn't arrived rises from yesterday, the
+   * way every other day's does, and the solid line covers it once it lands.
+   */
+  const aheadPath = (at: number, now: number, before: number | undefined, values: number[]) => {
+    const dueToday = (values[0] ?? now) > now;
+    const start =
+      dueToday && at > 0 && before !== undefined
+        ? `M${x(at - 1)},${y(before)}`
+        : `M${x(at)},${y(now)}`;
+    return `${start} ${values.map((v, k) => `L${x(at + k)},${y(v)}`).join(" ")}`;
+  };
   const expectedPath = income
-    ? `M${x(incomeStart)},${y(incomeNow)} ${income.expected
-        .map((v, k) => `L${x(incomeStart + k)},${y(v)}`)
-        .join(" ")}`
+    ? aheadPath(incomeStart, incomeNow, income.actual[incomeStart - 1], income.expected)
     : "";
   // Spending ahead: starts where the solid line stops, even if a late bill counts today.
   const spentNow = current[lastI] ?? 0;
@@ -898,9 +908,7 @@ export function PaceChart({
   const hasAnticipated = !!anticipated && headedTo > spentNow;
   const anticipatedPath =
     hasAnticipated && anticipated
-      ? `M${x(lastI)},${y(spentNow)} ${anticipated.values
-          .map((v, k) => `L${x(lastI + k)},${y(v)}`)
-          .join(" ")}`
+      ? aheadPath(lastI, spentNow, current[lastI - 1], anticipated.values)
       : "";
   const ha =
     hover !== null && hasAnticipated && anticipated && hover >= lastI

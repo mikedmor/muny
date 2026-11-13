@@ -6,7 +6,7 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ### Fixed
 
-- On **Spent this month**, the dashed **Expected** line now starts where **Earned** stops and steps up for pay that's due today but hasn't arrived, instead of starting on its own higher up.
+- On **Spent this month**, pay or bills due today that haven't arrived rise from yesterday as a dashed line, like every other day's, and turn solid once they land. The dashed line used to start on its own, higher up.
 
 ## [1.3.0] - 2026-11-12
 
