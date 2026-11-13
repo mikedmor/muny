@@ -167,6 +167,7 @@ export function applySync(
           name: pa.name.slice(0, 100),
           institutionName: info.institutionName ?? conn.institutionName,
           type: pa.type,
+          subtype: pa.subtype ?? null,
           mask: pa.mask,
           currency: pa.currency,
           balanceSource: "reported",
@@ -182,6 +183,7 @@ export function applySync(
         .where(and(eq(a.id, accountId), isNull(a.mask)))
         .run();
     }
+    if (pa.subtype) tx.update(a).set({ subtype: pa.subtype }).where(eq(a.id, accountId)).run();
     if (pa.balanceCents !== null) {
       tx.update(a)
         .set({ balanceSource: "reported", currentBalanceCents: pa.balanceCents })

@@ -25,13 +25,13 @@ Everything you need to install, set up and use Muny. New here? Start with **[Ins
 
 ## Debts and wealth
 
-| Guide                        | What it covers                                                                 |
-| ---------------------------- | ------------------------------------------------------------------------------ |
-| [Loans and assets](loans.md) | Loans, payoff plans, student loan statements, your home and car                |
-| [Credit cards](cards.md)     | Limits, statements, due dates, interest and paying cards off                   |
-| [Savings](savings.md)        | Ways to save, savings accounts, money saved and self-hosting                   |
-| [Stocks](stocks.md)          | Brokerage accounts, holdings, cost basis, the watch list and each stock's page |
-| [Crypto](crypto.md)          | Wallets, exchanges, prices, cost basis and tax reports                         |
+| Guide                        | What it covers                                                                         |
+| ---------------------------- | -------------------------------------------------------------------------------------- |
+| [Loans and assets](loans.md) | Loans, payoff plans, student loan statements, your home and car                        |
+| [Credit cards](cards.md)     | Limits, statements, due dates, interest and paying cards off                           |
+| [Savings](savings.md)        | Ways to save, savings accounts, money saved and self-hosting                           |
+| [Stocks](stocks.md)          | Brokerage accounts, holdings, tax lots, wash sales, 1099-B forms and each stock's page |
+| [Crypto](crypto.md)          | Wallets, exchanges, prices, cost basis and tax reports                                 |
 
 ## Insights and customizing
 

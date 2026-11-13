@@ -6,6 +6,7 @@ import { Alert, Card, PageHeader } from "../components/ui.js";
 import { api } from "../lib/api.js";
 import { keys } from "../lib/queries.js";
 import { CryptoTaxSection } from "./crypto/CryptoTaxSection.js";
+import { StocksTaxSection } from "./stocks/StocksTaxSection.js";
 
 /**
  * Tax year summary: totals from your own data to hand to tax software or an
@@ -179,6 +180,7 @@ export function TaxesPage() {
               <Section key={s.key} s={s} />
             ))}
           </div>
+          <StocksTaxSection year={year} />
           <CryptoTaxSection year={year} />
         </div>
       )}

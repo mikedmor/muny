@@ -5,6 +5,7 @@ import type {
   AlertType,
   AlternativeSuggestion,
   ApiLimit,
+  B1099Doc,
   BackupInfo,
   BudgetMonth,
   BulkUpdateInput,
@@ -42,6 +43,7 @@ import type {
   InvestSettings,
   InvestSummary,
   InvestTxn,
+  InvestTxnPage,
   LinkResult,
   LinkStart,
   ManualColumns,
@@ -51,6 +53,7 @@ import type {
   NotificationList,
   PayeeCleanupPreview,
   PayeeSummary,
+  ReconcileReport,
   RecurringKind,
   RecurringSeries,
   Rule,
@@ -63,6 +66,7 @@ import type {
   SetBudgetInput,
   SplitInput,
   StockPage,
+  StockTaxReport,
   SyncConfigStatus,
   SyncSummary,
   Tag,
@@ -850,6 +854,76 @@ export const useInvestTxns = (accountId?: string) =>
       api.get<InvestTxn[]>(
         `/api/invest/transactions${accountId ? `?accountId=${encodeURIComponent(accountId)}` : ""}`,
       ),
+  });
+
+/** The tax view of stocks for a year (realized gains, lots, maturity). */
+export const useStockTax = (year: number) =>
+  useQuery({
+    queryKey: [...investKeys.all, "tax", year],
+    queryFn: () => api.get<StockTaxReport>(`/api/invest/tax/${year}`),
+  });
+
+export const useInvestReconcile = () =>
+  useQuery({
+    queryKey: [...investKeys.all, "reconcile"],
+    queryFn: () => api.get<ReconcileReport>("/api/invest/reconcile"),
+  });
+
+export interface InvestTxnFilter {
+  accountId?: string;
+  securityId?: string;
+  type?: string;
+  from?: string;
+  to?: string;
+  q?: string;
+  offset?: number;
+  limit?: number;
+}
+
+export const useInvestTxnPage = (f: InvestTxnFilter) =>
+  useQuery({
+    queryKey: [...investKeys.all, "txnpage", f],
+    queryFn: () => {
+      const q = new URLSearchParams();
+      for (const [k, v] of Object.entries(f)) if (v !== undefined && v !== "") q.set(k, String(v));
+      return api.get<InvestTxnPage>(`/api/invest/txns?${q}`);
+    },
+    placeholderData: (prev) => prev,
+  });
+
+/** Stock writes change holdings, lots and value: refresh everything stock-related. */
+const investWrite = [investKeys.all, keys.overview, keys.reports] as const;
+
+export const useAddInvestTxn = () =>
+  useInvalidatingMutation(
+    (b: {
+      accountId: string;
+      type: string;
+      date: string;
+      symbol?: string;
+      quantity?: string;
+      price?: string;
+      totalCents?: number;
+      feesCents?: number;
+      description?: string;
+    }) => api.post<{ id: string }>("/api/invest/txns", b),
+    investWrite,
+  );
+
+export const useDeleteInvestTxn = () =>
+  useInvalidatingMutation((id: string) => api.delete(`/api/invest/txns/${id}`), investWrite);
+
+export const useSetTaxTreatment = () =>
+  useInvalidatingMutation(
+    (b: { accountId: string; treatment: string | null }) =>
+      api.put(`/api/invest/accounts/${b.accountId}/tax-treatment`, { treatment: b.treatment }),
+    investWrite,
+  );
+
+export const useB1099Docs = (year: number) =>
+  useQuery({
+    queryKey: [...investKeys.all, "b1099", year],
+    queryFn: () => api.get<B1099Doc[]>(`/api/invest/tax/${year}/docs`),
   });
 
 export const useInvestImport = () =>

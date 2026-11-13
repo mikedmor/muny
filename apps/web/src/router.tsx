@@ -33,6 +33,9 @@ import { SettingsPage } from "./pages/SettingsPage.js";
 import { SpendingPage } from "./pages/SpendingPage.js";
 import { StockDetailPage } from "./pages/StockDetailPage.js";
 import { StocksPage } from "./pages/StocksPage.js";
+import { StockReconcile } from "./pages/stocks/StockReconcile.js";
+import { StockSettings } from "./pages/stocks/StockSettings.js";
+import { StockTransactions } from "./pages/stocks/StockTransactions.js";
 import { TaxesPage } from "./pages/TaxesPage.js";
 import { ThemeEditorPage } from "./pages/ThemeEditorPage.js";
 import { TransactionsPage } from "./pages/TransactionsPage.js";
@@ -77,6 +80,13 @@ const searchPage = <const P extends string, S>(
 const monthSearch = (s: Record<string, unknown>): { month?: string } =>
   typeof s.month === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(s.month) ? { month: s.month } : {};
 
+const stockTxnSearch = (s: Record<string, unknown>) => {
+  const out: { accountId?: string; q?: string; type?: string } = {};
+  for (const k of ["accountId", "q", "type"] as const)
+    if (typeof s[k] === "string" && (s[k] as string).length <= 64) out[k] = s[k] as string;
+  return out;
+};
+
 const cryptoTxnSearch = (s: Record<string, unknown>) => {
   const out: Record<string, string | number> = {};
   for (const k of ["walletId", "asset", "type", "label", "from", "to", "warnings"])
@@ -118,6 +128,9 @@ const routeTree = rootRoute.addChildren([
   page("/documents", DocumentsPage),
   page("/documents/$documentId/review", ContractReviewPage),
   page("/stocks", StocksPage),
+  searchPage("/stocks/transactions", StockTransactions, stockTxnSearch),
+  page("/stocks/reconcile", StockReconcile),
+  page("/stocks/settings", StockSettings),
   page("/stocks/$symbol", StockDetailPage),
   page("/crypto", CryptoDashboard),
   page("/crypto/coins/$asset", CoinPage),

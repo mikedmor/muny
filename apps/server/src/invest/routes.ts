@@ -1,4 +1,5 @@
 import { type MunyDb, schema } from "@muny/db";
+import { INVEST_TXN_TYPES, TAX_TREATMENTS } from "@muny/shared";
 import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -6,6 +7,16 @@ import { requireUser } from "../auth/plugin.js";
 import { BudgetError } from "../crypto/budget.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, parse } from "../lib/http.js";
+import { describeChange } from "../undo/track.js";
+import {
+  DocError,
+  deleteB1099,
+  form8949Csv,
+  listB1099,
+  readB1099File,
+  saveB1099,
+  setB1099Summary,
+} from "./b1099.js";
 import { backfillInvestHistory, type HistoryDeps } from "./history.js";
 import { getInvestSettings, logoFor, setInvestSettings } from "./logos.js";
 import { marketIntraday, marketOverview } from "./market.js";
@@ -17,6 +28,14 @@ import {
   setHoldingCost,
 } from "./service.js";
 import { STOCK_SYMBOL, stockPage } from "./stock.js";
+import { reconcileReport, stockTaxReport } from "./tax.js";
+import {
+  addInvestTxn,
+  deleteInvestTxn,
+  pageInvestTxns,
+  setTaxTreatment,
+  TxnError,
+} from "./txns.js";
 import {
   addToWatchlist,
   listWatchlist,
@@ -40,7 +59,63 @@ const TxnQuery = z.object({
   limit: z.coerce.number().int().min(1).max(1000).optional(),
 });
 
-export function registerInvestRoutes(app: FastifyInstance, db: MunyDb, deps: HistoryDeps = {}) {
+const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const Year = z.object({ year: z.coerce.number().int().min(2000).max(2100) });
+const Id = z.object({ id: z.string().min(1).max(64) });
+const Shares = z
+  .string()
+  .regex(/^\d{1,12}(\.\d{1,10})?$/, "Enter a number of shares like 10 or 2.5");
+const TxnPageQuery = z.object({
+  accountId: z.string().max(64).optional(),
+  securityId: z.string().max(64).optional(),
+  type: z.enum(INVEST_TXN_TYPES).optional(),
+  from: Day.optional(),
+  to: Day.optional(),
+  q: z.string().max(100).optional(),
+  offset: z.coerce.number().int().min(0).max(1_000_000).optional(),
+  limit: z.coerce.number().int().min(1).max(500).optional(),
+});
+const NewTxn = z.object({
+  accountId: z.string().min(1).max(64),
+  type: z.enum(INVEST_TXN_TYPES),
+  date: Day,
+  symbol: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z][A-Za-z0-9.-]{0,9}$/, "Enter a ticker like VTI")
+    .optional(),
+  quantity: Shares.optional(),
+  price: z
+    .string()
+    .regex(/^\d{1,9}(\.\d{1,6})?$/, "Enter a price like 12.34")
+    .optional(),
+  totalCents: z.number().int().min(0).max(100_000_000_000).optional(),
+  feesCents: z.number().int().min(0).max(100_000_000).optional(),
+  description: z.string().max(200).optional(),
+});
+const Cents = z.number().int().min(-1e13).max(1e13);
+const Totals = z.object({
+  proceedsCents: Cents,
+  costCents: Cents,
+  washCents: Cents,
+  gainCents: Cents,
+  count: z.number().int().min(0).max(1e6).default(0),
+});
+const SummaryBody = z.object({
+  summary: z.partialRecord(z.enum(["A", "B", "C", "D", "E", "F", "?"]), Totals),
+});
+const DocBody = z.object({
+  accountId: z.string().min(1).max(64),
+  filename: z.string().min(1).max(200),
+  contentType: z.string().max(100),
+  base64: z.string().min(1).max(15_000_000),
+});
+
+export interface InvestDeps extends HistoryDeps {
+  secretKey?: Buffer;
+}
+
+export function registerInvestRoutes(app: FastifyInstance, db: MunyDb, deps: InvestDeps = {}) {
   const readable = <T>(fn: () => T): T => {
     try {
       return fn();
@@ -268,5 +343,188 @@ export function registerInvestRoutes(app: FastifyInstance, db: MunyDb, deps: His
       details: res,
     });
     return res;
+  });
+
+  // --- Taxes (D-088) -------------------------------------------------------------
+
+  app.get("/api/invest/tax/:year", async (req) => {
+    requireUser(req);
+    return stockTaxReport(db, parse(Year, req.params).year);
+  });
+
+  app.get("/api/invest/reconcile", async (req) => {
+    requireUser(req);
+    return reconcileReport(db);
+  });
+
+  app.put("/api/invest/accounts/:id/tax-treatment", async (req) => {
+    const user = requireUser(req);
+    const { id } = parse(Id, req.params);
+    const { treatment } = parse(
+      z.object({ treatment: z.enum(TAX_TREATMENTS).nullable() }),
+      req.body,
+    );
+    if (!setTaxTreatment(db, id, treatment)) throw badRequest("That isn't an investment account");
+    describeChange(db, "Changed how an account is taxed");
+    audit(db, {
+      actorType: "user",
+      actorId: user.id,
+      action: "invest.tax_treatment",
+      entityType: "account",
+      entityId: id,
+      details: { treatment },
+    });
+    return { ok: true };
+  });
+
+  // --- Transactions ----------------------------------------------------------------
+
+  app.get("/api/invest/txns", async (req) => {
+    requireUser(req);
+    return pageInvestTxns(db, parse(TxnPageQuery, req.query));
+  });
+
+  app.post("/api/invest/txns", async (req) => {
+    const user = requireUser(req);
+    const body = parse(NewTxn, req.body);
+    try {
+      const res = addInvestTxn(db, body);
+      describeChange(
+        db,
+        `Added a ${body.type.replace("_", " ")}${body.symbol ? ` of ${body.symbol.toUpperCase()}` : ""}`,
+      );
+      audit(db, {
+        actorType: "user",
+        actorId: user.id,
+        action: "invest.txn_add",
+        entityType: "investment",
+        entityId: res.id,
+        details: { type: body.type, accountId: body.accountId },
+      });
+      return res;
+    } catch (e) {
+      if (e instanceof TxnError) throw badRequest(e.message);
+      throw e;
+    }
+  });
+
+  app.delete("/api/invest/txns/:id", async (req) => {
+    const user = requireUser(req);
+    const { id } = parse(Id, req.params);
+    const res = deleteInvestTxn(db, id);
+    if (res === "ok") describeChange(db, "Deleted a stock transaction");
+    if (res === "missing") throw badRequest("That transaction is gone");
+    if (res === "synced")
+      throw badRequest(
+        "This came from your broker's sync and would only come back. Fix it at the broker.",
+      );
+    audit(db, {
+      actorType: "user",
+      actorId: user.id,
+      action: "invest.txn_delete",
+      entityType: "investment",
+      entityId: id,
+    });
+    return { ok: true };
+  });
+
+  // --- 1099-B forms ----------------------------------------------------------------
+
+  app.get("/api/invest/tax/:year/docs", async (req) => {
+    requireUser(req);
+    return listB1099(db, parse(Year, req.params).year);
+  });
+
+  app.post("/api/invest/tax/:year/docs", async (req) => {
+    const user = requireUser(req);
+    const { year } = parse(Year, req.params);
+    const body = parse(DocBody, req.body);
+    try {
+      const res = await saveB1099(db, deps.secretKey, { ...body, year });
+      describeChange(db, `Added a ${year} 1099-B`);
+      audit(db, {
+        actorType: "user",
+        actorId: user.id,
+        action: "invest.b1099_upload",
+        entityType: "account",
+        entityId: body.accountId,
+        details: { year },
+      });
+      return res;
+    } catch (e) {
+      if (e instanceof DocError) throw badRequest(e.message);
+      throw e;
+    }
+  });
+
+  app.get("/api/invest/tax/docs/:id/file", async (req, reply) => {
+    const user = requireUser(req);
+    const { id } = parse(Id, req.params);
+    let file: ReturnType<typeof readB1099File>;
+    try {
+      file = readB1099File(db, deps.secretKey, id);
+    } catch (e) {
+      throw badRequest(e instanceof Error ? e.message : "Couldn't open the file");
+    }
+    if (!file) throw badRequest("That form is gone");
+    audit(db, {
+      actorType: "user",
+      actorId: user.id,
+      action: "invest.b1099_view",
+      entityType: "document",
+      entityId: id,
+    });
+    return reply
+      .header("content-type", file.contentType)
+      .header("content-disposition", `inline; filename="${file.filename.replace(/"/g, "")}"`)
+      .header("x-content-type-options", "nosniff")
+      .send(file.body);
+  });
+
+  app.put("/api/invest/tax/docs/:id/summary", async (req) => {
+    const user = requireUser(req);
+    const { id } = parse(Id, req.params);
+    const { summary } = parse(SummaryBody, req.body);
+    if (!setB1099Summary(db, id, summary)) throw badRequest("That form is gone");
+    describeChange(db, "Entered 1099-B totals");
+    audit(db, {
+      actorType: "user",
+      actorId: user.id,
+      action: "invest.b1099_summary",
+      entityType: "document",
+      entityId: id,
+    });
+    return { ok: true };
+  });
+
+  app.delete("/api/invest/tax/docs/:id", async (req) => {
+    const user = requireUser(req);
+    const { id } = parse(Id, req.params);
+    if (!deleteB1099(db, id)) throw badRequest("That form is gone");
+    describeChange(db, "Deleted a 1099-B");
+    audit(db, {
+      actorType: "user",
+      actorId: user.id,
+      action: "invest.b1099_delete",
+      entityType: "document",
+      entityId: id,
+    });
+    return { ok: true };
+  });
+
+  app.get("/api/invest/tax/:year/8949.csv", async (req, reply) => {
+    const user = requireUser(req);
+    const { year } = parse(Year, req.params);
+    audit(db, {
+      actorType: "user",
+      actorId: user.id,
+      action: "invest.export_8949",
+      entityType: "investment",
+      details: { year },
+    });
+    return reply
+      .header("content-type", "text/csv; charset=utf-8")
+      .header("content-disposition", `attachment; filename="stocks-form-8949-${year}.csv"`)
+      .send(form8949Csv(db, year));
   });
 }

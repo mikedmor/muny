@@ -175,6 +175,10 @@ export const accounts = sqliteTable(
     planRateBps: integer(),
     /** Excluded from budgets/reports (e.g. a business account). */
     excludeFromReports: integer({ mode: "boolean" }).notNull().default(false),
+    /** The bank sync's own account type (Plaid subtype: "ira", "roth", "401k", "brokerage"…). */
+    subtype: text(),
+    /** Investment accounts: how they're taxed. Null: guessed from the subtype and name. */
+    taxTreatment: text({ enum: ["taxable", "deferred", "exempt"] }),
     sortOrder: integer().notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -896,6 +900,33 @@ export const securityPrices = sqliteTable(
     source: text().notNull(),
   },
   (t) => [primaryKey({ columns: [t.securityId, t.date] })],
+);
+
+/**
+ * 1099-B forms from brokers, per tax year (D-088): the file encrypted at rest
+ * (MUNY_SECRET_KEY), the sales read from a TXF or CSV export, and the totals
+ * per Form 8949 box (from the sales, read from a PDF, or typed in).
+ */
+export const stockTaxDocs = sqliteTable(
+  "stock_tax_docs",
+  {
+    id: text().primaryKey(),
+    accountId: text().references(() => accounts.id, { onDelete: "set null" }),
+    year: integer().notNull(),
+    filename: text().notNull(),
+    contentType: text().notNull(),
+    format: text({ enum: ["txf", "csv", "pdf", "image"] }).notNull(),
+    size: integer().notNull(),
+    /** Encrypted file bytes. */
+    data: blob({ mode: "buffer" }).notNull(),
+    /** B1099Sale[] read from the file (TXF and CSV). */
+    sales: text({ mode: "json" }).$type<unknown[]>().notNull().default([]),
+    /** B1099Summary: totals per box. */
+    summary: text({ mode: "json" }).$type<Record<string, unknown>>().notNull().default({}),
+    summarySource: text({ enum: ["sales", "read", "entered"] }),
+    uploadedAt: integer().notNull(),
+  },
+  (t) => [index("stock_tax_docs_year").on(t.year, t.accountId)],
 );
 
 /** Securities to keep an eye on, owned or not (Stocks → Watch list). */

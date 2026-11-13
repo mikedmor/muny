@@ -4,6 +4,13 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+### Added
+
+- **Stock taxes, like crypto's.** Stocks now has **Transactions**, **Reconcile** and **Settings** sections, and **Tax optimization** and **Asset maturity** views. Muny works out each holding's lots from your trades and shows this year's realized gains by holding period, what selling would do, losses you could harvest, when shares turn long term, and wash sales across all your accounts, IRAs included. Each account is taxable, tax-deferred or tax-free (guessed from its type, and yours to change); only taxable ones count.
+- **1099-B forms.** Upload each brokerage's 1099-B on **Taxes**: a TXF or CSV file is read sale by sale, a PDF for its summary totals (or type them in). Muny compares the form with its own numbers, and the new stocks section exports Form 8949 lines.
+- **Add a trade** by hand to fill in history your broker didn't send, and **Reconcile** shows which holdings' trades don't add up to what the broker reports.
+- The demo household now has a brokerage account and a Roth IRA.
+
 ### Fixed
 
 - On **Spent this month**, pay or bills due today that haven't arrived yet show as expected tomorrow: the solid lines end at today's real totals and the dashed ones rise into tomorrow, until the money lands. The dashed line used to start on its own, higher up.

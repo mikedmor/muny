@@ -19,6 +19,8 @@ export interface ProviderAccount {
   balanceCents: number | null;
   /** Credit cards: the credit limit, when the provider reports it. */
   creditLimitCents?: number | null;
+  /** The provider's own account type (Plaid subtype: "ira", "roth", "401k"…). */
+  subtype?: string | null;
 }
 
 /** A credit card's statement and terms from the provider (Plaid liabilities). */

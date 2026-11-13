@@ -172,7 +172,7 @@ export async function buildApp({
   registerTokenRoutes(app, db);
   registerAgentSurfaces(app, db);
   registerProposalRoutes(app, db, localToday);
-  registerInvestRoutes(app, db, { fetch: priceFetch });
+  registerInvestRoutes(app, db, { fetch: priceFetch, secretKey: config.secretKey });
   registerLoanRoutes(app, db, config.secretKey);
   registerDocumentRoutes(app, db, config.secretKey);
   registerCardRoutes(app, db, config.secretKey);

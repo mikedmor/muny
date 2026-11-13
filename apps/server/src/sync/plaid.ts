@@ -372,6 +372,7 @@ export class PlaidProvider implements Provider<PlaidCreds> {
           ref: a.account_id,
           name: a.name || a.official_name || "Account",
           type,
+          subtype: a.subtype ? String(a.subtype).slice(0, 40) : null,
           mask: a.mask ? a.mask.replace(/\D/g, "").slice(-4) || null : null,
           currency: a.balances.iso_currency_code ?? "USD",
           // Plaid reports what you owe on credit/loans as a positive number.

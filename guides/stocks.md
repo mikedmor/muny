@@ -88,6 +88,54 @@ Gains need to know what you paid. Muny uses, in order:
 
 Costs that Muny worked out or that you entered are marked with an asterisk.
 
+## Taxes: lots, tax optimization and asset maturity
+
+Stocks has four sections: **Dashboard**, **Transactions**, **Reconcile** and **Settings**. The dashboard has three views: **Overview** (the page described above), **Tax optimization** and **Asset maturity**. All of it counts **taxable accounts** only. IRAs, 401(k)s, Roth accounts and HSAs aren't taxed when you sell, so they're left out and their value is shown as sheltered.
+
+**How each account is taxed** is set in **Stocks → Settings**. Muny guesses from the account type your bank sync reports (IRA, Roth, 401(k)…) or the account's name, and you can change it:
+
+| Treatment        | For                                          |
+| ---------------- | -------------------------------------------- |
+| **Taxable**      | A regular brokerage account                  |
+| **Tax-deferred** | Traditional IRA, 401(k), 403(b), SEP, SIMPLE |
+| **Tax-free**     | Roth IRA, Roth 401(k), HSA, 529              |
+
+**Lots.** Muny works out each holding's lots from its trades: every buy is a lot with its date and cost, sales take the oldest shares first within each account (as most brokers do unless you pick lots), and a split grows every lot without changing its date or cost. A stock's page lists its lots, each with its gain and when it turns long term. Shares the broker reports but your history doesn't explain are shown as bought **before your history**, at whatever is left of the broker's cost.
+
+**Tax optimization** shows this year's realized gains so far (short and long term), and a what-if: tick holdings and how many shares, and see what selling them would add. It also shows the losses you could harvest today. A badge marks a holding you'd sell at a loss within 30 days of buying it, in **any** account: that would be a **wash sale**, and the loss couldn't be taken yet (or ever, if the new shares are in an IRA). Muny never sells anything.
+
+**Asset maturity** shows how much of what you hold is short term (a year or less) and long term, when the next shares turn long term, and how the long-term share grows over the next year if you hold everything.
+
+**Wash sales** are estimated across all your accounts, IRAs included. Each broker only sees its own, so Muny can find ones your 1099-B doesn't.
+
+## Transactions and Reconcile
+
+**Transactions** lists every trade, dividend, transfer and fee, with filters by account, type, ticker and dates. **Add a trade** fills in history your broker didn't send, for example purchases from before you connected or imported. You can delete trades you added or imported; synced ones come back from the broker, so fix those there.
+
+**Reconcile** checks that each holding's trades add up to what the broker reports, since lots and gains depend on it:
+
+| Status                | Means                                                                           |
+| --------------------- | ------------------------------------------------------------------------------- |
+| **Missing purchases** | The broker holds more shares than your trades explain: add the earlier buys     |
+| **Missing sale**      | Your trades add up to more than the broker holds: a sale or transfer is missing |
+| **No history**        | Held, but no trades at all                                                      |
+| **Not held**          | Your trades say you still hold some, the broker says none                       |
+| **Cost differs**      | Shares match, but your trades' cost is more than 1% off the broker's            |
+
+Each one has a button to add the missing trade.
+
+## 1099-B forms
+
+On **Taxes**, a **Stocks** section shows the year's realized gains by holding period, wash sales, dividends and interest from taxable accounts, and every sale. **Download (CSV)** gives Form 8949 lines by part and box for tax software or your accountant.
+
+Upload each brokerage's **1099-B** there:
+
+- The **TXF** file most brokers offer for tax software (often called "TurboTax" or "TXF download") is the best: Muny reads every sale, with its box, dates, cost, proceeds and wash sale amount, and the Form 8949 export uses the form's lines for that account.
+- A **CSV** of the sales works too, when its columns have headers like Date sold and Proceeds.
+- From a **PDF**, Muny reads the summary totals per box when their numbers add up (proceeds − cost + wash sale = gain), and you can type them in when it can't. A photo works the same way.
+
+Files are kept encrypted (set `MUNY_SECRET_KEY` first). Each form is compared with Muny's own numbers for that account and year. A difference usually means missing history (see Reconcile), lots your broker matched differently, or a wash sale only one side found. The 1099-B is the official record; Muny's numbers are an estimate, not tax advice.
+
 ## Logos, market overview and stock details (optional)
 
 Three extras are off until you turn them on, from the banner on the Stocks page or the **Extras** switches at the bottom:
@@ -106,7 +154,8 @@ All three send only ticker symbols, never your holdings. They can also be switch
 
 ## Limits
 
-- Realized gains from stock sales aren't worked out yet, so the Taxes page doesn't include them. Use your broker's 1099-B.
+- Lots are matched first in, first out. If you pick specific lots or your funds use average cost, your broker's gains will differ from Muny's.
+- Wash sales are estimated: Muny defers the matching part of the loss but doesn't move it onto the new shares' cost.
 - Values are only as fresh as your last sync or import.
 
 ---

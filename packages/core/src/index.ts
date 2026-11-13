@@ -15,9 +15,11 @@ export * from "./import/dates.js";
 export * from "./import/ofx.js";
 export * from "./import/rocket-money.js";
 export * from "./import/types.js";
+export * from "./invest/b1099.js";
 export * from "./invest/brokerage.js";
 export * from "./invest/cost.js";
 export * from "./invest/history.js";
+export * from "./invest/lots.js";
 
 export * from "./payees/normalize.js";
 export * from "./recurring/detect.js";

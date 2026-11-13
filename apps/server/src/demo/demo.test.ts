@@ -21,7 +21,9 @@ describe("demo mode", () => {
     expect(accounts.map((a) => [a.name, a.type]).sort()).toEqual([
       ["Everyday Checking", "checking"],
       ["Rainy Day Savings", "savings"],
+      ["Sample Brokerage", "investment"],
       ["Sample Rewards Card", "credit"],
+      ["Sample Roth IRA", "investment"],
       ["Student Loan", "loan"],
     ]);
     const balance = (n: string) => accounts.find((a) => a.name === n)?.balanceCents;

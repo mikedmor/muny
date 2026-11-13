@@ -45,7 +45,7 @@ Net worth includes every account that isn't excluded from reports: cash, investm
 | **Medical & health**  | Categories like Medical, Health, Pharmacy, Dental or Vision                                                                           |
 | **Taxes paid**        | Categories with "Tax" in the name, such as property tax or estimated payments                                                         |
 
-Each section says what it's based on, and lists its transactions. **Export for my accountant** downloads them all as one CSV. Crypto gains, income and Form 8949 lines appear on the same page; see [Crypto](crypto.md#cost-basis-and-taxes).
+Each section says what it's based on, and lists its transactions. **Export for my accountant** downloads them all as one CSV. Stock gains, dividends, 1099-B forms and Form 8949 lines appear on the same page (see [Stocks](stocks.md#1099-b-forms)), and so do crypto's (see [Crypto](crypto.md#cost-basis-and-taxes)).
 
 > [!NOTE]
 > Muny's figures are a starting point, not tax advice. What's deductible depends on your situation.

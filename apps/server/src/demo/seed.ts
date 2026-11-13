@@ -8,6 +8,7 @@ import { localToday } from "../lib/dates.js";
 import { createManualLoan } from "../loans/service.js";
 import { rescanRecurring } from "../recurring/service.js";
 import { setAccountApy } from "../savings/accounts.js";
+import { seedDemoStocks } from "./stocks.js";
 
 /**
  * Demo mode (MUNY_DEMO=true): a fresh install starts with a made-up
@@ -193,6 +194,7 @@ export function maybeSeedDemo(db: MunyDb, enabled: boolean, today = localToday()
     },
     today,
   );
+  seedDemoStocks(db, today);
   const cats = db.select().from(schema.categories).all();
   const cat = (n: string) => cats.find((c) => c.name === n)?.id;
   const fromMonth = addInterval(today, "monthly", -6).slice(0, 7);

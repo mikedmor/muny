@@ -14,7 +14,7 @@ import { ApiLimitNotice, useApiLimit } from "../components/ApiLimit.js";
 import { Donut, LineChart, type StackBand } from "../components/charts.js";
 import { Modal } from "../components/forms.js";
 import { PriceAlertButton } from "../components/PriceAlerts.js";
-import { Alert, Button, Card, cx, PageHeader } from "../components/ui.js";
+import { Alert, Button, Card, cx } from "../components/ui.js";
 import { MerchantAvatar } from "../components/visuals.js";
 import { api } from "../lib/api.js";
 import { fmtLive, useLiveQuotes } from "../lib/live.js";
@@ -26,6 +26,7 @@ import {
   useInvestTxns,
   useSecurityPrices,
   useSetHoldingCost,
+  useStockTax,
   useWatchAdd,
   useWatchlist,
   useWatchRefresh,
@@ -34,7 +35,9 @@ import {
 import { assignColors, OTHER_COLOR, seriesColor } from "../lib/series.js";
 import { Pct, Sparkline } from "./crypto/CryptoDashboard.js";
 import { fmtAmount, useDismissed } from "./crypto/common.js";
-import { MarketCard, StockLogo, StocksExtrasBanner, StocksExtrasSwitches } from "./StocksMarket.js";
+import { MarketCard, StockLogo, StocksExtrasBanner } from "./StocksMarket.js";
+import { StocksHeader } from "./stocks/common.js";
+import { StockMaturity, StockTaxOptimization } from "./stocks/StockTaxViews.js";
 
 const RANGES = [
   ["1M", 31],
@@ -798,19 +801,28 @@ function Activity({ accounts }: { accounts: { id: string; name: string }[] }) {
     <Card className="p-0">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
         <h2 className="font-semibold">Activity</h2>
-        <select
-          aria-label="Account"
-          value={accountId}
-          onChange={(e) => setAccountId(e.target.value)}
-          className="rounded-lg border border-slate-300 bg-surface px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
-        >
-          <option value="">All accounts</option>
-          {accounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
-        </select>
+        <span className="flex items-center gap-3">
+          <Link
+            to="/stocks/transactions"
+            search={accountId ? { accountId } : {}}
+            className="text-sm text-brand-600 hover:underline dark:text-brand-500"
+          >
+            All of it
+          </Link>
+          <select
+            aria-label="Account"
+            value={accountId}
+            onChange={(e) => setAccountId(e.target.value)}
+            className="rounded-lg border border-slate-300 bg-surface px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+          >
+            <option value="">All accounts</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+        </span>
       </div>
       {txns.data?.length === 0 && (
         <p className="px-4 py-6 text-sm text-slate-500">
@@ -999,9 +1011,23 @@ export function ImportDialog({
   );
 }
 
+const VIEWS = [
+  ["overview", "Overview"],
+  ["tax", "Tax optimization"],
+  ["maturity", "Asset maturity"],
+] as const;
+
+function TaxView({ view }: { view: "tax" | "maturity" }) {
+  const tax = useStockTax(new Date().getFullYear());
+  if (!tax.data)
+    return <p className="text-sm text-slate-500">{tax.isError ? tax.error.message : "Loading…"}</p>;
+  return view === "tax" ? <StockTaxOptimization r={tax.data} /> : <StockMaturity r={tax.data} />;
+}
+
 export function StocksPage() {
   const summary = useInvestSummary();
   const [importing, setImporting] = useState(false);
+  const [view, setView] = useState<(typeof VIEWS)[number][0]>("overview");
   const s = summary.data;
   const empty = s && s.accounts.length === 0;
   const settings = useInvestSettings();
@@ -1040,8 +1066,7 @@ export function StocksPage() {
 
   return (
     <>
-      <PageHeader
-        title="Stocks"
+      <StocksHeader
         actions={
           <div className="flex gap-2">
             <Link
@@ -1060,7 +1085,33 @@ export function StocksPage() {
         }
       />
       {summary.error && <Alert>{summary.error.message}</Alert>}
-      {s && !empty && !extrasDismissed && (
+      {s && !empty && (
+        <div
+          className="mb-4 flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800"
+          role="tablist"
+          aria-label="Views"
+        >
+          {VIEWS.map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              aria-selected={view === k}
+              onClick={() => setView(k)}
+              className={cx(
+                "-mb-px border-b-2 px-3 py-2 text-sm",
+                view === k
+                  ? "border-brand-600 font-semibold text-brand-700 dark:text-brand-500"
+                  : "border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      {s && !empty && view !== "overview" && <TaxView view={view} />}
+      {s && !empty && view === "overview" && !extrasDismissed && (
         <div className="mb-6">
           <StocksExtrasBanner onDismiss={dismissExtras} />
         </div>
@@ -1080,7 +1131,7 @@ export function StocksPage() {
         </Card>
       )}
 
-      {s && !empty && (
+      {s && !empty && view === "overview" && (
         <div className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Tile label="Portfolio value">{formatMoney(s.valueCents)}</Tile>
@@ -1198,7 +1249,6 @@ export function StocksPage() {
           <WatchList />
 
           <Activity accounts={s.accounts} />
-          <StocksExtrasSwitches />
         </div>
       )}
 

@@ -10,6 +10,7 @@ export * from "./crypto.js";
 export * from "./dashboard.js";
 export * from "./imports.js";
 export * from "./invest.js";
+export * from "./invest-tax.js";
 export * from "./ledger.js";
 export * from "./live.js";
 export * from "./loan-math.js";

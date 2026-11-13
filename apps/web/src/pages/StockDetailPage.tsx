@@ -20,11 +20,13 @@ import {
   stockKey,
   useSetInvestSettings,
   useStock,
+  useStockTax,
   useWatchAdd,
 } from "../lib/queries.js";
 import { Pct } from "./crypto/CryptoDashboard.js";
 import { fmtAmount } from "./crypto/common.js";
 import { StockLogo } from "./StocksMarket.js";
+import { StockLotsCard } from "./stocks/StockTaxViews.js";
 
 /**
  * One stock: your position and trades from Muny's own data, and, when turned
@@ -284,6 +286,12 @@ function TurnOn() {
   );
 }
 
+/** Its tax lots in taxable accounts (from the stock tax report). */
+function Lots({ securityId }: { securityId: string }) {
+  const tax = useStockTax(new Date().getFullYear());
+  return tax.data ? <StockLotsCard r={tax.data} securityId={securityId} /> : null;
+}
+
 export function StockDetailPage() {
   const { symbol: raw } = useParams({ strict: false }) as { symbol: string };
   const symbol = decodeURIComponent(raw).toUpperCase();
@@ -414,6 +422,7 @@ export function StockDetailPage() {
             <div className="min-w-0 space-y-5">
               {live && <Stats live={live} />}
               <Position page={page} />
+              {page.securityId && page.position && <Lots securityId={page.securityId} />}
               <Activity page={page} />
               {!live && !page.position && !page.activity.length && page.liveOn === false && (
                 <p className="text-sm text-slate-500">
