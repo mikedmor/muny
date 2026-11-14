@@ -9,6 +9,7 @@ import {
 import type { MunyDb } from "@muny/db";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
+import { haSummary } from "../homeassistant/service.js";
 import { forbidden, HttpError, parse } from "../lib/http.js";
 import { VERSION } from "../version.js";
 import { runTool, ToolError, toolJsonSchema } from "./registry.js";
@@ -177,6 +178,20 @@ export function registerAgentSurfaces(app: FastifyInstance, db: MunyDb) {
       if (!(e instanceof ToolError)) throw e;
       return reply.code(STATUS[e.code]).send({ error: { code: e.code, message: e.message } });
     }
+  });
+
+  // Home Assistant's REST integration polls this (read-only; needs a summary or accounts permission).
+  app.get("/api/v1/home-assistant", async (req, reply) => {
+    const agent = restAuth(req, reply);
+    if (!agent) return reply;
+    if (!agent.scopes.has("read:summary") && !agent.scopes.has("read:accounts"))
+      return reply.code(403).send({
+        error: {
+          code: "forbidden",
+          message: "This token needs the Summaries or Accounts permission for Home Assistant.",
+        },
+      });
+    return haSummary(db, agent.scopes);
   });
 
   app.get("/api/v1/openapi.json", async (req, reply) => {

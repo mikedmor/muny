@@ -82,6 +82,27 @@ The same tools are available as a REST API, with the same token and permissions:
 
 Money is always integer cents, so 12345 means $123.45.
 
+## Home Assistant
+
+Muny can show up on your Home Assistant dashboards and in its automations. In **Settings → Agents → Home Assistant**:
+
+1. Choose whether to include balances, enter Muny's address as Home Assistant reaches it (often your server's address and port, like `http://192.168.1.10:8420`), and how often it should check.
+2. Press **Create a token for Home Assistant**. It's read-only and never expires; revoke it in the token list any time.
+3. Copy the first line into Home Assistant's `secrets.yaml` and the block into `configuration.yaml`, then check the configuration and restart Home Assistant.
+
+You get these sensors, through Home Assistant's REST integration:
+
+| Sensor                                                                                                         | With                             |
+| -------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| Spent this month, earned this month                                                                            | Summaries                        |
+| Budget left, budget used (%)                                                                                   | Summaries, when you have budgets |
+| Bills due in 7 days, next bill and its date                                                                    | Summaries                        |
+| Unread alerts                                                                                                  | Summaries                        |
+| Net worth, cash, lowest balance ahead and its date                                                             | Accounts                         |
+| Balance headed low (a problem binary sensor, on when the forecast drops below an account's low-balance amount) | Accounts                         |
+
+Each account's name and balance comes along in the same answer, for templates. Amounts are in dollars, like `1234.56`. Home Assistant asks Muny at `GET /api/v1/home-assistant` with the token; nothing is sent anywhere else. Over a plain `http://` address the token isn't encrypted, which is usually fine between two machines on your home network but not over the internet.
+
 ---
 
 [← All guides](README.md)

@@ -13,6 +13,7 @@ import { Alert, Button, Card, Field } from "../../components/ui.js";
 import { api } from "../../lib/api.js";
 import { useAuthStatus } from "../../lib/auth.js";
 import { mcpAddressIsSafe } from "../../lib/mcpAddress.js";
+import { HomeAssistantSetup } from "./HomeAssistantSetup.js";
 
 /** Settings → Agents: tokens that let AI assistants and scripts talk to Muny. */
 
@@ -328,6 +329,8 @@ export function AgentSettings() {
           ))}
         </ul>
       </Card>
+
+      <HomeAssistantSetup />
     </section>
   );
 }

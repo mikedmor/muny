@@ -44,10 +44,10 @@ Everything you need to install, set up and use Muny. New here? Start with **[Ins
 
 ## AI
 
-| Guide                      | What it covers                                                                                           |
-| -------------------------- | -------------------------------------------------------------------------------------------------------- |
-| [AI assistants](agents.md) | Connect Claude or another assistant over MCP, with tokens, permissions and an approval inbox             |
-| [Built-in AI](ai.md)       | Optional Ask Muny, contract review, category suggestions, reviews and check-ins, and exactly what's sent |
+| Guide                      | What it covers                                                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| [AI assistants](agents.md) | Connect Claude or another assistant over MCP, with tokens, permissions and an approval inbox, and Home Assistant sensors |
+| [Built-in AI](ai.md)       | Optional Ask Muny, contract review, category suggestions, reviews and check-ins, and exactly what's sent                 |
 
 ## Running Muny
 
