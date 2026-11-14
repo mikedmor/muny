@@ -23,6 +23,7 @@ const ICON: Record<string, string> = {
   ai_checkin: "🧭",
   api_limit: "🚦",
   price_alert: "📈",
+  app_update: "✨",
 };
 
 function when(ms: number) {

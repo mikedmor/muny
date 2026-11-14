@@ -25,12 +25,13 @@ import {
   Receipt,
   Repeat,
   Settings,
+  Sparkles,
   Target,
   X,
 } from "lucide-react";
 import { useState } from "react";
 import { useLogout, useMeta } from "../lib/auth.js";
-import { useNotifications } from "../lib/queries.js";
+import { useNotifications, useUpdates } from "../lib/queries.js";
 import { ThemeProvider } from "../lib/theme.js";
 import { useAiSettings } from "../pages/settings/AiSettings.js";
 import { DemoBanner } from "./DemoNotice.js";
@@ -139,6 +140,7 @@ function UserBox({ user, onNavigate }: { user: CurrentUser; onNavigate?: () => v
   const [open, setOpen] = useState(false);
   const logout = useLogout();
   const meta = useMeta();
+  const update = useUpdates().data?.newer[0];
   return (
     <div className="relative border-t border-slate-200 pt-3 dark:border-slate-800">
       {open && (
@@ -185,6 +187,12 @@ function UserBox({ user, onNavigate }: { user: CurrentUser; onNavigate?: () => v
               className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
             >
               <Settings aria-hidden="true" className="size-4" /> Settings
+              {update && (
+                <span
+                  className="ml-auto size-2 rounded-full bg-brand-600"
+                  title={`Muny ${update.version} is out`}
+                />
+              )}
             </Link>
             <button
               type="button"
@@ -206,9 +214,12 @@ function UserBox({ user, onNavigate }: { user: CurrentUser; onNavigate?: () => v
       >
         <span
           aria-hidden="true"
-          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-600 text-xs font-semibold text-on-brand"
+          className="relative flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-600 text-xs font-semibold text-on-brand"
         >
           {initials(user)}
+          {update && (
+            <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full border-2 border-surface bg-amber-500" />
+          )}
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium">
@@ -238,6 +249,16 @@ function UserBox({ user, onNavigate }: { user: CurrentUser; onNavigate?: () => v
           </>
         )}
       </p>
+      {update && (
+        <Link
+          to="/settings"
+          hash="updates"
+          onClick={onNavigate}
+          className="mt-1 flex w-fit items-center gap-1.5 px-2 text-[11px] font-medium text-brand-600 hover:underline dark:text-brand-500"
+        >
+          <Sparkles aria-hidden="true" className="size-3" /> Muny {update.version} is out
+        </Link>
+      )}
       <a
         href={SUPPORT_URL}
         target="_blank"

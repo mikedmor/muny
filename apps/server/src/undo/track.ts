@@ -59,6 +59,7 @@ const UNTRACKED_SETTINGS = [
   "invest.watchlist.refreshed",
   "plaid.loginsCreated",
   "mail.state",
+  "updates.state",
 ];
 
 /** A change to only these isn't a change anyone would undo. */

@@ -76,6 +76,11 @@ const RULES: Record<AlertType, { label: string; description: string }> = {
     description:
       "A stock or coin you set an alert on (from its page, the watch list or Crypto) crosses your price or move. It includes the price.",
   },
+  app_update: {
+    label: "A new version of Muny",
+    description:
+      "Once per release, when the update check in Settings → Updates is on and finds a newer version.",
+  },
   api_limit: {
     label: "An API reaches its limit",
     description:

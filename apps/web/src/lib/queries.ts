@@ -78,6 +78,7 @@ import type {
   UpcomingCharge,
   UpdateAccountInput,
   UpdateRecurringInput,
+  UpdateStatus,
   UpdateTransactionInput,
   WatchItem,
 } from "@muny/shared";
@@ -854,6 +855,16 @@ export const useInvestTxns = (accountId?: string) =>
       api.get<InvestTxn[]>(
         `/api/invest/transactions${accountId ? `?accountId=${encodeURIComponent(accountId)}` : ""}`,
       ),
+  });
+
+export const updatesKey = ["updates"] as const;
+
+/** The running version and, when the check is on, newer releases. */
+export const useUpdates = () =>
+  useQuery({
+    queryKey: updatesKey,
+    queryFn: () => api.get<UpdateStatus>("/api/updates"),
+    staleTime: 30 * 60_000,
   });
 
 /** The tax view of stocks for a year (realized gains, lots, maturity). */

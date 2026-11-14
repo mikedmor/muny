@@ -16,6 +16,7 @@ export const ALERT_TYPES = [
   "ai_checkin",
   "api_limit",
   "price_alert",
+  "app_update",
 ] as const;
 export type AlertType = (typeof ALERT_TYPES)[number];
 

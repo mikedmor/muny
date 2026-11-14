@@ -28,3 +28,4 @@ export * from "./tax.js";
 export * from "./themes.js";
 export * from "./transactions.js";
 export * from "./trials.js";
+export * from "./updates.js";

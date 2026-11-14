@@ -130,6 +130,8 @@ Bank sync keys are covered in [Bank sync](bank-sync.md).
 
 Back up first (Muny keeps automatic backups in `data/backups`; see [Backups](backups.md)), then pull the new image and recreate the container. Database changes run on their own at startup. What changed in each version is in the [changelog](../CHANGELOG.md).
 
+**Knowing when there's a new version.** **Settings → Updates** shows the version you're running and the update steps for Docker Compose, Synology and Unraid. Turn on **Check for new versions** (the owner can; it's off by default) and Muny's server asks GitHub's public list of releases once a day. Nothing about you or your money is sent; GitHub sees only your server's IP address and a "Muny (self-hosted)" label. When a newer version is out, Settings lists what's new in each version since yours, the menu shows a dot and a link, and you get one **A new version of Muny** alert per release (through your alert channels, if you've added any). Muny never updates itself: it has no access to Docker. A tool like Watchtower can pull new images on a schedule; keep the image on `:1` so it never jumps to a major version.
+
 ## Next steps
 
 - [Getting started](getting-started.md): a tour of your first hour.

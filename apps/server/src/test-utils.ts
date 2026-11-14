@@ -13,6 +13,7 @@ export interface AppOptions {
   aiSleep?: (seconds: number) => Promise<void>;
   mailSource?: import("./mail/check.js").MailDeps["source"];
   liveWebSocket?: import("./live/hub.js").WsFactory;
+  updateFetch?: typeof fetch;
 }
 
 export async function makeApp(env: Record<string, string> = {}, opts: AppOptions = {}) {
@@ -27,6 +28,7 @@ export async function makeApp(env: Record<string, string> = {}, opts: AppOptions
     aiSleep: opts.aiSleep,
     mailSource: opts.mailSource,
     liveWebSocket: opts.liveWebSocket,
+    updateFetch: opts.updateFetch,
   });
   return { app, db, config };
 }

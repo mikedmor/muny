@@ -24,6 +24,7 @@ import { HistorySettings } from "./settings/HistorySettings.js";
 import { HouseholdSettings } from "./settings/HouseholdSettings.js";
 import { PayeesSettings } from "./settings/PayeesSettings.js";
 import { RulesSettings } from "./settings/RulesSettings.js";
+import { UpdatesSettings } from "./settings/UpdatesSettings.js";
 
 const KIND_LABEL = { expense: "Spending", income: "Income", transfer: "Transfers" } as const;
 
@@ -39,6 +40,7 @@ const TABS = [
   ["email", "Email"],
   ["history", "History"],
   ["household", "Household & account"],
+  ["updates", "Updates"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
@@ -60,7 +62,7 @@ export function SettingsPage() {
       <PageHeader title="Settings" />
       <div
         role="tablist"
-        className="mb-6 flex gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-b border-slate-200 dark:border-slate-800"
+        className="mb-6 flex gap-1 overflow-x-auto border-b border-slate-200 [scrollbar-width:none] lg:flex-wrap lg:overflow-visible dark:border-slate-800 [&::-webkit-scrollbar]:hidden"
       >
         {TABS.map(([key, label]) => (
           <button
@@ -94,6 +96,7 @@ export function SettingsPage() {
       {tab === "api" && <ApiSettings />}
       {tab === "email" && <EmailSettings />}
       {tab === "household" && <HouseholdSettings />}
+      {tab === "updates" && <UpdatesSettings />}
     </>
   );
 }

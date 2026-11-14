@@ -10,6 +10,7 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 - **1099-B forms.** Upload each brokerage's 1099-B on **Taxes**: a TXF or CSV file is read sale by sale, a PDF for its summary totals (or type them in). Muny compares the form with its own numbers, and the new stocks section exports Form 8949 lines.
 - **Add a trade** by hand to fill in history your broker didn't send, and **Reconcile** shows which holdings' trades don't add up to what the broker reports.
 - The demo household now has a brokerage account and a Roth IRA.
+- **Know when there's a new version.** **Settings → Updates** shows the version you're running and how to update each kind of install. Turn on the daily check (off by default; it asks GitHub's public list of releases and sends nothing about you) to see what's new in every version since yours, a dot on the menu, and one alert per release. Muny never updates itself.
 
 ### Fixed
 

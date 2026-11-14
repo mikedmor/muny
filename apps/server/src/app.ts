@@ -48,6 +48,8 @@ import { makeProviders, type Providers } from "./sync/engine.js";
 import { registerSyncRoutes } from "./sync/routes.js";
 import { registerTrialRoutes } from "./trials/routes.js";
 import { registerChangeTracking } from "./undo/routes.js";
+import { registerUpdateRoutes } from "./updates/routes.js";
+import { startUpdateChecks } from "./updates/service.js";
 import { VERSION } from "./version.js";
 
 export interface AppDeps {
@@ -67,6 +69,8 @@ export interface AppDeps {
   mailSource?: MailDeps["source"];
   /** WebSocket for live prices instead of the real one (tests). */
   liveWebSocket?: WsFactory;
+  /** Override outbound HTTP for the update check (tests). */
+  updateFetch?: typeof fetch;
 }
 
 /**
@@ -113,6 +117,7 @@ export async function buildApp({
   aiSleep,
   mailSource,
   liveWebSocket,
+  updateFetch,
 }: AppDeps): Promise<FastifyInstance> {
   const syncDeps = { config, providers: providers ?? makeProviders(config) };
   const csp = contentSecurityPolicy(config);
@@ -223,6 +228,10 @@ export async function buildApp({
   });
   app.decorate("syncDeps", syncDeps);
   app.decorate("alertDeps", alertDeps);
+  const updateDeps = { sourceUrl: config.sourceUrl, fetch: updateFetch, alerts: alertDeps };
+  registerUpdateRoutes(app, db, updateDeps);
+  const stopUpdates = startUpdateChecks(db, updateDeps, app.log);
+  app.addHook("onClose", async () => stopUpdates());
 
   // Polled by the Docker healthcheck every 30s; only log problems.
   app.get("/api/health", { logLevel: "warn" }, async (_req, reply) => {
