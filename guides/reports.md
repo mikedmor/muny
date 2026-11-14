@@ -30,6 +30,21 @@ Click any category to open its page, with its months, budget and transactions.
 
 Net worth includes every account that isn't excluded from reports: cash, investments, crypto at each day's price, and assets such as your home, less loans and card balances.
 
+## Year in review
+
+**Year in review** (under Insights) tells a year of your money as a story: this year so far, or any past year Muny has data for.
+
+- **Earned, spent and kept**, with the share of what came in that you kept, and the change on last year (the same months, while the year is under way).
+- **Month by month**, with the costliest and lightest months.
+- **Net worth** from the start of the year, and how much less (or more) you owe.
+- **Where it went** by category, against last year, and **your regulars**: the places you spent most, and the one you went to most often.
+- **The big ones**: your largest one-off purchases (bills and subscriptions are listed separately).
+- **Bills and subscriptions**: what they cost in all, which ones started or were cancelled, and which went up.
+- **A few facts**: transactions, days without spending and the longest run of them, the weekday you spend most on, and your biggest day.
+- **Investing**, if you have it: dividends and the gains you took on stocks and crypto, as on the Taxes page.
+
+It uses the same numbers as Reports and Spending, so accounts left out of reports and transfers don't count. In December and January the Overview offers a link to the year just ending.
+
 ## Forecast
 
 **Forecast** (under Insights) shows where a checking or savings account's balance is headed over the next 30, 60 or 90 days, day by day:

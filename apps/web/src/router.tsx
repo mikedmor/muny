@@ -29,6 +29,7 @@ import { OverviewPage } from "./pages/OverviewPage.js";
 import { PlaidOAuthPage } from "./pages/PlaidOAuthPage.js";
 import { RecurringPage } from "./pages/RecurringPage.js";
 import { ReportsPage } from "./pages/ReportsPage.js";
+import { ReviewPage } from "./pages/ReviewPage.js";
 import { SavingsPage } from "./pages/SavingsPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 import { SpendingPage } from "./pages/SpendingPage.js";
@@ -81,6 +82,11 @@ const searchPage = <const P extends string, S>(
 const monthSearch = (s: Record<string, unknown>): { month?: string } =>
   typeof s.month === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(s.month) ? { month: s.month } : {};
 
+const reviewSearch = (s: Record<string, unknown>): { year?: number } => {
+  const y = Number(s.year);
+  return Number.isInteger(y) && y >= 1990 && y <= 2100 ? { year: y } : {};
+};
+
 const forecastSearch = (s: Record<string, unknown>): { accountId?: string } =>
   typeof s.accountId === "string" && s.accountId.length <= 64 ? { accountId: s.accountId } : {};
 
@@ -132,6 +138,7 @@ const routeTree = rootRoute.addChildren([
   page("/documents", DocumentsPage),
   page("/documents/$documentId/review", ContractReviewPage),
   searchPage("/forecast", ForecastPage, forecastSearch),
+  searchPage("/review", ReviewPage, reviewSearch),
   page("/stocks", StocksPage),
   searchPage("/stocks/transactions", StockTransactions, stockTxnSearch),
   page("/stocks/reconcile", StockReconcile),

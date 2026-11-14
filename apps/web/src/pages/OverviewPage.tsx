@@ -32,7 +32,9 @@ import { api } from "../lib/api.js";
 import { keys, useAccounts, useConnections, useDashboard } from "../lib/queries.js";
 import { assignColors, OTHER_COLOR, SERIES_SLOTS } from "../lib/series.js";
 import { CryptoOverviewCard } from "./crypto/CryptoTaxSection.js";
+import { useDismissed } from "./crypto/common.js";
 import { ForecastOverviewCard } from "./ForecastPage.js";
+import { ReviewBanner } from "./ReviewPage.js";
 
 /**
  * The home dashboard, modeled on Rocket Money's: how this month's spending is
@@ -771,6 +773,11 @@ export function OverviewPage() {
   const o = useOverview();
   const d = o.data;
   const renderCard = useCardRenderer();
+  // December and January: a nudge to look back at the year.
+  const reviewMonth = d ? Number(d.today.slice(5, 7)) : 0;
+  const reviewYear = d ? Number(d.today.slice(0, 4)) - (reviewMonth === 12 ? 0 : 1) : 0;
+  const [reviewDismissed, dismissReview] = useDismissed(`review-${reviewYear}`);
+  const showReview = !!d && (reviewMonth === 12 || reviewMonth === 1) && !reviewDismissed;
 
   if (accounts.isSuccess && accounts.data.length === 0) {
     return (
@@ -801,6 +808,7 @@ export function OverviewPage() {
         <>
           {o.isError && <Alert>Couldn't load the overview.</Alert>}
           {d && <AttentionBar d={d} />}
+          {d && showReview && <ReviewBanner today={d.today} onDismiss={dismissReview} />}
         </>
       }
       renderCard={renderCard}

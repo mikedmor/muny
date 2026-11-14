@@ -76,6 +76,7 @@ For Docker Compose, Synology, Unraid and every setting, see the **[install guide
 - **Loans** with payoff dates, payoff plans and statement reading, including multi-loan student loan servicers
 - **Credit cards** with limits, statements, due dates and interest
 - **Savings** accounts with interest, earned rate and projections
+- **A balance forecast** for the weeks ahead, and a **year in review**
 - **Home Assistant sensors**: spending, budget left, bills due, net worth and a balance-headed-low warning on your dashboards
 - **Stocks** from Plaid or broker exports, with cost basis and history, tax lots, tax optimization and wash sale warnings, 1099-B import, a watch list, a page for each stock with optional live details and news, and optional live prices and price alerts
 - **Crypto** wallets and exchanges, with cost basis, gains and tax reports, and optional live prices and price alerts

@@ -6,6 +6,7 @@ import { audit } from "../lib/audit.js";
 import { localToday } from "../lib/dates.js";
 import { badRequest, notFound, parse } from "../lib/http.js";
 import { budgetRowActivity, categoryActivity, isBudgetRow } from "./category.js";
+import { yearInReview } from "./review.js";
 import {
   monthlyReport,
   netWorthDates,
@@ -22,6 +23,15 @@ const month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Use YYYY-MM");
 
 export function registerReportRoutes(app: FastifyInstance, db: MunyDb) {
   app.get("/api/overview", async () => overview(db));
+
+  /** A year in review (this year so far, or a past year). */
+  app.get("/api/review/:year", async (req) => {
+    const { year } = parse(
+      z.object({ year: z.coerce.number().int().min(1990).max(2100) }),
+      req.params,
+    );
+    return yearInReview(db, year);
+  });
 
   /** Tax year summary (and a CSV of every item, for an accountant). */
   const Year = z.object({ year: z.coerce.number().int().min(1990).max(2100) });
