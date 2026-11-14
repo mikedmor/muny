@@ -4,6 +4,10 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-14
+
+See where your balance is headed, look back on your year, put Muny on Home Assistant, and give stocks the same tax tools as crypto, with 1099-B import.
+
 ### Added
 
 - **Year in review.** A new page tells your year as a story: what you earned, spent and kept against last year, month by month, net worth and debt, where the money went, your regulars and biggest one-offs, subscriptions started, cancelled and raised, a few facts, and investing. In December and January the Overview links to it.
@@ -147,7 +151,8 @@ Install it with `docker pull ghcr.io/mikedmor/muny:1` and follow the [install gu
 
 If Muny saves you a subscription or two, you can [support its development](https://www.paypal.com/paypalme/mikedmor).
 
-[Unreleased]: https://github.com/mikedmor/muny/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/mikedmor/muny/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/mikedmor/muny/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/mikedmor/muny/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/mikedmor/muny/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/mikedmor/muny/compare/v1.0.0...v1.1.0
