@@ -21,6 +21,7 @@ import { CryptoTransactions } from "./pages/crypto/CryptoTransactions.js";
 import { CryptoWalletPage } from "./pages/crypto/CryptoWalletPage.js";
 import { CryptoWallets } from "./pages/crypto/CryptoWallets.js";
 import { DocumentsPage } from "./pages/DocumentsPage.js";
+import { ForecastPage } from "./pages/ForecastPage.js";
 import { ImportPage } from "./pages/ImportPage.js";
 import { LoansPage } from "./pages/LoansPage.js";
 import { NotificationsPage } from "./pages/NotificationsPage.js";
@@ -80,6 +81,9 @@ const searchPage = <const P extends string, S>(
 const monthSearch = (s: Record<string, unknown>): { month?: string } =>
   typeof s.month === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(s.month) ? { month: s.month } : {};
 
+const forecastSearch = (s: Record<string, unknown>): { accountId?: string } =>
+  typeof s.accountId === "string" && s.accountId.length <= 64 ? { accountId: s.accountId } : {};
+
 const stockTxnSearch = (s: Record<string, unknown>) => {
   const out: { accountId?: string; q?: string; type?: string } = {};
   for (const k of ["accountId", "q", "type"] as const)
@@ -127,6 +131,7 @@ const routeTree = rootRoute.addChildren([
   page("/taxes", TaxesPage),
   page("/documents", DocumentsPage),
   page("/documents/$documentId/review", ContractReviewPage),
+  searchPage("/forecast", ForecastPage, forecastSearch),
   page("/stocks", StocksPage),
   searchPage("/stocks/transactions", StockTransactions, stockTxnSearch),
   page("/stocks/reconcile", StockReconcile),

@@ -601,7 +601,8 @@ export function CustomizePage() {
         </Link>
       );
     // Interactive cards aren't documents, so there's no copy to customize.
-    if (BUILTIN_CARDS.find((c) => c.id === ref)?.needsAi) return null;
+    const builtin = BUILTIN_CARDS.find((c) => c.id === ref);
+    if (builtin?.needsAi || builtin?.interactive) return null;
     const info = describeCard(ref, custom);
     return (
       <Link

@@ -76,6 +76,11 @@ const RULES: Record<AlertType, { label: string; description: string }> = {
     description:
       "A stock or coin you set an alert on (from its page, the watch list or Crypto) crosses your price or move. It includes the price.",
   },
+  low_balance_ahead: {
+    label: "Low balance ahead",
+    description:
+      "An account is expected to drop below its low-balance amount (set on the Accounts page) within the days you choose, from its bills, card payments and usual spending. Once, until the forecast clears.",
+  },
   app_update: {
     label: "A new version of Muny",
     description:
@@ -262,6 +267,17 @@ function RuleParams({ rule, save }: { rule: AlertRule; save: (params: AlertParam
           min={1}
           max={14}
           onCommit={(v) => save({ days: v })}
+        />
+      );
+    case "low_balance_ahead":
+      return (
+        <NumberInput
+          label="Look ahead"
+          suffix="days"
+          value={p.daysBefore ?? 14}
+          min={3}
+          max={60}
+          onCommit={(v) => save({ daysBefore: v })}
         />
       );
     case "trial_ending":

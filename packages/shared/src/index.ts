@@ -8,6 +8,7 @@ export * from "./cards.js";
 export * from "./changes.js";
 export * from "./crypto.js";
 export * from "./dashboard.js";
+export * from "./forecast.js";
 export * from "./imports.js";
 export * from "./invest.js";
 export * from "./invest-tax.js";

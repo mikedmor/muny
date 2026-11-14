@@ -27,6 +27,7 @@ import {
   Settings,
   Sparkles,
   Target,
+  Telescope,
   X,
 } from "lucide-react";
 import { useState } from "react";
@@ -73,6 +74,7 @@ const NAV: { label?: string; items: { to: string; label: string; icon: LucideIco
     items: [
       { to: "/ask", label: "Ask Muny", icon: MessageCircleQuestion },
       { to: "/reports", label: "Reports", icon: ChartColumn },
+      { to: "/forecast", label: "Forecast", icon: Telescope },
       { to: "/taxes", label: "Taxes", icon: Receipt },
       { to: "/documents", label: "Documents", icon: FolderOpen },
     ],

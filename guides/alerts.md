@@ -3,7 +3,7 @@
 Muny checks for alerts every 5 minutes:
 
 - bills coming due and free trials ending (remind as many times as you like, e.g. 7 days and 1 day before)
-- low balances
+- low balances, and balances headed low: an account expected to drop below its low-balance amount within the next 14 days (see [Forecast](reports.md#forecast))
 - large, unusual or duplicate charges
 - price increases on subscriptions
 - budgets reaching the percentages you choose: 80% and 100% to start; add or remove as many as you like (turn them off for one category with **Budget alerts** in that category's **Edit** dialog)

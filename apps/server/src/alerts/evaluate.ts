@@ -10,6 +10,7 @@ import {
 import { and, eq, gte, isNull, sql } from "drizzle-orm";
 import { budgetMonth } from "../budgets/service.js";
 import { apiLimits } from "../crypto/budget.js";
+import { balanceForecast } from "../forecast/service.js";
 import { listAccounts } from "../ledger/accounts.js";
 import { listSeries, merchantKey, upcoming } from "../recurring/service.js";
 import { listTrials } from "../trials/routes.js";
@@ -58,12 +59,15 @@ export const DEFAULT_PARAMS: Record<AlertType, AlertParams> = {
   api_limit: {},
   price_alert: {},
   app_update: {},
+  low_balance_ahead: { daysBefore: 14 },
 };
 
 const STATE_KEY = "alerts.state";
 interface AlertState {
   low: Record<string, boolean>;
   conn: Record<string, string>;
+  /** Accounts already warned about a low balance ahead (until the forecast clears). */
+  ahead?: Record<string, boolean>;
 }
 
 /** Reminder days for bills and trials, largest first (older rules have one daysBefore). */
@@ -274,6 +278,39 @@ export function evaluateRules(
             body: `Charged twice: ${dayLabel(twin.postedDate)} and ${dayLabel(x.postedDate)} on ${x.accountName}.`,
             link: "/transactions",
           });
+        }
+        break;
+      }
+      case "low_balance_ahead": {
+        // Each account's low-balance amount, looked at ahead: warn once until the forecast clears.
+        const ahead = state.ahead ?? {};
+        state.ahead = ahead;
+        const horizon = Math.min(Math.max(p.daysBefore ?? 14, 3), 60);
+        for (const a of listAccounts(db)) {
+          const threshold = alertsOf(a.id).lowBalanceCents;
+          if (a.hidden || threshold === null || !["checking", "savings", "cash"].includes(a.type)) {
+            delete ahead[a.id];
+            continue;
+          }
+          const f = balanceForecast(db, { accountId: a.id, days: horizon }, today);
+          // Already low today is the low balance alert's job.
+          const below = f.firstBelow && f.firstBelow.date > today ? f.firstBelow : null;
+          if (below && !ahead[a.id]) {
+            const when = new Date(`${below.date}T00:00:00`).toLocaleDateString("en-US", {
+              weekday: "short",
+              month: "short",
+              day: "numeric",
+            });
+            out.push({
+              type: rule.type,
+              dedupeKey: `low_ahead:${a.id}:${below.date}`,
+              severity: "warning",
+              title: `${a.name} may drop below ${formatMoney(threshold)} on ${when}`,
+              body: `Muny expects about ${formatMoney(below.balanceCents)} then, from your bills, card payments and usual spending. It's a forecast: moving money or a payment date changes it.`,
+              link: `/forecast?accountId=${encodeURIComponent(a.id)}`,
+            });
+          }
+          ahead[a.id] = !!below;
         }
         break;
       }

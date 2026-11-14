@@ -28,6 +28,8 @@ export interface BuiltinCard {
   weight: number;
   /** Exists only while the built-in AI is on. Interactive, so there's no copy to customize. */
   needsAi?: boolean;
+  /** Drawn by its own component (no card document), so there's no copy to customize. */
+  interactive?: boolean;
 }
 
 export const BUILTIN_CARDS: BuiltinCard[] = [
@@ -65,6 +67,14 @@ export const BUILTIN_CARDS: BuiltinCard[] = [
     description: "Where you spent the most this month.",
     placement: "main",
     weight: 28,
+  },
+  {
+    id: "forecast",
+    title: "Balance forecast",
+    description: "Where your main account's balance is headed over the next 30 days.",
+    placement: "main",
+    weight: 20,
+    interactive: true,
   },
   {
     id: "cash-trend",
@@ -146,6 +156,7 @@ export const availableBuiltinCards = (aiOn: boolean) =>
 /** A new user's Overview, highest priority first. */
 export const DEFAULT_DASHBOARD: string[] = [
   "spending",
+  "forecast",
   "accounts",
   "cards",
   "loans",

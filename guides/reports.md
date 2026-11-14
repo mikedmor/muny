@@ -30,6 +30,21 @@ Click any category to open its page, with its months, budget and transactions.
 
 Net worth includes every account that isn't excluded from reports: cash, investments, crypto at each day's price, and assets such as your home, less loans and card balances.
 
+## Forecast
+
+**Forecast** (under Insights) shows where a checking or savings account's balance is headed over the next 30, 60 or 90 days, day by day:
+
+- today's balance, with what's pending;
+- recurring bills, subscriptions and paychecks on that account (from **Recurring**);
+- credit card payments made from it: this statement's balance on its due date, then about what you usually pay (marked as estimated);
+- your everyday spending from it, as a daily average over the last 90 days, without bills, card payments, money coming in and one-off big charges.
+
+It shows the lowest point and, under the chart, everything scheduled with the balance after each day. Point at the chart to see a day.
+
+Set a **low-balance amount** for the account on the **Accounts** page and the forecast draws it as a line, warns when the balance is headed below it, and the **Low balance ahead** alert tells you once, days before (14 by default; change it in **Alerts**). The **Balance forecast** Overview card shows your main checking account's next 30 days.
+
+It's an estimate: something you haven't done before, a bill Muny hasn't spotted as recurring, or a card payment from another account won't be in it.
+
 ## Taxes
 
 ![Taxes: deductible spending, mortgage interest and crypto reports for the year](images/taxes.png)

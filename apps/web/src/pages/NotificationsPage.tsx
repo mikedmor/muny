@@ -24,6 +24,7 @@ const ICON: Record<string, string> = {
   api_limit: "🚦",
   price_alert: "📈",
   app_update: "✨",
+  low_balance_ahead: "🔮",
 };
 
 function when(ms: number) {

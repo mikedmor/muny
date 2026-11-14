@@ -21,7 +21,7 @@ export function compactMoney(cents: number): string {
 }
 
 /** Nice round axis max + 3 ticks. */
-function niceTicks(max: number, min = 0): number[] {
+export function niceTicks(max: number, min = 0): number[] {
   const span = Math.max(1, max - min);
   const raw = span / 3;
   const pow = 10 ** Math.floor(Math.log10(raw));
@@ -174,7 +174,7 @@ export function RankedBars({
 const H = 200;
 const PAD = { top: 12, right: 8, bottom: 24, left: 48 };
 
-function useWidth() {
+export function useWidth() {
   const ref = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(320);
   useEffect(() => {

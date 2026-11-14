@@ -186,7 +186,7 @@ describe("running cards on real data", () => {
     const { client } = await setup();
     // All but the interactive ones, which aren't documents.
     expect([...TEMPLATE_IDS].sort()).toEqual(
-      BUILTIN_CARDS.filter((c) => !c.needsAi)
+      BUILTIN_CARDS.filter((c) => !c.needsAi && !c.interactive)
         .map((c) => c.id)
         .sort(),
     );

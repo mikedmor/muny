@@ -32,6 +32,7 @@ import { api } from "../lib/api.js";
 import { keys, useAccounts, useConnections, useDashboard } from "../lib/queries.js";
 import { assignColors, OTHER_COLOR, SERIES_SLOTS } from "../lib/series.js";
 import { CryptoOverviewCard } from "./crypto/CryptoTaxSection.js";
+import { ForecastOverviewCard } from "./ForecastPage.js";
 
 /**
  * The home dashboard, modeled on Rocket Money's: how this month's spending is
@@ -735,6 +736,7 @@ const CARD_RENDERERS: Record<string, (d: Overview) => ReactNode> = {
   categories: (d) => <CategoriesCard d={d} />,
   merchants: (d) => <TopMerchantsCard d={d} />,
   "cash-trend": (d) => <CashTrendCard d={d} />,
+  forecast: () => <ForecastOverviewCard />,
   calendar: () => <UpcomingCalendar />,
   recent: () => <RecentTransactions limit={8} />,
   accounts: () => <AccountsCard />,

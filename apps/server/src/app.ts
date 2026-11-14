@@ -24,6 +24,7 @@ import { registerBackupRoutes } from "./data/backups.js";
 import { registerExportRoutes } from "./data/export.js";
 import { registerDemoRoutes } from "./demo/routes.js";
 import { registerDocumentRoutes } from "./documents/routes.js";
+import { registerForecastRoutes } from "./forecast/routes.js";
 import { registerImportRoutes } from "./import/routes.js";
 import { registerInvestRoutes } from "./invest/routes.js";
 import { registerAccountRoutes } from "./ledger/accounts.js";
@@ -195,6 +196,7 @@ export async function buildApp({
   registerRecurringRoutes(app, db);
   registerBudgetRoutes(app, db);
   registerReportRoutes(app, db);
+  registerForecastRoutes(app, db);
   registerTrialRoutes(app, db);
   registerSavingsRoutes(app, db);
   registerAiRoutes(app, db, { secretKey: config.secretKey, fetch: aiFetch, sleep: aiSleep });
