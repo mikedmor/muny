@@ -1,7 +1,7 @@
 # Muny's public site
 
 Muny's home page, at [mikedmor.github.io/muny](https://mikedmor.github.io/muny/): what it does, screenshots
-and how to install it. It's plain HTML with no build step, no tracking, cookies or outside scripts.
+and how to install it. It's plain HTML with no build step and no cookies. Its one outside script is GoatCounter, which counts visits anonymously.
 
 The workflow `.github/workflows/public-site.yml` publishes this folder, and only this folder, whenever
 it or the guides' screenshots change on `main`. In the repository's **Settings → Pages**, **Source** must be **GitHub Actions**.
