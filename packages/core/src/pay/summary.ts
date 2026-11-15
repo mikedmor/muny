@@ -102,7 +102,7 @@ export function payBreakdown(
       if (y.latest.employer) employers.push(y.latest.employer);
       if (y.latest.payDate > asOf) asOf = y.latest.payDate;
     }
-    return {
+    return withHealth(yearW2s, {
       source: "stubs",
       asOf,
       employers,
@@ -111,7 +111,9 @@ export function payBreakdown(
       deductions: deductions.sort(desc),
       takeHomeCents: grossCents - total(taxes) - total(deductions),
       healthCoverageCents,
-    };
+      yourHealthCents: null,
+      employerHealthCents: null,
+    });
   }
 
   if (!yearW2s.length) return null;
@@ -124,7 +126,8 @@ export function payBreakdown(
     grossCents += w.summary.grossCents ?? b.wagesCents ?? 0;
     if (w.summary.grossCents !== null)
       for (const a of w.summary.adjustments)
-        if (a.cents < 0) addTo(deductions, { name: a.name, cents: -a.cents, preTax: true });
+        if (a.cents < 0)
+          addTo(deductions, { name: friendlyName(a.name), cents: -a.cents, preTax: true });
     const add = (name: string, cents: number | null) => {
       if (cents) addTo(taxes, { name, cents });
     };
@@ -134,7 +137,7 @@ export function payBreakdown(
     add(`${b.state ?? "State"} State Income Tax`, b.stateCents);
     add("Local Income Tax", b.localCents);
   }
-  return {
+  return withHealth(yearW2s, {
     source: "w2",
     asOf: `${year}-12-31`,
     employers: yearW2s.map((w) => w.employer).filter((e): e is string => !!e),
@@ -143,6 +146,39 @@ export function payBreakdown(
     deductions: deductions.sort(desc),
     takeHomeCents: grossCents - total(taxes) - total(deductions),
     healthCoverageCents,
+    yourHealthCents: null,
+    employerHealthCents: null,
+  });
+}
+
+/** ADP's "Other Cafe 125" is health premiums taken before tax under Section 125. */
+const CAFE_125 = /\bcafe(teria)?\b.*\b125\b|\bsec(tion)?\.?\s*125\b|^125\b/i;
+export const HEALTH_PREMIUMS = "Health premiums (medical, dental, vision)";
+const friendlyName = (name: string) => (CAFE_125.test(name) ? HEALTH_PREMIUMS : name);
+
+/** Health insurance premiums, not an FSA, HSA or dependent care account. */
+const HEALTH = /cafe|125|medical|dental|vision|health|premium/i;
+const NOT_PREMIUM = /fsa|flex|hsa|savings|dependent|dep care|life|disab/i;
+const isPremium = (name: string) => HEALTH.test(name) && !NOT_PREMIUM.test(name);
+
+/**
+ * Box 12 DD is the whole cost of health coverage. Your share is the health
+ * premiums taken from your pay that year (the W-2's own summary when it has
+ * one, else the stubs); the rest is roughly what your employer paid.
+ */
+function withHealth(w2s: W2Read[], b: PayBreakdown): PayBreakdown {
+  if (b.healthCoverageCents === null) return b;
+  const fromW2 = w2s.flatMap((w) =>
+    w.summary.adjustments.filter((a) => a.cents < 0 && isPremium(a.name)),
+  );
+  const yours = fromW2.length
+    ? fromW2.reduce((t, a) => t - a.cents, 0)
+    : b.deductions.filter((d) => d.preTax && isPremium(d.name)).reduce((t, d) => t + d.cents, 0);
+  if (!yours || yours > b.healthCoverageCents) return b;
+  return {
+    ...b,
+    yourHealthCents: yours,
+    employerHealthCents: b.healthCoverageCents - yours,
   };
 }
 

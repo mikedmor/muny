@@ -9,7 +9,7 @@ import {
   type W2Info,
 } from "@muny/shared";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Check, FileText, Trash2 } from "lucide-react";
+import { AlertTriangle, Check, FileText, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { Alert, Card, cx, PageHeader } from "../components/ui.js";
 import { api } from "../lib/api.js";
@@ -43,15 +43,96 @@ function toBase64(file: File): Promise<string> {
 
 type Outcome = { file: string; ok: PayUploadResult[] } | { file: string; error: string };
 
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** One short summary of a batch: what was added, skipped and couldn't be read. */
+function UploadSummary({ outcomes, onClose }: { outcomes: Outcome[]; onClose: () => void }) {
+  const added = outcomes.flatMap((o) => ("ok" in o ? o.ok : []));
+  const stubs = added.filter((r) => r.kind === "stub").length;
+  const w2s = added.filter((r) => r.kind === "w2");
+  const off = added.filter((r) => r.problems.length).length;
+  const failed = outcomes.filter((o): o is Extract<Outcome, { error: string }> => "error" in o);
+  const dupes = failed.filter((o) => /already added/i.test(o.error));
+  const errors = failed.filter((o) => !/already added/i.test(o.error));
+  const parts = [
+    stubs ? plural(stubs, "pay stub") : null,
+    w2s.length ? w2s.map((w) => `the ${w.label}`).join(", ") : null,
+  ].filter(Boolean);
+  const list = (
+    <ul className="mt-1 space-y-0.5 text-xs">
+      {errors.map((o) => (
+        <li key={o.file}>
+          <span className="font-medium">{o.file}</span>: {o.error}
+        </li>
+      ))}
+    </ul>
+  );
+  return (
+    <div
+      role="status"
+      className="flex items-start gap-3 rounded-lg border border-slate-200 bg-surface px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-900"
+    >
+      <div className="min-w-0 flex-1 space-y-0.5">
+        <p className="flex items-center gap-1.5">
+          {parts.length > 0 ? (
+            <>
+              <Check className="size-4 shrink-0 text-emerald-600" aria-hidden="true" />
+              Added {parts.join(" and ")}.
+            </>
+          ) : (
+            "Nothing new was added."
+          )}
+          {dupes.length > 0 && (
+            <span className="text-slate-500">
+              {plural(dupes.length, "file was", "files were")} already here.
+            </span>
+          )}
+        </p>
+        {off > 0 && (
+          <p className="text-amber-700 dark:text-amber-400">
+            {plural(off, "stub doesn't", "stubs don't")} add up; it's marked in the list below.
+          </p>
+        )}
+        {errors.length > 0 && (
+          <div className="text-red-700 dark:text-red-400">
+            {errors.length > 3 ? (
+              <details>
+                <summary className="cursor-pointer">
+                  {plural(errors.length, "file")} couldn't be added
+                </summary>
+                {list}
+              </details>
+            ) : (
+              <>
+                <p>{plural(errors.length, "file")} couldn't be added:</p>
+                {list}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={onClose}
+        className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+      >
+        <X className="size-4" aria-hidden="true" />
+        <span className="sr-only">Dismiss</span>
+      </button>
+    </div>
+  );
+}
+
 function Upload({ onDone }: { onDone: (year: number | null) => void }) {
   const qc = useQueryClient();
-  const [busy, setBusy] = useState<string | null>(null);
+  const [busy, setBusy] = useState<{ n: number; of: number } | null>(null);
   const [outcomes, setOutcomes] = useState<Outcome[]>([]);
   async function run(files: File[]) {
     const out: Outcome[] = [];
     let year: number | null = null;
-    for (const f of files) {
-      setBusy(f.name);
+    setOutcomes([]);
+    for (const [i, f] of files.entries()) {
+      setBusy({ n: i + 1, of: files.length });
       try {
         const ok = await api.post<PayUploadResult[]>("/api/pay/documents", {
           filename: f.name,
@@ -73,7 +154,11 @@ function Upload({ onDone }: { onDone: (year: number | null) => void }) {
   return (
     <div className="space-y-2">
       <label className="inline-block cursor-pointer rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-on-brand hover:bg-brand-700">
-        {busy ? `Reading ${busy}…` : "Add pay stubs or W-2s"}
+        {busy
+          ? busy.of > 1
+            ? `Reading ${busy.n} of ${busy.of}…`
+            : "Reading…"
+          : "Add pay stubs or W-2s"}
         <input
           type="file"
           multiple
@@ -87,37 +172,23 @@ function Upload({ onDone }: { onDone: (year: number | null) => void }) {
           }}
         />
       </label>
-      {outcomes.length > 0 && (
-        <ul className="space-y-1 text-sm">
-          {outcomes.map((o) => (
-            <li key={o.file} className="flex items-start gap-2">
-              {"error" in o ? (
-                <>
-                  <AlertTriangle
-                    className="mt-0.5 size-4 shrink-0 text-red-600"
-                    aria-hidden="true"
-                  />
-                  <span>
-                    <span className="font-medium">{o.file}</span>: {o.error}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <Check className="mt-0.5 size-4 shrink-0 text-emerald-600" aria-hidden="true" />
-                  <span>
-                    {o.ok.map((r) => r.label).join(", ")}
-                    {o.ok.some((r) => r.problems.length) && (
-                      <span className="text-amber-700 dark:text-amber-400">
-                        {" "}
-                        (doesn't add up, see below)
-                      </span>
-                    )}
-                  </span>
-                </>
-              )}
-            </li>
-          ))}
-        </ul>
+      {busy && busy.of > 1 && (
+        <div
+          className="h-1 w-full max-w-xs overflow-hidden rounded bg-slate-200 dark:bg-slate-800"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={busy.of}
+          aria-valuenow={busy.n - 1}
+          aria-label="Reading files"
+        >
+          <div
+            className="h-full bg-brand-600 transition-all"
+            style={{ width: `${((busy.n - 1) / busy.of) * 100}%` }}
+          />
+        </div>
+      )}
+      {outcomes.length > 0 && !busy && (
+        <UploadSummary outcomes={outcomes} onClose={() => setOutcomes([])} />
       )}
     </div>
   );
@@ -259,14 +330,63 @@ function YearCard({ year, b }: { year: number; b: PayBreakdown }) {
           total={ded}
         />
       </div>
-      {b.healthCoverageCents !== null && (
-        <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/60">
-          Your health coverage cost{" "}
-          <span className="font-semibold">{money(b.healthCoverageCents)}</span> in {year} in all,
-          counting your share and your employer's (W-2 box 12, code DD).
+      {b.healthCoverageCents !== null && <HealthCoverage year={year} b={b} />}
+    </Card>
+  );
+}
+
+/** W-2 box 12 DD split into your premiums and your employer's share, and pay counting it. */
+function HealthCoverage({ year, b }: { year: number; b: PayBreakdown }) {
+  const total = b.healthCoverageCents as number;
+  const employer = b.employerHealthCents;
+  return (
+    <div className="space-y-3 rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800/60">
+      <div>
+        <h3 className="font-semibold">Health coverage</h3>
+        <p className="text-xs text-slate-500">
+          What your coverage cost in {year} in all (W-2 box 12, code DD). It's for your information:
+          it isn't income and isn't taxed.
+        </p>
+      </div>
+      {employer !== null && b.yourHealthCents !== null ? (
+        <>
+          <dl className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {(
+              [
+                ["Total cost", total, "Your share and your employer's"],
+                [
+                  "You paid",
+                  b.yourHealthCents,
+                  `${pct(b.yourHealthCents, total)}, from your pay before tax`,
+                ],
+                ["Your employer paid", employer, `${pct(employer, total)}, roughly`],
+              ] as const
+            ).map(([k, v, sub]) => (
+              <div key={k}>
+                <dt className="text-xs text-slate-500">{k}</dt>
+                <dd className="text-lg font-semibold tabular-nums">{money(v)}</dd>
+                <dd className="text-xs text-slate-500">{sub}</dd>
+              </div>
+            ))}
+          </dl>
+          <p>
+            Counting what your employer paid toward your coverage, your pay was{" "}
+            <span className="font-semibold">{money(b.grossCents + employer)}</span>: gross pay of{" "}
+            {money(b.grossCents)} plus {money(employer)} you never see. Worth knowing when you
+            compare a job offer or price your own insurance.
+          </p>
+          <p className="text-xs text-slate-500">
+            Your employer's share is the total less your premiums. Plans differ in what they count
+            under DD, so treat it as an estimate.
+          </p>
+        </>
+      ) : (
+        <p>
+          <span className="font-semibold">{money(total)}</span> in all, counting your share and your
+          employer's.
         </p>
       )}
-    </Card>
+    </div>
   );
 }
 

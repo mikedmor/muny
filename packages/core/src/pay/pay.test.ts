@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { amountCents, type PdfItem, tidyName } from "./pdf.js";
 import { readAdpStub, stubProblems } from "./stub.js";
-import { employerKey, latestPeriod, payBreakdown, w2Check } from "./summary.js";
+import { employerKey, HEALTH_PREMIUMS, latestPeriod, payBreakdown, w2Check } from "./summary.js";
 import { readW2 } from "./w2.js";
 
 // Synthetic forms only: a made-up employer, person and amounts, laid out where
@@ -332,8 +332,10 @@ describe("a year of pay", () => {
     const b = payBreakdown(2026, [], [w]);
     expect(b?.source).toBe("w2");
     expect(b?.grossCents).toBe(10000000);
-    expect(b?.deductions).toEqual([{ name: "Other Cafe 125", cents: 1040000, preTax: true }]);
+    expect(b?.deductions).toEqual([{ name: HEALTH_PREMIUMS, cents: 1040000, preTax: true }]);
     expect(b?.healthCoverageCents).toBe(2000000);
+    expect(b?.yourHealthCents).toBe(1040000);
+    expect(b?.employerHealthCents).toBe(960000);
     expect(b?.takeHomeCents).toBe(10000000 - 700000 - 555832 - 129993 - 320000 - 1040000);
   });
 

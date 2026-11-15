@@ -112,6 +112,10 @@ export interface PayBreakdown {
   takeHomeCents: number;
   /** W-2 box 12 DD: the whole cost of your health coverage, both shares. */
   healthCoverageCents: number | null;
+  /** Your health premiums that year (taken from your pay), when the W-2's DD is known. */
+  yourHealthCents: number | null;
+  /** Roughly what your employer paid toward health coverage: DD less your premiums. */
+  employerHealthCents: number | null;
 }
 
 /** The latest pay period, and the same at that rate for a year. */
