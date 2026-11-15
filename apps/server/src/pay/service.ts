@@ -1,5 +1,7 @@
 import {
   employerKey,
+  isAdpStub,
+  isW2,
   latestPeriod,
   payBreakdown,
   readAdpStub,
@@ -287,6 +289,21 @@ function matchDeposits(db: MunyDb, stubs: StubRow[]): Map<string, PayDeposit[]> 
     );
   }
   return out;
+}
+
+/** Whether a PDF is a pay stub or W-2 Muny can read, without keeping it (the Import page sorts drops with this). */
+export async function detectPayDocument(base64: string): Promise<"stub" | "w2" | null> {
+  const data = Buffer.from(base64, "base64");
+  if (!data.length || data.length > MAX_FILE || data.subarray(0, 5).toString("latin1") !== "%PDF-")
+    return null;
+  try {
+    const pages = await pdfItems(new Uint8Array(data));
+    if (pages.some((p) => isAdpStub(p) && readAdpStub(p))) return "stub";
+    if (pages.some((p) => isW2(p) && readW2(p))) return "w2";
+  } catch {
+    // Not a PDF Muny can open: not a pay document.
+  }
+  return null;
 }
 
 export function payYears(db: MunyDb): number[] {

@@ -5,7 +5,14 @@ import { requireUser } from "../auth/plugin.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, parse } from "../lib/http.js";
 import { describeChange } from "../undo/track.js";
-import { deletePayDocument, PayError, payYear, readPayFile, uploadPayDocument } from "./service.js";
+import {
+  deletePayDocument,
+  detectPayDocument,
+  PayError,
+  payYear,
+  readPayFile,
+  uploadPayDocument,
+} from "./service.js";
 
 const Year = z.object({ year: z.coerce.number().int().min(1990).max(2200) });
 const Doc = z.object({ kind: z.enum(["stubs", "w2"]), id: z.string().min(1).max(64) });
@@ -18,6 +25,13 @@ export function registerPayRoutes(app: FastifyInstance, db: MunyDb, secret: Buff
   app.get("/api/pay/:year", async (req) => {
     requireUser(req);
     return payYear(db, parse(Year, req.params).year);
+  });
+
+  /** Is this PDF a pay stub or W-2? Nothing is kept. */
+  app.post("/api/pay/detect", async (req) => {
+    requireUser(req);
+    const { base64 } = parse(Upload.pick({ base64: true }), req.body);
+    return { kind: await detectPayDocument(base64) };
   });
 
   app.post("/api/pay/documents", async (req) => {

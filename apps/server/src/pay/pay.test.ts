@@ -210,6 +210,17 @@ describe("pay", () => {
     expect(out.w2s).toHaveLength(1);
   });
 
+  it("tells the Import page which PDFs are pay stubs and W-2s, keeping nothing", async () => {
+    const { client, db } = await setup();
+    const kind = async (pdf: Buffer) =>
+      (await client.post("/api/pay/detect", { base64: pdf.toString("base64") })).json().kind;
+    expect(await kind(stubPdf("01/13/2026"))).toBe("stub");
+    expect(await kind(w2Pdf())).toBe("w2");
+    expect(await kind(makePdf([{ x: 50, y: 700, t: "Card statement" }]))).toBeNull();
+    expect(await kind(Buffer.from("not a pdf"))).toBeNull();
+    expect(db.select().from(schema.payStubs).all()).toEqual([]);
+  });
+
   it("needs MUNY_SECRET_KEY to keep files", async () => {
     const { client } = await makeSignedInApp();
     const res = await client.post("/api/pay/documents", {

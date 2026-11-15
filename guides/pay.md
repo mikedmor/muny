@@ -14,7 +14,7 @@ Muny reads ADP's layout today. If your employer uses a different payroll service
 
 ## Adding them
 
-Click **Add pay stubs or W-2s** and pick one or more PDFs (a whole year of weekly stubs at once is fine; you'll see one short summary when it's done). Muny works out which is which. A PDF with several stubs (one per page) is fine, and a stub you've already added is skipped.
+Click **Add pay stubs or W-2s** (or drop them on **Import**) and pick one or more PDFs (a whole year of weekly stubs at once is fine; you'll see one short summary when it's done). Muny works out which is which. A PDF with several stubs (one per page) is fine, and a stub you've already added is skipped.
 
 **Your latest pay stub is enough to see the year so far**, because its year-to-date column covers every paycheck before it. Add older stubs if you want each deposit checked, and your W-2 when the year is over.
 

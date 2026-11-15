@@ -4,6 +4,13 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+### Added
+
+- **Pay.** A new page under Insights shows what happens to your pay before it reaches the bank. Add the pay stubs (earnings statements) and W-2s you download from your payroll site, and Muny shows your gross pay, each tax, what your benefits cost (medical, dental, vision, FSA, life and disability, with pre-tax ones marked) and take-home, for the year so far and per paycheck alongside a whole year at that rate. Your latest stub is enough to see the year so far. Each stub is checked to add up, each deposit is found in your accounts, and a W-2 is compared with the year's last stub. Muny reads ADP's layout for now, and files are stored encrypted (`MUNY_SECRET_KEY` must be set).
+- **What your health coverage really costs.** With a W-2, Pay splits box 12 code DD into what you paid and, roughly, what your employer paid, and shows your pay counting your employer's share.
+- Pay stubs and W-2s appear on **Documents**, **Taxes** shows a **Wages and withholding** card, and pay stubs and W-2s dropped on **Import** go straight to Pay.
+- AI assistants with the `read:summary` permission, and Ask Muny, can read your pay totals with the new `get_pay_summary` tool (never the files).
+
 ## [1.4.0] - 2026-11-14
 
 See where your balance is headed, look back on your year, put Muny on Home Assistant, and give stocks the same tax tools as crypto, with 1099-B import.

@@ -1,7 +1,8 @@
-import type { ImportFileKind } from "@muny/shared";
+import type { ImportFileKind, PayUploadResult } from "@muny/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
+  Banknote,
   Bitcoin,
   ChartCandlestick,
   FileStack,
@@ -130,9 +131,61 @@ export function ImportHub({
           </>,
         );
       }
-      if (pdfs.length) {
+      // Pay stubs and W-2s go to Pay; other PDFs are statements.
+      const statements: File[] = [];
+      const added: PayUploadResult[] = [];
+      let already = 0;
+      const payErrors: string[] = [];
+      for (const [i, f] of pdfs.entries()) {
+        setBusy(
+          pdfs.length > 1 ? `Looking at ${i + 1} of ${pdfs.length}…` : `Looking at ${f.name}…`,
+        );
+        const base64 = await toBase64(f);
+        const { kind } = await api.post<{ kind: "stub" | "w2" | null }>("/api/pay/detect", {
+          base64,
+        });
+        if (!kind) {
+          statements.push(f);
+          continue;
+        }
+        try {
+          added.push(
+            ...(await api.post<PayUploadResult[]>("/api/pay/documents", {
+              filename: f.name,
+              base64,
+            })),
+          );
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "Couldn't add it";
+          if (/already added/i.test(msg)) already++;
+          else payErrors.push(`${f.name}: ${msg}`);
+        }
+      }
+      if (pdfs.length > statements.length) {
+        await qc.invalidateQueries({ queryKey: ["pay"] });
+        await qc.invalidateQueries({ queryKey: ["documents"] });
+        const stubs = added.filter((r) => r.kind === "stub").length;
+        const w2s = added.length - stubs;
+        const what = [
+          stubs ? `${stubs} pay stub${stubs === 1 ? "" : "s"}` : "",
+          w2s ? `${w2s} W-2${w2s === 1 ? "" : "s"}` : "",
+        ]
+          .filter(Boolean)
+          .join(" and ");
+        setNotice(
+          <>
+            {what ? `Added ${what} to ` : "Nothing new for "}
+            <Link to="/pay" className="underline">
+              Pay
+            </Link>
+            .{already > 0 && ` ${already} ${already === 1 ? "was" : "were"} already there.`}
+          </>,
+        );
+        if (payErrors.length) setError(payErrors.join(" · "));
+      }
+      if (statements.length) {
         if (text.length) setNotice("Statements open first; drop the other files again after.");
-        setOpen({ kind: "statements", files: pdfs });
+        setOpen({ kind: "statements", files: statements });
         return;
       }
       const f = text[0];
@@ -187,8 +240,9 @@ export function ImportHub({
             <Upload aria-hidden="true" className="size-8 text-slate-400" />
             <span className="mt-3 font-medium">Drop any file here, or click to choose</span>
             <span className="mt-1 max-w-md text-sm text-slate-500">
-              Bank and Rocket Money exports, PDF statements, brokerage and crypto exports, receipts.
-              Muny works out what each one is, and you review it before anything is saved.
+              Bank and Rocket Money exports, PDF statements, pay stubs and W-2s, brokerage and
+              crypto exports, receipts. Muny works out what each one is, and you review it before
+              anything is saved.
             </span>
             <input
               type="file"
@@ -295,6 +349,19 @@ export function ImportHub({
           >
             Student loan servicers that list each loan on one statement. Loans → Import statements
             reads every loan on it and sets up the ones Muny doesn't have yet.
+          </Kind>
+          <Kind
+            icon={Banknote}
+            title="Pay stubs and W-2s"
+            formats="PDF · ADP · several at once"
+            action={
+              <Link to="/pay" className={linkClass}>
+                Pay →
+              </Link>
+            }
+          >
+            Earnings statements and W-2s from your payroll site: gross pay, taxes, what your
+            benefits cost and take-home. Drop them above or add them on Pay.
           </Kind>
           <Kind
             icon={FolderOpen}
