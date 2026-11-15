@@ -929,6 +929,56 @@ export const stockTaxDocs = sqliteTable(
   (t) => [index("stock_tax_docs_year").on(t.year, t.accountId)],
 );
 
+/** Pay stubs (earnings statements) you upload: what was read, and the file, encrypted. */
+export const payStubs = sqliteTable(
+  "pay_stubs",
+  {
+    id: text().primaryKey(),
+    employer: text(),
+    /** YYYY-MM-DD */
+    payDate: text().notNull(),
+    periodStart: text(),
+    periodEnd: text(),
+    grossCents: integer().notNull(),
+    netCents: integer().notNull(),
+    ytdGrossCents: integer(),
+    federalTaxableCents: integer(),
+    /** PayLine[] */
+    lines: text({ mode: "json" }).$type<unknown[]>().notNull().default([]),
+    /** { cents, last4 }[]: where net pay was deposited. */
+    deposits: text({ mode: "json" }).$type<unknown[]>().notNull().default([]),
+    checkCents: integer().notNull().default(0),
+    filename: text().notNull(),
+    size: integer().notNull(),
+    /** Encrypted file bytes. */
+    data: blob({ mode: "buffer" }).notNull(),
+    uploadedAt: integer().notNull(),
+  },
+  (t) => [index("pay_stubs_date").on(t.payDate)],
+);
+
+/** W-2s you upload: the boxes read from them, and the file, encrypted. */
+export const w2Forms = sqliteTable(
+  "w2_forms",
+  {
+    id: text().primaryKey(),
+    year: integer().notNull(),
+    employer: text(),
+    /** W2Boxes */
+    boxes: text({ mode: "json" }).$type<Record<string, unknown>>().notNull(),
+    /** { code, cents }[] */
+    box12: text({ mode: "json" }).$type<unknown[]>().notNull().default([]),
+    /** { grossCents, adjustments }: ADP's earnings summary. */
+    summary: text({ mode: "json" }).$type<Record<string, unknown>>().notNull(),
+    filename: text().notNull(),
+    size: integer().notNull(),
+    /** Encrypted file bytes. */
+    data: blob({ mode: "buffer" }).notNull(),
+    uploadedAt: integer().notNull(),
+  },
+  (t) => [index("w2_forms_year").on(t.year)],
+);
+
 /** Securities to keep an eye on, owned or not (Stocks → Watch list). */
 export const watchlist = sqliteTable("watchlist", {
   securityId: text()

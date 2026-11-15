@@ -355,7 +355,14 @@ export interface LoanStatementPreview {
 /** A document kept in Muny (Insights → Documents), or one it makes (tax reports). */
 export interface DocumentInfo {
   id: string;
-  kind: "loan_statement" | "card_statement" | "contract" | "tax_form" | "report" | "other";
+  kind:
+    | "loan_statement"
+    | "card_statement"
+    | "contract"
+    | "tax_form"
+    | "pay_stub"
+    | "report"
+    | "other";
   /** Where it's filed, e.g. "Loans / Seaview" or "Taxes / 2026". */
   folder: string;
   /** Open it (in the browser) and download it. */

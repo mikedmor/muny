@@ -2,6 +2,7 @@ import { type CurrentUser, SUPPORT_URL } from "@muny/shared";
 import { Link, Outlet } from "@tanstack/react-router";
 import {
   ArrowLeftRight,
+  Banknote,
   Bell,
   Bitcoin,
   ChartCandlestick,
@@ -77,6 +78,7 @@ const NAV: { label?: string; items: { to: string; label: string; icon: LucideIco
       { to: "/reports", label: "Reports", icon: ChartColumn },
       { to: "/forecast", label: "Forecast", icon: Telescope },
       { to: "/review", label: "Year in review", icon: PartyPopper },
+      { to: "/pay", label: "Pay", icon: Banknote },
       { to: "/taxes", label: "Taxes", icon: Receipt },
       { to: "/documents", label: "Documents", icon: FolderOpen },
     ],

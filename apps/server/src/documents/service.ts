@@ -3,6 +3,7 @@ import { type MunyDb, newId, schema } from "@muny/db";
 import { CRYPTO_TAX_REPORTS, type DocumentInfo } from "@muny/shared";
 import { desc, eq, getTableColumns, sql } from "drizzle-orm";
 import { decryptBytes, encryptBytes } from "../lib/crypto.js";
+import { payDocumentList } from "../pay/service.js";
 
 /**
  * Documents kept in Muny: loan statements (saved when imported) and files you
@@ -142,6 +143,68 @@ function taxDocuments(db: MunyDb): DocumentInfo[] {
   return out;
 }
 
+/** Pay stubs under Pay, W-2s with the year's tax forms; both kept on the Pay page. */
+function payDocuments(db: MunyDb): DocumentInfo[] {
+  const { stubs, w2s } = payDocumentList(db);
+  const entry = (
+    id: string,
+    kind: DocumentInfo["kind"],
+    folder: string,
+    href: string,
+    name: string,
+    size: number,
+    employer: string | null,
+    documentDate: string,
+    notes: string,
+    uploadedAt: number,
+  ): DocumentInfo => ({
+    id,
+    kind,
+    folder,
+    href,
+    downloadHref: `${href}?download=1`,
+    stored: false,
+    name,
+    mime: "application/pdf",
+    sizeBytes: size,
+    lender: employer,
+    documentDate,
+    notes,
+    accountId: null,
+    createdAt: uploadedAt,
+  });
+  return [
+    ...stubs.map((s) =>
+      entry(
+        `paystub:${s.id}`,
+        "pay_stub",
+        `Pay / ${s.payDate.slice(0, 4)}`,
+        `/api/pay/stubs/${s.id}/file`,
+        s.filename,
+        s.size,
+        s.employer,
+        s.payDate,
+        "Pay stub, read on the Pay page",
+        s.uploadedAt,
+      ),
+    ),
+    ...w2s.map((w) =>
+      entry(
+        `w2:${w.id}`,
+        "tax_form",
+        `Taxes / ${w.year} / Forms`,
+        `/api/pay/w2/${w.id}/file`,
+        w.filename,
+        w.size,
+        w.employer,
+        `${w.year}-12-31`,
+        `W-2${w.employer ? ` from ${w.employer}` : ""}, read on the Pay page`,
+        w.uploadedAt,
+      ),
+    ),
+  ];
+}
+
 const FOLDERS_KEY = "documents.folders";
 const MAX_FOLDERS = 500;
 
@@ -207,6 +270,7 @@ export function listDocuments(db: MunyDb): DocumentInfo[] {
       .all()
       .map((r) => ({ ...info(r), review: reviews.get(r.id) })),
     ...taxDocuments(db),
+    ...payDocuments(db),
   ].sort(
     (a, b) =>
       (b.documentDate ?? "").localeCompare(a.documentDate ?? "") || b.createdAt - a.createdAt,

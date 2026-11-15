@@ -19,6 +19,7 @@ export * from "./loan-math.js";
 export * from "./loans.js";
 export * from "./mail.js";
 export * from "./money.js";
+export * from "./pay.js";
 export * from "./payoff-plan.js";
 export * from "./recurring.js";
 export * from "./reports.js";

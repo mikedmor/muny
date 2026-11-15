@@ -39,6 +39,7 @@ Everything you need to install, set up and use Muny. New here? Start with **[Ins
 | ----------------------------------------- | --------------------------------------------------------------------- |
 | [Your Overview](overview.md)              | Choosing and arranging cards, and building your own with calculations |
 | [Spending, reports and taxes](reports.md) | Monthly spending, longer reports, net worth and the tax year          |
+| [Pay](pay.md)                             | Pay stubs and W-2s: gross pay, taxes, benefit costs and take-home     |
 | [Themes](themes.md)                       | Light, dark and your own color themes                                 |
 | [Undo and history](undo.md)               | Undo or redo any change, and see who changed what                     |
 

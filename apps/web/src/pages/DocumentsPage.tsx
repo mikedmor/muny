@@ -36,6 +36,7 @@ const KIND_LABEL: Record<DocumentInfo["kind"], string> = {
   card_statement: "Card statement",
   contract: "Contract",
   tax_form: "Tax form",
+  pay_stub: "Pay stub",
   report: "Report",
   other: "Document",
 };

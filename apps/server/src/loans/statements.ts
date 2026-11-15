@@ -20,6 +20,32 @@ export function cleanPdfText(s: string) {
   return s.replace(PUA_BEFORE_NUMBER, "$").replace(PUA, "").trim();
 }
 
+/** Each page's text pieces with where they sit, for forms read by position. */
+export async function pdfItems(
+  bytes: Uint8Array,
+): Promise<{ s: string; x: number; y: number; w: number; size: number }[][]> {
+  const doc = await getDocumentProxy(bytes);
+  const pages = [];
+  for (let n = 1; n <= doc.numPages; n++) {
+    const content = await (await doc.getPage(n)).getTextContent();
+    pages.push(
+      (content.items as { str?: string; transform?: number[]; width?: number }[])
+        .filter((i) => i.str?.trim() && i.transform)
+        .map((i) => {
+          const t = i.transform as number[];
+          return {
+            s: cleanPdfText(i.str as string),
+            x: t[4] ?? 0,
+            y: t[5] ?? 0,
+            w: i.width ?? 0,
+            size: Math.hypot(t[0] ?? 0, t[1] ?? 0) || 10,
+          };
+        }),
+    );
+  }
+  return pages;
+}
+
 /** The PDF's text as lines (cells left to right), top to bottom, page by page. */
 export async function pdfLines(bytes: Uint8Array): Promise<string[][]> {
   const doc = await getDocumentProxy(bytes);

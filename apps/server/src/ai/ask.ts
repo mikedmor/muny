@@ -31,6 +31,7 @@ const LOOKUPS: Record<string, string> = {
   get_net_worth_history: "net worth",
   get_investments_summary: "investments",
   get_debts: "debts",
+  get_pay_summary: "pay stubs and W-2s",
   search_transactions: "transactions",
   get_card_schema: "what data is available",
   query_data: "a calculation over your data",

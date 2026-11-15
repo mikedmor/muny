@@ -35,6 +35,7 @@ import { listAccounts } from "../ledger/accounts.js";
 import { audit } from "../lib/audit.js";
 import { readPlan } from "../loans/routes.js";
 import { loansReport } from "../loans/service.js";
+import { payYear } from "../pay/service.js";
 import { listSeries } from "../recurring/service.js";
 import { netWorthDates, netWorthReport, overview, spendingReport } from "../reports/service.js";
 import { savingsOpportunities } from "../savings/opportunities.js";
@@ -394,6 +395,32 @@ export const TOOLS: Tool[] = [
       return alternativeSuggestions(ctx.db, ctx.today).filter(
         (a) => !q || a.seriesName.toLowerCase().includes(q) || a.service.toLowerCase().includes(q),
       );
+    },
+  }),
+
+  defineTool({
+    name: "get_pay_summary",
+    description:
+      "Pay from uploaded pay stubs and W-2s: gross pay, each tax and deduction (benefits like medical, dental, life insurance, FSA; preTax marks those taken before income tax) and take-home, for a year so far; the latest pay period and how many periods make a year; and the W-2 boxes. source 'w2' means the year comes from a W-2 alone, where takeHomeCents still includes after-tax deductions. fromStubs marks a total added up from the uploaded stubs because the stub shows no year-to-date amount. healthCoverageCents is W-2 box 12 DD, the whole cost of health coverage, yours and your employer's.",
+    scope: "read:summary",
+    input: z.object({ year: z.number().int().min(1990).max(2200).optional() }),
+    run: (ctx, { year }) => {
+      const y = payYear(ctx.db, year ?? Number(ctx.today.slice(0, 4)));
+      return {
+        year: y.year,
+        yearsWithPay: y.years,
+        breakdown: y.breakdown,
+        latestPeriod: y.latest,
+        stubCount: y.stubs.length,
+        w2s: y.w2s.map((w) => ({
+          year: w.year,
+          employer: w.employer,
+          boxes: w.boxes,
+          box12: w.box12,
+          grossCents: w.summary.grossCents,
+          preTaxAdjustments: w.summary.adjustments,
+        })),
+      };
     },
   }),
 

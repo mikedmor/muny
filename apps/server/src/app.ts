@@ -38,6 +38,7 @@ import { registerLiveRoutes } from "./live/routes.js";
 import { registerLoanRoutes } from "./loans/routes.js";
 import type { MailDeps } from "./mail/check.js";
 import { registerMailRoutes } from "./mail/routes.js";
+import { registerPayRoutes } from "./pay/routes.js";
 import { registerRecurringRoutes } from "./recurring/routes.js";
 import { registerReportRoutes } from "./reports/routes.js";
 import { registerRuleRoutes } from "./rules/routes.js";
@@ -197,6 +198,7 @@ export async function buildApp({
   registerBudgetRoutes(app, db);
   registerReportRoutes(app, db);
   registerForecastRoutes(app, db);
+  registerPayRoutes(app, db, config.secretKey);
   registerTrialRoutes(app, db);
   registerSavingsRoutes(app, db);
   registerAiRoutes(app, db, { secretKey: config.secretKey, fetch: aiFetch, sleep: aiSleep });

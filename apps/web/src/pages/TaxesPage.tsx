@@ -1,4 +1,4 @@
-import { formatMoney, type TaxSection, type TaxYear } from "@muny/shared";
+import { formatMoney, type PayYear, type TaxSection, type TaxYear } from "@muny/shared";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
@@ -104,6 +104,63 @@ function Section({ s }: { s: TaxSection }) {
   );
 }
 
+/** Wages and withholding from the Pay page: the W-2 when there is one, else the stubs so far. */
+function WagesSection({ year }: { year: number }) {
+  const q = useQuery({
+    queryKey: ["pay", year],
+    queryFn: () => api.get<PayYear>(`/api/pay/${year}`),
+  });
+  const p = q.data;
+  if (!p?.breakdown && !p?.w2s.length) return null;
+  const w2 = p.w2s[0];
+  const rows: [string, number | null][] = w2
+    ? [
+        ["Wages (box 1)", w2.boxes.wagesCents],
+        ["Federal income tax withheld (box 2)", w2.boxes.federalCents],
+        [`${w2.boxes.state ?? "State"} income tax withheld (box 17)`, w2.boxes.stateCents],
+        ["Local income tax withheld (box 19)", w2.boxes.localCents],
+      ]
+    : (p.breakdown?.taxes ?? []).map((t): [string, number] => [t.name, t.cents]);
+  return (
+    <Card className="p-0">
+      <section aria-labelledby="tax-wages-title">
+        <div className="flex flex-wrap items-start justify-between gap-3 px-4 pt-4">
+          <div>
+            <h2 id="tax-wages-title" className="flex items-center gap-2 font-semibold">
+              <span aria-hidden="true">💼</span> Wages and withholding
+            </h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {w2
+                ? `From your ${year} W-2${p.w2s.length > 1 ? ` (and ${p.w2s.length - 1} more)` : ""}.`
+                : `So far, from your pay stub for ${p.breakdown?.asOf ?? ""}. Add your W-2 when it comes.`}
+            </p>
+          </div>
+          {!w2 && p.breakdown && (
+            <p className="text-2xl font-semibold tabular-nums">
+              {formatMoney(p.breakdown.grossCents)}
+            </p>
+          )}
+        </div>
+        <dl className="divide-y divide-slate-100 px-4 py-2 text-sm dark:divide-slate-800">
+          {rows
+            .filter(([, v]) => v !== null)
+            .map(([k, v]) => (
+              <div key={k} className="flex justify-between gap-3 py-1.5">
+                <dt>{k}</dt>
+                <dd className="font-medium tabular-nums">{formatMoney(v as number)}</dd>
+              </div>
+            ))}
+        </dl>
+        <div className="px-4 pb-3">
+          <Link to="/pay" className="text-sm text-brand-600 hover:underline">
+            See it all on Pay
+          </Link>
+        </div>
+      </section>
+    </Card>
+  );
+}
+
 export function TaxesPage() {
   const [year, setYear] = useState(() => new Date().getFullYear());
   const q = useQuery({
@@ -180,6 +237,7 @@ export function TaxesPage() {
               <Section key={s.key} s={s} />
             ))}
           </div>
+          <WagesSection year={year} />
           <StocksTaxSection year={year} />
           <CryptoTaxSection year={year} />
         </div>

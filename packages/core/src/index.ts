@@ -21,6 +21,10 @@ export * from "./invest/cost.js";
 export * from "./invest/history.js";
 export * from "./invest/lots.js";
 
+export * from "./pay/pdf.js";
+export * from "./pay/stub.js";
+export * from "./pay/summary.js";
+export * from "./pay/w2.js";
 export * from "./payees/normalize.js";
 export * from "./recurring/detect.js";
 export * from "./rules/engine.js";

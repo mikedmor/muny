@@ -26,6 +26,7 @@ import { ImportPage } from "./pages/ImportPage.js";
 import { LoansPage } from "./pages/LoansPage.js";
 import { NotificationsPage } from "./pages/NotificationsPage.js";
 import { OverviewPage } from "./pages/OverviewPage.js";
+import { PayPage } from "./pages/PayPage.js";
 import { PlaidOAuthPage } from "./pages/PlaidOAuthPage.js";
 import { RecurringPage } from "./pages/RecurringPage.js";
 import { ReportsPage } from "./pages/ReportsPage.js";
@@ -134,6 +135,7 @@ const routeTree = rootRoute.addChildren([
   page("/assets", AssetsPage),
   page("/ask", AskPage),
   page("/reports", ReportsPage),
+  page("/pay", PayPage),
   page("/taxes", TaxesPage),
   page("/documents", DocumentsPage),
   page("/documents/$documentId/review", ContractReviewPage),
