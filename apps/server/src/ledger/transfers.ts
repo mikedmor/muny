@@ -320,7 +320,9 @@ export function pairPayPalFunding(tx: Tx): number {
       )[0];
     if (!purchase) continue;
     used.add(purchase.id);
-    // The bank's withdrawal to PayPal.
+    // The bank's withdrawal to PayPal. Often still pending at the bank after
+    // PayPal has settled; pair it anyway (a pending row keeps its id when it
+    // posts, and if it's dropped instead the pair clears and is found again).
     const out = tx
       .select(cols)
       .from(t)
@@ -329,7 +331,6 @@ export function pairPayPalFunding(tx: Tx): number {
           eq(t.amountCents, -inRow.amountCents),
           isNull(t.transferPairId),
           eq(t.notTransfer, false),
-          eq(t.pending, false),
           sql`${t.accountId} not in (${sql.join(
             paypal.map((id) => sql`${id}`),
             sql`, `,

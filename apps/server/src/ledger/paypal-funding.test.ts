@@ -65,6 +65,39 @@ describe("PayPal pass-through", () => {
     expect(db.transaction((tx) => pairPayPalFunding(tx))).toBe(0);
   });
 
+  it("pairs a bank withdrawal that's still pending after PayPal settled", async () => {
+    const { client, db } = await makeSignedInApp();
+    const bank = (
+      await client.post("/api/accounts", { name: "Everyday Checking", type: "checking" })
+    ).json<Account>();
+    const pp = (
+      await client.post("/api/accounts", { name: "PayPal", type: "checking" })
+    ).json<Account>();
+    const add = async (accountId: string, postedDate: string, amountCents: number, d: string) =>
+      (
+        await client.post("/api/transactions", {
+          accountId,
+          postedDate,
+          amountCents,
+          description: d,
+        })
+      ).json<{ id: string }>();
+    const out = await add(bank.id, "2026-10-16", -975, "PayPal");
+    db.$client.prepare("update transactions set pending = 1 where id = ?").run(out.id);
+    const arrived = await add(pp.id, "2026-10-13", 975, "Bank Deposit to PayPal");
+    const purchase = await add(pp.id, "2026-10-13", -975, "STREAMCO");
+
+    expect(db.transaction((tx) => pairPayPalFunding(tx))).toBe(1);
+    const list = (await client.get("/api/transactions?limit=50")).json<TransactionPage>().items;
+    expect(list.map((t) => t.id)).toEqual([purchase.id]);
+    expect(list[0]?.fundedFrom).toMatchObject({ transactionId: out.id });
+    expect(
+      db.$client
+        .prepare("select transfer_pair_id p from transactions where id = ?")
+        .get(arrived.id),
+    ).toEqual({ p: out.id });
+  });
+
   it("leaves a refund in PayPal alone", async () => {
     const { client, db } = await makeSignedInApp();
     const pp = (
