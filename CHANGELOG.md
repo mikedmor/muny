@@ -11,6 +11,10 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 - Pay stubs and W-2s appear on **Documents**, **Taxes** shows a **Wages and withholding** card, and pay stubs and W-2s dropped on **Import** go straight to Pay.
 - AI assistants with the `read:summary` permission, and Ask Muny, can read your pay totals with the new `get_pay_summary` tool (never the files).
 
+### Fixed
+
+- A purchase paid through PayPal is listed once even while the bank's PayPal withdrawal is still pending. Before, the pending withdrawal and PayPal's "Bank Deposit to PayPal" showed alongside the purchase until the bank posted it.
+
 ## [1.4.0] - 2026-11-14
 
 See where your balance is headed, look back on your year, put Muny on Home Assistant, and give stocks the same tax tools as crypto, with 1099-B import.
