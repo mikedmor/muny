@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { ApiError } from "./lib/api.js";
 import { authKey } from "./lib/auth.js";
 import { watchInstall } from "./lib/device.js";
+import { restoreOffline } from "./lib/offline.js";
 import { applyCachedTheme } from "./lib/theme.js";
 import { router } from "./router.js";
 import "./index.css";
@@ -32,13 +33,18 @@ watchInstall();
 const root = document.getElementById("root");
 if (!root) throw new Error("#root element missing");
 
-createRoot(root).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
-  </StrictMode>,
-);
+// The offline snapshot (if this device keeps one) goes in before the first render.
+void restoreOffline(queryClient)
+  .catch(() => {})
+  .then(() =>
+    createRoot(root).render(
+      <StrictMode>
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </StrictMode>,
+    ),
+  );
 
 // Installable app + fast startup. Only in production builds (Vite dev serves differently).
 if (import.meta.env.PROD && "serviceWorker" in navigator) {

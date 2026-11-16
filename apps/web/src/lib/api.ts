@@ -1,5 +1,6 @@
 import { type ApiErrorBody, CHANGE_HEADER, CHANGE_TITLE_HEADER } from "@muny/shared";
 import { announceChange } from "./changes.js";
+import { markReachable, markUnreachable } from "./offline.js";
 
 export class ApiError extends Error {
   constructor(
@@ -27,7 +28,20 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
     headers["content-type"] = "application/json";
     payload = JSON.stringify(body);
   }
-  const res = await fetch(url, { method, headers, body: payload, credentials: "same-origin" });
+  let res: Response;
+  try {
+    res = await fetch(url, { method, headers, body: payload, credentials: "same-origin" });
+  } catch {
+    // Never reached the server (offline, VPN down, server off).
+    markUnreachable();
+    throw new ApiError(0, {
+      error:
+        method === "GET"
+          ? "Can't reach Muny right now."
+          : "Can't reach Muny right now, so this wasn't saved. Try again once you're connected.",
+    });
+  }
+  markReachable();
   const text = await res.text();
   const data = text ? JSON.parse(text) : undefined;
   if (!res.ok) {

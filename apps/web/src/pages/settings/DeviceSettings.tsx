@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { Button, Card } from "../../components/ui.js";
 import { useInstall } from "../../lib/device.js";
+import { offlineEnabled, offlineSupported, setOfflineEnabled } from "../../lib/offline.js";
 
 /** Settings for the device you're on: installing Muny as an app, and (below) offline use. */
 export function DeviceSettings() {
@@ -18,7 +19,51 @@ export function DeviceSettings() {
           . Installed, Muny also shows how many alerts are unread on its icon.
         </p>
       </Card>
+      <OfflineCard />
     </div>
+  );
+}
+
+function OfflineCard() {
+  const [on, setOn] = useState(offlineEnabled);
+  const [busy, setBusy] = useState(false);
+  const supported = offlineSupported();
+  return (
+    <Card>
+      <h2 className="font-semibold">Use offline</h2>
+      <label className="mt-3 flex items-start gap-3 text-sm">
+        <input
+          type="checkbox"
+          checked={on}
+          disabled={!supported || busy}
+          onChange={(e) => {
+            const next = e.target.checked;
+            setBusy(true);
+            void setOfflineEnabled(next)
+              .catch(() => {})
+              .finally(() => {
+                setOn(offlineEnabled());
+                setBusy(false);
+              });
+          }}
+          className="mt-0.5 size-4 accent-brand-600"
+        />
+        <span>
+          <span className="font-medium">Keep a copy of my data on this device</span>
+          <span className="block text-xs text-slate-500">
+            When Muny can't be reached (no signal, VPN off, server down), it opens with what you
+            last saw: the pages you've visited, as of then. It's read-only until you're back. The
+            copy is encrypted with a key that stays in this browser, and it's deleted when you sign
+            out or turn this off. Only turn it on for a phone or computer only you use.
+          </span>
+          {!supported && (
+            <span className="mt-1 block text-xs text-amber-700 dark:text-amber-400">
+              Needs Muny's secure (https://) address.
+            </span>
+          )}
+        </span>
+      </label>
+    </Card>
   );
 }
 

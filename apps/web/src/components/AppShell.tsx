@@ -39,6 +39,7 @@ import { useNotifications, useUpdates } from "../lib/queries.js";
 import { ThemeProvider } from "../lib/theme.js";
 import { useAiSettings } from "../pages/settings/AiSettings.js";
 import { DemoBanner } from "./DemoNotice.js";
+import { OfflineBanner } from "./OfflineBanner.js";
 import { ThemeTryBar } from "./ThemeSettings.js";
 import { UndoBar } from "./Undo.js";
 import { UpdateNotice } from "./UpdateNotice.js";
@@ -365,6 +366,7 @@ function Shell({ user }: { user: CurrentUser }) {
             You have view-only access to this household.
           </p>
         )}
+        <OfflineBanner />
         <UpdateNotice />
         <DemoBanner />
         <Outlet />

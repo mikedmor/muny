@@ -12,7 +12,10 @@ const apiPort = process.env.MUNY_PORT ?? "8420";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  define: { __MUNY_UI_VERSION__: JSON.stringify(version) },
+  define: {
+    __MUNY_UI_VERSION__: JSON.stringify(version),
+    __MUNY_BUILD__: JSON.stringify(`${version}+${Date.now().toString(36)}`),
+  },
   server: {
     port: 5173,
     proxy: {

@@ -34,7 +34,13 @@ Muny needs no extra headers behind a proxy.
 
 ## On your phone
 
-Open Muny in your phone's browser and go to **Settings → This device → Install Muny**, or use the browser's **Add to Home Screen** (or **Install app**). Installing as an app needs HTTPS; over plain `http://` it works as a normal web page. Installed, Muny opens in its own window, shows how many alerts are unread on its icon, and has shortcuts to Transactions, Alerts, Budgets and Recurring when you long-press the icon. Financial data is never stored in the browser's cache.
+Open Muny in your phone's browser and go to **Settings → This device → Install Muny**, or use the browser's **Add to Home Screen** (or **Install app**). Installing as an app needs HTTPS; over plain `http://` it works as a normal web page. Installed, Muny opens in its own window, shows how many alerts are unread on its icon, and has shortcuts to Transactions, Alerts, Budgets and Recurring when you long-press the icon.
+
+### Using it offline
+
+By default nothing financial is stored on your phone: when Muny can't be reached (no signal, Tailscale off, server restarting) it says so and shows only what's already on screen. To open it with your last data instead, turn on **Settings → This device → Keep a copy of my data on this device**. Muny then keeps the pages you've visited, as of the last time it could reach the server, and opens with them offline, with a banner showing how old they are. Nothing can be changed until it's back online.
+
+The copy is encrypted with a key that never leaves that browser, and is deleted when you sign out or turn the setting off. Turn it on only on a phone or computer that only you use. It needs Muny's HTTPS address.
 
 ## Household members
 

@@ -1,14 +1,27 @@
 ﻿/*
  * Muny service worker: makes the app installable and loads the UI quickly.
- * - /api/* is never cached (financial data stays on the server only).
+ * - /api/* is never cached here. (The opt-in offline snapshot is separate:
+ *   encrypted in IndexedDB by the app, see src/lib/offline.ts.)
  * - Built assets (/assets/*, hashed filenames) are cached on first use.
  * - Pages are network-first, falling back to the cached app shell offline.
  */
-const CACHE = "muny-shell-v5";
+const CACHE = "muny-shell-v6";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((c) => c.addAll(["/", "/manifest.webmanifest", "/icons/icon-192.png"])),
+    caches.open(CACHE).then(async (c) => {
+      await c.addAll(["/", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/badge-96.png"]);
+      // The app's own script and styles too, so it opens offline from the first visit.
+      try {
+        const html = await (await c.match("/")).text();
+        const assets = [...html.matchAll(/["'](\/assets\/[^"']+\.(?:js|css))["']/g)].map(
+          (m) => m[1],
+        );
+        await c.addAll([...new Set(assets)]);
+      } catch {
+        // Cached on first use instead.
+      }
+    }),
   );
   self.skipWaiting();
 });

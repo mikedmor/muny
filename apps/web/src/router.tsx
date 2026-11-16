@@ -51,7 +51,8 @@ function Root() {
       <div className="flex min-h-dvh items-center justify-center text-slate-500">Loading…</div>
     );
   }
-  if (status.isError) {
+  // Unreachable but we have who's signed in (offline snapshot): carry on read-only.
+  if (status.isError && !status.data) {
     return (
       <div className="mx-auto mt-20 max-w-md space-y-3 px-4">
         <Alert>Can't reach the Muny server.</Alert>
