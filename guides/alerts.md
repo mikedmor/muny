@@ -22,6 +22,8 @@ Every alert appears under **Alerts** in Muny (the bell).
 
 On **Alerts → Settings**, click **Turn on notifications here** on each device you want alerts on. On Android, install Muny first: open it in Chrome over HTTPS (your Tailscale address), then browser menu → **Install app**, and turn notifications on from the installed app. On Windows, Edge or Chrome works the same way (installed or in a tab). Alerts then arrive like any app's, even with Muny closed.
 
+Each notification opens the page it's about when tapped, and has **Mark read** (without opening Muny) and **Open** buttons. A newer alert of the same kind replaces the older one instead of stacking up. The installed app's icon shows how many alerts are unread.
+
 Each device becomes a channel. The **Where each alert goes** grid has a row per alert (account alerts together) and a column per device or channel: tick which alerts each one gets, or **All** / **None**. A new device starts with every alert that's on.
 
 Notifications go through the browser's own push service (Google for Chrome and Android, Microsoft for Edge, Mozilla for Firefox, Apple for Safari), encrypted so only that device can read them; Muny contacts it only for devices you turned on. A device that turns notifications off is switched off here too.

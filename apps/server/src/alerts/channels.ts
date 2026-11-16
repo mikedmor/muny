@@ -21,6 +21,10 @@ export interface OutboundMessage {
   severity: "info" | "warning";
   type: string;
   createdAt: number;
+  /** The notification's id (device notifications offer "Mark read"); absent for tests. */
+  id?: string;
+  /** Unread alerts once this one arrives (device notifications put it on the app icon). */
+  unread?: number;
 }
 
 const httpUrl = z
@@ -130,7 +134,16 @@ export async function sendToChannel(
             p256dh: config.p256dh as string,
             auth: config.auth as string,
           },
-          { title: msg.title, body: msg.body, url: msg.url, tag: msg.type },
+          {
+            title: msg.title,
+            body: msg.body,
+            url: msg.url,
+            link: msg.link ?? null,
+            tag: msg.type,
+            id: msg.id ?? null,
+            ts: msg.createdAt,
+            unread: msg.unread ?? null,
+          },
           push.vapid,
           push.subject,
           fetchImpl,

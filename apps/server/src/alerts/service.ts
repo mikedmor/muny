@@ -98,6 +98,7 @@ function record(db: MunyDb, candidates: Candidate[]) {
 
 export function outbound(
   n: {
+    id?: string;
     title: string;
     body: string;
     link: string | null;
@@ -115,6 +116,7 @@ export function outbound(
     severity: n.severity,
     type: n.ruleType,
     createdAt: n.createdAt.getTime(),
+    ...(n.id ? { id: n.id } : {}),
   };
 }
 
@@ -232,11 +234,12 @@ export function sendPending(db: MunyDb, deps: AlertDeps, now = new Date()): Prom
         .all()
         .map((c) => c.id),
     );
+    const unread = unreadCount(db);
     for (const n of pending) {
       const ids = (channelsByType.get(n.ruleType) ?? []).filter((id) => enabledChannels.has(id));
       let allOk = true;
       for (const id of ids) {
-        const r = await deliver(db, id, outbound(n, deps.publicUrl), deps);
+        const r = await deliver(db, id, { ...outbound(n, deps.publicUrl), unread }, deps);
         allOk &&= r.ok;
       }
       if (allOk)
@@ -260,13 +263,15 @@ export function listNotifications(db: MunyDb, limit = 50) {
     .limit(limit)
     .all()
     .map(toNotification);
-  const unread = db
+  return { items, unread: unreadCount(db) };
+}
+
+export const unreadCount = (db: MunyDb) =>
+  db
     .select({ id: schema.notifications.id })
     .from(schema.notifications)
     .where(isNull(schema.notifications.readAt))
     .all().length;
-  return { items, unread };
-}
 
 export function markRead(db: MunyDb, ids?: string[]) {
   const n = schema.notifications;

@@ -99,7 +99,20 @@ export class PushGone extends Error {}
 /** Send one notification. Throws PushGone when the device no longer accepts them. */
 export async function sendWebPush(
   sub: { endpoint: string; p256dh: string; auth: string },
-  payload: { title: string; body: string; url: string | null; tag?: string },
+  payload: {
+    title: string;
+    body: string;
+    url: string | null;
+    /** In-app path to open (works without MUNY_PUBLIC_URL). */
+    link?: string | null;
+    tag?: string;
+    /** Notification id, for "Mark read". */
+    id?: string | null;
+    /** When it happened (ms). */
+    ts?: number;
+    /** Unread count for the app icon. */
+    unread?: number | null;
+  },
   v: Vapid,
   subject: string,
   f: typeof fetch = fetch,

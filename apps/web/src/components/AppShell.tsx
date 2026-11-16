@@ -32,8 +32,9 @@ import {
   Telescope,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLogout, useMeta } from "../lib/auth.js";
+import { setAppBadge } from "../lib/device.js";
 import { useNotifications, useUpdates } from "../lib/queries.js";
 import { ThemeProvider } from "../lib/theme.js";
 import { useAiSettings } from "../pages/settings/AiSettings.js";
@@ -289,7 +290,12 @@ export function AppShell({ user }: { user: CurrentUser }) {
 
 function Shell({ user }: { user: CurrentUser }) {
   const [open, setOpen] = useState(false);
-  const unread = useNotifications().data?.unread ?? 0;
+  const notifications = useNotifications().data;
+  const unread = notifications?.unread ?? 0;
+  // The count on the installed app's icon follows what's unread here.
+  useEffect(() => {
+    if (notifications) setAppBadge(notifications.unread);
+  }, [notifications]);
 
   return (
     <div className="min-h-dvh bg-slate-50 text-slate-900 md:flex dark:bg-slate-950 dark:text-slate-100">

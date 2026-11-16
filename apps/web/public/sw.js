@@ -4,7 +4,7 @@
  * - Built assets (/assets/*, hashed filenames) are cached on first use.
  * - Pages are network-first, falling back to the cached app shell offline.
  */
-const CACHE = "muny-shell-v4";
+const CACHE = "muny-shell-v5";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -60,6 +60,13 @@ self.addEventListener("fetch", (event) => {
   }
 });
 
+// The unread count on the installed app's icon (where supported).
+function setBadge(n) {
+  const nav = self.navigator;
+  if (typeof n !== "number" || !nav || !nav.setAppBadge) return Promise.resolve();
+  return (n > 0 ? nav.setAppBadge(n) : nav.clearAppBadge()).catch(() => {});
+}
+
 // Alerts sent to this device (Web Push): show them, and open Muny when tapped.
 self.addEventListener("push", (event) => {
   let data = {};
@@ -68,19 +75,51 @@ self.addEventListener("push", (event) => {
   } catch {
     data = { title: "Muny", body: event.data ? event.data.text() : "" };
   }
+  const options = {
+    body: data.body || "",
+    icon: "/icons/icon-192.png",
+    // Android draws the small status-bar icon from this image's shape only.
+    badge: "/icons/badge-96.png",
+    data: { url: data.link || data.url || "/alerts", id: data.id || null },
+  };
+  if (typeof data.ts === "number") options.timestamp = data.ts;
+  // A newer alert of the same kind replaces the old one, and still buzzes.
+  if (data.tag) {
+    options.tag = data.tag;
+    options.renotify = true;
+  }
+  if (data.id)
+    options.actions = [
+      { action: "read", title: "Mark read" },
+      { action: "open", title: "Open" },
+    ];
   event.waitUntil(
-    self.registration.showNotification(data.title || "Muny", {
-      body: data.body || "",
-      icon: "/icons/icon-192.png",
-      badge: "/icons/icon-192.png",
-      tag: data.tag || undefined,
-      data: { url: data.url || "/alerts" },
-    }),
+    Promise.all([
+      self.registration.showNotification(data.title || "Muny", options),
+      setBadge(data.unread),
+    ]),
   );
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  const id = event.notification.data && event.notification.data.id;
+  if (event.action === "read" && id) {
+    // Mark it read without opening Muny (uses this browser's sign-in).
+    event.waitUntil(
+      fetch("/api/notifications/read", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json", "x-muny-csrf": "1" },
+        body: JSON.stringify({ ids: [id] }),
+      })
+        .then(() => fetch("/api/notifications?limit=1", { credentials: "same-origin" }))
+        .then((r) => (r.ok ? r.json() : null))
+        .then((l) => setBadge(l ? l.unread : undefined))
+        .catch(() => {}),
+    );
+    return;
+  }
   const raw = (event.notification.data && event.notification.data.url) || "/alerts";
   const target = new URL(raw, self.location.origin);
   // Only ever open Muny itself.

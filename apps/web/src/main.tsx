@@ -4,6 +4,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ApiError } from "./lib/api.js";
 import { authKey } from "./lib/auth.js";
+import { watchInstall } from "./lib/device.js";
 import { applyCachedTheme } from "./lib/theme.js";
 import { router } from "./router.js";
 import "./index.css";
@@ -26,6 +27,7 @@ const queryClient: QueryClient = new QueryClient({
 });
 
 applyCachedTheme();
+watchInstall();
 
 const root = document.getElementById("root");
 if (!root) throw new Error("#root element missing");

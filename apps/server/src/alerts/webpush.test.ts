@@ -83,7 +83,11 @@ describe("web push", () => {
     const msg = sent.at(-1);
     expect(msg?.url).toBe(sub.endpoint);
     expect(msg?.headers["content-encoding"]).toBe("aes128gcm");
-    expect(JSON.parse(b.decrypt(msg?.body as Buffer)).title).toBeTruthy();
+    const payload = JSON.parse(b.decrypt(msg?.body as Buffer));
+    expect(payload.title).toBeTruthy();
+    // The in-app path to open, and when it happened; a test has no alert to mark read.
+    expect(payload).toMatchObject({ link: "/", id: null });
+    expect(typeof payload.ts).toBe("number");
     // VAPID: a token for the push service's origin, signed by this server's key.
     const [, token, k] = /^vapid t=([^,]+), k=(.+)$/.exec(msg?.headers.authorization ?? "") ?? [];
     expect(k).toBe(publicKey);

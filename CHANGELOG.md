@@ -10,6 +10,8 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 - **What your health coverage really costs.** With a W-2, Pay splits box 12 code DD into what you paid and, roughly, what your employer paid, and shows your pay counting your employer's share.
 - Pay stubs and W-2s appear on **Documents**, **Taxes** shows a **Wages and withholding** card, and pay stubs and W-2s dropped on **Import** go straight to Pay.
 - AI assistants with the `read:summary` permission, and Ask Muny, can read your pay totals with the new `get_pay_summary` tool (never the files).
+- **A better phone app.** **Settings → This device** has an **Install Muny** button (or tells you how to install from your browser). Installed, Muny opens on a dark splash screen, its icon shows how many alerts are unread, and long-pressing it gives shortcuts to Transactions, Alerts, Budgets and Recurring.
+- **Better notifications on Android.** Alerts show Muny's mark in the status bar instead of a white square, open the page they're about, show when they happened, and have **Mark read** and **Open** buttons. A newer alert of the same kind replaces the older one.
 
 ### Fixed
 
