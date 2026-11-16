@@ -491,6 +491,7 @@ export const DATASETS: DatasetInfo[] = [
       money("interest_12_months", "Interest, last 12 months"),
       money("interest_all_time", "Interest, all time"),
       money("average_contribution", "Average added per month"),
+      money("average_withdrawal", "Average taken out per month"),
     ],
   },
   {

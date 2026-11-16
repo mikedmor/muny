@@ -209,7 +209,7 @@ function PlanDialog({
   onSaved: () => void;
 }) {
   const defaultRate = a.plan?.rateBps ?? a.apyBps ?? a.earnedApyBps ?? 0;
-  const defaultMonthly = a.plan?.monthlyCents ?? Math.max(0, a.avgMonthlyContributionCents);
+  const defaultMonthly = a.plan?.monthlyCents ?? Math.max(0, a.avgMonthlyNetCents);
   const [rate, setRate] = useState(defaultRate / 100);
   const [monthly, setMonthly] = useState(Math.round(defaultMonthly / 100));
   const [years, setYears] = useState(10);
@@ -343,7 +343,7 @@ function PlanDialog({
 function PlanSummary({ a, onSaved }: { a: SavingsAccountInfo; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
   const rate = a.plan?.rateBps ?? a.apyBps ?? a.earnedApyBps ?? 0;
-  const monthly = a.plan?.monthlyCents ?? Math.max(0, a.avgMonthlyContributionCents);
+  const monthly = a.plan?.monthlyCents ?? Math.max(0, a.avgMonthlyNetCents);
   const at = (years: number) => growth(a.balanceCents, rate, monthly, years * 12).at(-1);
   return (
     <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-slate-50 p-4 dark:bg-slate-800/40">
@@ -403,7 +403,7 @@ function AccountCard({ a, onSaved }: { a: SavingsAccountInfo; onSaved: () => voi
   const last12 = a.months.slice(-12);
   // The next 12 months on your plan, or at the current pace and rate.
   const planRate = a.plan?.rateBps ?? a.apyBps ?? a.earnedApyBps ?? 0;
-  const planMonthly = a.plan?.monthlyCents ?? Math.max(0, a.avgMonthlyContributionCents);
+  const planMonthly = a.plan?.monthlyCents ?? Math.max(0, a.avgMonthlyNetCents);
   const lastMonth = a.months.at(-1)?.month ?? new Date().toISOString().slice(0, 7);
   const [ly, lm] = lastMonth.split("-").map(Number) as [number, number];
   const ahead = growth(a.balanceCents, planRate, planMonthly, 12)
@@ -423,7 +423,7 @@ function AccountCard({ a, onSaved }: { a: SavingsAccountInfo; onSaved: () => voi
         </div>
         <p className="text-2xl font-semibold tabular-nums">{formatMoney(a.balanceCents)}</p>
       </div>
-      <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-5">
+      <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3 lg:grid-cols-6">
         <Stat label="Rate">
           <ApyEditor a={a} onSaved={onSaved} />
         </Stat>
@@ -442,12 +442,11 @@ function AccountCard({ a, onSaved }: { a: SavingsAccountInfo; onSaved: () => voi
         >
           {formatMoney(a.interest.ytdCents)}
         </Stat>
-        <Stat label="Added per month" sub="Average, not counting interest">
-          <span
-            className={cx(a.avgMonthlyContributionCents < 0 && "text-red-600 dark:text-red-400")}
-          >
-            {formatMoney(a.avgMonthlyContributionCents)}
-          </span>
+        <Stat label="Added per month" sub="Average deposits, not counting interest">
+          {formatMoney(a.avgMonthlyContributionCents)}
+        </Stat>
+        <Stat label="Taken out per month" sub="Average withdrawals">
+          {formatMoney(a.avgMonthlyWithdrawalCents)}
         </Stat>
       </dl>
       <div className="mt-5 grid gap-6 lg:grid-cols-2">

@@ -154,8 +154,12 @@ export interface SavingsAccountInfo {
   earnedApyBps: number | null;
   interest: { last30Cents: number; ytdCents: number; last12Cents: number; allTimeCents: number };
   lastInterestDate: string | null;
-  /** Average net money added per month over the last 12 months (not counting interest). */
+  /** Average money put in per month over the last 12 months (deposits only, not counting interest). */
   avgMonthlyContributionCents: number;
+  /** Average money taken out per month over the last 12 months, as a positive amount. */
+  avgMonthlyWithdrawalCents: number;
+  /** Average net change per month over the last 12 months (in minus out, not counting interest). */
+  avgMonthlyNetCents: number;
   /** The last 24 months, oldest first. */
   months: SavingsAccountMonth[];
 }

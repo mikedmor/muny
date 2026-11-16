@@ -112,7 +112,8 @@ export function savingsAccountsReport(db: MunyDb, today = localToday()): Savings
       if (avg > 0) earnedApyBps = Math.round((last12 / avg / share) * 10000);
     }
     const recent = months.slice(-12);
-    const net = recent.reduce((s, m) => s + m.depositsCents + m.withdrawalsCents, 0);
+    const deposits = recent.reduce((s, m) => s + m.depositsCents, 0);
+    const withdrawals = recent.reduce((s, m) => s + m.withdrawalsCents, 0);
     const active = recent.filter(
       (m) => m.balanceCents !== 0 || m.depositsCents || m.withdrawalsCents,
     ).length;
@@ -142,7 +143,9 @@ export function savingsAccountsReport(db: MunyDb, today = localToday()): Savings
           .map((x) => x.date)
           .sort()
           .at(-1) ?? null,
-      avgMonthlyContributionCents: Math.round(net / Math.max(1, active)),
+      avgMonthlyContributionCents: Math.round(deposits / Math.max(1, active)),
+      avgMonthlyWithdrawalCents: Math.round(-withdrawals / Math.max(1, active)),
+      avgMonthlyNetCents: Math.round((deposits + withdrawals) / Math.max(1, active)),
       months,
     };
   });

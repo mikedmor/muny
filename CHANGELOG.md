@@ -14,6 +14,7 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 ### Fixed
 
 - A purchase paid through PayPal is listed once even while the bank's PayPal withdrawal is still pending. Before, the pending withdrawal and PayPal's "Bank Deposit to PayPal" showed alongside the purchase until the bank posted it.
+- A savings account's **Added per month** counts only money put in. What you take out is shown on its own as **Taken out per month**, so one large withdrawal no longer makes "added" negative.
 
 ## [1.4.0] - 2026-11-14
 

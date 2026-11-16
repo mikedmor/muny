@@ -520,6 +520,7 @@ const savingsAccounts: Reader = (db, _range, today) =>
     interest_12_months: a.interest.last12Cents,
     interest_all_time: a.interest.allTimeCents,
     average_contribution: a.avgMonthlyContributionCents,
+    average_withdrawal: a.avgMonthlyWithdrawalCents,
   }));
 
 const savingsMonths: Reader = (db, _range, today) =>
