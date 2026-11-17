@@ -120,6 +120,7 @@ Settings are environment variables. They're read at startup, so recreate the con
 | `MUNY_PUSH_RELAY`            | the app's relay  | Where Android app notifications go (encrypted); `off` turns them off (see [Alerts](alerts.md#in-the-android-app)) |
 | `MUNY_FCM_CREDENTIALS`       | none             | Your own Firebase key file, for an Android app you built yourself (see [Alerts](alerts.md#in-the-android-app))    |
 | `MUNY_DEMO`                  | `false`          | `true` fills a fresh install with a made-up household to try                                                      |
+| `MUNY_DEMO_OWNER`            | none             | With `MUNY_DEMO`: `email:password` for an owner made at start on an empty install, for a public demo that's wiped and started again (a short, shared password is allowed) |
 | `MUNY_SYNC_INTERVAL_HOURS`   | `6`              | How often bank sync runs; `0` turns it off                                                                        |
 | `MUNY_BACKUP_DIR`            | `<data>/backups` | Where backups are written                                                                                         |
 | `MUNY_BACKUP_KEEP`           | `14`             | How many backups to keep                                                                                          |

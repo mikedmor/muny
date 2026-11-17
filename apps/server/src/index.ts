@@ -6,6 +6,7 @@ import { buildApp } from "./app.js";
 import { anchorAllCards } from "./cards/service.js";
 import { loadConfig } from "./config.js";
 import { startBackupScheduler } from "./data/backups.js";
+import { ensureDemoOwner } from "./demo/owner.js";
 import { maybeSeedDemo } from "./demo/seed.js";
 import { repairRawAchPayees, repairStubPayees } from "./ledger/payees.js";
 import { seedDefaultCategories } from "./ledger/seed.js";
@@ -24,6 +25,8 @@ async function main() {
   const db = openDb({ filename: config.dbFile, migrationsFolder: config.migrationsDir });
   seedDefaultCategories(db);
   ensureAlertRules(db);
+  // A public demo's owner first (MUNY_DEMO_OWNER), so the household below has someone to belong to.
+  if (config.demoOwner) await ensureDemoOwner(db, config.demoOwner);
   maybeSeedDemo(db, config.demo);
   repairRawAchPayees(db);
   repairStubPayees(db);

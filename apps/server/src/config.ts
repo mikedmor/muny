@@ -52,6 +52,12 @@ const EnvSchema = z.object({
     .enum(["true", "false", "1", "0", ""])
     .optional()
     .transform((v) => v === "true" || v === "1"),
+  /**
+   * With MUNY_DEMO: "email:password" for an owner made at start on an empty install, so a
+   * public demo that's wiped and started again can be signed in to with a short, shared
+   * password. Ignored without MUNY_DEMO.
+   */
+  MUNY_DEMO_OWNER: z.string().max(300).optional(),
   /** Hours between automatic bank syncs; 0 turns scheduled sync off. */
   MUNY_SYNC_INTERVAL_HOURS: z.coerce
     .number()
@@ -110,6 +116,8 @@ export interface Config {
   syncIntervalHours: number;
   /** MUNY_DEMO: fill a fresh install with a made-up household. */
   demo: boolean;
+  /** MUNY_DEMO_OWNER (only with MUNY_DEMO): the demo's owner, made at start on an empty install. */
+  demoOwner: { email: string; password: string } | null;
   plaid: PlaidConfig | null;
   teller: TellerConfig | null;
   /** How notifications reach the Android app: own Firebase key, the push relay, or not at all. */
@@ -139,6 +147,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     backupDir: e.MUNY_BACKUP_DIR ? resolve(e.MUNY_BACKUP_DIR) : resolve(dataDir, "backups"),
     backupKeep: e.MUNY_BACKUP_KEEP,
     demo: e.MUNY_DEMO,
+    demoOwner: e.MUNY_DEMO ? demoOwnerOf(e.MUNY_DEMO_OWNER) : null,
     backupIntervalHours: e.MUNY_BACKUP_INTERVAL_HOURS,
     syncIntervalHours: e.MUNY_SYNC_INTERVAL_HOURS,
     plaid:
@@ -167,4 +176,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
         }
       : null,
   };
+}
+
+/** "email:password" (the password may itself contain colons); a readable error otherwise. */
+function demoOwnerOf(value: string | undefined): { email: string; password: string } | null {
+  if (!value?.trim()) return null;
+  const at = value.indexOf(":");
+  const email = (at > 0 ? value.slice(0, at) : "").trim().toLowerCase();
+  const password = at > 0 ? value.slice(at + 1) : "";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !password)
+    throw new Error("MUNY_DEMO_OWNER must be email:password, like demo@example.com:demo");
+  return { email, password };
 }

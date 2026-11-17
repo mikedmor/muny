@@ -6,6 +6,7 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ### Added
 
+- **`MUNY_DEMO_OWNER`** for a public demo: with `MUNY_DEMO`, an `email:password` owner made at start on an empty install, so a demo that's wiped and restarted (like the one for app-store reviewers) can be signed in to with a short, shared password.
 - **Pay.** A new page under Insights shows what happens to your pay before it reaches the bank. Add the pay stubs (earnings statements) and W-2s you download from your payroll site, and Muny shows your gross pay, each tax, what your benefits cost (medical, dental, vision, FSA, life and disability, with pre-tax ones marked) and take-home, for the year so far and per paycheck alongside a whole year at that rate. Your latest stub is enough to see the year so far. Each stub is checked to add up, each deposit is found in your accounts, and a W-2 is compared with the year's last stub. Muny reads ADP's layout for now, and files are stored encrypted (`MUNY_SECRET_KEY` must be set).
 - **What your health coverage really costs.** With a W-2, Pay splits box 12 code DD into what you paid and, roughly, what your employer paid, and shows your pay counting your employer's share.
 - Pay stubs and W-2s appear on **Documents**, **Taxes** shows a **Wages and withholding** card, and pay stubs and W-2s dropped on **Import** go straight to Pay.

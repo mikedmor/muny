@@ -9,7 +9,8 @@ import type {
 } from "@muny/shared";
 import { describe, expect, it } from "vitest";
 import { localToday } from "../lib/dates.js";
-import { makeSignedInApp } from "../test-utils.js";
+import { makeApp, makeSignedInApp, TestClient } from "../test-utils.js";
+import { ensureDemoOwner } from "./owner.js";
 import { maybeSeedDemo } from "./seed.js";
 
 describe("demo mode", () => {
@@ -72,5 +73,35 @@ describe("demo mode", () => {
     const { client } = await makeSignedInApp();
     expect((await client.get("/api/accounts")).json<Account[]>()).toEqual([]);
     expect((await client.get("/api/demo")).json()).toEqual({ active: false });
+  });
+});
+
+describe("a public demo's owner (MUNY_DEMO_OWNER)", () => {
+  const env = { MUNY_DEMO: "true", MUNY_DEMO_OWNER: "Demo@Example.com:demo" };
+
+  it("is made on an empty install, with a short password, and the household follows", async () => {
+    const { app, db, config } = await makeApp(env);
+    expect(config.demoOwner).toEqual({ email: "demo@example.com", password: "demo" });
+    expect(
+      await ensureDemoOwner(db, config.demoOwner as NonNullable<typeof config.demoOwner>),
+    ).toBe(true);
+    expect(maybeSeedDemo(db, true)).toBe(true);
+    const login = await new TestClient(app).post("/api/auth/login", {
+      email: "demo@example.com",
+      password: "demo",
+    });
+    expect(login.statusCode).toBe(200);
+    // Started again on the same data: nothing more is made.
+    expect(await ensureDemoOwner(db, { email: "other@example.com", password: "x" })).toBe(false);
+    expect(db.select().from(schema.users).all()).toHaveLength(1);
+  });
+
+  it("is ignored without MUNY_DEMO, and says what's wrong with a bad value", async () => {
+    expect(
+      (await makeApp({ MUNY_DEMO_OWNER: "demo@example.com:demo" })).config.demoOwner,
+    ).toBeNull();
+    await expect(makeApp({ MUNY_DEMO: "true", MUNY_DEMO_OWNER: "no-colon" })).rejects.toThrow(
+      /MUNY_DEMO_OWNER must be email:password/,
+    );
   });
 });
