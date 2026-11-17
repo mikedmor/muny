@@ -33,6 +33,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { inAndroidApp, syncAppPush } from "../lib/appShell.js";
 import { useLogout, useMeta } from "../lib/auth.js";
 import { setAppBadge } from "../lib/device.js";
 import { useNotifications, useUpdates } from "../lib/queries.js";
@@ -297,6 +298,10 @@ function Shell({ user }: { user: CurrentUser }) {
   useEffect(() => {
     if (notifications) setAppBadge(notifications.unread);
   }, [notifications]);
+  // In the Android app: if the push app moved this phone's endpoint, tell the server.
+  useEffect(() => {
+    if (inAndroidApp()) void syncAppPush().catch(() => {});
+  }, []);
 
   return (
     <div className="min-h-dvh bg-slate-50 text-slate-900 md:flex dark:bg-slate-950 dark:text-slate-100">

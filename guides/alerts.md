@@ -20,7 +20,7 @@ Every alert appears under **Alerts** in Muny (the bell).
 
 ## Notifications on your phone or computer
 
-On **Alerts → Settings**, click **Turn on notifications here** on each device you want alerts on. On Android, install Muny first: open it in Chrome over HTTPS (your Tailscale address), then browser menu → **Install app**, and turn notifications on from the installed app. On Windows, Edge or Chrome works the same way (installed or in a tab). Alerts then arrive like any app's, even with Muny closed.
+On **Alerts → Settings**, click **Turn on notifications here** on each device you want alerts on. On Android, install Muny first: open it in Chrome over HTTPS (your Tailscale address), then browser menu → **Install app**, and turn notifications on from the installed app. On Windows, Edge or Chrome works the same way (installed or in a tab). Alerts then arrive like any app's, even with Muny closed. In the [Android app](access.md#android-app), alerts come through the free ntfy app instead: install ntfy, then turn notifications on the same way from inside the app.
 
 Each notification opens the page it's about when tapped, and has **Mark read** (without opening Muny) and **Open** buttons. A newer alert of the same kind replaces the older one instead of stacking up. The installed app's icon shows how many alerts are unread.
 

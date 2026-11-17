@@ -38,13 +38,13 @@ Open Muny in your phone's browser and go to **Settings → This device → Insta
 
 ### Android app
 
-There's also a small Android app. It opens your Muny full-screen through Chrome, so notifications, offline use and saved sign-ins work just as they do in the browser. It asks for your Muny address the first time, can ask for your fingerprint or screen lock when it opens (on by default), and puts Muny's notifications under its own name and icon. Install the app file (`.apk`) attached to a Muny release, from release 1.5 on (allow installing apps from your browser or file manager when Android asks). It needs Chrome on the phone and Muny's HTTPS address.
+There's also a small Android app. It shows your Muny in its own window, with no browser involved: no address bar and no browser badge. It asks for your Muny address the first time, and can ask for your fingerprint or screen lock when it opens and again after 5 minutes away (on by default). Install the app file (`.apk`) attached to a Muny release, from release 1.5 on (allow installing apps from your browser or file manager when Android asks). It needs Muny's HTTPS address; a home root certificate installed on the phone works too.
 
-Muny already vouches for the official app at `/.well-known/assetlinks.json`, which is what makes the address bar go away; nothing to set up. If you build and sign the app yourself, add yours with `MUNY_ANDROID_APPS=your.package.name=AA:BB:…` (the app's setup screen shows the exact line).
+The app keeps its own sign-in, so sign in once in the app. Its notifications arrive through **ntfy**, a free push app (from F-Droid or Google Play): install it, then in Muny go to **Alerts → Settings → Turn on notifications here**. ntfy only ever sees encrypted alerts, and can use ntfy.sh or your own ntfy server, as long as it has an HTTPS address. In the app, **Keep a copy of my data on this device** is on unless you turn it off (see below).
 
 ### Using it offline
 
-By default nothing financial is stored on your phone: when Muny can't be reached (no signal, Tailscale off, server restarting) it says so and shows only what's already on screen. To open it with your last data instead, turn on **Settings → This device → Keep a copy of my data on this device**. Muny then keeps the pages you've visited, as of the last time it could reach the server, and opens with them offline, with a banner showing how old they are. Nothing can be changed until it's back online.
+In a browser, nothing financial is stored on your phone by default: when Muny can't be reached (no signal, Tailscale off, server restarting) it says so and shows only what's already on screen. To open it with your last data instead, turn on **Settings → This device → Keep a copy of my data on this device**. Muny then keeps the pages you've visited, as of the last time it could reach the server, and opens with them offline, with a banner showing how old they are. Nothing can be changed until it's back online.
 
 The copy is encrypted with a key that never leaves that browser, and is deleted when you sign out or turn the setting off. Turn it on only on a phone or computer that only you use. It needs Muny's HTTPS address.
 

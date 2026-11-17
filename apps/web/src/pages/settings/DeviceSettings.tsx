@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { Button, Card } from "../../components/ui.js";
+import { inAndroidApp, openAppSettings } from "../../lib/appShell.js";
 import { useInstall } from "../../lib/device.js";
 import { offlineEnabled, offlineSupported, setOfflineEnabled } from "../../lib/offline.js";
 
@@ -55,6 +56,8 @@ function OfflineCard() {
             last saw: the pages you've visited, as of then. It's read-only until you're back. The
             copy is encrypted with a key that stays in this browser, and it's deleted when you sign
             out or turn this off. Only turn it on for a phone or computer only you use.
+            {inAndroidApp() &&
+              " In the Android app it's on unless you turn it off, since the app can ask for your fingerprint or screen lock before showing anything."}
           </span>
           {!supported && (
             <span className="mt-1 block text-xs text-amber-700 dark:text-amber-400">
@@ -68,6 +71,24 @@ function OfflineCard() {
 }
 
 function InstallCard() {
+  if (inAndroidApp()) {
+    return (
+      <Card>
+        <h2 className="font-semibold">Android app</h2>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+          You're using the Muny Android app. Change the Muny address it opens, or whether it asks
+          for your fingerprint or screen lock, in its settings (also from long-pressing its icon).
+        </p>
+        <Button className="mt-3" variant="secondary" onClick={() => openAppSettings()}>
+          Server and lock
+        </Button>
+      </Card>
+    );
+  }
+  return <BrowserInstallCard />;
+}
+
+function BrowserInstallCard() {
   const { standalone, canPrompt, install } = useInstall();
   const [declined, setDeclined] = useState(false);
   const ua = navigator.userAgent;

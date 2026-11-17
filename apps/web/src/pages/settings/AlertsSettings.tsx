@@ -14,6 +14,13 @@ import { Checkbox, MoneyField, SelectField } from "../../components/forms.js";
 import { Alert, Button, Card, cx, Field } from "../../components/ui.js";
 import { ApiError, api } from "../../lib/api.js";
 import {
+  appHello,
+  appPushError,
+  appSubscribe,
+  inAndroidApp,
+  registerAppPush,
+} from "../../lib/appShell.js";
+import {
   useAlertRules,
   useCategories,
   useChannels,
@@ -538,6 +545,62 @@ function deviceName() {
 
 /** Turn on notifications for this phone or computer (Muny installed, or open in the browser). */
 function ThisDevice({ channels }: { channels: NotificationChannel[] }) {
+  return inAndroidApp() ? <ThisApp channels={channels} /> : <ThisBrowser channels={channels} />;
+}
+
+/** In the Android app: notifications come through UnifiedPush (a push app such as ntfy). */
+function ThisApp({ channels }: { channels: NotificationChannel[] }) {
+  const qc = useQueryClient();
+  const [state, setState] = useState<string | null>(null);
+  const [mine, setMine] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void appHello()
+      .then((h) => setMine(h.push?.subscription?.endpoint ?? null))
+      .catch(() => {});
+  }, []);
+  const turnOn = async () => {
+    setBusy(true);
+    setState("Asking…");
+    try {
+      const { publicKey } = await api.get<{ publicKey: string }>("/api/alerts/push/key");
+      const r = await appSubscribe(publicKey);
+      if (!r.ok || !r.subscription) {
+        setState(appPushError(r.error));
+        return;
+      }
+      await registerAppPush(r.subscription);
+      setMine(r.subscription.endpoint);
+      setState("On. Use Send test on it below.");
+      await qc.invalidateQueries();
+    } catch (err) {
+      setState(err instanceof Error ? err.message : "Couldn't turn them on");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const isOn = !!mine && channels.some((c) => c.type === "push" && c.enabled);
+  return (
+    <Card className="space-y-2">
+      <h3 className="font-semibold">Notifications on this phone</h3>
+      <p className="text-sm text-slate-500">
+        Alerts arrive like any app's, even with Muny closed. The app gets them through a free push
+        app, <span className="font-medium">ntfy</span> (from F-Droid or Google Play), using ntfy.sh
+        or your own ntfy server. They're encrypted so only this phone can read them. This phone
+        shows up as a channel below, so you can choose which alerts it gets.
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button onClick={() => void turnOn()} disabled={busy}>
+          {isOn ? "Turn on again" : "Turn on notifications here"}
+        </Button>
+        {isOn && <span className="text-sm text-emerald-700 dark:text-emerald-400">On</span>}
+        {state && <span className="text-sm text-slate-500">{state}</span>}
+      </div>
+    </Card>
+  );
+}
+
+function ThisBrowser({ channels }: { channels: NotificationChannel[] }) {
   const qc = useQueryClient();
   const [state, setState] = useState<string | null>(null);
   const [mine, setMine] = useState<string | null>(null);

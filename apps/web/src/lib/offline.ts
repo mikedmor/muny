@@ -1,5 +1,6 @@
 import { type DehydratedState, dehydrate, hydrate, type QueryClient } from "@tanstack/react-query";
 import { useSyncExternalStore } from "react";
+import { inAndroidApp } from "./appShell.js";
 
 /**
  * Offline snapshot (opt-in per device, see DECISIONS D-094).
@@ -67,9 +68,16 @@ export const offlineSupported = () =>
   "indexedDB" in window &&
   !!globalThis.crypto?.subtle;
 
+/**
+ * Off by default in a browser. On by default in the Android app, which asks
+ * for fingerprint or screen lock before showing anything; turning it off
+ * there is remembered ("0").
+ */
 export function offlineEnabled(): boolean {
   try {
-    return offlineSupported() && localStorage.getItem(FLAG) === "1";
+    if (!offlineSupported()) return false;
+    const v = localStorage.getItem(FLAG);
+    return v === "1" || (v === null && inAndroidApp());
   } catch {
     return false;
   }
@@ -80,8 +88,7 @@ let unsubscribe: (() => void) | null = null;
 
 export async function setOfflineEnabled(on: boolean) {
   try {
-    if (on) localStorage.setItem(FLAG, "1");
-    else localStorage.removeItem(FLAG);
+    localStorage.setItem(FLAG, on ? "1" : "0");
   } catch {
     // Storage blocked: stays off.
   }
