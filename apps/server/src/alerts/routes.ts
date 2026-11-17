@@ -357,6 +357,30 @@ export function registerAlertRoutes(app: FastifyInstance, db: MunyDb, deps: Aler
     return { ok: true };
   });
 
+  /** Turn off notifications for this device: its channel goes (the device forgets its keys itself). */
+  app.post("/api/alerts/push/unsubscribe", async (req) => {
+    const user = requireUser(req);
+    const key = needKey();
+    const { endpoint } = parse(z.object({ endpoint: z.string().max(4200) }), req.body);
+    const mine = db
+      .select()
+      .from(ch)
+      .where(eq(ch.type, "push"))
+      .all()
+      .filter((c) => decryptJson<ChannelConfig>(key, c.configEnc).endpoint === endpoint);
+    for (const c of mine) {
+      db.delete(ch).where(eq(ch.id, c.id)).run();
+      for (const r of db.select().from(schema.alertRules).all())
+        if (r.channelIds.includes(c.id))
+          db.update(schema.alertRules)
+            .set({ channelIds: r.channelIds.filter((x) => x !== c.id) })
+            .where(eq(schema.alertRules.id, r.id))
+            .run();
+      log(user.id, "alert.push_unsubscribe", c.id);
+    }
+    return { ok: true, removed: mine.length };
+  });
+
   app.post("/api/alerts/channels/:id/test", async (req) => {
     requireUser(req);
     needKey();

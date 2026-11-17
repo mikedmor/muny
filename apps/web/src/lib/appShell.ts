@@ -118,6 +118,17 @@ export async function registerAppPush(sub: AppSubscription) {
   }
 }
 
+/** Turns notifications off on this phone: the server drops its channel, the app its token and keys. */
+export async function unregisterAppPush(endpoint: string | null) {
+  if (endpoint) await api.post("/api/alerts/push/unsubscribe", { endpoint });
+  await ask({ type: "push.unsubscribe" }, 10_000).catch(() => {});
+  try {
+    localStorage.removeItem(REGISTERED);
+  } catch {
+    // Nothing kept.
+  }
+}
+
 /**
  * At startup in the app: Google can change this phone's push token (after a
  * reinstall or a restore). If notifications were turned on here and the

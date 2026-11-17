@@ -216,3 +216,25 @@ describe("the push relay (the published app, no Firebase key needed)", () => {
     expect(() => loadConfig({ MUNY_PUSH_RELAY: "http://push.example" })).toThrow(/https/);
   });
 });
+
+describe("turning app notifications off", () => {
+  it("removes this phone's channel and takes it off every alert", async () => {
+    const p = phone();
+    const SECRET = Buffer.alloc(32, 3).toString("base64");
+    const { client } = await makeSignedInApp({ env: { MUNY_SECRET_KEY: SECRET } });
+    const endpoint = "fcm:dTok3n:APA91b-abcdefghijklmnop";
+    const chan = (
+      await client.post("/api/alerts/push/subscribe", {
+        endpoint,
+        keys: { p256dh: p.p256dh, auth: p.auth },
+        device: "Android app",
+      })
+    ).json<NotificationChannel>();
+    const off = await client.post("/api/alerts/push/unsubscribe", { endpoint });
+    expect(off.json()).toEqual({ ok: true, removed: 1 });
+    const left = (await client.get("/api/alerts/channels")).json<NotificationChannel[]>();
+    expect(left.some((c) => c.id === chan.id)).toBe(false);
+    const rules = (await client.get("/api/alerts/rules")).json<{ channelIds: string[] }[]>();
+    expect(rules.every((r) => !r.channelIds.includes(chan.id))).toBe(true);
+  });
+});

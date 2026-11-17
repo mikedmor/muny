@@ -19,6 +19,7 @@ import {
   appSubscribe,
   inAndroidApp,
   registerAppPush,
+  unregisterAppPush,
 } from "../../lib/appShell.js";
 import {
   useAlertRules,
@@ -579,6 +580,19 @@ function ThisApp({ channels }: { channels: NotificationChannel[] }) {
       setBusy(false);
     }
   };
+  const turnOff = async () => {
+    setBusy(true);
+    try {
+      await unregisterAppPush(mine);
+      setMine(null);
+      setState("Off. This phone's notification keys are deleted.");
+      await qc.invalidateQueries();
+    } catch (err) {
+      setState(err instanceof Error ? err.message : "Couldn't turn them off");
+    } finally {
+      setBusy(false);
+    }
+  };
   const isOn = !!mine && channels.some((c) => c.type === "push" && c.enabled);
   return (
     <Card className="space-y-2">
@@ -592,6 +606,11 @@ function ThisApp({ channels }: { channels: NotificationChannel[] }) {
         <Button onClick={() => void turnOn()} disabled={busy}>
           {isOn ? "Turn on again" : "Turn on notifications here"}
         </Button>
+        {mine && (
+          <Button variant="secondary" onClick={() => void turnOff()} disabled={busy}>
+            Turn off
+          </Button>
+        )}
         {isOn && <span className="text-sm text-emerald-700 dark:text-emerald-400">On</span>}
         {state && <span className="text-sm text-slate-500">{state}</span>}
       </div>
