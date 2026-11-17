@@ -123,6 +123,7 @@ Settings are environment variables. They're read at startup, so recreate the con
 | `MUNY_BACKUP_KEEP`           | `14`             | How many backups to keep                                               |
 | `MUNY_BACKUP_INTERVAL_HOURS` | `24`             | Hours between backups; `0` turns automatic backups off                 |
 | `TZ`                         | `UTC`            | Your time zone, so "today" and due dates are right                     |
+| `MUNY_ANDROID_APPS`          | none             | Your own build of the Android app: `package=SHA256` (see [Access](access.md#android-app)) |
 
 Bank sync keys are covered in [Bank sync](bank-sync.md).
 

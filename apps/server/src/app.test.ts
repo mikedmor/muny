@@ -34,6 +34,21 @@ describe("server", () => {
     });
   });
 
+  it("serves assetlinks.json for the Android app, signed out, with extra apps from settings", async () => {
+    const fp = Array.from({ length: 32 }, () => "ab").join(":");
+    const app = await makeApp({ MUNY_ANDROID_APPS: `com.example.mymuny=${fp}` });
+    const res = await app.inject({ method: "GET", url: "/.well-known/assetlinks.json" });
+    expect(res.statusCode).toBe(200);
+    const links =
+      res.json<{ target: { package_name: string; sha256_cert_fingerprints: string[] } }[]>();
+    expect(links.map((l) => l.target.package_name)).toEqual([
+      "io.github.mikedmor.muny",
+      "com.example.mymuny",
+    ]);
+    expect(links[1]?.target.sha256_cert_fingerprints).toEqual([fp.toUpperCase()]);
+    expect(() => loadConfig({ MUNY_ANDROID_APPS: "not-an-app" })).toThrow(/MUNY_ANDROID_APPS/);
+  });
+
   it("returns JSON 404 for unknown API routes when signed in", async () => {
     const { client } = await makeSignedInApp();
     const res = await client.get("/api/nope");

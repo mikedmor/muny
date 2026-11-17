@@ -6,6 +6,23 @@ const optionalString = z
   .optional()
   .transform((v) => (v?.trim() ? v.trim() : undefined));
 
+/** package=SHA-256 fingerprint of the app's signing certificate (32 hex pairs). */
+const ANDROID_APP = /^[a-zA-Z][\w]*(\.[a-zA-Z][\w]*)+=([0-9A-Fa-f]{2}:){31}[0-9A-Fa-f]{2}$/;
+
+/** The Muny Android app published by the project (see guides/access.md). */
+export const OFFICIAL_ANDROID_APPS: AndroidApp[] = [
+  {
+    packageName: "io.github.mikedmor.muny",
+    sha256:
+      "3D:BE:D2:CF:53:0B:37:78:CC:5A:B2:89:E8:8B:E0:BD:44:52:42:F8:25:7C:7C:19:EF:61:E3:F9:F7:1E:03:F9",
+  },
+];
+
+export interface AndroidApp {
+  packageName: string;
+  sha256: string;
+}
+
 const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   MUNY_HOST: z.string().default("0.0.0.0"),
@@ -25,6 +42,19 @@ const EnvSchema = z.object({
   MUNY_SOURCE_URL: z.string().url().default("https://github.com/mikedmor/muny"),
   /** Address you open Muny at (e.g. https://muny.example.ts.net), for links in notifications. */
   MUNY_PUBLIC_URL: optionalString.pipe(z.string().url().optional()),
+  /**
+   * More Android apps to trust (served in /.well-known/assetlinks.json), for a
+   * copy you built and signed yourself: "package=SHA256,package=SHA256".
+   */
+  MUNY_ANDROID_APPS: optionalString.refine(
+    (v) =>
+      v === undefined ||
+      v
+        .split(/[,\s]+/)
+        .filter(Boolean)
+        .every((e) => ANDROID_APP.test(e)),
+    "MUNY_ANDROID_APPS must look like com.example.muny=AA:BB:…(32 pairs), comma-separated",
+  ),
   /** Where automatic SQLite backups go. Defaults to <data dir>/backups. */
   MUNY_BACKUP_DIR: optionalString,
   /** How many backups to keep. */
@@ -92,6 +122,8 @@ export interface Config {
   migrationsDir: string | undefined;
   sourceUrl: string;
   publicUrl: string | undefined;
+  /** Android apps that may open Muny full-screen: the official one plus MUNY_ANDROID_APPS. */
+  androidApps: AndroidApp[];
   backupDir: string;
   backupKeep: number;
   backupIntervalHours: number;
@@ -122,6 +154,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     migrationsDir: e.MUNY_MIGRATIONS_DIR ? resolve(e.MUNY_MIGRATIONS_DIR) : undefined,
     sourceUrl: e.MUNY_SOURCE_URL,
     publicUrl: e.MUNY_PUBLIC_URL,
+    androidApps: [
+      ...OFFICIAL_ANDROID_APPS,
+      ...(e.MUNY_ANDROID_APPS ?? "")
+        .split(/[,\s]+/)
+        .filter(Boolean)
+        .map((entry) => {
+          const [packageName = "", sha256 = ""] = entry.split("=");
+          return { packageName, sha256: sha256.toUpperCase() };
+        }),
+    ],
     backupDir: e.MUNY_BACKUP_DIR ? resolve(e.MUNY_BACKUP_DIR) : resolve(dataDir, "backups"),
     backupKeep: e.MUNY_BACKUP_KEEP,
     demo: e.MUNY_DEMO,

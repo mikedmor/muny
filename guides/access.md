@@ -36,6 +36,12 @@ Muny needs no extra headers behind a proxy.
 
 Open Muny in your phone's browser and go to **Settings → This device → Install Muny**, or use the browser's **Add to Home Screen** (or **Install app**). Installing as an app needs HTTPS; over plain `http://` it works as a normal web page. Installed, Muny opens in its own window, shows how many alerts are unread on its icon, and has shortcuts to Transactions, Alerts, Budgets and Recurring when you long-press the icon.
 
+### Android app
+
+There's also a small Android app. It opens your Muny full-screen through Chrome, so notifications, offline use and saved sign-ins work just as they do in the browser. It asks for your Muny address the first time, can ask for your fingerprint or screen lock when it opens (on by default), and puts Muny's notifications under its own name and icon. Install the app file (`.apk`) attached to a Muny release, from release 1.5 on (allow installing apps from your browser or file manager when Android asks). It needs Chrome on the phone and Muny's HTTPS address.
+
+Muny already vouches for the official app at `/.well-known/assetlinks.json`, which is what makes the address bar go away; nothing to set up. If you build and sign the app yourself, add yours with `MUNY_ANDROID_APPS=your.package.name=AA:BB:…` (the app's setup screen shows the exact line).
+
 ### Using it offline
 
 By default nothing financial is stored on your phone: when Muny can't be reached (no signal, Tailscale off, server restarting) it says so and shows only what's already on screen. To open it with your last data instead, turn on **Settings → This device → Keep a copy of my data on this device**. Muny then keeps the pages you've visited, as of the last time it could reach the server, and opens with them offline, with a banner showing how old they are. Nothing can be changed until it's back online.

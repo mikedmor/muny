@@ -13,6 +13,7 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 - **A better phone app.** **Settings → This device** has an **Install Muny** button (or tells you how to install from your browser). Installed, Muny opens on a dark splash screen, its icon shows how many alerts are unread, and long-pressing it gives shortcuts to Transactions, Alerts, Budgets and Recurring.
 - **Better notifications on Android.** Alerts show Muny's mark in the status bar instead of a white square, open the page they're about, show when they happened, and have **Mark read** and **Open** buttons. A newer alert of the same kind replaces the older one.
 - **Use Muny offline.** Turn on **Settings → This device → Keep a copy of my data on this device** and Muny opens with your last data when it can't reach the server, with a banner showing how old it is. It's read-only until you're back, encrypted with a key that stays in that browser, and deleted when you sign out. Off by default.
+- **Android app.** A small app that opens Muny full-screen through Chrome, with fingerprint or screen lock, Muny's own notification icon and long-press shortcuts. Muny serves `/.well-known/assetlinks.json` so the app opens without an address bar; `MUNY_ANDROID_APPS` adds your own build.
 - When Muny can't be reached, a banner says so and it checks again on its own; saving explains that nothing was saved instead of failing quietly.
 
 ### Fixed

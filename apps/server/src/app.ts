@@ -259,6 +259,21 @@ export async function buildApp({
     return body;
   });
 
+  // Lets the Muny Android app open this server full-screen (Digital Asset Links). Public by design:
+  // it names apps, not anything about you.
+  app.get("/.well-known/assetlinks.json", async (_req, reply) =>
+    reply.header("cache-control", "public, max-age=3600").send(
+      config.androidApps.map((a) => ({
+        relation: ["delegate_permission/common.handle_all_urls"],
+        target: {
+          namespace: "android_app",
+          package_name: a.packageName,
+          sha256_cert_fingerprints: [a.sha256],
+        },
+      })),
+    ),
+  );
+
   const indexHtml = config.webDir ? join(config.webDir, "index.html") : undefined;
   const serveWeb = config.webDir !== undefined && indexHtml !== undefined && existsSync(indexHtml);
   if (serveWeb && config.webDir) {
