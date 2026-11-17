@@ -1,7 +1,14 @@
 import type { MunyDb } from "@muny/db";
-import { builtinCardDoc, type CardDoc, TEMPLATE_IDS } from "@muny/shared";
+import {
+  availableBuiltinCards,
+  builtinCardDoc,
+  type CardDoc,
+  CUSTOM_PREFIX,
+  TEMPLATE_IDS,
+} from "@muny/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { aiEnabled } from "../ai/settings.js";
 import { requireUser } from "../auth/plugin.js";
 import { audit } from "../lib/audit.js";
 import { notFound, parse } from "../lib/http.js";
@@ -22,6 +29,25 @@ import {
 
 const IdParams = z.object({ id: z.string().min(1).max(64) });
 
+/** Where tapping a built-in card's home-screen widget goes (custom cards open the Overview). */
+const WIDGET_OPENS: Record<string, string> = {
+  spending: "/spending",
+  calendar: "/recurring",
+  "cash-flow": "/reports",
+  categories: "/spending",
+  merchants: "/spending",
+  forecast: "/forecast",
+  "cash-trend": "/reports",
+  accounts: "/accounts",
+  cards: "/cards",
+  loans: "/loans",
+  stocks: "/stocks",
+  crypto: "/crypto",
+  budget: "/budgets",
+  recent: "/transactions",
+  "coming-up": "/recurring",
+};
+
 /**
  * The customizable Overview. Layouts belong to each person; custom cards are
  * documents shared by the household. These are the operations an assistant's
@@ -39,6 +65,36 @@ export function registerDashboardRoutes(app: FastifyInstance, db: MunyDb) {
     });
 
   app.get("/api/dashboard", async (req) => getDashboard(db, requireUser(req).id));
+
+  /**
+   * Cards that can be home-screen widgets in the Android app (app-shell's widget
+   * contract): this person's Overview cards first, then the rest. Each `page`
+   * draws just that card; `open` is where tapping the widget goes.
+   */
+  app.get("/api/app-widgets", async (req) => {
+    const user = requireUser(req);
+    const d = getDashboard(db, user.id);
+    const builtins = availableBuiltinCards(aiEnabled(db)).filter((c) => !c.needsAi);
+    const all = [
+      ...builtins.map((c) => ({ id: c.id, title: c.title, description: c.description })),
+      ...d.customCards.map((c) => ({
+        id: `${CUSTOM_PREFIX}${c.id}`,
+        title: c.title,
+        description: "Your custom card",
+      })),
+    ];
+    const order = new Map(d.cards.map((ref, i) => [ref, i]));
+    all.sort((a, b) => (order.get(a.id) ?? 1e6) - (order.get(b.id) ?? 1e6));
+    return {
+      widgets: all.map((c) => ({
+        ...c,
+        onOverview: order.has(c.id),
+        page: `/app-widget/${encodeURIComponent(c.id)}`,
+        open: WIDGET_OPENS[c.id] ?? "/",
+        refresh: 30,
+      })),
+    };
+  });
 
   /** Everything a person or an assistant needs to write a card. Holds no financial data. */
   app.get("/api/dashboard/schema", async (req) => {

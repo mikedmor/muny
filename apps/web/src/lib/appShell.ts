@@ -153,3 +153,14 @@ export async function syncAppPush() {
   const sub = hello.push?.subscription;
   if (sub && sub.endpoint !== registered) await registerAppPush(sub);
 }
+
+// --- Home-screen widgets -----------------------------------------------------
+
+/**
+ * Tells the app a widget page is fully drawn, so it can take the picture
+ * (app-shell's widget contract). Safe to call more than once or in a browser.
+ */
+export function signalWidgetReady() {
+  (window as Window & { __appWidgetReady?: boolean }).__appWidgetReady = true;
+  port()?.postMessage(JSON.stringify({ type: "widget.ready" }));
+}

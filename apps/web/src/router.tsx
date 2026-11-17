@@ -4,6 +4,7 @@ import { Alert, Button } from "./components/ui.js";
 import { useAuthStatus } from "./lib/auth.js";
 import { validateTransactionSearch } from "./lib/search.js";
 import { AccountsPage } from "./pages/AccountsPage.js";
+import { AppWidgetPage, WidgetMessage } from "./pages/AppWidgetPage.js";
 import { AskPage } from "./pages/AskPage.js";
 import { AssetsPage } from "./pages/AssetsPage.js";
 import { InvitePage, LoginPage, SetupPage } from "./pages/AuthPages.js";
@@ -46,6 +47,14 @@ import { TransactionsPage } from "./pages/TransactionsPage.js";
 /** Root: decides between first-run setup, sign-in, and the app. */
 function Root() {
   const status = useAuthStatus();
+  // A home-screen widget in the Android app: one card, no app around it.
+  const widget = /^\/app-widget\/([^/]+)$/.exec(window.location.pathname);
+  if (widget?.[1]) {
+    if (status.isPending) return null;
+    if (!status.data?.user)
+      return <WidgetMessage text={status.data ? "Open Muny to sign in." : "Can't reach Muny."} />;
+    return <AppWidgetPage cardRef={decodeURIComponent(widget[1])} />;
+  }
   if (status.isPending) {
     return (
       <div className="flex min-h-dvh items-center justify-center text-slate-500">Loading…</div>
