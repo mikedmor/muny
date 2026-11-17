@@ -51,7 +51,7 @@ optgroup {
 }
 
 /* Home-screen widgets (pages/AppWidgetPage): the card fills the widget, and parts a card
-   marks data-widget-optional are dropped when it's small. */
+   marks data-widget-optional are dropped, last first, while it doesn't fit. */
 .app-widget-fill {
   display: flex;
   flex-direction: column;
@@ -59,6 +59,6 @@ optgroup {
 .app-widget-fill > * {
   flex: 1 1 auto;
 }
-[data-widget-compact] [data-widget-optional] {
+.app-widget-fill [data-widget-hidden] {
   display: none;
 }

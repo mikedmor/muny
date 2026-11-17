@@ -484,7 +484,10 @@ export function StackLegend({
   onFocus?: (key: string | null) => void;
 }) {
   return (
-    <ul className="mt-3 flex flex-wrap gap-x-1 gap-y-1 text-xs text-slate-600 dark:text-slate-400">
+    <ul
+      data-widget-optional
+      className="mt-3 flex flex-wrap gap-x-1 gap-y-1 text-xs text-slate-600 dark:text-slate-400"
+    >
       {stack.map((b) => {
         const v = b.values[at ?? b.values.length - 1] ?? 0;
         return (
@@ -922,7 +925,10 @@ export function PaceChart({
 
   return (
     <div>
-      <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600 dark:text-slate-400">
+      <div
+        data-widget-optional
+        className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600 dark:text-slate-400"
+      >
         <span className="inline-flex items-center gap-1.5">
           <svg width="18" height="6" aria-hidden="true">
             <line

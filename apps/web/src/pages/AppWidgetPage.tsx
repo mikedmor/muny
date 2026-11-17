@@ -15,8 +15,8 @@ import { useCardRenderer } from "./OverviewPage.js";
 
 /** Narrower than this, a card is laid out at this width and scaled down. */
 const MIN_WIDTH = 260;
-/** Scaling below this first drops the card's optional parts. */
-const COMPACT_BELOW = 0.6;
+/** Shrinking the card below this drops one of its optional parts instead. */
+const KEEP_SCALE = 0.85;
 
 export function AppWidgetPage({ cardRef }: { cardRef: string }) {
   return (
@@ -66,16 +66,16 @@ export function WidgetMessage({ text }: { text: string }) {
 
 /**
  * Fits the card to the widget: laid out at the widget's own width (text keeps
- * its size), stretched to fill the height, and only scaled down when it still
- * doesn't fit. Before scaling far, it drops the parts a card marks
- * `data-widget-optional` (charts, detail rows), so a small widget shows the
- * headline at full size instead of a tiny copy of the whole card.
+ * its size) and stretched to fill the height. When it's too tall, it drops the
+ * parts a card marks `data-widget-optional` one at a time, last first (detail
+ * rows, legends, then the chart), until it fits at nearly full size, and only
+ * then scales what's left. A big widget shows the whole card; a small one the
+ * headline at full size, not a tiny copy of everything.
  */
 function Fitted({ children }: { children: ReactNode }) {
   const inner = useRef<HTMLDivElement>(null);
   const [view, setView] = useState({ w: window.innerWidth, h: window.innerHeight });
-  const [height, setHeight] = useState(0);
-  const [compact, setCompact] = useState(false);
+  const [scale, setScale] = useState(1);
 
   // Nothing behind the card: the widget shows the home screen around it.
   useLayoutEffect(() => {
@@ -88,37 +88,40 @@ function Fitted({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  useEffect(() => {
-    const onResize = () => setView({ w: window.innerWidth, h: window.innerHeight });
-    window.addEventListener("resize", onResize);
-    const el = inner.current;
-    const ro = el ? new ResizeObserver(() => setHeight(el.offsetHeight)) : null;
-    if (el && ro) ro.observe(el);
-    return () => {
-      window.removeEventListener("resize", onResize);
-      ro?.disconnect();
-    };
-  }, []);
-
   const width = Math.max(view.w, MIN_WIDTH);
   const byWidth = view.w / width;
   // The height there is to fill, in the card's own (unscaled) pixels.
   const room = view.h / byWidth;
-  const byHeight = height > room ? room / height : 1;
 
-  // Too tall to show well: drop the optional parts first (once), then measure again.
+  // Show every part, then hide optional ones (last first) while it would
+  // shrink below KEEP_SCALE. Runs again whenever the card changes size (data
+  // arriving, charts measuring themselves).
   useLayoutEffect(() => {
-    if (
-      !compact &&
-      byHeight < COMPACT_BELOW &&
-      inner.current?.querySelector("[data-widget-optional]")
-    )
-      setCompact(true);
-  }, [compact, byHeight]);
+    const el = inner.current;
+    if (!el) return;
+    const fit = () => {
+      const parts = [...el.querySelectorAll("[data-widget-optional]")];
+      for (const p of parts) p.removeAttribute("data-widget-hidden");
+      // minHeight is room, so the height is room unless the card needs more.
+      while (el.offsetHeight > room / KEEP_SCALE && parts.length > 0)
+        parts.pop()?.setAttribute("data-widget-hidden", "");
+      setScale(Math.min(1, room / el.offsetHeight));
+    };
+    fit();
+    // It only grows past room when the card needs more: then it's time to fit.
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    const onResize = () => setView({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener("resize", onResize);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", onResize);
+    };
+  }, [room]);
 
-  const scale = byWidth * byHeight;
+  const shown = byWidth * scale;
   return (
-    <div className="fixed inset-0 overflow-hidden" data-widget-compact={compact ? "" : undefined}>
+    <div className="fixed inset-0 overflow-hidden">
       <div
         ref={inner}
         className="app-widget-fill"
@@ -127,8 +130,8 @@ function Fitted({ children }: { children: ReactNode }) {
           minHeight: room,
           position: "absolute",
           top: 0,
-          left: (view.w - width * scale) / 2,
-          transform: `scale(${scale})`,
+          left: (view.w - width * shown) / 2,
+          transform: `scale(${shown})`,
           transformOrigin: "top left",
         }}
       >
