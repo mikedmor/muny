@@ -381,7 +381,10 @@ function AccountsCard() {
           ];
         })}
       </ul>
-      <div className="border-t border-slate-200 px-4 py-2 text-right text-sm dark:border-slate-800">
+      <div
+        data-widget-optional
+        className="border-t border-slate-200 px-4 py-2 text-right text-sm dark:border-slate-800"
+      >
         <Link to="/reports" hash="net-worth" className="text-slate-500 hover:underline">
           Net worth &amp; trends
         </Link>

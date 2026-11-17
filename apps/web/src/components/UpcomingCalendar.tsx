@@ -39,6 +39,7 @@ export function UpcomingCalendar() {
       <div className="mb-2 flex items-center justify-between">
         <Button
           variant="ghost"
+          data-widget-hide
           aria-label="Previous month"
           onClick={() =>
             setCursor((c) => (c.m === 0 ? { y: c.y - 1, m: 11 } : { y: c.y, m: c.m - 1 }))
@@ -46,7 +47,7 @@ export function UpcomingCalendar() {
         >
           ‹
         </Button>
-        <p className="font-medium">
+        <p className="mx-auto font-medium">
           {new Date(cursor.y, cursor.m, 1).toLocaleDateString(undefined, {
             month: "long",
             year: "numeric",
@@ -54,6 +55,7 @@ export function UpcomingCalendar() {
         </p>
         <Button
           variant="ghost"
+          data-widget-hide
           aria-label="Next month"
           onClick={() =>
             setCursor((c) => (c.m === 11 ? { y: c.y + 1, m: 0 } : { y: c.y, m: c.m + 1 }))
@@ -77,6 +79,7 @@ export function UpcomingCalendar() {
             <div
               // biome-ignore lint/suspicious/noArrayIndexKey: fixed grid cells
               key={i}
+              data-widget-shrink
               className={cx(
                 "min-h-20 bg-surface p-1 dark:bg-slate-950",
                 !d && "bg-slate-50 dark:bg-slate-900",

@@ -51,7 +51,7 @@ optgroup {
 }
 
 /* Home-screen widgets (pages/AppWidgetPage): the card fills the widget, and parts a card
-   marks data-widget-optional are dropped, last first, while it doesn't fit. */
+   marks data-widget-optional (then list rows) are dropped, last first, while it doesn't fit. */
 .app-widget-fill {
   display: flex;
   flex-direction: column;
@@ -59,6 +59,12 @@ optgroup {
 .app-widget-fill > * {
   flex: 1 1 auto;
 }
+/* Controls that can't be used in a picture of the card, and parts dropped to fit. */
+.app-widget-fill [data-widget-hide],
 .app-widget-fill [data-widget-hidden] {
   display: none;
+}
+/* Fixed minimum heights (calendar days) give way so more fits. */
+.app-widget-fill [data-widget-shrink] {
+  min-height: 0;
 }

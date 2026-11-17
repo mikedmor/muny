@@ -67,7 +67,7 @@ export function CryptoOverviewCard() {
         ))}
       </ul>
       {realized !== null && (
-        <p className="text-xs text-slate-500">
+        <p data-widget-optional className="text-xs text-slate-500">
           Realized gains in {year}: <span className="font-medium">{money(realized)}</span> ·{" "}
           <Link to="/taxes" className="text-brand-600 hover:underline">
             Taxes
@@ -75,7 +75,7 @@ export function CryptoOverviewCard() {
         </p>
       )}
       {(recent.data?.items.length ?? 0) > 0 && (
-        <div className="border-t border-slate-100 pt-2 dark:border-slate-800">
+        <div data-widget-optional className="border-t border-slate-100 pt-2 dark:border-slate-800">
           <p className="mb-1 text-xs font-medium tracking-wide text-slate-500 uppercase">
             Recent activity
           </p>

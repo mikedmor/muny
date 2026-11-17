@@ -54,7 +54,7 @@ export function StocksOverviewCard() {
         ))}
       </ul>
       {d.incomeLast12Cents > 0 && (
-        <p className="text-xs text-slate-500">
+        <p data-widget-optional className="text-xs text-slate-500">
           Dividends and interest, last 12 months: {formatMoney(d.incomeLast12Cents)}
         </p>
       )}

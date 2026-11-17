@@ -1269,7 +1269,7 @@ export function TableToggle({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="mt-2">
+    <div className="mt-2" data-widget-hide>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
