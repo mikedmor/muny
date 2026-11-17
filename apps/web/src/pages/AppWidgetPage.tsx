@@ -16,7 +16,7 @@ import { useCardRenderer } from "./OverviewPage.js";
 /** Narrower than this, a card is laid out at this width and scaled down. */
 const MIN_WIDTH = 260;
 /** Scaling below this first drops the card's optional parts. */
-const COMPACT_BELOW = 0.8;
+const COMPACT_BELOW = 0.6;
 
 export function AppWidgetPage({ cardRef }: { cardRef: string }) {
   return (
