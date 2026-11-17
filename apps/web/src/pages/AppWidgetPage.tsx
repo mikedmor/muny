@@ -13,8 +13,10 @@ import { useCardRenderer } from "./OverviewPage.js";
  * when it's done (signalWidgetReady) once nothing is still loading.
  */
 
-/** Cards are laid out for a dashboard column: never narrower than this, then scaled to fit. */
-const MIN_WIDTH = 340;
+/** Narrower than this, a card is laid out at this width and scaled down. */
+const MIN_WIDTH = 260;
+/** Scaling below this first drops the card's optional parts. */
+const COMPACT_BELOW = 0.8;
 
 export function AppWidgetPage({ cardRef }: { cardRef: string }) {
   return (
@@ -62,11 +64,18 @@ export function WidgetMessage({ text }: { text: string }) {
   );
 }
 
-/** Lays the card out at a readable width, then scales it down to fit the window, centered. */
+/**
+ * Fits the card to the widget: laid out at the widget's own width (text keeps
+ * its size), stretched to fill the height, and only scaled down when it still
+ * doesn't fit. Before scaling far, it drops the parts a card marks
+ * `data-widget-optional` (charts, detail rows), so a small widget shows the
+ * headline at full size instead of a tiny copy of the whole card.
+ */
 function Fitted({ children }: { children: ReactNode }) {
   const inner = useRef<HTMLDivElement>(null);
   const [view, setView] = useState({ w: window.innerWidth, h: window.innerHeight });
-  const [box, setBox] = useState({ w: 0, h: 0 });
+  const [height, setHeight] = useState(0);
+  const [compact, setCompact] = useState(false);
 
   // Nothing behind the card: the widget shows the home screen around it.
   useLayoutEffect(() => {
@@ -83,9 +92,7 @@ function Fitted({ children }: { children: ReactNode }) {
     const onResize = () => setView({ w: window.innerWidth, h: window.innerHeight });
     window.addEventListener("resize", onResize);
     const el = inner.current;
-    const ro = el
-      ? new ResizeObserver(() => setBox({ w: el.offsetWidth, h: el.offsetHeight }))
-      : null;
+    const ro = el ? new ResizeObserver(() => setHeight(el.offsetHeight)) : null;
     if (el && ro) ro.observe(el);
     return () => {
       window.removeEventListener("resize", onResize);
@@ -94,12 +101,36 @@ function Fitted({ children }: { children: ReactNode }) {
   }, []);
 
   const width = Math.max(view.w, MIN_WIDTH);
-  const scale = box.h > 0 ? Math.min(view.w / width, view.h / box.h, 1) : view.w / width;
+  const byWidth = view.w / width;
+  // The height there is to fill, in the card's own (unscaled) pixels.
+  const room = view.h / byWidth;
+  const byHeight = height > room ? room / height : 1;
+
+  // Too tall to show well: drop the optional parts first (once), then measure again.
+  useLayoutEffect(() => {
+    if (
+      !compact &&
+      byHeight < COMPACT_BELOW &&
+      inner.current?.querySelector("[data-widget-optional]")
+    )
+      setCompact(true);
+  }, [compact, byHeight]);
+
+  const scale = byWidth * byHeight;
   return (
-    <div className="fixed inset-0 flex items-center justify-center overflow-hidden">
+    <div className="fixed inset-0 overflow-hidden" data-widget-compact={compact ? "" : undefined}>
       <div
         ref={inner}
-        style={{ width, transform: `scale(${scale})`, transformOrigin: "center", flex: "none" }}
+        className="app-widget-fill"
+        style={{
+          width,
+          minHeight: room,
+          position: "absolute",
+          top: 0,
+          left: (view.w - width * scale) / 2,
+          transform: `scale(${scale})`,
+          transformOrigin: "top left",
+        }}
       >
         {children}
       </div>

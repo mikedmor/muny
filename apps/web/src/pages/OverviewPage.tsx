@@ -136,7 +136,7 @@ function SpendingCard({ d }: { d: Overview }) {
           </span>
         )}
       </p>
-      <div className="mt-4">
+      <div className="mt-4" data-widget-optional>
         <PaceChart
           current={s.thisMonthDaily}
           previous={s.lastMonthDaily}
@@ -156,7 +156,10 @@ function SpendingCard({ d }: { d: Overview }) {
           }}
         />
       </div>
-      <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-3 text-sm sm:grid-cols-3 dark:border-slate-800">
+      <dl
+        data-widget-optional
+        className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-3 text-sm sm:grid-cols-3 dark:border-slate-800"
+      >
         <div>
           <dt className="text-slate-500">Earned this month</dt>
           <dd className="font-medium tabular-nums">{formatMoney(d.incomeMonthToDateCents)}</dd>

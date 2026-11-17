@@ -49,3 +49,16 @@ optgroup {
 [data-mode="dark"] optgroup {
   color: var(--color-slate-100);
 }
+
+/* Home-screen widgets (pages/AppWidgetPage): the card fills the widget, and parts a card
+   marks data-widget-optional are dropped when it's small. */
+.app-widget-fill {
+  display: flex;
+  flex-direction: column;
+}
+.app-widget-fill > * {
+  flex: 1 1 auto;
+}
+[data-widget-compact] [data-widget-optional] {
+  display: none;
+}
