@@ -20,13 +20,22 @@ Every alert appears under **Alerts** in Muny (the bell).
 
 ## Notifications on your phone or computer
 
-On **Alerts → Settings**, click **Turn on notifications here** on each device you want alerts on. On Android, install Muny first: open it in Chrome over HTTPS (your Tailscale address), then browser menu → **Install app**, and turn notifications on from the installed app. On Windows, Edge or Chrome works the same way (installed or in a tab). Alerts then arrive like any app's, even with Muny closed. In the [Android app](access.md#android-app), alerts come through the free ntfy app instead: install ntfy, then turn notifications on the same way from inside the app.
+On **Alerts → Settings**, click **Turn on notifications here** on each device you want alerts on. On Android, install Muny first: open it in Chrome over HTTPS (your Tailscale address), then browser menu → **Install app**, and turn notifications on from the installed app. On Windows, Edge or Chrome works the same way (installed or in a tab). Alerts then arrive like any app's, even with Muny closed. The [Android app](access.md#android-app) works the same way, once Muny is set up for it (below).
 
 Each notification opens the page it's about when tapped, and has **Mark read** (without opening Muny) and **Open** buttons. A newer alert of the same kind replaces the older one instead of stacking up. The installed app's icon shows how many alerts are unread.
 
 Each device becomes a channel. The **Where each alert goes** grid has a row per alert (account alerts together) and a column per device or channel: tick which alerts each one gets, or **All** / **None**. A new device starts with every alert that's on.
 
 Notifications go through the browser's own push service (Google for Chrome and Android, Microsoft for Edge, Mozilla for Firefox, Apple for Safari), encrypted so only that device can read them; Muny contacts it only for devices you turned on. A device that turns notifications off is switched off here too.
+
+### In the Android app
+
+In the [Android app](access.md#android-app), turn notifications on the same way: **Alerts → Settings → Turn on notifications here**. There's nothing to set up on your server or to install on the phone. Alerts arrive through Google Play services, like any app's.
+
+To get there, Muny hands each alert to the app's push relay, which passes it to Google for delivery. Each alert is encrypted on your server for that one phone (the same encryption browsers use for notifications), so neither the relay nor Google can read it: they only see the phone's push token and scrambled data. Nothing is sent unless notifications are on in the app.
+
+- **Turn app notifications off** for your whole Muny with `MUNY_PUSH_RELAY=off`.
+- **Run your own relay** (it's a small Cloudflare Worker in the app-shell project) and point `MUNY_PUSH_RELAY` at it, or skip the relay entirely with your own Firebase key in `MUNY_FCM_CREDENTIALS`. Both only work with a copy of the app built with your own Firebase project.
 
 ## Getting alerts by email or other apps
 

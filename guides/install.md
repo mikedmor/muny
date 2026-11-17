@@ -113,16 +113,18 @@ The first build takes a few minutes (about 6 on a DS920+).
 
 Settings are environment variables. They're read at startup, so recreate the container after changing them (`docker compose up -d`).
 
-| Variable                     | Default          | Meaning                                                                |
-| ---------------------------- | ---------------- | ---------------------------------------------------------------------- |
-| `MUNY_SECRET_KEY`            | (required)       | Encrypts stored credentials. Generate once, keep a copy safe.          |
-| `MUNY_PUBLIC_URL`            | none             | Muny's address, used for links in alerts (e.g. `https://muny.example`) |
-| `MUNY_DEMO`                  | `false`          | `true` fills a fresh install with a made-up household to try           |
-| `MUNY_SYNC_INTERVAL_HOURS`   | `6`              | How often bank sync runs; `0` turns it off                             |
-| `MUNY_BACKUP_DIR`            | `<data>/backups` | Where backups are written                                              |
-| `MUNY_BACKUP_KEEP`           | `14`             | How many backups to keep                                               |
-| `MUNY_BACKUP_INTERVAL_HOURS` | `24`             | Hours between backups; `0` turns automatic backups off                 |
-| `TZ`                         | `UTC`            | Your time zone, so "today" and due dates are right                     |
+| Variable                     | Default          | Meaning                                                                                                           |
+| ---------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `MUNY_SECRET_KEY`            | (required)       | Encrypts stored credentials. Generate once, keep a copy safe.                                                     |
+| `MUNY_PUBLIC_URL`            | none             | Muny's address, used for links in alerts (e.g. `https://muny.example`)                                            |
+| `MUNY_PUSH_RELAY`            | the app's relay  | Where Android app notifications go (encrypted); `off` turns them off (see [Alerts](alerts.md#in-the-android-app)) |
+| `MUNY_FCM_CREDENTIALS`       | none             | Your own Firebase key file, for an Android app you built yourself (see [Alerts](alerts.md#in-the-android-app))    |
+| `MUNY_DEMO`                  | `false`          | `true` fills a fresh install with a made-up household to try                                                      |
+| `MUNY_SYNC_INTERVAL_HOURS`   | `6`              | How often bank sync runs; `0` turns it off                                                                        |
+| `MUNY_BACKUP_DIR`            | `<data>/backups` | Where backups are written                                                                                         |
+| `MUNY_BACKUP_KEEP`           | `14`             | How many backups to keep                                                                                          |
+| `MUNY_BACKUP_INTERVAL_HOURS` | `24`             | Hours between backups; `0` turns automatic backups off                                                            |
+| `TZ`                         | `UTC`            | Your time zone, so "today" and due dates are right                                                                |
 
 Bank sync keys are covered in [Bank sync](bank-sync.md).
 

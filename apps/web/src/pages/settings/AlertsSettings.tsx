@@ -548,7 +548,7 @@ function ThisDevice({ channels }: { channels: NotificationChannel[] }) {
   return inAndroidApp() ? <ThisApp channels={channels} /> : <ThisBrowser channels={channels} />;
 }
 
-/** In the Android app: notifications come through UnifiedPush (a push app such as ntfy). */
+/** In the Android app: notifications come through Firebase Cloud Messaging (Google Play services). */
 function ThisApp({ channels }: { channels: NotificationChannel[] }) {
   const qc = useQueryClient();
   const [state, setState] = useState<string | null>(null);
@@ -584,10 +584,9 @@ function ThisApp({ channels }: { channels: NotificationChannel[] }) {
     <Card className="space-y-2">
       <h3 className="font-semibold">Notifications on this phone</h3>
       <p className="text-sm text-slate-500">
-        Alerts arrive like any app's, even with Muny closed. The app gets them through a free push
-        app, <span className="font-medium">ntfy</span> (from F-Droid or Google Play), using ntfy.sh
-        or your own ntfy server. They're encrypted so only this phone can read them. This phone
-        shows up as a channel below, so you can choose which alerts it gets.
+        Alerts arrive like any app's, even with Muny closed. They come through Google Play services,
+        encrypted so only this phone can read them. This phone shows up as a channel below, so you
+        can choose which alerts it gets.
       </p>
       <div className="flex flex-wrap items-center gap-3">
         <Button onClick={() => void turnOn()} disabled={busy}>

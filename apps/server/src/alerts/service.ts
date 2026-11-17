@@ -15,12 +15,15 @@ import { verifySavings } from "../savings/service.js";
 import { moveAlertsToAccounts } from "./accounts.js";
 import { ChannelError, type OutboundMessage, sendToChannel } from "./channels.js";
 import { type Candidate, DEFAULT_PARAMS, evaluateRules } from "./evaluate.js";
+import type { FcmRoute } from "./fcm.js";
 import { vapidKeys } from "./webpush.js";
 
 export interface AlertDeps {
   secretKey: Buffer | undefined;
   /** e.g. https://muny.example.ts.net, for links in outbound messages. */
   publicUrl: string | undefined;
+  /** How notifications reach the Android app (MUNY_PUSH_RELAY or MUNY_FCM_CREDENTIALS). */
+  fcm?: FcmRoute | null;
   fetch?: typeof fetch;
 }
 
@@ -141,6 +144,7 @@ export async function deliver(
         ? {
             vapid: vapidKeys(db, deps.secretKey),
             subject: deps.publicUrl ?? "https://github.com/mikedmor/muny",
+            fcm: deps.fcm,
           }
         : undefined;
     // Links in notifications open Muny (relative when no public address is set).

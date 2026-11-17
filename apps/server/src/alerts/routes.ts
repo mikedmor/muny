@@ -19,6 +19,7 @@ import { decryptJson, encryptJson } from "../lib/crypto.js";
 import { badRequest, HttpError, notFound, parse } from "../lib/http.js";
 import { accountAlerts, setAccountAlerts } from "./accounts.js";
 import { channelSummary, parseChannelConfig } from "./channels.js";
+import { FCM_PREFIX } from "./fcm.js";
 import {
   type AlertDeps,
   deliver,
@@ -244,6 +245,11 @@ export function registerAlertRoutes(app: FastifyInstance, db: MunyDb, deps: Aler
       }),
       req.body,
     );
+    if (body.endpoint.startsWith(FCM_PREFIX) && !deps.fcm)
+      throw new HttpError(
+        400,
+        "Notifications in the Android app are turned off on this Muny (MUNY_PUSH_RELAY=off).",
+      );
     const config = parseConfig("push", {
       endpoint: body.endpoint,
       p256dh: body.keys.p256dh,

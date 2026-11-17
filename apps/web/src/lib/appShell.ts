@@ -4,8 +4,9 @@ import { api } from "./api.js";
  * The Muny Android app (a WebView, from the app-shell project). On Muny's own
  * origin it gives the page a `window.AppShell` message port; requests are
  * JSON with an `id`, answers come back as `message` events with that `id`.
- * Notifications go through UnifiedPush: the app hands us a Web Push
- * subscription (endpoint + keys) that the server registers like a browser's.
+ * Notifications go through Firebase Cloud Messaging: the app hands us a
+ * subscription like a browser's (endpoint `fcm:<token>` + its own encryption
+ * keys), which the server registers and encrypts to like Web Push.
  */
 
 interface Port {
@@ -29,7 +30,7 @@ export interface AppHello extends Reply {
   version: string;
   /** The app asks for fingerprint or screen lock. */
   lock: boolean;
-  push: { distributor: boolean; permission: boolean; subscription?: AppSubscription };
+  push: { available: boolean; permission: boolean; subscription?: AppSubscription };
 }
 
 const port = (): Port | undefined => (window as Window & { AppShell?: Port }).AppShell;
@@ -88,12 +89,12 @@ export const openAppSettings = () => port()?.postMessage(JSON.stringify({ type: 
 /** What to tell the user when the app couldn't turn notifications on. */
 export function appPushError(error: string | undefined): string {
   switch (error) {
-    case "no-distributor":
-      return "Notifications in the app arrive through a free push app. Install ntfy (from F-Droid or Google Play), open it once, then try again.";
+    case "not-configured":
+      return "This copy of the app was built without notifications (no Firebase setup).";
     case "denied":
       return "Notifications are off for Muny in Android. Turn them on in Settings → Apps → Muny → Notifications, then try again.";
-    case "timeout":
-      return "The push app didn't answer. Open ntfy, check it's connected, and try again.";
+    case "failed:IOException":
+      return "Couldn't reach Google to set up notifications. Check you're online and that Google Play services is up to date, then try again.";
     default:
       return `Couldn't turn them on${error ? ` (${error})` : ""}.`;
   }
@@ -118,8 +119,8 @@ export async function registerAppPush(sub: AppSubscription) {
 }
 
 /**
- * At startup in the app: the push app can change this phone's endpoint (a new
- * ntfy server, a reinstall). If notifications were turned on here and the
+ * At startup in the app: Google can change this phone's push token (after a
+ * reinstall or a restore). If notifications were turned on here and the
  * endpoint moved, tell the server the new one.
  */
 export async function syncAppPush() {

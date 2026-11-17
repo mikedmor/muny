@@ -40,7 +40,7 @@ Open Muny in your phone's browser and go to **Settings → This device → Insta
 
 There's also a small Android app. It shows your Muny in its own window, with no browser involved: no address bar and no browser badge. It asks for your Muny address the first time, and can ask for your fingerprint or screen lock when it opens and again after 5 minutes away (on by default). Install the app file (`.apk`) attached to a Muny release, from release 1.5 on (allow installing apps from your browser or file manager when Android asks). It needs Muny's HTTPS address; a home root certificate installed on the phone works too.
 
-The app keeps its own sign-in, so sign in once in the app. Its notifications arrive through **ntfy**, a free push app (from F-Droid or Google Play): install it, then in Muny go to **Alerts → Settings → Turn on notifications here**. ntfy only ever sees encrypted alerts, and can use ntfy.sh or your own ntfy server, as long as it has an HTTPS address. In the app, **Keep a copy of my data on this device** is on unless you turn it off (see below).
+The app keeps its own sign-in, so sign in once in the app. Turn its notifications on in **Alerts → Settings → Turn on notifications here**; they arrive through Google Play services, encrypted so only your phone can read them, with nothing to set up (see [Alerts](alerts.md#in-the-android-app)). In the app, **Keep a copy of my data on this device** is on unless you turn it off (see below).
 
 ### Using it offline
 

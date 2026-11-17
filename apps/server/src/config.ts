@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import { z } from "zod";
+import { DEFAULT_PUSH_RELAY, type FcmRoute, loadFcmCredentials } from "./alerts/fcm.js";
 
 const optionalString = z
   .string()
@@ -25,6 +26,17 @@ const EnvSchema = z.object({
   MUNY_SOURCE_URL: z.string().url().default("https://github.com/mikedmor/muny"),
   /** Address you open Muny at (e.g. https://muny.example.ts.net), for links in notifications. */
   MUNY_PUBLIC_URL: optionalString.pipe(z.string().url().optional()),
+  /** Firebase service-account key file: notifications straight to an Android app you built yourself. */
+  MUNY_FCM_CREDENTIALS: optionalString,
+  /** Push relay for the Android app (default: the published app's); "off" to turn app notifications off. */
+  MUNY_PUSH_RELAY: optionalString.pipe(
+    z
+      .union([
+        z.literal("off"),
+        z.string().url().startsWith("https://", "MUNY_PUSH_RELAY must be https"),
+      ])
+      .optional(),
+  ),
   /** Where automatic SQLite backups go. Defaults to <data dir>/backups. */
   MUNY_BACKUP_DIR: optionalString,
   /** How many backups to keep. */
@@ -100,6 +112,8 @@ export interface Config {
   demo: boolean;
   plaid: PlaidConfig | null;
   teller: TellerConfig | null;
+  /** How notifications reach the Android app: own Firebase key, the push relay, or not at all. */
+  fcm: FcmRoute | null;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -139,6 +153,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
               .filter(Boolean),
           }
         : null,
+    fcm: e.MUNY_FCM_CREDENTIALS
+      ? { credentials: loadFcmCredentials(resolve(e.MUNY_FCM_CREDENTIALS)) }
+      : e.MUNY_PUSH_RELAY === "off"
+        ? null
+        : { relay: e.MUNY_PUSH_RELAY ?? DEFAULT_PUSH_RELAY },
     teller: e.TELLER_APPLICATION_ID
       ? {
           applicationId: e.TELLER_APPLICATION_ID,

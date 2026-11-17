@@ -210,6 +210,7 @@ export async function buildApp({
   const alertDeps: AlertDeps = {
     secretKey: config.secretKey,
     publicUrl: config.publicUrl,
+    fcm: config.fcm,
     fetch: alertFetch,
   };
   registerAlertRoutes(app, db, alertDeps);

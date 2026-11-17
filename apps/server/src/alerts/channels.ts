@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import type { ChannelConfig, ChannelType } from "@muny/shared";
 import { createTransport } from "nodemailer";
 import { z } from "zod";
+import { FCM_PREFIX, type FcmRoute, sendFcm } from "./fcm.js";
 import { PushGone, sendWebPush, type Vapid } from "./webpush.js";
 
 /**
@@ -66,7 +67,16 @@ export function parseChannelConfig(type: ChannelType, input: unknown): ChannelCo
     case "push":
       return z
         .object({
-          endpoint: httpUrl.refine((u) => u.startsWith("https://"), "Push endpoints use https"),
+          // A browser's push service (https), or the Android app's Firebase token (fcm:…).
+          endpoint: z
+            .string()
+            .trim()
+            .refine(
+              (u) =>
+                /^fcm:[\w:-]{20,4096}$/.test(u) ||
+                (httpUrl.safeParse(u).success && u.startsWith("https://")),
+              "Push endpoints use https",
+            ),
           p256dh: z.string().regex(/^[\w-]{80,100}$/, "Bad key"),
           auth: z.string().regex(/^[\w-]{16,30}$/, "Bad key"),
           device: z.string().trim().max(80).default("This device"),
@@ -121,33 +131,33 @@ export async function sendToChannel(
   config: ChannelConfig,
   msg: OutboundMessage,
   fetchImpl: typeof fetch = fetch,
-  /** push: this server's VAPID keys and contact (MUNY_PUBLIC_URL). */
-  push?: { vapid: Vapid; subject: string },
+  /** push: this server's VAPID keys and contact (MUNY_PUBLIC_URL), and Firebase for the app. */
+  push?: { vapid: Vapid; subject: string; fcm?: FcmRoute | null },
 ): Promise<void> {
   switch (type) {
     case "push": {
       if (!push) throw new ChannelError("MUNY_SECRET_KEY isn't set");
+      const sub = {
+        endpoint: config.endpoint as string,
+        p256dh: config.p256dh as string,
+        auth: config.auth as string,
+      };
+      const payload = {
+        title: msg.title,
+        body: msg.body,
+        url: msg.url,
+        link: msg.link ?? null,
+        tag: msg.type,
+        id: msg.id ?? null,
+        ts: msg.createdAt,
+        unread: msg.unread ?? null,
+      };
+      const app = sub.endpoint.startsWith(FCM_PREFIX);
+      if (app && !push.fcm)
+        throw new ChannelError("Android app notifications are off (MUNY_PUSH_RELAY=off)");
       try {
-        await sendWebPush(
-          {
-            endpoint: config.endpoint as string,
-            p256dh: config.p256dh as string,
-            auth: config.auth as string,
-          },
-          {
-            title: msg.title,
-            body: msg.body,
-            url: msg.url,
-            link: msg.link ?? null,
-            tag: msg.type,
-            id: msg.id ?? null,
-            ts: msg.createdAt,
-            unread: msg.unread ?? null,
-          },
-          push.vapid,
-          push.subject,
-          fetchImpl,
-        );
+        if (app && push.fcm) await sendFcm(sub, payload, push.fcm, fetchImpl);
+        else await sendWebPush(sub, payload, push.vapid, push.subject, fetchImpl);
       } catch (err) {
         if (err instanceof PushGone)
           throw new ChannelError(
