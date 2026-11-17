@@ -598,9 +598,10 @@ function ThisApp({ channels }: { channels: NotificationChannel[] }) {
     <Card className="space-y-2">
       <h3 className="font-semibold">Notifications on this phone</h3>
       <p className="text-sm text-slate-500">
-        Alerts arrive like any app's, even with Muny closed. They come through Google Play services,
-        encrypted so only this phone can read them. This phone shows up as a channel below, so you
-        can choose which alerts it gets.
+        Alerts arrive like any app's, even with Muny closed. They come through Google Play services
+        (or a UnifiedPush app such as ntfy, if you chose that in the app's Server and lock
+        settings), encrypted so only this phone can read them. This phone shows up as a channel
+        below, so you can choose which alerts it gets.
       </p>
       <div className="flex flex-wrap items-center gap-3">
         <Button onClick={() => void turnOn()} disabled={busy}>

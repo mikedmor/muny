@@ -35,6 +35,7 @@ In the [Android app](access.md#android-app), turn notifications on the same way:
 To get there, Muny hands each alert to the app's push relay, which passes it to Google for delivery. Each alert is encrypted on your server for that one phone (the same encryption browsers use for notifications), so neither the relay nor Google can read it: they only see the phone's push token and scrambled data. Nothing is sent unless notifications are on in the app.
 
 - **Turn app notifications off** for your whole Muny with `MUNY_PUSH_RELAY=off`.
+- **Without Google:** in the app, press and hold its icon → **Server and lock**, and turn on **Use a UnifiedPush app instead of Google**. Alerts then go straight from your Muny to a UnifiedPush app such as [ntfy](https://ntfy.sh) on the phone (with your own ntfy server if you like), with no relay. Your ntfy server needs an https address.
 - **Run your own relay** (it's a small Cloudflare Worker in the app-shell project) and point `MUNY_PUSH_RELAY` at it, or skip the relay entirely with your own Firebase key in `MUNY_FCM_CREDENTIALS`. Both only work with a copy of the app built with your own Firebase project.
 
 ## Getting alerts by email or other apps

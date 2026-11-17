@@ -30,7 +30,12 @@ export interface AppHello extends Reply {
   version: string;
   /** The app asks for fingerprint or screen lock. */
   lock: boolean;
-  push: { available: boolean; permission: boolean; subscription?: AppSubscription };
+  push: {
+    method?: "firebase" | "unifiedpush";
+    available: boolean;
+    permission: boolean;
+    subscription?: AppSubscription;
+  };
 }
 
 const port = (): Port | undefined => (window as Window & { AppShell?: Port }).AppShell;
@@ -89,6 +94,8 @@ export const openAppSettings = () => port()?.postMessage(JSON.stringify({ type: 
 /** What to tell the user when the app couldn't turn notifications on. */
 export function appPushError(error: string | undefined): string {
   switch (error) {
+    case "no-distributor":
+      return "This phone is set to get notifications through a UnifiedPush app, but none is installed. Install one such as ntfy, or switch back to Google in the app's Server and lock settings.";
     case "not-configured":
       return "This copy of the app was built without notifications (no Firebase setup).";
     case "denied":
