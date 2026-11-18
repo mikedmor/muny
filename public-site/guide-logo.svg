@@ -1,0 +1,9 @@
+<svg viewBox="0 0 1254 1254" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect width="1254" height="1254" fill="#020d22" />
+            <path d="M275 286h137l215 239 218-239h135v341H851V475L627 720 402 473v435H275z" fill="#fff" />
+            <g fill="#10efb0">
+              <path d="M515 908V805a16 16 0 0 1 16-16h99a16 16 0 0 1 16 16v103z" />
+              <path d="M683 908V752a16 16 0 0 1 16-16h99a16 16 0 0 1 16 16v156z" />
+              <path d="M851 908V681a16 16 0 0 1 16-16h97a16 16 0 0 1 16 16v227z" />
+            </g>
+          </svg>

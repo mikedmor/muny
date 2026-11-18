@@ -1,0 +1,49 @@
+{
+  "name": "Muny",
+  "src": "guides",
+  "out": "public-site/guide",
+  "repo": "https://github.com/mikedmor/muny",
+  "branch": "main",
+  "title": "Everything about Muny",
+  "description": "How to install, set up and use Muny, the self-hosted personal finance app: budgets, bills, loans, stocks, crypto, AI assistants and more.",
+  "logo": "guide-logo.svg",
+  "links": [
+    {
+      "label": "Muny",
+      "href": "../"
+    },
+    {
+      "label": "GitHub",
+      "href": "https://github.com/mikedmor/muny",
+      "optional": true
+    }
+  ],
+  "analytics": "<script data-goatcounter=\"https://mikedmor.goatcounter.com/count\" async src=\"//gc.zgo.at/count.js\"></script>",
+  "colors": {
+    "light": {
+      "bg": "#f6f8fb",
+      "bg-2": "#eef2f7",
+      "card": "#ffffff",
+      "ink": "#0b1526",
+      "muted": "#55627a",
+      "faint": "#8a96aa",
+      "line": "#e2e8f0",
+      "accent": "#0d9488",
+      "accent-ink": "#0f766e",
+      "glow": "rgb(20 184 166 / 0.14)",
+      "code-bg": "#050c1a"
+    },
+    "dark": {
+      "bg": "#050c1a",
+      "bg-2": "#0a1426",
+      "card": "#0c1628",
+      "ink": "#eaf1fb",
+      "muted": "#9aa8bf",
+      "faint": "#66758e",
+      "line": "#1a2740",
+      "accent-ink": "#2dd4bf",
+      "glow": "rgb(16 239 176 / 0.1)",
+      "code-bg": "#030914"
+    }
+  }
+}

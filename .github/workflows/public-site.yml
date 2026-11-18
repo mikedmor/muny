@@ -1,13 +1,14 @@
 # Publishes public-site/ (and only that folder) to GitHub Pages: Muny's home page, at
 # https://mikedmor.github.io/muny/. Its screenshots are the guides' own (guides/images), copied in
-# here, so new guide screenshots reach the site on their own.
+# here, so new guide screenshots reach the site on their own. The guides themselves (guides/*.md)
+# become the guide at /muny/guide/, built by guide-kit from mikedmor/mikedmor.github.io.
 # In the repository's Settings → Pages, Source must be "GitHub Actions".
 name: Public site
 
 on:
   push:
     branches: [main]
-    paths: ["public-site/**", "guides/images/**", ".github/workflows/public-site.yml"]
+    paths: ["public-site/**", "guides/**", ".github/workflows/public-site.yml"]
   workflow_dispatch:
 
 permissions:
@@ -30,6 +31,19 @@ jobs:
       - uses: actions/configure-pages@v5
       - name: Use the guides' screenshots
         run: mkdir -p public-site/shots && cp guides/images/*.png public-site/shots/
+      - name: Get guide-kit
+        uses: actions/checkout@v4
+        with:
+          repository: mikedmor/mikedmor.github.io
+          path: .guide-kit
+          sparse-checkout: tools/guide-kit
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build the guide
+        run: |
+          npm ci --prefix .guide-kit/tools/guide-kit
+          node .guide-kit/tools/guide-kit/build.mjs public-site/guide.json
       - uses: actions/upload-pages-artifact@v3
         with:
           path: public-site

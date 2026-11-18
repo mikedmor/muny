@@ -63,3 +63,5 @@ CLAUDE.md
 
 # The public site copies its screenshots from guides/images when it deploys.
 public-site/shots/
+# Built from guides/*.md when the site deploys (see public-site/README.md).
+public-site/guide/

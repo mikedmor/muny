@@ -169,9 +169,15 @@
       .phones { display: flex; justify-content: center; gap: 1.5rem; flex-wrap: wrap; }
       .phones figure { margin: 0; width: min(15rem, 28vw); min-width: 10rem; text-align: center; }
       .phones .frame { padding: 6px; border-radius: 26px; background: var(--navy); border: 1px solid #22314d; box-shadow: var(--shadow); }
-      .phones img { border-radius: 20px; aspect-ratio: 390 / 844; object-fit: cover; object-position: top; cursor: zoom-in; }
+      .phones img { border-radius: 20px; aspect-ratio: 9 / 16; object-fit: cover; object-position: top; cursor: zoom-in; }
       .phones figure:nth-child(2) { transform: translateY(-1.5rem); }
       .phones figcaption { margin-top: 0.8rem; color: var(--muted); font-size: 0.9rem; }
+      .app-points { max-width: 46rem; margin: 0 auto 2.5rem; padding: 0; list-style: none; display: grid; gap: 0.7rem; color: var(--muted); }
+      .app-points li { display: flex; gap: 0.65rem; }
+      .app-points li::before { content: "✓"; flex: none; display: grid; place-items: center; width: 1.35rem; height: 1.35rem; margin-top: 0.15rem; border-radius: 50%; background: color-mix(in oklab, var(--brand) 16%, transparent); color: var(--brand-ink); font-size: 0.75rem; font-weight: 800; }
+      .app-points b { color: var(--ink); }
+      .app-cta { justify-content: center; margin-top: 2.5rem; }
+      .app-note { margin: 0.9rem 0 0; text-align: center; color: var(--muted); font-size: 0.9rem; }
 
       /* Install */
       .start { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 2.5rem; align-items: start; }
@@ -226,6 +232,8 @@
           <a class="opt" href="#tour">Tour</a>
           <a class="opt" href="#features">Features</a>
           <a href="#ai">AI</a>
+          <a class="opt" href="#android">Android</a>
+          <a href="guide/">Guide</a>
           <a href="#start">Install</a>
           <a class="opt-sm" href="https://github.com/mikedmor/muny">GitHub</a>
           <a class="home" href="https://mikedmor.github.io/" title="More projects by mikedmor">← All projects</a>
@@ -245,6 +253,10 @@
           </p>
           <div class="cta">
             <a class="btn primary" href="#start">Install it</a>
+            <a class="btn" href="#android">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M11 18h2"/></svg>
+              Android app
+            </a>
             <a class="btn" href="https://github.com/mikedmor/muny">
               <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
               Code on GitHub
@@ -313,7 +325,7 @@
           <div aria-live="polite">
             <h3 id="tour-title-2">Transactions</h3>
             <p id="tour-text"></p>
-            <a class="more" id="tour-more" href="https://github.com/mikedmor/muny/blob/main/guides/transactions.md">Read the guide →</a>
+            <a class="more" id="tour-more" href="guide/transactions/">Read the guide →</a>
           </div>
         </div>
       </section>
@@ -412,17 +424,31 @@
         </div>
       </div>
 
-      <section class="wrap" aria-labelledby="phone-title">
+      <section id="android" class="wrap" aria-labelledby="phone-title">
         <div class="head center">
           <p class="kicker">On your phone</p>
-          <h2 id="phone-title">Made for the screen you have</h2>
-          <p>Install it to your home screen. The Overview is arranged separately for phones and desktops.</p>
+          <h2 id="phone-title">Muny for Android</h2>
+          <p>Your Muny as an app of its own, with no browser around it. It connects to your own Muny server and adds what a web page can't.</p>
         </div>
+        <ul class="app-points">
+          <li><span><b>Overview cards on your home screen:</b> spending, upcoming bills, accounts and more, as widgets.</span></li>
+          <li><span><b>Alerts as notifications:</b> a bill due, a budget running out, a balance headed low. Encrypted so only your phone can read them.</span></li>
+          <li><span><b>Fingerprint or screen lock</b> when the app opens, on by default, and it hides from the recent apps view.</span></li>
+          <li><span><b>Only talks to your server.</b> No account with us, no tracking, no ads. Works at home or through your own VPN, such as Tailscale.</span></li>
+        </ul>
         <div class="phones">
-          <figure><div class="frame"><img src="shots/recurring-phone.png" width="390" height="844" alt="Recurring charges on a phone." loading="lazy" /></div><figcaption>What's due</figcaption></figure>
-          <figure><div class="frame"><img src="shots/overview-phone.png" width="390" height="844" alt="The Overview on a phone." loading="lazy" /></div><figcaption>The Overview</figcaption></figure>
-          <figure><div class="frame"><img src="shots/budgets-phone.png" width="390" height="844" alt="Budgets on a phone." loading="lazy" /></div><figcaption>Budgets</figcaption></figure>
+          <figure><div class="frame"><img src="app/bills.webp" width="540" height="960" alt="The Muny app's Recurring page: subscriptions, bills, the yearly total and recurring income." loading="lazy" /></div><figcaption>What's due</figcaption></figure>
+          <figure><div class="frame"><img src="app/overview.webp" width="540" height="960" alt="The Muny app's Overview: spending this month against October, with what's earned and expected." loading="lazy" /></div><figcaption>The Overview</figcaption></figure>
+          <figure><div class="frame"><img src="app/budgets.webp" width="540" height="960" alt="The Muny app's Budgets: what's left of this month's budget, and the projection to the end of the month." loading="lazy" /></div><figcaption>Budgets</figcaption></figure>
         </div>
+        <div class="cta app-cta">
+          <a class="btn primary" href="https://play.google.com/store/apps/details?id=io.github.mikedmor.muny" title="Get it on Google Play">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M11 18h2"/></svg>
+            Android ↗
+          </a>
+          <a class="btn" href="https://mikedmor.com/apps/muny/">Set up the app</a>
+        </div>
+        <p class="app-note">Free. Needs Android 11 or newer, and a Muny server with an <code>https://</code> address the phone trusts.</p>
       </section>
 
       <section id="start" class="wrap" aria-labelledby="start-title">
@@ -440,7 +466,7 @@
               <b>Settings → Data → Start clean</b> removes it when you're ready.
             </p>
             <div class="cta">
-              <a class="btn" href="https://github.com/mikedmor/muny/blob/main/guides/install.md">Install guide (Compose, Synology, Unraid)</a>
+              <a class="btn" href="guide/install/">Install guide (Compose, Synology, Unraid)</a>
             </div>
           </div>
           <div class="code">
@@ -463,7 +489,7 @@ docker run -d --name muny --restart unless-stopped --user "$(id -u):$(id -g)" \
         <span>Muny is free and open source (AGPL-3.0). This site has no cookies and counts visits anonymously with GoatCounter.</span>
         <nav aria-label="More">
           <a href="https://github.com/mikedmor/muny">GitHub</a>
-          <a href="https://github.com/mikedmor/muny/blob/main/guides/README.md">Guides</a>
+          <a href="guide/">Guide</a>
           <a href="https://github.com/mikedmor/muny/blob/main/CHANGELOG.md">Changelog</a>
           <a href="https://github.com/mikedmor/muny/blob/main/SECURITY.md">Security</a>
           <a href="https://mikedmor.github.io/">More projects by mikedmor</a>
@@ -479,7 +505,7 @@ docker run -d --name muny --restart unless-stopped --user "$(id -u):$(id -g)" \
 
     <script>
       (() => {
-        const GUIDES = "https://github.com/mikedmor/muny/blob/main/guides/";
+        const GUIDES = "guide/";
         const TOUR = [
           ["Transactions", "transactions", "transactions", "Every account in one list, with search, filters, splits, notes, tags, merchant cleanup and bulk edits.", "transactions.md"],
           ["Recurring", "recurring", "recurring", "Subscriptions and bills, found automatically: what's due, what's been paid, and when a price goes up.", "recurring.md"],
@@ -515,7 +541,7 @@ docker run -d --name muny --restart unless-stopped --user "$(id -u):$(id -g)" \
           document.getElementById("tour-url").textContent = `money.home/${url}`;
           document.getElementById("tour-title-2").textContent = name;
           document.getElementById("tour-text").textContent = text;
-          document.getElementById("tour-more").href = GUIDES + guide;
+          document.getElementById("tour-more").href = GUIDES + guide.replace(/\.md$/, "/");
         };
         TOUR.forEach(([name], i) => {
           const b = document.createElement("button");
