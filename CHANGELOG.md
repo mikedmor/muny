@@ -4,6 +4,10 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-17
+
+Muny on your phone: an Android app with widgets, better notifications and offline use. Plus Pay, to see your paycheck from gross to take-home.
+
 ### Added
 
 - **`MUNY_DEMO_OWNER`** for a public demo: with `MUNY_DEMO`, an `email:password` owner made at start on an empty install, so a demo that's wiped and restarted (like the one for app-store reviewers) can be signed in to with a short, shared password.
@@ -15,6 +19,7 @@ All notable changes to Muny are listed here. Versions follow [Semantic Versionin
 - **Better notifications on Android.** Alerts show Muny's mark in the status bar instead of a white square, open the page they're about, show when they happened, and have **Mark read** and **Open** buttons. A newer alert of the same kind replaces the older one.
 - **Use Muny offline.** Turn on **Settings → This device → Keep a copy of my data on this device** and Muny opens with your last data when it can't reach the server, with a banner showing how old it is. It's read-only until you're back, encrypted with a key that stays in that browser, and deleted when you sign out. Off by default in a browser; on by default in the Android app.
 - **Android app.** A small app that shows Muny in its own window, with no browser and no address bar: fingerprint or screen lock when it opens and after 5 minutes away, long-press shortcuts, and notifications through Google Play services (end-to-end encrypted, through the app's push relay; nothing to set up) with Muny's own icon and a **Mark read** button. Its file attaches to releases.
+- **Home-screen widgets** in the Android app: put any Overview card on your home screen. Each widget fills its space and drops optional parts when it's small, and opens that page when tapped.
 - When Muny can't be reached, a banner says so and it checks again on its own; saving explains that nothing was saved instead of failing quietly.
 
 ### Fixed

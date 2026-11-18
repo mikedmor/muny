@@ -114,16 +114,15 @@ describe("balance forecast", () => {
   });
 
   it("warns once when an account is headed below its low-balance amount", async () => {
-    const { db, client, checking } = await setup();
+    const { db, checking } = await setup();
     setAccountAlerts(db, checking, {
       lowBalanceCents: 20_000,
       largeChargeCents: null,
       unusualCharge: false,
       duplicateCharge: false,
     });
-    const f = (
-      await client.get(`/api/forecast?accountId=${checking}&days=14`)
-    ).json<BalanceForecast>();
+    // On the fixed day, not the real one (the route uses today's date).
+    const f: BalanceForecast = balanceForecast(db, { accountId: checking, days: 14 }, TODAY);
     expect(f.thresholdCents).toBe(20_000);
     // $250 today, $20 a day: below $200 on the 17th.
     expect(f.firstBelow).toEqual({ date: "2026-11-17", balanceCents: 19_000 });
